@@ -84,18 +84,42 @@ function hashPasswordResetToken(raw: string): string {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const raffleUploadsDir = path.join(__dirname, "..", "public", "uploads", "raffles");
-const chatUploadsDir = path.join(__dirname, "..", "public", "uploads", "chat");
-const receiptUploadsDir = path.join(__dirname, "..", "public", "uploads", "receipts");
-if (!existsSync(raffleUploadsDir)) {
-  mkdirSync(raffleUploadsDir, { recursive: true });
+const projectRoot = path.join(__dirname, "..");
+const envUploadsRoot = (process.env.UPLOADS_ROOT || "").trim();
+const uploadsRoots = (() => {
+  if (envUploadsRoot) {
+    return [path.isAbsolute(envUploadsRoot) ? envUploadsRoot : path.join(projectRoot, envUploadsRoot)];
+  }
+  const roots = [path.join(projectRoot, "public", "uploads")];
+  const distUploads = path.join(projectRoot, "dist", "uploads");
+  if (existsSync(path.join(projectRoot, "dist")) && !roots.includes(distUploads)) {
+    roots.push(distUploads);
+  }
+  return roots;
+})();
+
+function ensureUploadDirs(subdir: string): string[] {
+  const dirs = uploadsRoots.map((root) => path.join(root, subdir));
+  for (const dir of dirs) {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  }
+  return dirs;
 }
-if (!existsSync(chatUploadsDir)) {
-  mkdirSync(chatUploadsDir, { recursive: true });
+
+async function writeUploadToDirs(dirs: string[], fileName: string, buffer: Buffer): Promise<void> {
+  await Promise.all(
+    dirs.map(async (dir) => {
+      const filePath = path.join(dir, fileName);
+      await writeFile(filePath, buffer);
+    }),
+  );
 }
-if (!existsSync(receiptUploadsDir)) {
-  mkdirSync(receiptUploadsDir, { recursive: true });
-}
+
+const raffleUploadsDirs = ensureUploadDirs("raffles");
+const chatUploadsDirs = ensureUploadDirs("chat");
+const receiptUploadsDirs = ensureUploadDirs("receipts");
 
 function parseChatMessagePayload(body: { body?: string; attachment?: unknown }):
   | { ok: true; text: string; attachment: ReturnType<typeof parseChatAttachmentFromMessage> }
@@ -135,8 +159,7 @@ async function handleChatFileUpload(c: Context): Promise<Response> {
     return c.json({ error: "Тип файла не поддерживается" }, 400);
   }
   const fileName = `${randomUUID()}${ext}`;
-  const filePath = path.join(chatUploadsDir, fileName);
-  await writeFile(filePath, buffer);
+  await writeUploadToDirs(chatUploadsDirs, fileName, buffer);
   const url = `/uploads/chat/${fileName}`;
   const origName = String(blob.name || "file")
     .replace(/[<>\"]/g, "")
@@ -179,8 +202,7 @@ async function handleReceiptFileUpload(c: Context): Promise<Response> {
     return c.json({ error: "Допустимы изображения или PDF" }, 400);
   }
   const fileName = `${randomUUID()}${ext}`;
-  const filePath = path.join(receiptUploadsDir, fileName);
-  await writeFile(filePath, buffer);
+  await writeUploadToDirs(receiptUploadsDirs, fileName, buffer);
   const url = `/uploads/receipts/${fileName}`;
   const origName = String(blob.name || "чек")
     .replace(/[<>\"]/g, "")
@@ -889,8 +911,7 @@ app.post("/api/admin/raffles/upload", async (c) => {
     return c.json({ error: "Допустимы JPEG, PNG, WebP, GIF" }, 400);
   }
   const name = `${randomUUID()}${ext}`;
-  const filePath = path.join(raffleUploadsDir, name);
-  await writeFile(filePath, buffer);
+  await writeUploadToDirs(raffleUploadsDirs, name, buffer);
   const url = `/uploads/raffles/${name}`;
   return c.json({ url });
 });
