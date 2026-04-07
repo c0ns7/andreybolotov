@@ -1,0 +1,65 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#ffffff" />
+    {description ? <meta name="description" content={description} /> : null}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+    <script is:inline>
+      (function () {
+        var r = document.documentElement;
+        try {
+          var path = (location.pathname || "/").replace(/\/$/, "") || "/";
+          var isGuestLanding = path === "/";
+          var raw = localStorage.getItem("ab_auth_v2");
+          var hasAuth = false;
+          if (raw) {
+            try {
+              var ja = JSON.parse(raw);
+              hasAuth = !!(ja && ja.token && ja.phone);
+            } catch (e) {}
+          }
+          /* На гостевом / без входа не ставим js-intro-done — иначе до app.js скрывается лента заставки */
+          if (localStorage.getItem("ab_intro_dismissed") === "1" && (!isGuestLanding || hasAuth)) {
+            r.classList.add("js-intro-done");
+          }
+          if (raw) {
+            var j = JSON.parse(raw);
+            if (j && j.token && j.phone) {
+              /* На / не ставим js-has-session: иначе global.css скрывает #screen-welcome до редиректа в /home */
+              if (!isGuestLanding) {
+                r.classList.add("js-has-session");
+                return;
+              }
+              r.classList.add("js-guest");
+              return;
+            }
+          }
+          r.classList.add("js-guest");
+        } catch (e) {
+          r.classList.add("js-guest");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <slot />
+    <script src="/js/app.js" defer></script>
+  </body>
+</html>
