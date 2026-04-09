@@ -1,58 +1,66 @@
 ---
 import Base from "../../layouts/Base.astro";
+import AppDockNav from "../../components/AppDockNav.astro";
+import AppDockModals from "../../components/AppDockModals.astro";
 ---
 
 <Base title="Акция — оплата" description="Оплата и бронирование номерков.">
   <script is:inline>
-    document.documentElement.classList.add("raffle-purchase-page");
+    document.documentElement.classList.add("raffle-purchase-page", "raffle-grid-page");
   </script>
+  <div class="app-shell app-shell--with-tabbar" id="app-shell">
   <div class="raffle-purchase-layout" id="raffle-purchase-layout">
-    <header class="raffle-purchase-topbar">
-      <button type="button" class="raffle-purchase-back" id="raffle-page-back" aria-label="Назад">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M15 18l-6-6 6-6"></path>
-        </svg>
-      </button>
-      <div class="raffle-purchase-topbar__mid">
-        <p id="raffle-page-topbar-title" class="raffle-purchase-topbar__title">Акция</p>
-        <div id="raffle-page-checkout-bar" class="raffle-checkout-bar" hidden>
-          <div id="raffle-page-checkout-numbers" class="raffle-checkout-bar__nums"></div>
-          <div id="raffle-page-checkout-timer" class="raffle-checkout-bar__timer-wrap" role="status" aria-live="polite">
-            <span class="raffle-checkout-bar__timer-icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 6v6l4 2"></path>
-              </svg>
-            </span>
-            <span id="raffle-page-checkout-timer-text" class="raffle-checkout-bar__timer-text"></span>
-          </div>
-          <button type="button" class="raffle-checkout-bar__extend btn btn--secondary btn--sm" id="raffle-page-extend" hidden>
-            Продлить на 10 мин
-          </button>
-        </div>
+    <header class="raffle-purchase-hero" id="raffle-page-hero">
+      <div class="raffle-purchase-hero__bg" aria-hidden="true">
+        <div class="raffle-purchase-hero__watermark" aria-hidden="true"></div>
       </div>
-      <div class="raffle-purchase-topbar__trailing">
-        <div id="raffle-page-topbar-grid-tools" class="raffle-purchase-topbar__right">
-          <span id="raffle-page-tab-free" class="raffle-purchase-tab-free">— из — свободно</span>
-          <button type="button" class="raffle-purchase-refresh" id="raffle-page-refresh" aria-label="Обновить список">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <div class="raffle-purchase-hero__bar">
+        <button type="button" class="raffle-purchase-back raffle-purchase-back--hero" id="raffle-page-back" aria-label="Назад на главную">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6"></path>
+          </svg>
+        </button>
+        <div class="raffle-purchase-hero__mid">
+          <div id="raffle-page-heading-block" class="raffle-purchase-hero-head">
+            <h1 id="raffle-page-heading" class="raffle-purchase-title raffle-purchase-title--hero">Акция</h1>
+            <p id="raffle-page-price-badge" class="raffle-price-badge raffle-price-badge--hero" hidden></p>
+          </div>
+          <div id="raffle-page-checkout-head" class="raffle-purchase-hero-checkout-head" hidden>
+            <p id="raffle-page-checkout-title" class="raffle-purchase-title raffle-purchase-title--hero">Акция</p>
+          </div>
+          <div id="raffle-page-checkout-bar" class="raffle-checkout-bar raffle-checkout-bar--hero" hidden>
+            <div id="raffle-page-checkout-numbers" class="raffle-checkout-bar__nums"></div>
+            <div id="raffle-page-checkout-timer" class="raffle-checkout-bar__timer-wrap" role="status" aria-live="polite">
+              <span class="raffle-checkout-bar__timer-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 6v6l4 2"></path>
+                </svg>
+              </span>
+              <span id="raffle-page-checkout-timer-text" class="raffle-checkout-bar__timer-text"></span>
+            </div>
+            <button type="button" class="raffle-checkout-bar__extend btn btn--secondary btn--sm" id="raffle-page-extend" hidden>
+              Продлить на 10 мин
+            </button>
+          </div>
+        </div>
+        <div id="raffle-page-topbar-grid-tools" class="raffle-purchase-hero-tools">
+          <span id="raffle-page-tab-free" class="raffle-purchase-hero-count">— из —</span>
+          <button type="button" class="raffle-purchase-refresh raffle-purchase-refresh--hero" id="raffle-page-refresh" aria-label="Обновить список">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M21 12a9 9 0 1 1-3-6.7"></path>
               <path d="M21 3v7h-7"></path>
             </svg>
           </button>
         </div>
-        <div class="raffle-purchase-topbar__spacer" id="raffle-page-topbar-spacer" hidden aria-hidden="true"></div>
+        <div class="raffle-purchase-hero-spacer" id="raffle-page-topbar-spacer" hidden aria-hidden="true"></div>
       </div>
     </header>
 
     <main class="raffle-purchase-main">
-      <div id="raffle-page-heading-block" class="raffle-purchase-heading-block">
-        <h1 id="raffle-page-heading" class="raffle-purchase-title">Акция</h1>
-        <p id="raffle-page-meta" class="raffle-purchase-meta"></p>
-      </div>
       <p id="raffle-page-timer" class="raffle-detail__timer raffle-purchase-timer" hidden></p>
 
-      <div id="raffle-page-root" class="raffle-purchase-root" data-raffle-ui="raffle-page">
+      <div id="raffle-page-root" class="raffle-purchase-root raffle-purchase-panel" data-raffle-ui="raffle-page">
         <div id="raffle-page-flow">
           <div id="raffle-page-step-grid">
             <div id="raffle-page-legend" class="raffle-legend" aria-label="Обозначения на сетке">
@@ -61,12 +69,12 @@ import Base from "../../layouts/Base.astro";
                 Свободно
               </span>
               <span class="raffle-legend__item">
-                <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
-                Занято
+                <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
+                Ваш выбор
               </span>
               <span class="raffle-legend__item">
-                <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
-                Выбрано
+                <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
+                Забронировано
               </span>
             </div>
             <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
@@ -86,7 +94,7 @@ import Base from "../../layouts/Base.astro";
               </p>
               <div class="raffle-detail__bar">
                 <span id="raffle-page-selection" class="raffle-detail__selection">Выбрано: 0 / 10</span>
-                <button type="button" class="btn btn--primary" id="raffle-page-reserve">В корзину</button>
+                <button type="button" class="btn btn--primary raffle-reserve-btn--empty" id="raffle-page-reserve">Выберите номера</button>
               </div>
             </div>
           </div>
@@ -122,4 +130,7 @@ import Base from "../../layouts/Base.astro";
       </div>
     </main>
   </div>
+  <AppDockNav />
+  </div>
+  <AppDockModals />
 </Base>

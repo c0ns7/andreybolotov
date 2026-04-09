@@ -136,6 +136,27 @@ function migrate() {
     db.exec(`ALTER TABLE raffle_orders ADD COLUMN reserve_extended_once INTEGER NOT NULL DEFAULT 0`);
   }
 
+  const rafCols = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
+  if (!rafCols.some((c) => c.name === "wholesale_enabled")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN wholesale_enabled INTEGER NOT NULL DEFAULT 0`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS raffle_wholesale_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      raffle_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      user_slot_index INTEGER NOT NULL,
+      wholesale_number INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE (raffle_id, user_id, user_slot_index),
+      UNIQUE (raffle_id, wholesale_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rwa_raffle ON raffle_wholesale_assignments(raffle_id);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -383,6 +404,7 @@ export type RaffleRow = {
   qr_image_url: string;
   status: string;
   sort_order: number;
+  wholesale_enabled: number;
   created_at: number;
   updated_at: number;
 };
@@ -398,6 +420,7 @@ export type RaffleDto = {
   qr_image_url: string;
   status: "active" | "closed" | "paused";
   sort_order: number;
+  wholesale_enabled: boolean;
 };
 
 export function raffleToDto(r: RaffleRow): RaffleDto {
@@ -413,6 +436,7 @@ export function raffleToDto(r: RaffleRow): RaffleDto {
     qr_image_url: r.qr_image_url,
     status: st,
     sort_order: r.sort_order,
+    wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
   };
 }
 
@@ -436,6 +460,7 @@ export function insertRaffle(data: {
   qr_image_url: string;
   status: string;
   sort_order: number;
+  wholesale_enabled: number;
 }): number {
   const now = Date.now();
   const info = db
@@ -443,8 +468,8 @@ export function insertRaffle(data: {
       `INSERT INTO raffles (
         title, cover_image_url, price_rub, ticket_count,
         collection_url, collection_recipient, qr_image_url,
-        status, sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, sort_order, wholesale_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
@@ -456,6 +481,7 @@ export function insertRaffle(data: {
       data.qr_image_url,
       data.status,
       data.sort_order,
+      data.wholesale_enabled,
       now,
       now,
     );
@@ -474,13 +500,14 @@ export function updateRaffle(
     qr_image_url: string;
     status: string;
     sort_order: number;
+    wholesale_enabled: number;
   },
 ): void {
   db.prepare(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, ticket_count = ?,
       collection_url = ?, collection_recipient = ?, qr_image_url = ?,
-      status = ?, sort_order = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, updated_at = ?
     WHERE id = ?`,
   ).run(
     data.title,
@@ -492,6 +519,7 @@ export function updateRaffle(
     data.qr_image_url,
     data.status,
     data.sort_order,
+    data.wholesale_enabled,
     Date.now(),
     id,
   );

@@ -5,8 +5,10 @@
 
   /** @type {Array<Record<string, unknown>>} */
   let rafflesCache = [];
-  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string}>} */
+  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean}>} */
   let participantsCache = [];
+  /** @type {Array<{wholesale_number:number,user_phone:string}>} */
+  let wholesalersCache = [];
   let participantsRaffleId = null;
   const revealedPhones = new Set();
 
@@ -115,7 +117,9 @@
           esc(String(r.price_rub)) +
           " ₽ за билет · " +
           esc(String(r.ticket_count)) +
-          " номерков</p>" +
+          " номерков" +
+          (r.wholesale_enabled ? " · оптовики вкл." : "") +
+          "</p>" +
           '<div class="admin-raffle-card__actions">' +
           '<div class="admin-raffle-card__row">' +
           '<button type="button" class="admin-raffle-btn admin-raffle-btn--participants admin-raffle-participants-btn" data-id="' +
@@ -264,6 +268,8 @@
             return Math.max(m, Number(x.sort_order) || 0);
           }, 0) + 1,
         );
+    var whEl = document.getElementById("raffle-wholesale-enabled");
+    if (whEl) whEl.checked = edit ? !!edit.wholesale_enabled : false;
     var cf = document.getElementById("raffle-cover-file");
     var qf = document.getElementById("raffle-qr-file");
     if (cf) cf.value = "";
@@ -299,8 +305,11 @@
       .map(function (x) {
         const key = String(x.ticket_number) + "|" + String(x.user_phone || "");
         const revealed = revealedPhones.has(key);
+        const wholesaleCls = x.is_wholesale ? " admin-raffle-participant-card--wholesale" : "";
         return (
-          '<article class="admin-raffle-participant-card">' +
+          '<article class="admin-raffle-participant-card' +
+          wholesaleCls +
+          '">' +
           '<div class="admin-raffle-participant-card__ticket">№ ' +
           esc(String(x.ticket_number)) +
           "</div>" +
@@ -327,10 +336,37 @@
     });
   }
 
+  function renderWholesalersList() {
+    const el = document.getElementById("raffle-wholesalers-list");
+    const wrap = document.getElementById("raffle-wholesalers-wrap");
+    if (!el) return;
+    if (!wholesalersCache.length) {
+      el.innerHTML =
+        '<p class="admin-raffle-participants__empty" style="margin:0;border-style:dashed">' +
+        "Пока нет. Номер оптовика присваивается за каждые 10 подтверждённых номерков по очереди.</p>";
+      return;
+    }
+    el.innerHTML = wholesalersCache
+      .map(function (w) {
+        return (
+          '<div class="admin-raffle-wholesaler-row">' +
+          '<span class="admin-raffle-wholesaler-row__num">№ ' +
+          esc(String(w.wholesale_number)) +
+          "</span>" +
+          "<span>" +
+          esc(String(w.user_phone || "—")) +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
   async function openParticipants(raffleId) {
     if (!modalParticipants || !participantsList) return;
     participantsRaffleId = raffleId;
     participantsCache = [];
+    wholesalersCache = [];
     revealedPhones.clear();
     if (participantsSearch) participantsSearch.value = "";
     participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
@@ -344,6 +380,10 @@
       });
       if (participantsRaffleId !== raffleId) return;
       participantsCache = Array.isArray(data.participants) ? data.participants : [];
+      wholesalersCache = Array.isArray(data.wholesalers) ? data.wholesalers : [];
+      var whWrap = document.getElementById("raffle-wholesalers-wrap");
+      if (whWrap) whWrap.hidden = !data.wholesale_enabled;
+      renderWholesalersList();
       renderParticipantsList();
     } catch (e) {
       participantsList.innerHTML =
@@ -477,6 +517,10 @@
       qr_image_url: qrUrl,
       status: document.getElementById("raffle-status").value,
       sort_order: Number(document.getElementById("raffle-sort").value) || 0,
+      wholesale_enabled: (function () {
+        var w = document.getElementById("raffle-wholesale-enabled");
+        return w ? !!w.checked : false;
+      })(),
     };
     try {
       if (editId) {

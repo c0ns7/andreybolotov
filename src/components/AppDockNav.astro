@@ -1,0 +1,110 @@
+---
+/* Панель чата + нижняя навигация (общая для /home и /home/raffle) */
+---
+
+<div id="panel-chat" class="panel-chat screen--hidden" aria-hidden="true">
+  <div class="panel-chat__inner">
+    <header class="panel-chat__head">
+      <div class="panel-chat__head-left">
+        <div class="panel-chat__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 class="panel-chat__title">Поддержка</h2>
+          <p class="panel-chat__status">Обычно отвечаем в течение дня</p>
+        </div>
+      </div>
+      <button type="button" class="panel-chat__close" id="btn-chat-close" aria-label="Закрыть чат">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </header>
+    <div class="panel-chat__hint" id="panel-chat-hint">Чат защищён сквозным шифрованием (RLS).</div>
+    <div id="chat-messages" class="panel-chat__messages custom-scrollbar"></div>
+    <form id="form-chat" class="panel-chat__form">
+      <input
+        type="file"
+        id="chat-file-input"
+        hidden
+        tabindex="-1"
+        aria-hidden="true"
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.mp4,.mp3,.ogg,.webm"
+      />
+      <button type="button" class="panel-chat__attach" id="btn-chat-attach" aria-label="Прикрепить файл" title="Прикрепить файл">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.38-8.38A4 4 0 1 1 18 12.84l-8.38 8.38a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+        </svg>
+      </button>
+      <input
+        id="chat-input"
+        class="panel-chat__input"
+        type="text"
+        autocomplete="off"
+        placeholder="Сообщение..."
+        maxlength="4000"
+      />
+      <button type="submit" class="panel-chat__send" id="btn-chat-send" aria-label="Отправить">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
+          <path d="m21.854 2.147-10.94 10.939"></path>
+        </svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+<nav class="bottom-nav" id="bottom-nav" aria-label="Разделы приложения">
+  <div class="bottom-nav__inner bottom-nav__inner--5">
+    <button type="button" class="bottom-nav-btn" id="tab-search" aria-label="Поиск номера">
+      <span class="bottom-nav-btn__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m21 21-4.34-4.34"></path>
+          <circle cx="11" cy="11" r="8"></circle>
+        </svg>
+      </span>
+      <span class="bottom-nav-btn__label">Поиск</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="tab-chat" aria-label="Чат">
+      <span class="bottom-nav-btn__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>
+        </svg>
+      </span>
+      <span class="bottom-nav-btn__label">Чат</span>
+    </button>
+    <button type="button" class="bottom-nav-btn bottom-nav-btn--center" id="tab-cart" aria-label="Корзина">
+      <span class="bottom-nav-btn__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 10a4 4 0 0 1-8 0"></path>
+          <path d="M3.103 6.034h17.794"></path>
+          <path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"></path>
+        </svg>
+        <span id="cart-nav-badge" class="bottom-nav-btn__badge" hidden aria-hidden="true"></span>
+      </span>
+      <span class="bottom-nav-btn__label">Корзина</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="tab-tickets" aria-label="Билеты">
+      <span class="bottom-nav-btn__icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>
+          <path d="M13 5v2"></path>
+          <path d="M13 17v2"></path>
+          <path d="M13 11v2"></path>
+        </svg>
+        <span id="tickets-nav-badge" class="bottom-nav-btn__badge tickets-nav-badge" hidden aria-hidden="true"></span>
+      </span>
+      <span class="bottom-nav-btn__label">Билеты</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="tab-profile" aria-label="Профиль">
+      <span class="bottom-nav-btn__icon">
+        <span id="bottom-nav-profile-letter" style="font-size: 13px; font-weight: 900; color: #374151">К</span>
+        <span class="bottom-nav-profile__dot" aria-hidden="true"></span>
+      </span>
+      <span class="bottom-nav-btn__label">Профиль</span>
+    </button>
+  </div>
+</nav>

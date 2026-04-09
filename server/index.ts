@@ -57,7 +57,8 @@ import {
   getTicketGridSlice,
   getTicketNumbersForOrder,
   listPendingPayments,
-  listAdminRaffleParticipants,
+  getAdminRaffleParticipantsBundle,
+  recalculateWholesaleForRaffle,
   addTicketsToReservedOrder,
   appendRandomTicketsToReservedOrder,
   getTicketCellKind,
@@ -246,6 +247,23 @@ function requireAdmin(c: Context): SessionUser | Response {
   return u;
 }
 
+const rateLimitBuckets = new Map<string, { win: number; n: number }>();
+
+function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
+  let b = rateLimitBuckets.get(key);
+  if (!b || now - b.win > windowMs) {
+    b = { win: now, n: 0 };
+    rateLimitBuckets.set(key, b);
+  }
+  b.n += 1;
+  return b.n <= max;
+}
+
+function rateLimitExceeded(c: Context) {
+  return c.json({ error: "Слишком много запросов. Подождите немного." }, 429);
+}
+
 function normalizeRaffleStatus(s: string): "active" | "closed" | "paused" {
   if (s === "closed" || s === "paused") return s;
   return "active";
@@ -261,6 +279,7 @@ type RaffleInput = {
   qr_image_url: string;
   status: "active" | "closed" | "paused";
   sort_order: number;
+  wholesale_enabled: boolean;
 };
 
 function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: RaffleInput } | { ok: false; error: string } {
@@ -294,6 +313,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     ? normalizeRaffleStatus(String(body.status ?? "active"))
     : "paused";
 
+  const wholesale_enabled = Boolean(body.wholesale_enabled);
+
   return {
     ok: true,
     value: {
@@ -306,6 +327,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       qr_image_url,
       status,
       sort_order,
+      wholesale_enabled,
     },
   };
 }
@@ -610,6 +632,7 @@ app.get("/api/raffles", (c) => {
 app.get("/api/raffles/cart", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`get:cart:${u.id}`, 60, 60_000)) return rateLimitExceeded(c);
   c.header("Cache-Control", "private, no-store");
   const items = listReservedOrdersForUser(u.id);
   return c.json({ items });
@@ -618,6 +641,7 @@ app.get("/api/raffles/cart", (c) => {
 app.get("/api/raffles/my-tickets", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`get:my-tickets:${u.id}`, 60, 60_000)) return rateLimitExceeded(c);
   c.header("Cache-Control", "private, no-store");
   return c.json({
     reserved: listReservedOrdersForUser(u.id),
@@ -657,6 +681,7 @@ app.get("/api/raffles/:id/order", (c) => {
 app.get("/api/raffles/:id/tickets", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`get:tickets-slice:${u.id}`, 180, 60_000)) return rateLimitExceeded(c);
   const id = Number(c.req.param("id"));
   const from = Number(c.req.query("from") || "1");
   const to = Number(c.req.query("to") || "500");
@@ -670,6 +695,7 @@ app.get("/api/raffles/:id/tickets", (c) => {
 app.get("/api/raffles/:id/ticket-lookup", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`get:ticket-lookup:${u.id}`, 120, 60_000)) return rateLimitExceeded(c);
   const id = Number(c.req.param("id"));
   const n = Number(c.req.query("n"));
   if (!Number.isFinite(id) || !Number.isFinite(n)) {
@@ -728,6 +754,7 @@ app.post("/api/raffles/orders/:orderId/random-tickets", async (c) => {
 app.delete("/api/raffles/orders/:orderId/tickets/:ticketNum", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`del:ticket:${u.id}`, 45, 60_000)) return rateLimitExceeded(c);
   const orderId = Number(c.req.param("orderId"));
   const ticketNum = Number(c.req.param("ticketNum"));
   if (!Number.isFinite(orderId) || !Number.isFinite(ticketNum)) {
@@ -768,6 +795,7 @@ app.post("/api/raffles/orders/:orderId/extend-reservation", (c) => {
 app.post("/api/raffles/:id/reserve", async (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
+  if (!rateLimitAllow(`post:reserve:${u.id}`, 25, 60_000)) return rateLimitExceeded(c);
   const id = Number(c.req.param("id"));
   let body: { numbers?: number[] };
   try {
@@ -938,6 +966,7 @@ app.post("/api/admin/raffles", async (c) => {
     qr_image_url: v.qr_image_url,
     status: v.status,
     sort_order: v.sort_order,
+    wholesale_enabled: v.wholesale_enabled ? 1 : 0,
   });
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row) : null });
@@ -969,7 +998,9 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     qr_image_url: v.qr_image_url,
     status: v.status,
     sort_order: v.sort_order,
+    wholesale_enabled: v.wholesale_enabled ? 1 : 0,
   });
+  recalculateWholesaleForRaffle(id);
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row) : null });
 });
@@ -993,13 +1024,16 @@ app.get("/api/admin/raffles/:id/participants", (c) => {
   const raffle = getRaffleById(id);
   if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
   c.header("Cache-Control", "no-store");
-  const rows = listAdminRaffleParticipants(id);
+  const bundle = getAdminRaffleParticipantsBundle(id);
   return c.json({
-    participants: rows.map((row) => ({
+    wholesale_enabled: bundle.wholesale_enabled,
+    participants: bundle.participants.map((row) => ({
       ticket_number: row.ticket_number,
       user_phone: row.user_phone,
       order_status: row.order_status,
+      is_wholesale: row.is_wholesale,
     })),
+    wholesalers: bundle.wholesalers,
   });
 });
 

@@ -1,0 +1,277 @@
+---
+/* Модалки профиля, корзины, билетов, поиска номера — общие для /home и /home/raffle */
+---
+
+<div
+  id="modal-profile"
+  class="modal-overlay modal-overlay--profile"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="profile-modal-heading"
+>
+  <div class="profile-modal">
+    <button type="button" class="profile-modal__close" id="profile-modal-close" aria-label="Закрыть">✕</button>
+    <div class="profile-modal__body">
+      <div class="profile-modal__hero">
+        <div class="profile-modal__avatar" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <h3 id="profile-modal-heading" class="profile-modal__title"></h3>
+        <p id="profile-modal-phone-hero" class="profile-modal__phone-sub"></p>
+      </div>
+
+      <div class="profile-modal__card">
+        <div class="profile-modal__field">
+          <span class="profile-modal__label">Имя и Фамилия</span>
+          <div id="profile-field-name" class="profile-modal__value"></div>
+        </div>
+        <div class="profile-modal__field">
+          <span class="profile-modal__label">Телефон</span>
+          <div id="profile-field-phone" class="profile-modal__value"></div>
+        </div>
+        <div class="profile-modal__field">
+          <span class="profile-modal__label">Email</span>
+          <div id="profile-field-email" class="profile-modal__value"></div>
+        </div>
+        <div class="profile-modal__hint">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 16v-4"></path>
+            <path d="M12 8h.01"></path>
+          </svg>
+          <p>Если вам нужно изменить данные в профиле, обратитесь в службу поддержки.</p>
+        </div>
+      </div>
+
+      <div class="profile-modal__stats">
+        <div class="profile-modal__stat">
+          <p class="profile-modal__stat-label">Ваши Билеты</p>
+          <p id="profile-stat-tickets" class="profile-modal__stat-num">0</p>
+        </div>
+        <div class="profile-modal__stat-divider" aria-hidden="true"></div>
+        <div class="profile-modal__stat">
+          <p class="profile-modal__stat-label">Статус</p>
+          <p id="profile-stat-status" class="profile-modal__stat-status">Активен</p>
+        </div>
+      </div>
+
+      <p id="profile-admin-wrap" class="profile-modal__admin" hidden>
+        <a href="/admin" class="btn-admin-link" id="link-admin">Панель администратора</a>
+      </p>
+
+      <div class="profile-modal__actions">
+        <button type="button" class="profile-modal__btn-back" id="profile-modal-dismiss">Вернуться</button>
+      </div>
+      <button type="button" class="profile-modal__btn-logout" id="btn-profile-logout">Выйти из аккаунта</button>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modal-raffle-unavailable"
+  class="modal-overlay modal-overlay--raffle-unavailable"
+  aria-hidden="true"
+  role="dialog"
+  aria-labelledby="raffle-unavailable-heading"
+>
+  <div class="modal modal--raffle-unavailable">
+    <div class="modal__top">
+      <span></span>
+      <span class="modal__top-title">Акция</span>
+      <button type="button" class="modal__close" id="modal-raffle-unavailable-close" aria-label="Закрыть">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="modal__body">
+      <h3 id="raffle-unavailable-heading" class="raffle-unavailable__heading"></h3>
+      <p id="raffle-unavailable-text" class="raffle-unavailable__text"></p>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modal-cart"
+  class="modal-overlay modal-overlay--cart"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-cart-title"
+>
+  <div class="modal modal--cart cart-sheet" id="modal-cart-sheet">
+    <div class="cart-sheet__grabber" aria-hidden="true"></div>
+    <div class="cart-sheet__head">
+      <div class="cart-sheet__head-text">
+        <h2 id="modal-cart-title" class="cart-sheet__title">Подтверждение</h2>
+      </div>
+      <button type="button" class="cart-sheet__close" id="modal-cart-close" aria-label="Закрыть">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="cart-sheet__body custom-scrollbar">
+      <div class="cart-sheet__section">
+        <p class="cart-sheet__section-label">Номерки</p>
+        <div id="modal-cart-numbers-root"></div>
+      </div>
+      <div class="cart-sheet__section cart-sheet__section--buyer">
+        <p class="cart-sheet__section-label">Покупатель</p>
+        <div class="cart-sheet__buyer" id="modal-cart-buyer">
+          <div class="cart-sheet__buyer-row">
+            <span class="cart-sheet__buyer-avatar" id="modal-cart-buyer-avatar" aria-hidden="true">?</span>
+            <div class="cart-sheet__buyer-text">
+              <span class="cart-sheet__buyer-name" id="modal-cart-buyer-name">—</span>
+              <p class="cart-sheet__buyer-phone" id="modal-cart-buyer-phone">—</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cart-sheet__footer">
+      <p id="modal-cart-multi-hint" class="cart-sheet__hint" hidden></p>
+      <p id="modal-cart-tip-home" class="cart-sheet__footer-tip">💡 Несколько билетов повышают шансы</p>
+      <p id="modal-cart-tip-raffle" class="cart-sheet__footer-tip" hidden>Один билетик — может, ещё парочку? 🎲</p>
+      <button type="button" class="cart-sheet__cta" id="modal-cart-checkout" disabled>
+        <span class="cart-sheet__cta-inner">
+          <span class="cart-sheet__cta-spinner" id="modal-cart-checkout-spinner" aria-hidden="true" hidden>
+            <svg class="cart-sheet__cta-spinner-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="32" stroke-dashoffset="12" opacity="0.35"></circle>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></path>
+            </svg>
+          </span>
+          <span id="modal-cart-checkout-label">Корзина пуста</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modal-tickets"
+  class="modal-overlay modal-overlay--tickets"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-tickets-title"
+>
+  <div class="modal modal--tickets-sheet">
+    <div class="cart-sheet__grabber" aria-hidden="true"></div>
+    <div class="tickets-sheet__header">
+      <div class="tickets-sheet__header-text">
+        <h2 id="modal-tickets-title" class="tickets-sheet__title">Мои билеты</h2>
+        <p id="modal-tickets-subtitle" class="tickets-sheet__subtitle" hidden></p>
+      </div>
+      <button type="button" class="tickets-sheet__close" id="modal-tickets-close" aria-label="Закрыть">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="tickets-sheet__tabs" role="tablist" aria-label="Раздел билетов">
+      <button
+        type="button"
+        role="tab"
+        id="modal-tickets-tab-reserved"
+        class="tickets-sheet__tab tickets-sheet__tab--active"
+        data-tickets-tab="reserved"
+        aria-selected="true"
+      >
+        <span class="tickets-sheet__tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 6v6l4 2"></path>
+          </svg>
+        </span>
+        <span class="tickets-sheet__tab-label">В брони</span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        id="modal-tickets-tab-confirmed"
+        class="tickets-sheet__tab"
+        data-tickets-tab="confirmed"
+        aria-selected="false"
+      >
+        <span class="tickets-sheet__tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>
+            <path d="M13 5v2"></path>
+            <path d="M13 17v2"></path>
+            <path d="M13 11v2"></path>
+          </svg>
+        </span>
+        <span class="tickets-sheet__tab-label">Купленные</span>
+      </button>
+    </div>
+    <div class="tickets-sheet__body custom-scrollbar" id="modal-tickets-body"></div>
+  </div>
+</div>
+
+<div
+  id="modal-ticket-search"
+  class="modal-overlay modal-overlay--ticket-search"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-ticket-search-title"
+>
+  <div class="modal ticket-search-sheet">
+    <div class="ticket-search-sheet__grabber" aria-hidden="true"></div>
+    <div class="ticket-search-sheet__head">
+      <div class="ticket-search-sheet__head-spacer" aria-hidden="true"></div>
+      <h2 id="modal-ticket-search-title" class="ticket-search-sheet__title">Поиск номера</h2>
+      <button type="button" class="ticket-search-sheet__close" id="modal-ticket-search-close" aria-label="Закрыть">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="ticket-search-sheet__body custom-scrollbar">
+      <div class="ticket-search-sheet__segment" role="tablist" aria-label="Режим поиска">
+        <button type="button" class="ticket-search-sheet__seg ticket-search-sheet__seg--active" id="ticket-search-mode-enter" data-mode="enter" role="tab" aria-selected="true">Ввести номер</button>
+        <button type="button" class="ticket-search-sheet__seg" id="ticket-search-mode-random" data-mode="random" role="tab" aria-selected="false">Случайный выбор</button>
+      </div>
+      <div id="ticket-search-panel-enter">
+        <h3 class="ticket-search-sheet__label">Номер билета</h3>
+        <div id="ticket-search-field" class="ticket-search-sheet__field">
+          <input
+            id="ticket-search-input"
+            class="ticket-search-sheet__input"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            autocomplete="off"
+          />
+          <span id="ticket-search-status-badge" class="ticket-search-status-badge ticket-search-status-badge--empty" aria-live="polite"></span>
+        </div>
+        <button type="button" class="btn btn--primary ticket-search-sheet__cta" id="ticket-search-apply" disabled>Укажите свободный номер</button>
+      </div>
+      <div id="ticket-search-panel-random" hidden>
+        <h3 class="ticket-search-sheet__label">Количество случайных билетов</h3>
+        <div class="ticket-search-random__qty" aria-label="Количество">
+          <button type="button" class="ticket-search-random__step" id="ticket-search-random-minus" aria-label="Меньше">−</button>
+          <span id="ticket-search-random-qty-display" class="ticket-search-random__value">5</span>
+          <button type="button" class="ticket-search-random__step" id="ticket-search-random-plus" aria-label="Больше">+</button>
+        </div>
+        <div class="ticket-search-random__presets" role="group" aria-label="Быстрый выбор">
+          <button type="button" class="ticket-search-random__preset" data-random-preset="1">1</button>
+          <button type="button" class="ticket-search-random__preset" data-random-preset="3">3</button>
+          <button type="button" class="ticket-search-random__preset ticket-search-random__preset--active" data-random-preset="5">5</button>
+          <button type="button" class="ticket-search-random__preset" data-random-preset="10">10</button>
+          <button type="button" class="ticket-search-random__preset" data-random-preset="20">20</button>
+        </div>
+        <button type="button" class="btn btn--primary ticket-search-sheet__cta ticket-search-sheet__cta--blue" id="ticket-search-random-apply">
+          Добавить 5 случайных билетов
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

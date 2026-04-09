@@ -277,6 +277,7 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
   const now = Date.now();
+  const raffleId = o.raffle_id;
   db.prepare(`UPDATE raffle_orders SET status = 'confirmed', updated_at = ? WHERE id = ?`).run(
     now,
     orderId,
@@ -284,6 +285,7 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
   db.prepare(
     `UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`,
   ).run(orderId);
+  recalculateWholesaleForRaffle(raffleId);
   return { ok: true };
 }
 
@@ -292,11 +294,13 @@ export function rejectOrderByAdmin(orderId: number): { ok: true } | { ok: false;
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
   const now = Date.now();
+  const raffleId = o.raffle_id;
   db.prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ?`).run(orderId);
   db.prepare(`UPDATE raffle_orders SET status = 'rejected', updated_at = ? WHERE id = ?`).run(
     now,
     orderId,
   );
+  recalculateWholesaleForRaffle(raffleId);
   return { ok: true };
 }
 
@@ -445,24 +449,112 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
   }));
 }
 
-export type AdminRaffleParticipantRow = {
+/** Пересчёт номеров оптовиков: каждые 10 подтверждённых номерков в акции дают следующий глобальный № по времени подтверждения заказов. */
+export function recalculateWholesaleForRaffle(raffleId: number): void {
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return;
+  db.prepare(`DELETE FROM raffle_wholesale_assignments WHERE raffle_id = ?`).run(raffleId);
+  if (!Number(raffle.wholesale_enabled)) return;
+
+  const rows = db
+    .prepare(
+      `SELECT h.user_id AS user_id, h.ticket_number AS ticket_number, o.updated_at AS ord_u, o.id AS oid
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.status = 'confirmed'
+       ORDER BY o.updated_at ASC, o.id ASC, h.ticket_number ASC`,
+    )
+    .all(raffleId) as Array<{ user_id: number; ticket_number: number; ord_u: number; oid: number }>;
+
+  const perUser = new Map<number, number>();
+  let globalN = 0;
+  const now = Date.now();
+  const ins = db.prepare(
+    `INSERT INTO raffle_wholesale_assignments (raffle_id, user_id, user_slot_index, wholesale_number, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const row of rows) {
+    const uid = row.user_id;
+    const c = (perUser.get(uid) ?? 0) + 1;
+    perUser.set(uid, c);
+    if (c % 10 !== 0) continue;
+    globalN += 1;
+    const slotIdx = c / 10;
+    ins.run(raffleId, uid, slotIdx, globalN, now);
+  }
+}
+
+export type AdminWholesalerRow = {
+  wholesale_number: number;
+  user_phone: string;
+};
+
+export type AdminRaffleParticipantView = {
   ticket_number: number;
   user_phone: string;
   order_status: string;
+  is_wholesale: boolean;
 };
 
-export function listAdminRaffleParticipants(raffleId: number): AdminRaffleParticipantRow[] {
+export function getAdminRaffleParticipantsBundle(raffleId: number): {
+  wholesale_enabled: boolean;
+  participants: AdminRaffleParticipantView[];
+  wholesalers: AdminWholesalerRow[];
+} {
   cleanupExpiredRaffleOrders();
-  return db
+  const raffle = getRaffleById(raffleId);
+  const wholesale_enabled = Boolean(raffle && Number(raffle.wholesale_enabled));
+
+  const countRows = db
     .prepare(
-      `SELECT h.ticket_number AS ticket_number, u.phone AS user_phone, o.status AS order_status
+      `SELECT h.user_id AS user_id, COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.status = 'confirmed'
+       GROUP BY h.user_id`,
+    )
+    .all(raffleId) as Array<{ user_id: number; c: number }>;
+  const countMap = new Map(countRows.map((r) => [r.user_id, r.c]));
+
+  const partRows = db
+    .prepare(
+      `SELECT h.ticket_number AS ticket_number, u.phone AS user_phone, o.status AS order_status, h.user_id AS user_id
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        INNER JOIN users u ON u.id = o.user_id
        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')
        ORDER BY h.ticket_number ASC`,
     )
-    .all(raffleId) as AdminRaffleParticipantRow[];
+    .all(raffleId) as Array<{
+    ticket_number: number;
+    user_phone: string;
+    order_status: string;
+    user_id: number;
+  }>;
+
+  const participants: AdminRaffleParticipantView[] = partRows.map((row) => ({
+    ticket_number: row.ticket_number,
+    user_phone: row.user_phone,
+    order_status: row.order_status,
+    is_wholesale:
+      wholesale_enabled && (countMap.get(row.user_id) ?? 0) >= 10,
+  }));
+
+  let wholesalers: AdminWholesalerRow[] = [];
+  if (wholesale_enabled) {
+    wholesalers = db
+      .prepare(
+        `SELECT w.wholesale_number AS wholesale_number, u.phone AS user_phone
+         FROM raffle_wholesale_assignments w
+         INNER JOIN users u ON u.id = w.user_id
+         WHERE w.raffle_id = ?
+         ORDER BY w.wholesale_number ASC`,
+      )
+      .all(raffleId) as AdminWholesalerRow[];
+  }
+
+  return { wholesale_enabled, participants, wholesalers };
 }
 
 export function addTicketsToReservedOrder(

@@ -387,6 +387,62 @@
   color: var(--text-muted);
   background: #f9fafb;
 }
+.admin-raffle-toggle-row {
+  margin-top: 8px;
+}
+.admin-raffle-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.admin-raffle-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent, #3478f6);
+}
+.admin-raffle-wholesalers {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #fed7aa;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+}
+.admin-raffle-wholesalers__title {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9a3412;
+}
+.admin-raffle-wholesalers__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-raffle-wholesaler-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.admin-raffle-wholesaler-row__num {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #c2410c;
+  min-width: 2.5rem;
+}
+.admin-raffle-participant-card--wholesale {
+  border-color: #fdba74;
+  background: linear-gradient(180deg, #fff7ed 0%, #fff 100%);
+}
+.admin-raffle-participant-card--wholesale .admin-raffle-participant-card__ticket {
+  color: #9a3412;
+}
 .admin-raffle-participant-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

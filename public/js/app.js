@@ -280,22 +280,25 @@
   }
 
   function setBottomNavActive() {
+    const tabSearch = document.getElementById("tab-search");
     const tabChat = document.getElementById("tab-chat");
     const tabCart = document.getElementById("tab-cart");
     const tabTickets = document.getElementById("tab-tickets");
     const tabProfile = document.getElementById("tab-profile");
     const panelChat = document.getElementById("panel-chat");
-    const modalProfile = document.getElementById("modal-profile");
+    const modalProfileEl = document.getElementById("modal-profile");
     const chatOpen = panelChat && !panelChat.classList.contains("screen--hidden");
-    const profileOpen = modalProfile && modalProfile.classList.contains("is-open");
+    const profileOpen = modalProfileEl && modalProfileEl.classList.contains("is-open");
     const cartOpen = modalCart && modalCart.classList.contains("is-open");
     const ticketsOpen = modalTickets && modalTickets.classList.contains("is-open");
+    const searchOpen = modalTicketSearch && modalTicketSearch.classList.contains("is-open");
 
-    [tabChat, tabCart, tabTickets, tabProfile].forEach(function (el) {
+    [tabSearch, tabChat, tabCart, tabTickets, tabProfile].forEach(function (el) {
       if (el) el.classList.remove("bottom-nav-btn--active");
     });
 
-    if (cartOpen && tabCart) tabCart.classList.add("bottom-nav-btn--active");
+    if (searchOpen && tabSearch) tabSearch.classList.add("bottom-nav-btn--active");
+    else if (cartOpen && tabCart) tabCart.classList.add("bottom-nav-btn--active");
     else if (ticketsOpen && tabTickets) tabTickets.classList.add("bottom-nav-btn--active");
     else if (chatOpen && tabChat) tabChat.classList.add("bottom-nav-btn--active");
     else if (profileOpen && tabProfile) tabProfile.classList.add("bottom-nav-btn--active");
@@ -517,6 +520,7 @@
   function openChatPanel() {
     closeCartModal();
     closeTicketsModal();
+    closeTicketSearchModal();
     if (modalProfile) closeModal(modalProfile);
     const panel = document.getElementById("panel-chat");
     if (!panel) return;
@@ -634,9 +638,21 @@
   const modalRaffleUnavailable = document.getElementById("modal-raffle-unavailable");
   const modalCart = document.getElementById("modal-cart");
   const modalTickets = document.getElementById("modal-tickets");
+  const modalTicketSearch = document.getElementById("modal-ticket-search");
 
   var ticketsModalDataCache = { reserved: [], confirmed: [] };
+  var lastCartChromeTotal = -1;
+  var ticketSearchLookupTimer = null;
+  var ticketSearchLastLookup = { n: NaN, kind: null };
+  var ticketSearchRandomQty = 5;
   var ticketsModalActiveTab = "reserved";
+  /** Кэш корзины и «Мои билеты» — подгружается после входа, обновляется при мутациях */
+  var raffleDataCache = {
+    cart: /** @type {{ items: unknown[] } | null} */ (null),
+    tickets: /** @type {{ reserved: unknown[]; confirmed: unknown[] } | null} */ (null),
+  };
+  var lastCartCheckoutAt = 0;
+  var lastCartRemoveAt = 0;
 
   /** @type {Array<Record<string, unknown>>} */
   let raffleDetailCache = [];
@@ -673,6 +689,7 @@
   }
 
   function closeCartModal() {
+    setCartCheckoutLoading(false);
     if (modalCart) closeModal(modalCart);
   }
 
@@ -680,6 +697,128 @@
 
   function closeTicketsModal() {
     if (modalTickets) closeModal(modalTickets);
+  }
+
+  function getTicketSearchSlotsLeft() {
+    if (!IS_RAFFLE_PURCHASE_PAGE || !raffleDetailState.raffle) return 0;
+    return Math.max(0, RAFFLE_MAX_SELECT - raffleDetailState.selected.size);
+  }
+
+  function randomTicketsPhrase(n) {
+    var mod10 = n % 10;
+    var mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 14) return "случайных билетов";
+    if (mod10 === 1) return "случайный билет";
+    if (mod10 >= 2 && mod10 <= 4) return "случайных билета";
+    return "случайных билетов";
+  }
+
+  function clampTicketSearchRandomQty() {
+    var max = getTicketSearchSlotsLeft();
+    if (max < 1) {
+      ticketSearchRandomQty = 1;
+      return;
+    }
+    if (ticketSearchRandomQty > max) ticketSearchRandomQty = max;
+    if (ticketSearchRandomQty < 1) ticketSearchRandomQty = 1;
+  }
+
+  function updateTicketSearchRandomPanel() {
+    var disp = document.getElementById("ticket-search-random-qty-display");
+    var btn = document.getElementById("ticket-search-random-apply");
+    var minus = document.getElementById("ticket-search-random-minus");
+    var plus = document.getElementById("ticket-search-random-plus");
+    clampTicketSearchRandomQty();
+    var max = getTicketSearchSlotsLeft();
+    if (disp) disp.textContent = String(ticketSearchRandomQty);
+    document.querySelectorAll("[data-random-preset]").forEach(function (b) {
+      var v = Number(b.getAttribute("data-random-preset"));
+      b.classList.toggle("ticket-search-random__preset--active", v === ticketSearchRandomQty);
+    });
+    var phrase = "Добавить " + String(ticketSearchRandomQty) + " " + randomTicketsPhrase(ticketSearchRandomQty);
+    if (btn) btn.textContent = phrase;
+    var can =
+      max >= 1 &&
+      ticketSearchRandomQty <= max &&
+      IS_RAFFLE_PURCHASE_PAGE &&
+      !raffleDetailState.order &&
+      !!(raffleDetailState.raffle && raffleDetailState.raffle.id);
+    if (btn) btn.disabled = !can;
+    if (minus) minus.disabled = ticketSearchRandomQty <= 1 || max < 1;
+    if (plus) plus.disabled = ticketSearchRandomQty >= max || max < 1;
+  }
+
+  function resetTicketSearchSheet() {
+    ticketSearchLastLookup = { n: NaN, kind: null };
+    ticketSearchRandomQty = 5;
+    if (ticketSearchLookupTimer) {
+      clearTimeout(ticketSearchLookupTimer);
+      ticketSearchLookupTimer = null;
+    }
+    var inp = document.getElementById("ticket-search-input");
+    var apply = document.getElementById("ticket-search-apply");
+    var field = document.getElementById("ticket-search-field");
+    var badge = document.getElementById("ticket-search-status-badge");
+    var mEnter = document.getElementById("ticket-search-mode-enter");
+    var mRand = document.getElementById("ticket-search-mode-random");
+    var pEnter = document.getElementById("ticket-search-panel-enter");
+    var pRand = document.getElementById("ticket-search-panel-random");
+    if (inp) inp.value = "";
+    if (field) field.className = "ticket-search-sheet__field";
+    if (badge) {
+      badge.className = "ticket-search-status-badge ticket-search-status-badge--empty";
+      badge.textContent = "";
+    }
+    if (apply) {
+      apply.disabled = true;
+      apply.textContent = "Укажите свободный номер";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+    }
+    if (mEnter && mRand) {
+      mEnter.classList.add("ticket-search-sheet__seg--active");
+      mRand.classList.remove("ticket-search-sheet__seg--active");
+      mEnter.setAttribute("aria-selected", "true");
+      mRand.setAttribute("aria-selected", "false");
+    }
+    if (pEnter && pRand) {
+      pEnter.hidden = false;
+      pRand.hidden = true;
+    }
+    document.querySelectorAll("[data-random-preset]").forEach(function (b) {
+      var v = Number(b.getAttribute("data-random-preset"));
+      b.classList.toggle("ticket-search-random__preset--active", v === 5);
+    });
+    updateTicketSearchRandomPanel();
+    updateTicketSearchApplyUI();
+  }
+
+  function openTicketSearchModal() {
+    if (!modalTicketSearch) return;
+    var s = loadSession();
+    if (!s || !s.token) {
+      openModal(modalLogin);
+      return;
+    }
+    if (!authVerified) return;
+    if (!IS_RAFFLE_PURCHASE_PAGE) {
+      showToast("Поиск номера доступен на странице выбора номерков в акции.", "info");
+      return;
+    }
+    if (raffleDetailState.order) {
+      showToast("Поиск недоступен на этом шаге.", "warning");
+      return;
+    }
+    closeChatPanel();
+    closeCartModal();
+    closeTicketsModal();
+    if (modalProfile) closeModal(modalProfile);
+    resetTicketSearchSheet();
+    openModal(modalTicketSearch);
+    setBottomNavActive();
+  }
+
+  function closeTicketSearchModal() {
+    if (modalTicketSearch) closeModal(modalTicketSearch);
   }
 
   function formatReserveUntilMs(ms) {
@@ -697,12 +836,62 @@
     }
   }
 
+  function countTicketsInActiveRaffles(tickets) {
+    if (!tickets) return 0;
+    var n = 0;
+    function add(arr) {
+      (arr || []).forEach(function (it) {
+        var st = it.raffle && it.raffle.status;
+        if (st === "active") {
+          n += (it.numbers && it.numbers.length) || 0;
+        }
+      });
+    }
+    add(tickets.reserved);
+    add(tickets.confirmed);
+    return n;
+  }
+
+  function syncTicketsNavBadge() {
+    var tab = document.getElementById("tab-tickets");
+    var badge = document.getElementById("tickets-nav-badge");
+    if (!tab || !badge) return;
+    var s = loadSession();
+    if (!s || !s.token || !authVerified || !raffleDataCache.tickets) {
+      badge.hidden = true;
+      badge.textContent = "";
+      tab.classList.remove("bottom-nav-btn--tickets-has-items");
+      return;
+    }
+    var n = countTicketsInActiveRaffles(raffleDataCache.tickets);
+    if (n > 0) {
+      badge.hidden = false;
+      badge.textContent = n > 99 ? "99+" : String(n);
+      tab.classList.add("bottom-nav-btn--tickets-has-items");
+    } else {
+      badge.hidden = true;
+      badge.textContent = "";
+      tab.classList.remove("bottom-nav-btn--tickets-has-items");
+    }
+  }
+
   function syncProfileTicketCount() {
     var el = document.getElementById("profile-stat-tickets");
     if (!el) return;
     var s = loadSession();
     if (!s || !s.token || !authVerified) {
       el.textContent = "0";
+      return;
+    }
+    if (raffleDataCache.tickets) {
+      var n = 0;
+      (raffleDataCache.tickets.confirmed || []).forEach(function (it) {
+        var st = it.raffle && it.raffle.status;
+        if (st === "active") {
+          n += (it.numbers && it.numbers.length) || 0;
+        }
+      });
+      el.textContent = String(n);
       return;
     }
     fetch("/api/raffles/my-tickets", { cache: "no-store", headers: authHeaders() })
@@ -771,6 +960,10 @@
     var html = "";
     var i;
     var j;
+    var trophySvg =
+      '<span class="tickets-reserved-head__icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21 2.18 1.09 3.02 2.58 3.02 4.34"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></span>';
+    var clockSvg =
+      '<svg class="tickets-reserved-status__icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>';
     for (i = 0; i < reserved.length; i++) {
       var rv = reserved[i];
       var ro = rv.order || {};
@@ -782,10 +975,13 @@
       var meta = until ? "Бронь до " + until : "Бронь активна";
       var slotsLeft = RAFFLE_MAX_SELECT - nums.length;
       var randCount = Math.max(0, Math.min(3, slotsLeft));
-      html += '<section class="tickets-group">';
-      html += '<h3 class="tickets-group__title">' + title + "</h3>";
-      html += '<p class="tickets-group__meta">' + escapeHtml(meta) + "</p>";
-      html += '<div class="tickets-chips">';
+      var pendingCount = nums.length;
+      html += '<section class="tickets-group tickets-group--reserved-pending">';
+      html += '<div class="tickets-reserved-head">' + trophySvg + '<h3 class="tickets-reserved-head__title">' + title + "</h3></div>";
+      html += '<hr class="tickets-reserved-divider" />';
+      html += '<p class="tickets-reserved-meta">' + escapeHtml(meta) + "</p>";
+      html += '<p class="tickets-reserved-status">' + clockSvg + "ожидают оплаты (" + String(pendingCount) + ")</p>";
+      html += '<div class="tickets-chips tickets-chips--pending">';
       for (j = 0; j < nums.length; j++) {
         var nj = nums[j];
         html +=
@@ -804,6 +1000,7 @@
           "</span>";
       }
       html += "</div>";
+      html += '<p class="tickets-reserved-foot">Оплатите бронь, чтобы не потерять номерки</p>';
       if (slotsLeft > 0) {
         html += '<div class="tickets-add-row">';
         html += '<div class="tickets-lookup-wrap">';
@@ -871,6 +1068,28 @@
     return html;
   }
 
+  function updateTicketsModalSubtitle() {
+    var el = document.getElementById("modal-tickets-subtitle");
+    if (!el) return;
+    var reserved = ticketsModalDataCache.reserved || [];
+    var confirmed = ticketsModalDataCache.confirmed || [];
+    var arr = ticketsModalActiveTab === "reserved" ? reserved : confirmed;
+    var n = 0;
+    (arr || []).forEach(function (it) {
+      var st = it.raffle && it.raffle.status;
+      if (st === "active") {
+        n += (it.numbers && it.numbers.length) || 0;
+      }
+    });
+    if (n > 0) {
+      el.hidden = false;
+      el.textContent = String(n) + " шт.";
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+    }
+  }
+
   function paintTicketsModalBody() {
     var body = document.getElementById("modal-tickets-body");
     if (!body) return;
@@ -880,22 +1099,25 @@
     if (ticketsModalActiveTab === "reserved") {
       if (!reserved.length) {
         body.innerHTML = bothEmpty ? ticketsEmptyAllHtml() : ticketsEmptyReservedOnlyHtml();
-        return;
+      } else {
+        body.innerHTML = buildTicketsReservedHtml(reserved);
       }
-      body.innerHTML = buildTicketsReservedHtml(reserved);
-      return;
-    }
-    if (!confirmed.length) {
+    } else if (!confirmed.length) {
       body.innerHTML = bothEmpty ? ticketsEmptyAllHtml() : ticketsEmptyConfirmedHtml();
-      return;
+    } else {
+      body.innerHTML = buildTicketsConfirmedHtml(confirmed);
     }
-    body.innerHTML = buildTicketsConfirmedHtml(confirmed);
+    updateTicketsModalSubtitle();
   }
 
   function renderTicketsModalBody(data) {
     ticketsModalDataCache = {
       reserved: data && data.reserved ? data.reserved : [],
       confirmed: data && data.confirmed ? data.confirmed : [],
+    };
+    raffleDataCache.tickets = {
+      reserved: ticketsModalDataCache.reserved,
+      confirmed: ticketsModalDataCache.confirmed,
     };
     updateTicketsTabButtons();
     paintTicketsModalBody();
@@ -906,6 +1128,7 @@
     suffix.classList.remove(
       "tickets-lookup-suffix--free",
       "tickets-lookup-suffix--taken",
+      "tickets-lookup-suffix--mine",
       "tickets-lookup-suffix--hidden",
     );
     var textEl = suffix.querySelector(".tickets-lookup-suffix__text");
@@ -919,26 +1142,131 @@
       if (textEl) textEl.textContent = "Свободно";
       return;
     }
+    if (kind === "self_reserved" || kind === "self_pending" || kind === "self_confirmed") {
+      suffix.classList.add("tickets-lookup-suffix--mine");
+      if (textEl) textEl.textContent = "Ваш";
+      return;
+    }
     suffix.classList.add("tickets-lookup-suffix--taken");
     if (textEl) textEl.textContent = kind === "error" ? "—" : "Занято";
   }
 
   function ticketsModalAfterMutation() {
-    syncProfileTicketCount();
     syncCartChrome().catch(function () {});
     return refreshTicketsModalContent();
+  }
+
+  function applyCartBadgeFromItems(items) {
+    var tabCart = document.getElementById("tab-cart");
+    var badge = document.getElementById("cart-nav-badge");
+    if (!tabCart) return;
+    var total = 0;
+    for (var i = 0; i < items.length; i++) {
+      total += ((items[i].numbers && items[i].numbers.length) || 0);
+    }
+    var prev = lastCartChromeTotal;
+    if (total > 0) {
+      tabCart.classList.add("bottom-nav-btn--cart-has-items");
+      if (badge) {
+        badge.hidden = false;
+        badge.textContent = total > 99 ? "99+" : String(total);
+        if (prev >= 0 && total > prev) {
+          badge.classList.remove("cart-nav-badge--bounce");
+          void badge.offsetWidth;
+          badge.classList.add("cart-nav-badge--bounce");
+          window.setTimeout(function () {
+            badge.classList.remove("cart-nav-badge--bounce");
+          }, 600);
+        }
+      }
+      lastCartChromeTotal = total;
+    } else {
+      lastCartChromeTotal = 0;
+      tabCart.classList.remove("bottom-nav-btn--cart-has-items");
+      if (badge) {
+        badge.hidden = true;
+        badge.textContent = "";
+        badge.classList.remove("cart-nav-badge--bounce");
+      }
+    }
+  }
+
+  function applyCartModalContext() {
+    var sheet = document.getElementById("modal-cart-sheet");
+    var tipH = document.getElementById("modal-cart-tip-home");
+    var tipR = document.getElementById("modal-cart-tip-raffle");
+    var onRaffle = IS_RAFFLE_PURCHASE_PAGE;
+    if (sheet) {
+      sheet.classList.toggle("cart-sheet--context-raffle", !!onRaffle);
+      sheet.classList.toggle("cart-sheet--context-home", !onRaffle);
+    }
+    if (tipH) tipH.hidden = !!onRaffle;
+    if (tipR) tipR.hidden = !onRaffle;
+  }
+
+  function setCartCheckoutLoading(loading) {
+    var btn = document.getElementById("modal-cart-checkout");
+    var sp = document.getElementById("modal-cart-checkout-spinner");
+    var lab = document.getElementById("modal-cart-checkout-label");
+    if (!btn || !lab) return;
+    if (loading) {
+      btn.classList.add("cart-sheet__cta--loading");
+      btn.disabled = true;
+      if (sp) sp.hidden = false;
+      lab.textContent = "Подождите...";
+    } else {
+      btn.classList.remove("cart-sheet__cta--loading");
+      if (sp) sp.hidden = true;
+    }
+  }
+
+  async function fetchCartFromApi() {
+    var s = loadSession();
+    if (!s || !s.token || !authVerified) {
+      raffleDataCache.cart = null;
+      throw new Error("no auth");
+    }
+    var res = await fetch("/api/raffles/cart", { cache: "no-store", headers: authHeaders() });
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) throw new Error(data.error || "Ошибка");
+    var items = data.items || [];
+    raffleDataCache.cart = { items: items };
+    applyCartBadgeFromItems(items);
+    return raffleDataCache.cart;
+  }
+
+  async function fetchTicketsFromApi() {
+    var s = loadSession();
+    if (!s || !s.token || !authVerified) {
+      raffleDataCache.tickets = null;
+      throw new Error("no auth");
+    }
+    var res = await fetch("/api/raffles/my-tickets", { cache: "no-store", headers: authHeaders() });
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) throw new Error(data.error || "Ошибка");
+    var payload = { reserved: data.reserved || [], confirmed: data.confirmed || [] };
+    raffleDataCache.tickets = payload;
+    syncTicketsNavBadge();
+    return payload;
+  }
+
+  function prefetchRaffleCaches() {
+    return Promise.all([fetchCartFromApi().catch(function () {}), fetchTicketsFromApi().catch(function () {})]);
   }
 
   async function refreshTicketsModalContent() {
     var s = loadSession();
     if (!s || !s.token || !authVerified) return;
     try {
-      var res = await fetch("/api/raffles/my-tickets", { cache: "no-store", headers: authHeaders() });
-      var data = await res.json().catch(function () {
-        return {};
-      });
-      if (!res.ok) throw new Error(data.error || "Ошибка");
-      renderTicketsModalBody(data);
+      var data = await fetchTicketsFromApi();
+      if (modalTickets && modalTickets.classList.contains("is-open")) {
+        renderTicketsModalBody(data);
+      }
+      syncProfileTicketCount();
     } catch (e) {
       showToast(String(e.message || "Ошибка"), "error");
     }
@@ -955,14 +1283,18 @@
     ticketsModalActiveTab = "reserved";
     closeChatPanel();
     closeCartModal();
+    closeTicketSearchModal();
     if (modalProfile) closeModal(modalProfile);
     try {
-      var res = await fetch("/api/raffles/my-tickets", { cache: "no-store", headers: authHeaders() });
-      var data = await res.json().catch(function () {
-        return {};
-      });
-      if (!res.ok) throw new Error(data.error || "Ошибка");
-      renderTicketsModalBody(data);
+      if (!raffleDataCache.tickets) {
+        await fetchTicketsFromApi();
+      }
+      renderTicketsModalBody(
+        raffleDataCache.tickets || {
+          reserved: [],
+          confirmed: [],
+        },
+      );
     } catch (e) {
       showToast(String(e.message || "Ошибка"), "error");
       renderTicketsModalBody({ reserved: [], confirmed: [] });
@@ -977,45 +1309,27 @@
     if (!tabCart) return;
     var s = loadSession();
     if (!s || !s.token || !authVerified) {
+      lastCartChromeTotal = 0;
+      raffleDataCache.cart = null;
+      raffleDataCache.tickets = null;
       tabCart.classList.remove("bottom-nav-btn--cart-has-items");
+      syncTicketsNavBadge();
       if (badge) {
         badge.hidden = true;
         badge.textContent = "";
+        badge.classList.remove("cart-nav-badge--bounce");
       }
       return;
     }
     try {
-      var res = await fetch("/api/raffles/cart", {
-        cache: "no-store",
-        headers: authHeaders(),
-      });
-      var data = await res.json().catch(function () {
-        return {};
-      });
-      if (!res.ok) throw new Error();
-      var items = data.items || [];
-      var total = 0;
-      for (var i = 0; i < items.length; i++) {
-        total += ((items[i].numbers && items[i].numbers.length) || 0);
-      }
-      if (total > 0) {
-        tabCart.classList.add("bottom-nav-btn--cart-has-items");
-        if (badge) {
-          badge.hidden = false;
-          badge.textContent = total > 99 ? "99+" : String(total);
-        }
-      } else {
-        tabCart.classList.remove("bottom-nav-btn--cart-has-items");
-        if (badge) {
-          badge.hidden = true;
-          badge.textContent = "";
-        }
-      }
+      await fetchCartFromApi();
     } catch (_) {
+      lastCartChromeTotal = 0;
       tabCart.classList.remove("bottom-nav-btn--cart-has-items");
       if (badge) {
         badge.hidden = true;
         badge.textContent = "";
+        badge.classList.remove("cart-nav-badge--bounce");
       }
     }
   }
@@ -1043,56 +1357,78 @@
   }
 
   function renderCartModalBody(items) {
-    var body = document.getElementById("modal-cart-body");
+    var numbersRoot = document.getElementById("modal-cart-numbers-root");
     var btnCheckout = document.getElementById("modal-cart-checkout");
     var hintEl = document.getElementById("modal-cart-multi-hint");
     var checkoutLabel = document.getElementById("modal-cart-checkout-label");
-    if (!body) return;
+    if (!numbersRoot) return;
+    var onRaffle = IS_RAFFLE_PURCHASE_PAGE;
+    var chipRemoveSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+    function chipHtml(oid, n) {
+      return (
+        '<div class="cart-modal__chip">' +
+        '<button type="button" class="cart-modal__chip-remove" data-cart-remove="1" data-order-id="' +
+        String(oid) +
+        '" data-ticket="' +
+        String(n) +
+        '" aria-label="Убрать номер ' +
+        escapeHtml(String(n)) +
+        '">' +
+        chipRemoveSvg +
+        "</button>" +
+        '<span class="cart-modal__chip-num">' +
+        escapeHtml(String(n)) +
+        "</span></div>"
+      );
+    }
+
     if (!items || !items.length) {
-      body.innerHTML =
-        '<div class="cart-modal__empty-wrap">' +
-        '<p class="cart-modal__empty">Корзина пуста. Выберите номерки в акции и нажмите «В корзину».</p></div>';
+      if (onRaffle) {
+        numbersRoot.innerHTML =
+          '<div class="cart-modal__chips-row">' +
+          '<button type="button" class="cart-modal__add-slot" data-cart-add-more="1" aria-label="Добавить номерки">+</button>' +
+          "</div>";
+      } else {
+        numbersRoot.innerHTML = '<div class="cart-modal__numbers-empty"></div>';
+      }
       if (btnCheckout) {
         btnCheckout.disabled = true;
         btnCheckout.removeAttribute("data-checkout-raffle-id");
       }
-      if (checkoutLabel) checkoutLabel.textContent = "Корзина пуста";
+      if (checkoutLabel) checkoutLabel.textContent = onRaffle ? "Выберите номерки" : "Корзина пуста";
       if (hintEl) {
         hintEl.hidden = true;
         hintEl.textContent = "";
       }
+      setCartCheckoutLoading(false);
       return;
     }
     var html = "";
-    for (var i = 0; i < items.length; i++) {
+    var totalNums = 0;
+    var i;
+    var j;
+    for (i = 0; i < items.length; i++) {
       var it = items[i];
       var title = escapeHtml(String((it.raffle && it.raffle.title) || ""));
       var oid = Number(it.order && it.order.id);
-      html += '<section class="cart-modal__group">';
-      html += '<p class="cart-modal__raffle-name">' + title + "</p>";
-      html += '<p class="cart-modal__group-label">Номерки</p>';
-      html += '<ul class="cart-modal__list">';
       var nums = it.numbers || [];
-      for (var j = 0; j < nums.length; j++) {
-        var n = nums[j];
-        html += '<li class="cart-modal__row">';
-        html +=
-          '<button type="button" class="cart-modal__remove" data-cart-remove="1" data-order-id="' +
-          String(oid) +
-          '" data-ticket="' +
-          String(n) +
-          '" aria-label="Убрать номер ' +
-          escapeHtml(String(n)) +
-          '">';
-        html +=
-          '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-        html += "</button>";
-        html += '<span class="cart-modal__num">№ ' + escapeHtml(String(n)) + "</span>";
-        html += "</li>";
+      totalNums += nums.length;
+      if (items.length > 1) {
+        html += '<p class="cart-modal__raffle-name">' + title + "</p>";
       }
-      html += "</ul></section>";
+      html += '<div class="cart-modal__chips-row">';
+      for (j = 0; j < nums.length; j++) {
+        html += chipHtml(oid, nums[j]);
+      }
+      if (onRaffle && i === items.length - 1) {
+        html +=
+          '<button type="button" class="cart-modal__add-slot" data-cart-add-more="1" aria-label="Добавить номерки">+</button>';
+      }
+      html += "</div>";
     }
-    body.innerHTML = html;
+    numbersRoot.innerHTML = html;
     if (btnCheckout) {
       btnCheckout.disabled = false;
       var firstRaffleId = items[0] && items[0].raffle && items[0].raffle.id;
@@ -1100,17 +1436,24 @@
         btnCheckout.setAttribute("data-checkout-raffle-id", String(firstRaffleId));
       }
     }
-    if (checkoutLabel) checkoutLabel.textContent = "К оплате";
+    if (checkoutLabel) {
+      if (onRaffle && totalNums > 0) {
+        checkoutLabel.textContent = "Забронировать (" + String(totalNums) + ") >";
+      } else {
+        checkoutLabel.textContent = "К оплате";
+      }
+    }
     if (hintEl) {
       if (items.length > 1) {
         hintEl.hidden = false;
         hintEl.textContent =
-          "Несколько заявок — «К оплате» откроет первую. Остальные оплатите по очереди из корзины.";
+          "Несколько заявок — кнопка откроет первую. Остальные оплатите по очереди из корзины.";
       } else {
         hintEl.hidden = true;
         hintEl.textContent = "";
       }
     }
+    setCartCheckoutLoading(false);
   }
 
   async function openCartModal() {
@@ -1121,21 +1464,24 @@
       return;
     }
     if (!authVerified) return;
+    applyCartModalContext();
     updateCartBuyerDisplay();
     closeChatPanel();
     closeTicketsModal();
+    closeTicketSearchModal();
     if (modalProfile) closeModal(modalProfile);
     var tcb = document.getElementById("tab-cart");
     if (tcb) tcb.classList.add("bottom-nav-btn--cart-open");
+    setCartCheckoutLoading(false);
     try {
-      var res = await fetch("/api/raffles/cart", { cache: "no-store", headers: authHeaders() });
-      var data = await res.json().catch(function () {
-        return {};
-      });
-      if (!res.ok) throw new Error(data.error || "Ошибка");
-      renderCartModalBody(data.items || []);
+      if (!raffleDataCache.cart) {
+        await fetchCartFromApi();
+      }
+      renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
     } catch (e) {
-      showToast(String(e.message || "Ошибка"), "error");
+      if (String(e.message || "") !== "no auth") {
+        showToast(String(e.message || "Ошибка"), "error");
+      }
       renderCartModalBody([]);
     }
     openModal(modalCart);
@@ -1182,7 +1528,7 @@
     }
     var ctaClass =
       st === "active" ? "raffle-card__cta raffle-card__cta--indigo" : "raffle-card__cta raffle-card__cta--dark";
-    var ctaLabel = "Подробнее";
+    var ctaLabel = st === "active" ? "Участвовать" : "Подробнее";
     return (
       '<article class="raffle-card">' +
       '<div class="raffle-card__media">' +
@@ -1262,8 +1608,22 @@
   }
 
   function updateRaffleSelectionLabel() {
+    var n = raffleDetailState.selected.size;
     var el = raffleDetailEl("selection");
-    if (el) el.textContent = "Выбрано: " + String(raffleDetailState.selected.size) + " / " + String(RAFFLE_MAX_SELECT);
+    if (el) el.textContent = "Выбрано: " + String(n) + " / " + String(RAFFLE_MAX_SELECT);
+    var reserveBtn = document.getElementById("raffle-page-reserve");
+    if (reserveBtn) {
+      if (n > 0) {
+        reserveBtn.textContent = "Забронировать (" + String(n) + ")";
+        reserveBtn.classList.remove("raffle-reserve-btn--empty");
+      } else {
+        reserveBtn.textContent = "Выберите номера";
+        reserveBtn.classList.add("raffle-reserve-btn--empty");
+      }
+    }
+    if (modalTicketSearch && modalTicketSearch.classList.contains("is-open")) {
+      updateTicketSearchRandomPanel();
+    }
   }
 
   function startRaffleReserveTimer(untilTs) {
@@ -1356,18 +1716,20 @@
     var gridTools = document.getElementById("raffle-page-topbar-grid-tools");
     var checkoutBar = document.getElementById("raffle-page-checkout-bar");
     var headingBlock = document.getElementById("raffle-page-heading-block");
-    var topTitle = document.getElementById("raffle-page-topbar-title");
+    var checkoutHead = document.getElementById("raffle-page-checkout-head");
+    var checkoutTitleEl = document.getElementById("raffle-page-checkout-title");
     var numsEl = document.getElementById("raffle-page-checkout-numbers");
     var extendBtnTop = document.getElementById("raffle-page-extend");
     var topSpacer = document.getElementById("raffle-page-topbar-spacer");
     var inCheckout = order && String(order.status) === "reserved";
-    if (topTitle && r) topTitle.textContent = String(r.title || "Акция");
     if (inCheckout) {
       layout.classList.add("raffle-purchase-layout--checkout");
       if (gridTools) gridTools.hidden = true;
       if (topSpacer) topSpacer.hidden = false;
       if (checkoutBar) checkoutBar.hidden = false;
       if (headingBlock) headingBlock.hidden = true;
+      if (checkoutHead) checkoutHead.hidden = false;
+      if (checkoutTitleEl && r) checkoutTitleEl.textContent = String(r.title || "Акция");
       if (legacyTimer) legacyTimer.hidden = true;
       if (numsEl) {
         if (nums.length > 0) {
@@ -1396,6 +1758,7 @@
       if (topSpacer) topSpacer.hidden = true;
       if (checkoutBar) checkoutBar.hidden = true;
       if (headingBlock) headingBlock.hidden = false;
+      if (checkoutHead) checkoutHead.hidden = true;
     }
   }
 
@@ -1582,9 +1945,40 @@
     }
     var freeEl = raffleDetailEl("tab-free");
     if (freeEl) {
-      freeEl.textContent = freeInTab + " из " + String(cells.length) + " свободно";
+      freeEl.textContent = String(freeInTab) + " из " + String(cells.length);
     }
     renderRaffleGrid(cells);
+  }
+
+  function getRangeTabForTicketN(ticketCount, n) {
+    var maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
+    var chunk = 500;
+    if (n < 1 || n > maxN) return null;
+    var start = 1;
+    while (start <= maxN) {
+      var end = Math.min(start + chunk - 1, maxN);
+      if (n >= start && n <= end) return { from: start, to: end };
+      start = end + 1;
+    }
+    return null;
+  }
+
+  async function ensureRaffleTabForNumber(n) {
+    var r = raffleDetailState.raffle;
+    if (!r || !r.id) return;
+    var part = getRangeTabForTicketN(r.ticket_count, n);
+    if (!part) return;
+    if (raffleDetailState.rangeFrom === part.from && raffleDetailState.rangeTo === part.to) return;
+    var tabs = raffleDetailEl("tabs");
+    if (tabs) {
+      tabs.querySelectorAll(".raffle-range-tab").forEach(function (b) {
+        var f = Number(b.getAttribute("data-from"));
+        b.classList.toggle("raffle-range-tab--active", f === part.from);
+      });
+    }
+    raffleDetailState.rangeFrom = part.from;
+    raffleDetailState.rangeTo = part.to;
+    await loadRaffleTicketSlice();
   }
 
   function renderRaffleGrid(cells) {
@@ -1595,18 +1989,28 @@
       var cell = cells[i];
       var n = cell.n;
       var kind = String(cell.kind || "free");
-      /* Купленные / на проверке — как занятые (номер не показываем). Активная бронь self_reserved — с номером. */
-      if (
-        kind === "taken" ||
-        kind === "self_confirmed" ||
-        kind === "self_pending"
-      ) {
+      /* Чужие занятые — серая точка без номера. Свои бронь / ожидание / подтверждено — оранжевые с номером. */
+      if (kind === "taken") {
         html +=
           '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято"><span class="raffle-cell__dot"></span></div>';
         continue;
       }
       var label = String(n);
       var cls = "raffle-cell";
+      if (kind === "self_reserved" || kind === "self_pending" || kind === "self_confirmed") {
+        cls += " raffle-cell--free raffle-cell--mine";
+        html +=
+          '<div class="' +
+          cls +
+          '" data-kind="' +
+          escapeHtml(kind) +
+          '" aria-label="Ваш номер ' +
+          escapeHtml(label) +
+          '"><span>' +
+          escapeHtml(label) +
+          "</span></div>";
+        continue;
+      }
       if (kind === "free") {
         cls += " raffle-cell--free";
         if (raffleDetailState.selected.has(n)) cls += " raffle-cell--selected";
@@ -1621,8 +2025,7 @@
           escapeHtml(label) +
           "</button>";
       } else {
-        /* self_reserved — тот же синий вид, что у «Выбрано», без отдельной категории «ваши» */
-        cls += " raffle-cell--free raffle-cell--selected";
+        cls += " raffle-cell--free raffle-cell--mine";
         html +=
           '<div class="' +
           cls +
@@ -1630,7 +2033,7 @@
           escapeHtml(kind) +
           '" aria-label="Номер ' +
           escapeHtml(label) +
-          ' в брони"><span>' +
+          '"><span>' +
           escapeHtml(label) +
           "</span></div>";
       }
@@ -1793,21 +2196,10 @@
     if (window.__abRafflePageBound) return;
     window.__abRafflePageBound = true;
 
-    document.getElementById("raffle-page-back")?.addEventListener("click", function () {
-      if (IS_RAFFLE_PAY_PAGE) {
-        location.href = "/home";
-        return;
-      }
-      var layout = document.getElementById("raffle-purchase-layout");
-      if (layout && layout.classList.contains("raffle-purchase-layout--checkout")) {
-        location.href = "/home";
-        return;
-      }
-      if (window.history.length > 1) {
-        window.history.back();
-      } else {
-        location.href = "/home";
-      }
+    document.getElementById("raffle-page-back")?.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      location.href = "/home";
     });
 
     document.getElementById("raffle-pay-numbers")?.addEventListener("click", function (e) {
@@ -2029,13 +2421,13 @@
       raffleDetailState.raffle = r;
       syncRafflePaymentButtons(r);
       var heading = raffleDetailEl("heading");
-      var meta = raffleDetailEl("meta");
-      var topbarTitle = document.getElementById("raffle-page-topbar-title");
+      var priceBadge = document.getElementById("raffle-page-price-badge");
       if (heading) heading.textContent = String(r.title || "");
-      if (topbarTitle) topbarTitle.textContent = String(r.title || "Акция");
-      if (meta) {
-        meta.textContent =
-          String(r.price_rub ?? 0) + " ₽ за билет · " + String(r.ticket_count ?? 0) + " номерков";
+      if (priceBadge) {
+        var pr = Number(r.price_rub ?? 0);
+        var fmt = String(Math.max(0, Math.round(pr))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+        priceBadge.textContent = "БИЛЕТ: " + fmt + " ₽";
+        priceBadge.hidden = false;
       }
       buildRaffleRangeTabs(r.ticket_count);
       updateRaffleSelectionLabel();
@@ -2050,6 +2442,7 @@
       }
       await loadRaffleTicketSlice();
       bindRafflePurchasePageEvents();
+      setBottomNavActive();
     } catch (e) {
       showToast(String(e.message || "Ошибка"), "error");
       location.replace("/home");
@@ -2241,12 +2634,22 @@
       closeCartModal();
       return;
     }
+    var addMore = e.target.closest("[data-cart-add-more]");
+    if (addMore) {
+      e.preventDefault();
+      closeCartModal();
+      return;
+    }
     var rm = e.target.closest("[data-cart-remove]");
     if (!rm) return;
     e.preventDefault();
+    var nowRm = Date.now();
+    if (nowRm - lastCartRemoveAt < 450) return;
+    lastCartRemoveAt = nowRm;
     var orderId = Number(rm.getAttribute("data-order-id"));
     var ticket = Number(rm.getAttribute("data-ticket"));
     if (!Number.isFinite(orderId) || !Number.isFinite(ticket)) return;
+    rm.disabled = true;
     fetch("/api/raffles/orders/" + String(orderId) + "/tickets/" + String(ticket), {
       method: "DELETE",
       headers: authHeaders(),
@@ -2258,20 +2661,32 @@
       })
       .then(function (x) {
         if (!x.ok) throw new Error(x.d.error || "Ошибка");
-        return openCartModal();
+        return fetchCartFromApi();
       })
       .then(function () {
-        return syncCartChrome();
+        if (modalCart && modalCart.classList.contains("is-open")) {
+          renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+        }
       })
       .catch(function (err) {
         showToast(String(err.message || "Ошибка"), "error");
+      })
+      .finally(function () {
+        if (rm) rm.disabled = false;
       });
   });
   document.getElementById("modal-cart-checkout")?.addEventListener("click", function () {
-    var rid = this.getAttribute("data-checkout-raffle-id");
-    if (!rid) return;
-    closeCartModal();
-    location.href = "/home/raffle/pay?id=" + encodeURIComponent(rid);
+    var btn = this;
+    var rid = btn.getAttribute("data-checkout-raffle-id");
+    if (!rid || btn.classList.contains("cart-sheet__cta--loading")) return;
+    var now = Date.now();
+    if (now - lastCartCheckoutAt < 2000) return;
+    lastCartCheckoutAt = now;
+    setCartCheckoutLoading(true);
+    window.setTimeout(function () {
+      closeCartModal();
+      location.href = "/home/raffle/pay?id=" + encodeURIComponent(rid);
+    }, 160);
   });
 
   document.getElementById("modal-tickets-close")?.addEventListener("click", function () {
@@ -2402,6 +2817,333 @@
     }
   });
 
+  function updateTicketSearchApplyUI() {
+    var apply = document.getElementById("ticket-search-apply");
+    var rawEl = document.getElementById("ticket-search-input");
+    var field = document.getElementById("ticket-search-field");
+    var badge = document.getElementById("ticket-search-status-badge");
+    if (!apply || !rawEl) return;
+
+    function setField(mode) {
+      if (!field) return;
+      field.className = "ticket-search-sheet__field" + (mode ? " ticket-search-sheet__field--" + mode : "");
+    }
+
+    function setBadge(text, variant) {
+      if (!badge) return;
+      if (!text) {
+        badge.className = "ticket-search-status-badge ticket-search-status-badge--empty";
+        badge.textContent = "";
+        return;
+      }
+      badge.className = "ticket-search-status-badge ticket-search-status-badge--" + variant;
+      badge.textContent = text;
+    }
+
+    var v = String(rawEl.value || "").trim();
+    var digits = v.replace(/\D/g, "");
+    var n = parseInt(digits, 10);
+    var r = raffleDetailState.raffle;
+
+    if (!digits || !Number.isFinite(n) || n < 1) {
+      apply.disabled = true;
+      apply.textContent = "Укажите свободный номер";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("");
+      setBadge("", "");
+      return;
+    }
+
+    if (r && (n < 1 || n > Number(r.ticket_count))) {
+      apply.disabled = true;
+      apply.textContent = "Укажите свободный номер";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("invalid");
+      setBadge("НЕТ ТАКОГО", "invalid");
+      return;
+    }
+
+    var lk = ticketSearchLastLookup;
+    if (!lk || lk.n !== n) {
+      apply.disabled = true;
+      apply.textContent = "Проверяем…";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("loading");
+      setBadge("", "");
+      return;
+    }
+
+    if (lk.kind === "error") {
+      apply.disabled = true;
+      apply.textContent = "Укажите свободный номер";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("invalid");
+      setBadge("ОШИБКА", "invalid");
+      return;
+    }
+
+    if (lk.kind === "free") {
+      apply.disabled = false;
+      apply.textContent = "Добавить №" + String(n);
+      apply.className = "btn btn--primary ticket-search-sheet__cta ticket-search-sheet__cta--primary-dark";
+      setField("free");
+      setBadge("СВОБОДЕН", "free");
+      return;
+    }
+
+    if (lk.kind === "self_reserved" || lk.kind === "self_pending" || lk.kind === "self_confirmed") {
+      apply.disabled = true;
+      apply.textContent = "Добавить №" + String(n);
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("self");
+      setBadge("ВАШ", "self");
+      return;
+    }
+
+    if (lk.kind === "taken") {
+      apply.disabled = true;
+      apply.textContent = "Укажите свободный номер";
+      apply.className = "btn btn--primary ticket-search-sheet__cta";
+      setField("taken");
+      setBadge("ЗАНЯТО", "taken");
+      return;
+    }
+
+    apply.disabled = true;
+    apply.textContent = "Укажите свободный номер";
+    apply.className = "btn btn--primary ticket-search-sheet__cta";
+    setField("invalid");
+    setBadge("НЕТ ТАКОГО", "invalid");
+  }
+
+  function scheduleTicketSearchLookup() {
+    var inp = document.getElementById("ticket-search-input");
+    var r = raffleDetailState.raffle;
+    if (ticketSearchLookupTimer) clearTimeout(ticketSearchLookupTimer);
+    if (!inp || !r || !r.id) return;
+    var raw = String(inp.value || "").replace(/\D/g, "");
+    var n = parseInt(raw, 10);
+    if (!raw || !Number.isFinite(n) || n < 1) {
+      ticketSearchLastLookup = { n: NaN, kind: null };
+      updateTicketSearchApplyUI();
+      return;
+    }
+    if (n > Number(r.ticket_count)) {
+      ticketSearchLastLookup = { n: NaN, kind: null };
+      updateTicketSearchApplyUI();
+      return;
+    }
+    ticketSearchLastLookup = { n: NaN, kind: null };
+    updateTicketSearchApplyUI();
+    ticketSearchLookupTimer = setTimeout(function () {
+      ticketSearchLookupTimer = null;
+      fetch("/api/raffles/" + String(r.id) + "/ticket-lookup?n=" + String(n), {
+        cache: "no-store",
+        headers: authHeaders(),
+      })
+        .then(function (res) {
+          return res.json().then(function (d) {
+            return { ok: res.ok, d: d };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok) throw new Error();
+          var inp2 = document.getElementById("ticket-search-input");
+          var cur = inp2 ? String(inp2.value || "").replace(/\D/g, "") : "";
+          if (parseInt(cur, 10) !== n) return;
+          ticketSearchLastLookup = { n: n, kind: x.d.kind };
+          updateTicketSearchApplyUI();
+        })
+        .catch(function () {
+          var inp3 = document.getElementById("ticket-search-input");
+          var cur2 = inp3 ? String(inp3.value || "").replace(/\D/g, "") : "";
+          if (parseInt(cur2, 10) !== n) return;
+          ticketSearchLastLookup = { n: n, kind: "error" };
+          updateTicketSearchApplyUI();
+        });
+    }, 320);
+  }
+
+  document.getElementById("modal-ticket-search-close")?.addEventListener("click", function () {
+    closeTicketSearchModal();
+  });
+  modalTicketSearch?.addEventListener("click", function (e) {
+    if (e.target === modalTicketSearch) closeTicketSearchModal();
+  });
+  document.getElementById("ticket-search-input")?.addEventListener("input", function () {
+    scheduleTicketSearchLookup();
+  });
+  document.getElementById("ticket-search-mode-enter")?.addEventListener("click", function () {
+    var mEnter = document.getElementById("ticket-search-mode-enter");
+    var mRand = document.getElementById("ticket-search-mode-random");
+    var pEnter = document.getElementById("ticket-search-panel-enter");
+    var pRand = document.getElementById("ticket-search-panel-random");
+    if (mEnter && mRand) {
+      mEnter.classList.add("ticket-search-sheet__seg--active");
+      mRand.classList.remove("ticket-search-sheet__seg--active");
+      mEnter.setAttribute("aria-selected", "true");
+      mRand.setAttribute("aria-selected", "false");
+    }
+    if (pEnter && pRand) {
+      pEnter.hidden = false;
+      pRand.hidden = true;
+    }
+  });
+  document.getElementById("ticket-search-mode-random")?.addEventListener("click", function () {
+    var mEnter = document.getElementById("ticket-search-mode-enter");
+    var mRand = document.getElementById("ticket-search-mode-random");
+    var pEnter = document.getElementById("ticket-search-panel-enter");
+    var pRand = document.getElementById("ticket-search-panel-random");
+    if (mEnter && mRand) {
+      mRand.classList.add("ticket-search-sheet__seg--active");
+      mEnter.classList.remove("ticket-search-sheet__seg--active");
+      mRand.setAttribute("aria-selected", "true");
+      mEnter.setAttribute("aria-selected", "false");
+    }
+    if (pEnter && pRand) {
+      pRand.hidden = false;
+      pEnter.hidden = true;
+    }
+    updateTicketSearchRandomPanel();
+  });
+  document.getElementById("ticket-search-random-minus")?.addEventListener("click", function () {
+    if (ticketSearchRandomQty > 1) {
+      ticketSearchRandomQty -= 1;
+      updateTicketSearchRandomPanel();
+    }
+  });
+  document.getElementById("ticket-search-random-plus")?.addEventListener("click", function () {
+    var max = getTicketSearchSlotsLeft();
+    if (ticketSearchRandomQty < max) {
+      ticketSearchRandomQty += 1;
+      updateTicketSearchRandomPanel();
+    }
+  });
+  document.querySelectorAll("[data-random-preset]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var v = Number(btn.getAttribute("data-random-preset"));
+      if (!Number.isFinite(v) || v < 1) return;
+      var max = getTicketSearchSlotsLeft();
+      ticketSearchRandomQty = Math.min(v, Math.max(1, max));
+      updateTicketSearchRandomPanel();
+    });
+  });
+  document.getElementById("ticket-search-apply")?.addEventListener("click", function () {
+    if (!IS_RAFFLE_PURCHASE_PAGE || raffleDetailState.order) return;
+    var r = raffleDetailState.raffle;
+    if (!r || !r.id) return;
+    var raw = document.getElementById("ticket-search-input");
+    var n = parseInt(String(raw && raw.value ? raw.value : "").replace(/\D/g, ""), 10);
+    if (!Number.isFinite(n) || n < 1) return;
+    if (ticketSearchLastLookup.kind !== "free" || ticketSearchLastLookup.n !== n) return;
+    ensureRaffleTabForNumber(n)
+      .then(function () {
+        return fetch("/api/raffles/" + String(r.id) + "/ticket-lookup?n=" + String(n), {
+          cache: "no-store",
+          headers: authHeaders(),
+        }).then(function (res) {
+          return res.json().then(function (d) {
+            return { ok: res.ok, d: d };
+          });
+        });
+      })
+      .then(function (x) {
+        if (!x.ok || x.d.kind !== "free") {
+          showToast("Номер уже занят или недоступен", "warning");
+          return loadRaffleTicketSlice().then(function () {
+            return false;
+          });
+        }
+        if (raffleDetailState.selected.has(n)) {
+          raffleDetailState.selected.delete(n);
+        } else {
+          if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
+            showToast("Не больше " + String(RAFFLE_MAX_SELECT) + " номерков за раз", "warning");
+            return false;
+          }
+          raffleDetailState.selected.add(n);
+        }
+        updateRaffleSelectionLabel();
+        return loadRaffleTicketSlice().then(function () {
+          return true;
+        });
+      })
+      .then(function (didClose) {
+        if (!didClose) return;
+        closeTicketSearchModal();
+        showToast("Номер " + String(n) + " обновлён в выборе", "success");
+      })
+      .catch(function (e) {
+        showToast(String(e.message || "Ошибка"), "error");
+      });
+  });
+  document.getElementById("ticket-search-random-apply")?.addEventListener("click", function () {
+    if (!IS_RAFFLE_PURCHASE_PAGE || raffleDetailState.order) return;
+    var r = raffleDetailState.raffle;
+    if (!r || !r.id) return;
+    clampTicketSearchRandomQty();
+    var want = ticketSearchRandomQty;
+    var maxSlots = getTicketSearchSlotsLeft();
+    if (maxSlots < 1) {
+      showToast("Достигнут лимит выбора номерков", "warning");
+      return;
+    }
+    want = Math.min(want, maxSlots);
+    var from = raffleDetailState.rangeFrom;
+    var to = raffleDetailState.rangeTo;
+    fetch("/api/raffles/" + String(r.id) + "/tickets?from=" + String(from) + "&to=" + String(to), {
+      cache: "no-store",
+      headers: authHeaders(),
+    })
+      .then(function (res) {
+        return res.json().then(function (d) {
+          return { ok: res.ok, d: d };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) throw new Error(x.d.error || "Ошибка");
+        var cells = x.d.cells || [];
+        var freeNums = [];
+        var i;
+        for (i = 0; i < cells.length; i++) {
+          if (cells[i].kind === "free") freeNums.push(cells[i].n);
+        }
+        var candidates = freeNums.filter(function (num) {
+          return !raffleDetailState.selected.has(num);
+        });
+        if (!candidates.length) {
+          showToast("Нет свободных номеров в этом диапазоне", "warning");
+          return false;
+        }
+        var picks = [];
+        var pool = candidates.slice();
+        for (i = 0; i < want && pool.length; i++) {
+          var idx = Math.floor(Math.random() * pool.length);
+          picks.push(pool[idx]);
+          pool.splice(idx, 1);
+        }
+        if (!picks.length) return false;
+        for (i = 0; i < picks.length; i++) {
+          raffleDetailState.selected.add(picks[i]);
+        }
+        updateRaffleSelectionLabel();
+        return loadRaffleTicketSlice().then(function () {
+          return picks.length;
+        });
+      })
+      .then(function (added) {
+        if (!added) return;
+        closeTicketSearchModal();
+        showToast(
+          added === 1 ? "Случайный номер добавлен" : "Добавлено случайных номеров: " + String(added),
+          "success",
+        );
+      })
+      .catch(function (e) {
+        showToast(String(e.message || "Ошибка"), "error");
+      });
+  });
+
   const btnRegisterMain = document.getElementById("btn-register-main");
   const btnLoginLink = document.getElementById("btn-login-link");
 
@@ -2440,12 +3182,17 @@
       setBottomNavActive();
       return;
     }
+    if (overlay.id === "modal-ticket-search") {
+      setBottomNavActive();
+      return;
+    }
     if (overlay.id === "modal-profile") setBottomNavActive();
   }
 
   function closeAllModals() {
     closeCartModal();
     closeTicketsModal();
+    closeTicketSearchModal();
     [modalRegister, modalLogin, modalForgot, modalProfile].forEach(closeModal);
     closeRaffleUnavailableModal();
   }
@@ -2453,6 +3200,7 @@
   function openProfileModal() {
     closeCartModal();
     closeTicketsModal();
+    closeTicketSearchModal();
     renderDashboard();
     openModal(modalProfile);
     setBottomNavActive();
@@ -2991,6 +3739,23 @@
       });
   });
 
+  var tabSearchEl = document.getElementById("tab-search");
+  if (tabSearchEl) {
+    tabSearchEl.addEventListener("click", function () {
+      var s = loadSession();
+      if (!s || !s.token) {
+        openModal(modalLogin);
+        return;
+      }
+      if (!authVerified) return;
+      if (modalTicketSearch && modalTicketSearch.classList.contains("is-open")) {
+        closeTicketSearchModal();
+        return;
+      }
+      openTicketSearchModal();
+    });
+  }
+
   var tabCartEl = document.getElementById("tab-cart");
   if (tabCartEl) {
     tabCartEl.addEventListener("click", function () {
@@ -3066,6 +3831,16 @@
   initWelcomeSplash();
   updateScreens();
   verifySessionOnLoad().then(function () {
+    if (
+      authVerified &&
+      (IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE)
+    ) {
+      prefetchRaffleCaches()
+        .catch(function () {})
+        .finally(function () {
+          syncProfileTicketCount();
+        });
+    }
     if (IS_HOME_APP && authVerified) {
       try {
         var ptoast = sessionStorage.getItem("ab_pending_toast");
@@ -3075,8 +3850,6 @@
           showToast(pt.message, pt.type || "neutral");
         }
       } catch (_) {}
-      syncCartChrome().catch(function () {});
-      syncProfileTicketCount();
       try {
         if (new URLSearchParams(location.search).get("openCart") === "1") {
           history.replaceState({}, "", "/home");

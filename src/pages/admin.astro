@@ -203,6 +203,15 @@ import "../styles/admin-raffles.css";
                   <p class="admin-raffle-field-hint admin-raffle-field-hint--tight">Меньшее число — выше на главной.</p>
                 </div>
               </div>
+              <div class="form-group admin-raffle-toggle-row">
+                <label class="admin-raffle-checkbox">
+                  <input id="raffle-wholesale-enabled" type="checkbox" />
+                  <span>Оптовики</span>
+                </label>
+                <p class="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  Учёт от 10 подтверждённых номерков в этой акции: отдельный список оптовиков (№ 1, 2, 3… по очереди) и оранжевое выделение в списке участников.
+                </p>
+              </div>
             </section>
             <div class="form-actions form-actions--split admin-raffle-form__actions">
               <button type="button" class="btn btn--ghost" id="btn-raffle-cancel">Отмена</button>
@@ -232,6 +241,10 @@ import "../styles/admin-raffles.css";
               <span>Поиск по номерку</span>
               <input id="raffle-participants-search" class="input" type="search" inputmode="numeric" placeholder="Введите номерок" autocomplete="off" />
             </label>
+            <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers" hidden>
+              <h3 class="admin-raffle-wholesalers__title">Оптовики</h3>
+              <div id="raffle-wholesalers-list" class="admin-raffle-wholesalers__list"></div>
+            </div>
             <div id="raffle-participants-list" class="admin-raffle-participants__list"></div>
           </div>
         </div>
