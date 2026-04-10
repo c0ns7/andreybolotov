@@ -670,7 +670,22 @@ html.js-intro-done #welcome-splash {
   color: var(--accent);
 }
 
-.raffle-card__price span {
+.raffle-card__price-old {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #9ca3af;
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+
+.raffle-card__price-current {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+/* Только подпись «/ билет» — не все span (иначе затираются цены со скидкой) */
+.raffle-card__price-suffix {
   font-size: 0.75rem;
   font-weight: 500;
   color: #9ca3af;
@@ -4838,6 +4853,35 @@ html.raffle-purchase-page .raffle-detail__step {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
 }
 
+.raffle-price-badge--hero.raffle-price-badge--hero-sale {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 8px;
+  padding: 6px 14px;
+  font-size: 0.62rem;
+  background: linear-gradient(125deg, #0f766e 0%, #059669 40%, #10b981 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.raffle-price-badge__old {
+  font-weight: 700;
+  text-decoration: line-through;
+  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.raffle-price-badge__arrow {
+  opacity: 0.9;
+  font-weight: 800;
+}
+
+.raffle-price-badge__new {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
 .raffle-purchase-meta {
   margin: 0 0 10px;
   font-size: 0.88rem;
@@ -4919,18 +4963,85 @@ html.raffle-purchase-page .raffle-detail__step {
 }
 
 .modal-overlay--raffle-unavailable .modal--raffle-unavailable {
-  max-width: min(520px, 100vw - 32px);
+  max-width: min(400px, 100vw - 32px);
+  padding: 0;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.modal--raffle-unavailable .raffle-unavailable__top {
+  position: relative;
+  z-index: 2;
+  background: #fff;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.modal--raffle-unavailable .raffle-unavailable__close {
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.raffle-unavailable__hero {
+  position: relative;
+  padding: 28px 24px 36px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.raffle-unavailable--paused .raffle-unavailable__hero {
+  background: linear-gradient(145deg, #fbbf24 0%, #f97316 45%, #ea580c 100%);
+}
+
+.raffle-unavailable--closed .raffle-unavailable__hero {
+  background: linear-gradient(145deg, #64748b 0%, #475569 40%, #1e293b 100%);
+}
+
+.raffle-unavailable__glow {
+  position: absolute;
+  inset: -40% -20% auto;
+  height: 120%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.raffle-unavailable__icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.raffle-unavailable__body {
+  padding: 18px 20px 22px !important;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
 }
 
 .raffle-unavailable__heading {
   margin: 0 0 10px;
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #0f172a;
 }
 
 .raffle-unavailable__text {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #64748b;
 }

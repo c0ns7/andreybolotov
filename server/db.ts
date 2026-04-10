@@ -140,6 +140,9 @@ function migrate() {
   if (!rafCols.some((c) => c.name === "wholesale_enabled")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN wholesale_enabled INTEGER NOT NULL DEFAULT 0`);
   }
+  if (!rafCols.some((c) => c.name === "old_price_rub")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN old_price_rub INTEGER NOT NULL DEFAULT 0`);
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS raffle_wholesale_assignments (
@@ -398,6 +401,7 @@ export type RaffleRow = {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  old_price_rub?: number;
   ticket_count: number;
   collection_url: string;
   collection_recipient: string;
@@ -414,6 +418,7 @@ export type RaffleDto = {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  old_price_rub: number | null;
   ticket_count: number;
   collection_url: string;
   collection_recipient: string;
@@ -425,11 +430,13 @@ export type RaffleDto = {
 
 export function raffleToDto(r: RaffleRow): RaffleDto {
   const st = r.status === "closed" || r.status === "paused" ? r.status : "active";
+  const oldP = Number(r.old_price_rub ?? 0);
   return {
     id: r.id,
     title: r.title,
     cover_image_url: r.cover_image_url,
     price_rub: r.price_rub,
+    old_price_rub: oldP > 0 ? oldP : null,
     ticket_count: r.ticket_count,
     collection_url: r.collection_url,
     collection_recipient: r.collection_recipient,
@@ -454,6 +461,7 @@ export function insertRaffle(data: {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  old_price_rub: number;
   ticket_count: number;
   collection_url: string;
   collection_recipient: string;
@@ -466,15 +474,16 @@ export function insertRaffle(data: {
   const info = db
     .prepare(
       `INSERT INTO raffles (
-        title, cover_image_url, price_rub, ticket_count,
+        title, cover_image_url, price_rub, old_price_rub, ticket_count,
         collection_url, collection_recipient, qr_image_url,
         status, sort_order, wholesale_enabled, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
       data.cover_image_url,
       data.price_rub,
+      data.old_price_rub,
       data.ticket_count,
       data.collection_url,
       data.collection_recipient,
@@ -494,6 +503,7 @@ export function updateRaffle(
     title: string;
     cover_image_url: string;
     price_rub: number;
+    old_price_rub: number;
     ticket_count: number;
     collection_url: string;
     collection_recipient: string;
@@ -505,7 +515,7 @@ export function updateRaffle(
 ): void {
   db.prepare(
     `UPDATE raffles SET
-      title = ?, cover_image_url = ?, price_rub = ?, ticket_count = ?,
+      title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
       collection_url = ?, collection_recipient = ?, qr_image_url = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, updated_at = ?
     WHERE id = ?`,
@@ -513,6 +523,7 @@ export function updateRaffle(
     data.title,
     data.cover_image_url,
     data.price_rub,
+    data.old_price_rub,
     data.ticket_count,
     data.collection_url,
     data.collection_recipient,

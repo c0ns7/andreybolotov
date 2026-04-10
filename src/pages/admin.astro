@@ -164,6 +164,22 @@ import "../styles/admin-raffles.css";
                   <input id="raffle-tickets" class="input" type="number" min="0" step="1" required inputmode="numeric" />
                 </div>
               </div>
+              <div class="form-group">
+                <label for="raffle-old-price">Старая цена, ₽</label>
+                <input
+                  id="raffle-old-price"
+                  class="input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="Не показывать"
+                  autocomplete="off"
+                />
+                <p class="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  Необязательно. На главной отображается зачёркнутой серым, если больше текущей цены (например 2000 при цене 1300).
+                </p>
+              </div>
             </section>
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-pay">
               <h3 id="raffle-sec-pay" class="admin-raffle-section__title">Оплата для пользователей</h3>
@@ -204,9 +220,10 @@ import "../styles/admin-raffles.css";
                 </div>
               </div>
               <div class="form-group admin-raffle-toggle-row">
-                <label class="admin-raffle-checkbox">
-                  <input id="raffle-wholesale-enabled" type="checkbox" />
-                  <span>Оптовики</span>
+                <label class="admin-toggle" for="raffle-wholesale-enabled">
+                  <input id="raffle-wholesale-enabled" class="admin-toggle__input" type="checkbox" role="switch" />
+                  <span class="admin-toggle__track" aria-hidden="true"></span>
+                  <span class="admin-toggle__label">Оптовики</span>
                 </label>
                 <p class="admin-raffle-field-hint admin-raffle-field-hint--tight">
                   Учёт от 10 подтверждённых номерков в этой акции: отдельный список оптовиков (№ 1, 2, 3… по очереди) и оранжевое выделение в списке участников.

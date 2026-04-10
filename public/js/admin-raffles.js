@@ -281,6 +281,13 @@
     document.getElementById("raffle-title").value = edit ? edit.title : "";
     document.getElementById("raffle-cover-url").value = edit ? edit.cover_image_url || "" : "";
     document.getElementById("raffle-price").value = edit ? String(edit.price_rub) : "0";
+    var rop = document.getElementById("raffle-old-price");
+    if (rop) {
+      rop.value =
+        edit && edit.old_price_rub != null && Number(edit.old_price_rub) > 0
+          ? String(edit.old_price_rub)
+          : "";
+    }
     document.getElementById("raffle-tickets").value = edit ? String(edit.ticket_count) : "0";
     document.getElementById("raffle-collection-url").value = edit ? edit.collection_url || "" : "";
     document.getElementById("raffle-recipient").value = edit ? edit.collection_recipient || "" : "";
@@ -578,6 +585,11 @@
       title: document.getElementById("raffle-title").value.trim(),
       cover_image_url: coverUrl,
       price_rub: Number(document.getElementById("raffle-price").value),
+      old_price_rub: (function () {
+        var el = document.getElementById("raffle-old-price");
+        var s = el && String(el.value || "").trim();
+        return s === "" ? 0 : Number(s);
+      })(),
       ticket_count: Number(document.getElementById("raffle-tickets").value),
       collection_url: document.getElementById("raffle-collection-url").value.trim(),
       collection_recipient: document.getElementById("raffle-recipient").value.trim(),

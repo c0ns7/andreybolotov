@@ -273,6 +273,7 @@ type RaffleInput = {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  old_price_rub: number;
   ticket_count: number;
   collection_url: string;
   collection_recipient: string;
@@ -293,9 +294,20 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   const qr_image_url = String(body.qr_image_url ?? "").trim();
 
   const price_rub = Math.floor(Number(body.price_rub));
+  const old_price_raw = body.old_price_rub;
+  const old_price_rub =
+    old_price_raw === undefined || old_price_raw === null || old_price_raw === ""
+      ? 0
+      : Math.floor(Number(old_price_raw));
   const ticket_count = Math.floor(Number(body.ticket_count));
   if (!Number.isFinite(price_rub) || price_rub < 0 || price_rub > 1_000_000_000) {
     return { ok: false, error: "Некорректная цена билета" };
+  }
+  if (!Number.isFinite(old_price_rub) || old_price_rub < 0 || old_price_rub > 1_000_000_000) {
+    return { ok: false, error: "Некорректная старая цена" };
+  }
+  if (old_price_rub > 0 && old_price_rub <= price_rub) {
+    return { ok: false, error: "Старая цена должна быть больше текущей (или оставьте пустой)" };
   }
   if (!Number.isFinite(ticket_count) || ticket_count < 0 || ticket_count > 100_000_000) {
     return { ok: false, error: "Некорректное количество номерков" };
@@ -321,6 +333,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       title,
       cover_image_url,
       price_rub,
+      old_price_rub,
       ticket_count,
       collection_url,
       collection_recipient,
@@ -961,6 +974,7 @@ app.post("/api/admin/raffles", async (c) => {
     title: v.title,
     cover_image_url: v.cover_image_url,
     price_rub: v.price_rub,
+    old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
     collection_recipient: v.collection_recipient,
@@ -993,6 +1007,7 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     title: v.title,
     cover_image_url: v.cover_image_url,
     price_rub: v.price_rub,
+    old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
     collection_recipient: v.collection_recipient,

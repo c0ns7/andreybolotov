@@ -1500,6 +1500,10 @@
       .replace(/"/g, "&quot;");
   }
 
+  function formatRubleAmount(n) {
+    return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
   function buildRaffleCardHtml(r, idx) {
     var st = String(r.status || "active");
     var badgeBlock = "";
@@ -1529,6 +1533,16 @@
     var ctaClass =
       st === "active" ? "raffle-card__cta raffle-card__cta--indigo" : "raffle-card__cta raffle-card__cta--dark";
     var ctaLabel = st === "active" ? "Участвовать" : "Подробнее";
+    var pr = Number(r.price_rub ?? 0);
+    var oldP = Number(r.old_price_rub ?? 0);
+    var priceInner =
+      oldP > 0 && oldP > pr
+        ? '<span class="raffle-card__price-old">' +
+          escapeHtml(formatRubleAmount(oldP)) +
+          '&nbsp;₽</span> <span class="raffle-card__price-current">' +
+          escapeHtml(formatRubleAmount(pr)) +
+          '&nbsp;₽</span>'
+        : escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
     return (
       '<article class="raffle-card">' +
       '<div class="raffle-card__media">' +
@@ -1541,8 +1555,8 @@
       "</div>" +
       '<div class="raffle-card__foot">' +
       '<div class="raffle-card__price">' +
-      escapeHtml(String(r.price_rub ?? 0)) +
-      '&nbsp;₽ <span>/ билет</span></div>' +
+      priceInner +
+      ' <span class="raffle-card__price-suffix">/ билет</span></div>' +
       '<button type="button" class="' +
       ctaClass +
       '" data-raffle-idx="' +
@@ -2180,6 +2194,15 @@
   function openRaffleUnavailableModal(r) {
     if (!modalRaffleUnavailable) return;
     var st = String(r.status || "active");
+    var inner = document.getElementById("modal-raffle-unavailable-inner");
+    if (inner) {
+      inner.classList.toggle("raffle-unavailable--paused", st === "paused");
+      inner.classList.toggle("raffle-unavailable--closed", st === "closed");
+    }
+    var icP = modalRaffleUnavailable.querySelector(".raffle-unavailable__icon--paused");
+    var icC = modalRaffleUnavailable.querySelector(".raffle-unavailable__icon--closed");
+    if (icP) icP.hidden = st !== "paused";
+    if (icC) icC.hidden = st !== "closed";
     var heading = document.getElementById("raffle-unavailable-heading");
     var text = document.getElementById("raffle-unavailable-text");
     if (heading) heading.textContent = String(r.title || "");
@@ -2425,8 +2448,21 @@
       if (heading) heading.textContent = String(r.title || "");
       if (priceBadge) {
         var pr = Number(r.price_rub ?? 0);
-        var fmt = String(Math.max(0, Math.round(pr))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-        priceBadge.textContent = "БИЛЕТ: " + fmt + " ₽";
+        var oldP = Number(r.old_price_rub ?? 0);
+        var fmt = formatRubleAmount(pr);
+        priceBadge.classList.toggle("raffle-price-badge--hero-sale", oldP > 0 && oldP > pr);
+        if (oldP > 0 && oldP > pr) {
+          priceBadge.innerHTML =
+            '<span class="raffle-price-badge__old">' +
+            escapeHtml(formatRubleAmount(oldP)) +
+            ' ₽</span>' +
+            '<span class="raffle-price-badge__arrow" aria-hidden="true">→</span>' +
+            '<span class="raffle-price-badge__new">БИЛЕТ: ' +
+            escapeHtml(fmt) +
+            " ₽</span>";
+        } else {
+          priceBadge.textContent = "БИЛЕТ: " + fmt + " ₽";
+        }
         priceBadge.hidden = false;
       }
       buildRaffleRangeTabs(r.ticket_count);
