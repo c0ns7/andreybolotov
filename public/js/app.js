@@ -3504,30 +3504,16 @@
     var searchSheet = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
     var profileSheet = modalProfile && modalProfile.querySelector(".profile-modal");
 
-    function scrollArea(el) {
-      var n = el;
-      while (n && n !== document.body) {
-        if (
-          n.classList &&
-          (n.classList.contains("cart-sheet__body") ||
-            n.classList.contains("tickets-sheet__body") ||
-            n.classList.contains("ticket-search-sheet__body") ||
-            n.classList.contains("profile-modal__body"))
-        ) {
-          return n;
-        }
-        n = n.parentElement;
-      }
-      return null;
-    }
-
-    function bind(overlay, panel, closeFn) {
-      if (!overlay || !panel) return;
+    /**
+     * Закрытие свайпом только с «ручки» и шапки — иначе скролл контента уводил шторку.
+     * @param {string} dragHandleSelector селектор зоны захвата (closest от target)
+     */
+    function bind(overlay, panel, closeFn, dragHandleSelector) {
+      if (!overlay || !panel || !dragHandleSelector) return;
       var startY = 0;
       var startX = 0;
       var lastDy = 0;
       var active = false;
-      var ignore = false;
       var moveHandler = null;
 
       function detachMove() {
@@ -3543,19 +3529,15 @@
         if (!overlay.classList.contains("is-open")) return;
         if (e.touches.length !== 1) return;
         var target = e.target;
+        if (!(target instanceof Element)) return;
+        if (!target.closest(dragHandleSelector)) return;
         if (target.closest("button, a, input, textarea, select, [role='tab']")) return;
-        var sc = scrollArea(target);
-        if (sc && sc.scrollTop > 2) {
-          ignore = true;
-          return;
-        }
-        ignore = false;
         active = true;
         lastDy = 0;
         startY = e.touches[0].clientY;
         startX = e.touches[0].clientX;
         moveHandler = function (ev) {
-          if (!active || ignore || !overlay.classList.contains("is-open")) return;
+          if (!active || !overlay.classList.contains("is-open")) return;
           var y = ev.touches[0].clientY;
           var x = ev.touches[0].clientX;
           var dy = y - startY;
@@ -3573,10 +3555,6 @@
         detachMove();
         if (!active) return;
         active = false;
-        if (ignore) {
-          ignore = false;
-          return;
-        }
         var dy = lastDy;
         panel.style.removeProperty("--sheet-drag-y");
         if (dy > THRESHOLD) {
@@ -3590,10 +3568,10 @@
       panel.addEventListener("touchcancel", onTouchEnd);
     }
 
-    bind(modalCart, cartSheet, closeCartModal);
-    bind(modalTickets, ticketsSheet, closeTicketsModal);
-    bind(modalTicketSearch, searchSheet, closeTicketSearchModal);
-    bind(modalProfile, profileSheet, closeProfileModal);
+    bind(modalCart, cartSheet, closeCartModal, ".cart-sheet__grabber, .cart-sheet__head");
+    bind(modalTickets, ticketsSheet, closeTicketsModal, ".cart-sheet__grabber, .tickets-sheet__header");
+    bind(modalTicketSearch, searchSheet, closeTicketSearchModal, ".ticket-search-sheet__grabber, .ticket-search-sheet__head");
+    bind(modalProfile, profileSheet, closeProfileModal, ".profile-modal__sheet-handle");
   })();
 
   var TOAST_SVG = {

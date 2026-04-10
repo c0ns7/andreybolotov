@@ -3108,6 +3108,10 @@ a.raffle-pay__btn {
   transform: translateY(0);
 }
 
+.profile-modal__sheet-handle {
+  display: none;
+}
+
 .profile-modal__close {
   position: absolute;
   top: 20px;
@@ -3347,15 +3351,16 @@ a.raffle-pay__btn {
     transform: translateY(var(--sheet-drag-y, 0px));
   }
 
-  .profile-modal::before {
-    content: "";
-    display: block;
-    width: 40px;
-    height: 5px;
-    border-radius: 999px;
-    background: #e5e7eb;
-    margin: 4px auto 8px;
+  .profile-modal__sheet-handle {
     flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    padding: 2px 0 6px;
+    touch-action: none;
+  }
+
+  .profile-modal__sheet-handle .cart-sheet__grabber {
+    margin-bottom: 0;
   }
 
   .profile-modal__body {
