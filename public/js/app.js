@@ -1656,6 +1656,67 @@
     return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   }
 
+  function homeFeedEmptyStateHtml(variant) {
+    var isError = variant === "error";
+    var iconGift =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      "<path d=\"M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"></path>" +
+      "<path d=\"M4 12V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5\"></path>" +
+      "<path d=\"M12 22V7\"></path>" +
+      "<path d=\"M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z\"></path>" +
+      "<path d=\"M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z\"></path>" +
+      "</svg>";
+    var iconWarn =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      "<path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"></path>" +
+      "<line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"></line>" +
+      "<line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"></line>" +
+      "</svg>";
+    var title = isError ? "Не удалось загрузить акции" : "Пока нет акций";
+    var text = isError
+      ? "Проверьте интернет и попробуйте ещё раз. Если проблема останется — напишите в чат поддержки."
+      : "Когда появится новая акция, она будет здесь. А пока загляните в билеты или напишите нам — всегда рады помочь.";
+    var actions = isError
+      ? '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--primary" data-home-feed-retry>Обновить</button>' +
+        '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--ghost" data-home-feed-open-chat>Чат</button>'
+      : '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--primary" data-home-feed-open-chat>Написать в чат</button>';
+    return (
+      '<div class="home-feed-empty' +
+      (isError ? " home-feed-empty--error" : "") +
+      '" role="status">' +
+      '<div class="home-feed-empty__card">' +
+      '<div class="home-feed-empty__glow" aria-hidden="true"></div>' +
+      '<div class="home-feed-empty__icon-wrap" aria-hidden="true">' +
+      (isError ? iconWarn : iconGift) +
+      "</div>" +
+      '<h2 class="home-feed-empty__title">' +
+      escapeHtml(title) +
+      "</h2>" +
+      '<p class="home-feed-empty__text">' +
+      escapeHtml(text) +
+      "</p>" +
+      '<div class="home-feed-empty__actions">' +
+      actions +
+      "</div></div></div>"
+    );
+  }
+
+  function bindHomeFeedEmptyActions(container) {
+    if (!container) return;
+    var openChat = container.querySelector("[data-home-feed-open-chat]");
+    if (openChat) {
+      openChat.addEventListener("click", function () {
+        openChatPanel();
+      });
+    }
+    var retry = container.querySelector("[data-home-feed-retry]");
+    if (retry) {
+      retry.addEventListener("click", function () {
+        loadRafflesFeed();
+      });
+    }
+  }
+
   function buildRaffleCardHtml(r, idx) {
     var st = String(r.status || "active");
     var badgeBlock = "";
@@ -1724,8 +1785,8 @@
     var el = document.getElementById(containerId);
     if (!el) return;
     if (!list || !list.length) {
-      el.innerHTML =
-        '<p class="chat-empty" style="text-align:center;padding:24px;color:#9ca3af;font-size:0.85rem">Пока нет акций. Загляните позже.</p>';
+      el.innerHTML = homeFeedEmptyStateHtml("empty");
+      bindHomeFeedEmptyActions(el);
       return;
     }
     raffleDetailCache = list.slice();
@@ -1776,10 +1837,11 @@
       var list = data.raffles || [];
       renderRaffleCards("home-cards-app", list);
     } catch (_) {
-      var msg =
-        '<p class="chat-empty" style="text-align:center;padding:24px;color:#9ca3af;font-size:0.85rem">Не удалось загрузить акции</p>';
       var ap = document.getElementById("home-cards-app");
-      if (ap) ap.innerHTML = msg;
+      if (ap) {
+        ap.innerHTML = homeFeedEmptyStateHtml("error");
+        bindHomeFeedEmptyActions(ap);
+      }
     }
   }
 
@@ -2372,7 +2434,7 @@
       text.textContent =
         st === "paused"
           ? "Техническая пауза. Продажи временно недоступны. Скоро вернёмся."
-          : "Продажи по этой акции закрыты.";
+          : "Продажи закрыты: все номерки распроданы. Скоро назначим прямой эфир для награждения победителей — следите за новостями в чате и на сайте.";
     }
     openModal(modalRaffleUnavailable);
   }

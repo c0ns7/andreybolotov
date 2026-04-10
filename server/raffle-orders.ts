@@ -372,6 +372,7 @@ export function listReservedOrdersForUser(userId: number): Array<{
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
+         AND COALESCE(r.hidden_from_public, 0) = 0
        ORDER BY o.id DESC`,
     )
     .all(userId, now) as Array<RaffleOrderRow & { raffle_title: string; raffle_price: number }>;
@@ -435,6 +436,7 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'confirmed'
+         AND COALESCE(r.hidden_from_public, 0) = 0
        ORDER BY o.id DESC`,
     )
     .all(userId) as Array<
