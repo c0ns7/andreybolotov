@@ -495,6 +495,9 @@ export type AdminRaffleParticipantView = {
   user_phone: string;
   order_status: string;
   is_wholesale: boolean;
+  user_id: number;
+  user_name: string;
+  user_email: string;
 };
 
 export function getAdminRaffleParticipantsBundle(raffleId: number): {
@@ -519,7 +522,8 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
 
   const partRows = db
     .prepare(
-      `SELECT h.ticket_number AS ticket_number, u.phone AS user_phone, o.status AS order_status, h.user_id AS user_id
+      `SELECT h.ticket_number AS ticket_number, u.phone AS user_phone, o.status AS order_status, h.user_id AS user_id,
+              u.name AS user_name, u.email AS user_email
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        INNER JOIN users u ON u.id = o.user_id
@@ -531,6 +535,8 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
     user_phone: string;
     order_status: string;
     user_id: number;
+    user_name: string;
+    user_email: string;
   }>;
 
   const participants: AdminRaffleParticipantView[] = partRows.map((row) => ({
@@ -539,6 +545,9 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
     order_status: row.order_status,
     is_wholesale:
       wholesale_enabled && (countMap.get(row.user_id) ?? 0) >= 10,
+    user_id: row.user_id,
+    user_name: row.user_name ?? "",
+    user_email: row.user_email ?? "",
   }));
 
   let wholesalers: AdminWholesalerRow[] = [];

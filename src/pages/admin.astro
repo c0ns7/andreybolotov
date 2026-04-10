@@ -251,6 +251,52 @@ import "../styles/admin-raffles.css";
       </div>
     </div>
 
+    <div
+      id="modal-raffle-buyer"
+      class="modal-overlay modal-overlay--raffle-form modal-overlay--raffle-buyer"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-raffle-buyer-title"
+    >
+      <div class="modal admin-raffle-modal">
+        <div class="modal__top admin-raffle-modal__top">
+          <span></span>
+          <h2 id="modal-raffle-buyer-title" class="modal__top-title">Покупатель</h2>
+          <button type="button" class="modal__close" id="modal-raffle-buyer-close" aria-label="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="modal__body admin-raffle-modal__body">
+          <p class="admin-raffle-buyer-modal__lead">Данные скрыты. Нажмите на блок ниже, чтобы показать.</p>
+          <div
+            id="raffle-buyer-reveal"
+            class="admin-raffle-buyer-modal__reveal"
+            role="button"
+            tabindex="0"
+            aria-label="Показать или скрыть данные покупателя"
+          >
+            <div class="admin-raffle-buyer-modal__fields">
+              <div class="admin-raffle-buyer-modal__row">
+                <span class="admin-raffle-buyer-modal__label">Имя</span>
+                <span id="raffle-buyer-name" class="admin-raffle-buyer-modal__value"></span>
+              </div>
+              <div class="admin-raffle-buyer-modal__row">
+                <span class="admin-raffle-buyer-modal__label">Телефон</span>
+                <span id="raffle-buyer-phone" class="admin-raffle-buyer-modal__value"></span>
+              </div>
+              <div class="admin-raffle-buyer-modal__row">
+                <span class="admin-raffle-buyer-modal__label">Email</span>
+                <span id="raffle-buyer-email" class="admin-raffle-buyer-modal__value"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-edit-user" class="modal-overlay" aria-hidden="true" role="dialog" aria-labelledby="edit-user-title">
       <div class="modal admin-edit-modal">
         <div class="modal__top">

@@ -5,7 +5,7 @@
 
   /** @type {Array<Record<string, unknown>>} */
   let rafflesCache = [];
-  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean}>} */
+  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,user_email?:string}>} */
   let participantsCache = [];
   /** @type {Array<{wholesale_number:number,user_phone:string}>} */
   let wholesalersCache = [];
@@ -68,6 +68,31 @@
   const modalParticipants = document.getElementById("modal-raffle-participants");
   const participantsSearch = document.getElementById("raffle-participants-search");
   const participantsList = document.getElementById("raffle-participants-list");
+  const modalBuyer = document.getElementById("modal-raffle-buyer");
+  const raffleBuyerReveal = document.getElementById("raffle-buyer-reveal");
+
+  function openBuyerModal(ctx) {
+    var title = document.getElementById("modal-raffle-buyer-title");
+    var nameEl = document.getElementById("raffle-buyer-name");
+    var phoneEl = document.getElementById("raffle-buyer-phone");
+    var emailEl = document.getElementById("raffle-buyer-email");
+    if (title) title.textContent = "Номерок № " + String(ctx.ticket_number);
+    if (nameEl) nameEl.textContent = ctx.user_name || "—";
+    if (phoneEl) phoneEl.textContent = ctx.user_phone || "—";
+    if (emailEl) emailEl.textContent = ctx.user_email || "—";
+    if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
+    if (modalBuyer) {
+      modalBuyer.classList.add("is-open");
+      modalBuyer.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeBuyerModal() {
+    if (!modalBuyer) return;
+    modalBuyer.classList.remove("is-open");
+    modalBuyer.setAttribute("aria-hidden", "true");
+    if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
+  }
 
   function setStatusBadge(status) {
     if (status === "active") {
@@ -306,13 +331,27 @@
         const key = String(x.ticket_number) + "|" + String(x.user_phone || "");
         const revealed = revealedPhones.has(key);
         const wholesaleCls = x.is_wholesale ? " admin-raffle-participant-card--wholesale" : "";
+        var isBought = x.order_status === "confirmed";
+        var ticketBlock = isBought
+          ? '<button type="button" class="admin-raffle-participant-card__ticket admin-raffle-participant-card__ticket--bought" data-ticket="' +
+            esc(String(x.ticket_number)) +
+            '" data-name="' +
+            esc(String(x.user_name != null ? x.user_name : "")) +
+            '" data-email="' +
+            esc(String(x.user_email != null ? x.user_email : "")) +
+            '" data-phone="' +
+            esc(String(x.user_phone || "")) +
+            '">№ ' +
+            esc(String(x.ticket_number)) +
+            "</button>"
+          : '<div class="admin-raffle-participant-card__ticket">№ ' +
+            esc(String(x.ticket_number)) +
+            "</div>";
         return (
           '<article class="admin-raffle-participant-card' +
           wholesaleCls +
           '">' +
-          '<div class="admin-raffle-participant-card__ticket">№ ' +
-          esc(String(x.ticket_number)) +
-          "</div>" +
+          ticketBlock +
           '<button type="button" class="admin-raffle-participant-card__phone' +
           (revealed ? "" : " is-masked") +
           '" data-key="' +
@@ -394,6 +433,7 @@
   }
 
   function closeParticipants() {
+    closeBuyerModal();
     if (!modalParticipants) return;
     modalParticipants.classList.remove("is-open");
     modalParticipants.setAttribute("aria-hidden", "true");
@@ -478,7 +518,30 @@
   document
     .getElementById("modal-raffle-participants-close")
     ?.addEventListener("click", closeParticipants);
+  document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
   participantsSearch?.addEventListener("input", renderParticipantsList);
+  participantsList?.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest && e.target.closest(".admin-raffle-participant-card__ticket--bought");
+    if (!btn) return;
+    e.preventDefault();
+    openBuyerModal({
+      ticket_number: Number(btn.getAttribute("data-ticket")) || 0,
+      user_name: btn.getAttribute("data-name") || "",
+      user_email: btn.getAttribute("data-email") || "",
+      user_phone: btn.getAttribute("data-phone") || "",
+    });
+  });
+  modalBuyer?.addEventListener("click", function (e) {
+    if (e.target === modalBuyer) closeBuyerModal();
+  });
+  raffleBuyerReveal?.addEventListener("click", function () {
+    raffleBuyerReveal.classList.toggle("is-revealed");
+  });
+  raffleBuyerReveal?.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    raffleBuyerReveal.classList.toggle("is-revealed");
+  });
   modalForm?.addEventListener("click", function (e) {
     if (e.target === modalForm) closeForm();
   });
@@ -487,6 +550,10 @@
   });
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
+    if (modalBuyer && modalBuyer.classList.contains("is-open")) {
+      closeBuyerModal();
+      return;
+    }
     if (modalForm && modalForm.classList.contains("is-open")) closeForm();
     if (modalParticipants && modalParticipants.classList.contains("is-open")) closeParticipants();
   });

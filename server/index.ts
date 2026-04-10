@@ -1033,6 +1033,9 @@ app.get("/api/admin/raffles/:id/participants", (c) => {
       user_phone: row.user_phone,
       order_status: row.order_status,
       is_wholesale: row.is_wholesale,
+      user_id: row.user_id,
+      user_name: row.user_name,
+      user_email: row.user_email,
     })),
     wholesalers: bundle.wholesalers,
   });
