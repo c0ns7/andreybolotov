@@ -1,0 +1,112 @@
+---
+import "../styles/global.css";
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Технические работы — Андрей Болотов</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="maintenance-page">
+    <main class="maintenance-main">
+      <div class="maintenance-card">
+        <div class="maintenance-card__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+          </svg>
+        </div>
+        <h1 class="maintenance-card__title">Технические работы</h1>
+        <p class="maintenance-card__text">
+          Сайт временно недоступен. Мы уже всё чиним — зайдите чуть позже.
+        </p>
+        <p class="maintenance-card__hint" id="maintenance-redirect-hint" hidden>Перенаправляем на главную…</p>
+      </div>
+    </main>
+    <script is:inline>
+      (function () {
+        var hint = document.getElementById("maintenance-redirect-hint");
+        fetch("/api/site/status", { cache: "no-store" })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (j) {
+            if (!j || !j.maintenance) {
+              if (hint) {
+                hint.hidden = false;
+              }
+              location.replace("/");
+            }
+          })
+          .catch(function () {
+            if (hint) {
+              hint.hidden = false;
+            }
+            location.replace("/");
+          });
+      })();
+    </script>
+    <style>
+      .maintenance-page {
+        margin: 0;
+        min-height: 100dvh;
+        background: linear-gradient(160deg, #0f172a 0%, #1e293b 45%, #334155 100%);
+        color: #e2e8f0;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      .maintenance-main {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .maintenance-card {
+        max-width: 400px;
+        text-align: center;
+        padding: 40px 28px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(12px);
+      }
+      .maintenance-card__icon {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+        color: #94a3b8;
+      }
+      .maintenance-card__title {
+        margin: 0 0 12px;
+        font-size: 1.45rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: #f8fafc;
+      }
+      .maintenance-card__text {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        color: #cbd5e1;
+      }
+      .maintenance-card__hint {
+        margin: 20px 0 0;
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+    </style>
+  </body>
+</html>

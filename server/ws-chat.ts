@@ -215,6 +215,10 @@ export function attachWebSocket(wss: WebSocketServer) {
       ws.close();
       return;
     }
+    if (user.blocked === 1) {
+      ws.close();
+      return;
+    }
 
     if (user.role === "admin") {
       adminSockets.add(ws);

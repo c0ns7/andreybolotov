@@ -23,6 +23,8 @@ import {
   listAdminThreadsWithMeta,
   listSupportMessagesForUser,
   markThreadReadByStaff,
+  markStaffMessagesReadByUser,
+  countUnreadStaffMessagesForUser,
   messageToDto,
   updateUserProfile,
   updateUserPasswordHash,
@@ -34,7 +36,15 @@ import {
   deleteRaffle,
   getRaffleById,
   listRafflesAll,
+  listRafflesPublic,
+  isRaffleVisibleOnSite,
   raffleToDto,
+  getSiteSettings,
+  setMaintenanceEnabled,
+  countActiveAdmins,
+  listAllUsersForAdmin,
+  updateUserRole,
+  updateUserBlocked,
 } from "./db.js";
 import {
   attachWebSocket,
@@ -45,7 +55,7 @@ import {
 } from "./ws-chat.js";
 import { getStaffTypingForUser, getUserTypingForThread } from "./typing-state.js";
 import type { Context } from "hono";
-import type { SessionUser } from "./db.js";
+import type { RaffleRow, SessionUser } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import {
@@ -223,9 +233,41 @@ app.use(
   }),
 );
 
+function maintenanceBypassPath(path: string): boolean {
+  if (path === "/api/health" || path === "/api/site/status") return true;
+  return (
+    path === "/api/auth/register" ||
+    path === "/api/auth/login" ||
+    path === "/api/auth/me" ||
+    path === "/api/auth/logout" ||
+    path === "/api/auth/forgot" ||
+    path === "/api/auth/reset-password"
+  );
+}
+
+app.use(async (c, next) => {
+  const p = c.req.path;
+  if (!p.startsWith("/api/")) return next();
+  if (maintenanceBypassPath(p)) return next();
+  if (!getSiteSettings().maintenance_enabled) return next();
+  const u = authUser(c);
+  if (u && u.role === "admin") return next();
+  return c.json(
+    { error: "Технические работы. Попробуйте позже.", code: "maintenance" },
+    503,
+  );
+});
+
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "andreybolotov-api", ts: Date.now() }),
 );
+
+app.get("/api/site/status", (c) => {
+  c.header("Cache-Control", "no-store");
+  return c.json({
+    maintenance: getSiteSettings().maintenance_enabled,
+  });
+});
 
 function authUser(c: Context): SessionUser | null {
   const auth = c.req.header("Authorization");
@@ -234,15 +276,25 @@ function authUser(c: Context): SessionUser | null {
   return getUserBySessionToken(token) ?? null;
 }
 
+function isBlockedUser(u: SessionUser): boolean {
+  return u.blocked === 1;
+}
+
 function requireUser(c: Context): SessionUser | Response {
   const u = authUser(c);
   if (!u) return c.json({ error: "Не авторизован" }, 401);
+  if (isBlockedUser(u)) {
+    return c.json({ error: "Аккаунт заблокирован", code: "account_blocked" }, 403);
+  }
   return u;
 }
 
 function requireAdmin(c: Context): SessionUser | Response {
   const u = authUser(c);
   if (!u) return c.json({ error: "Не авторизован" }, 401);
+  if (isBlockedUser(u)) {
+    return c.json({ error: "Аккаунт заблокирован", code: "account_blocked" }, 403);
+  }
   if (u.role !== "admin") return c.json({ error: "Недостаточно прав" }, 403);
   return u;
 }
@@ -264,6 +316,16 @@ function rateLimitExceeded(c: Context) {
   return c.json({ error: "Слишком много запросов. Подождите немного." }, 429);
 }
 
+/** Акция на сайте или есть незавершённая заявка пользователя (бронь / проверка чека). */
+function raffleVisibleOrActiveOrder(c: Context, u: SessionUser, id: number): RaffleRow | Response {
+  const raffle = getRaffleById(id);
+  if (!raffle) return c.json({ error: "Не найдено" }, 404);
+  if (isRaffleVisibleOnSite(raffle)) return raffle;
+  const order = getActiveOrderForUser(id, u.id);
+  if (order) return raffle;
+  return c.json({ error: "Не найдено" }, 404);
+}
+
 function normalizeRaffleStatus(s: string): "active" | "closed" | "paused" {
   if (s === "closed" || s === "paused") return s;
   return "active";
@@ -281,6 +343,7 @@ type RaffleInput = {
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
+  hidden_from_public: boolean;
 };
 
 function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: RaffleInput } | { ok: false; error: string } {
@@ -326,6 +389,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     : "paused";
 
   const wholesale_enabled = Boolean(body.wholesale_enabled);
+  const hidden_from_public = Boolean(body.hidden_from_public);
 
   return {
     ok: true,
@@ -341,6 +405,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       status,
       sort_order,
       wholesale_enabled,
+      hidden_from_public,
     },
   };
 }
@@ -385,6 +450,7 @@ app.post("/api/auth/register", async (c) => {
       name,
       email,
       role: row?.role ?? "user",
+      blocked: false,
     },
   });
 });
@@ -409,6 +475,12 @@ app.post("/api/auth/login", async (c) => {
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return c.json({ error: "Неверный телефон или пароль" }, 401);
   }
+  if (user.blocked === 1) {
+    return c.json(
+      { error: "Аккаунт заблокирован. Обратитесь в поддержку.", code: "account_blocked" },
+      403,
+    );
+  }
 
   const token = randomUUID();
   createSession(token, user.id);
@@ -420,6 +492,7 @@ app.post("/api/auth/login", async (c) => {
       name: user.name,
       email: user.email,
       role: user.role ?? "user",
+      blocked: user.blocked === 1,
     },
   });
 });
@@ -436,6 +509,7 @@ app.get("/api/auth/me", (c) => {
       name: user.name,
       email: user.email,
       role: user.role ?? "user",
+      blocked: user.blocked === 1,
     },
   });
 });
@@ -443,7 +517,13 @@ app.get("/api/auth/me", (c) => {
 app.post("/api/auth/logout", (c) => {
   const auth = c.req.header("Authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (token) deleteSession(token);
+  if (token) {
+    const u = getUserBySessionToken(token);
+    if (u && u.blocked === 1) {
+      return c.json({ error: "Недоступно", code: "account_blocked" }, 403);
+    }
+    deleteSession(token);
+  }
   return c.json({ ok: true });
 });
 
@@ -507,6 +587,21 @@ app.post("/api/auth/reset-password", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/api/chat/unread", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ unread_staff: countUnreadStaffMessagesForUser(u.id) });
+});
+
+app.post("/api/chat/mark-staff-read", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  markStaffMessagesReadByUser(u.id);
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ ok: true, unread_staff: 0 });
+});
+
 app.get("/api/chat/messages", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
@@ -543,6 +638,27 @@ app.post("/api/admin/chat/upload", async (c) => {
   return handleChatFileUpload(c);
 });
 
+app.get("/api/admin/settings", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  return c.json(getSiteSettings());
+});
+
+app.patch("/api/admin/settings", async (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: { maintenance_enabled?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  setMaintenanceEnabled(Boolean(body.maintenance_enabled));
+  c.header("Cache-Control", "no-store");
+  return c.json(getSiteSettings());
+});
+
 app.post("/api/chat/messages", async (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
@@ -574,10 +690,29 @@ app.get("/api/admin/users", (c) => {
       name: x.name,
       email: x.email,
       role: x.role,
+      blocked: x.blocked === 1,
       last_body: x.last_body,
       last_at: x.last_at,
       last_is_staff: x.last_is_staff,
       unread_count: x.unread_count,
+    })),
+  });
+});
+
+app.get("/api/admin/users/all", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  const rows = listAllUsersForAdmin();
+  return c.json({
+    users: rows.map((x) => ({
+      id: x.id,
+      phone: x.phone,
+      name: x.name,
+      email: x.email,
+      role: x.role,
+      blocked: x.blocked === 1,
+      created_at: x.created_at,
     })),
   });
 });
@@ -599,6 +734,7 @@ app.get("/api/admin/users/:userId/messages", (c) => {
       name: target.name,
       email: target.email,
       role: target.role ?? "user",
+      blocked: target.blocked === 1,
     },
     messages: rows.map((r) => messageToDto(r)),
     user_typing: getUserTypingForThread(userId),
@@ -636,7 +772,7 @@ app.get("/api/raffles", (c) => {
   const auth = requireUser(c);
   if (auth instanceof Response) return auth;
   c.header("Cache-Control", "private, no-store");
-  const rows = listRafflesAll();
+  const rows = listRafflesPublic();
   return c.json({
     raffles: rows.map((r) => raffleToDto(r)),
   });
@@ -664,12 +800,12 @@ app.get("/api/raffles/my-tickets", (c) => {
 });
 
 app.get("/api/raffles/:id", (c) => {
-  const auth = requireUser(c);
-  if (auth instanceof Response) return auth;
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
-  const raffle = getRaffleById(id);
-  if (!raffle) return c.json({ error: "Не найдено" }, 404);
+  const raffle = raffleVisibleOrActiveOrder(c, u, id);
+  if (raffle instanceof Response) return raffle;
   c.header("Cache-Control", "private, no-store");
   return c.json({ raffle: raffleToDto(raffle) });
 });
@@ -679,8 +815,8 @@ app.get("/api/raffles/:id/order", (c) => {
   if (u instanceof Response) return u;
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
-  const raffle = getRaffleById(id);
-  if (!raffle) return c.json({ error: "Не найдено" }, 404);
+  const raffle = raffleVisibleOrActiveOrder(c, u, id);
+  if (raffle instanceof Response) return raffle;
   const order = getActiveOrderForUser(id, u.id);
   if (!order) {
     return c.json({ order: null, numbers: [], raffle: raffleToDto(raffle) });
@@ -700,8 +836,8 @@ app.get("/api/raffles/:id/tickets", (c) => {
   const from = Number(c.req.query("from") || "1");
   const to = Number(c.req.query("to") || "500");
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
-  const raffle = getRaffleById(id);
-  if (!raffle) return c.json({ error: "Не найдено" }, 404);
+  const raffle = raffleVisibleOrActiveOrder(c, u, id);
+  if (raffle instanceof Response) return raffle;
   const slice = getTicketGridSlice(id, u.id, from, to);
   return c.json({ ...slice, raffle: raffleToDto(raffle) });
 });
@@ -715,8 +851,8 @@ app.get("/api/raffles/:id/ticket-lookup", (c) => {
   if (!Number.isFinite(id) || !Number.isFinite(n)) {
     return c.json({ error: "Некорректные данные" }, 400);
   }
-  const raffle = getRaffleById(id);
-  if (!raffle) return c.json({ error: "Не найдено" }, 404);
+  const raffle = raffleVisibleOrActiveOrder(c, u, id);
+  if (raffle instanceof Response) return raffle;
   if (n < 1 || n > raffle.ticket_count) return c.json({ error: "Некорректный номер" }, 400);
   const kind = getTicketCellKind(id, Math.floor(n), u.id);
   return c.json({ n: Math.floor(n), kind });
@@ -884,6 +1020,7 @@ app.get("/api/admin/raffle-payments", (c) => {
       raffle_title: row.raffle_title,
       user_phone: row.user_phone,
       user_name: row.user_name,
+      user_id: row.user_id,
     })),
   });
 });
@@ -914,7 +1051,7 @@ app.get("/api/admin/raffles", (c) => {
   c.header("Cache-Control", "no-store");
   const rows = listRafflesAll();
   return c.json({
-    raffles: rows.map((r) => raffleToDto(r)),
+    raffles: rows.map((r) => raffleToDto(r, { forAdmin: true })),
   });
 });
 
@@ -982,9 +1119,10 @@ app.post("/api/admin/raffles", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   const row = getRaffleById(id);
-  return c.json({ raffle: row ? raffleToDto(row) : null });
+  return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
 
 app.patch("/api/admin/raffles/:id", async (c) => {
@@ -1015,10 +1153,11 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   recalculateWholesaleForRaffle(id);
   const row = getRaffleById(id);
-  return c.json({ raffle: row ? raffleToDto(row) : null });
+  return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
 
 app.delete("/api/admin/raffles/:id", (c) => {
@@ -1063,36 +1202,66 @@ app.patch("/api/admin/users/:userId", async (c) => {
   if (!Number.isFinite(userId)) return c.json({ error: "Некорректный id" }, 400);
   const target = getUserById(userId);
   if (!target) return c.json({ error: "Пользователь не найден" }, 404);
-  let body: { name?: string; phone?: string; email?: string };
+  let body: { name?: string; phone?: string; email?: string; role?: string; blocked?: boolean };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
-  const name = String(body.name ?? target.name).trim();
-  const phoneRaw = body.phone !== undefined ? String(body.phone) : target.phone;
-  const email = String(body.email ?? target.email).trim().toLowerCase();
 
-  const phone = normalizePhone(phoneRaw);
-  if (!phone) return c.json({ error: "Введите корректный телефон" }, 400);
-  if (!isValidRuMobile(phone)) {
-    return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
-  }
-  if (!name) return c.json({ error: "Укажите имя" }, 400);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return c.json({ error: "Укажите корректный email" }, 400);
+  const wantsProfile =
+    body.name !== undefined || body.phone !== undefined || body.email !== undefined;
+
+  if (wantsProfile) {
+    const name = String(body.name ?? target.name).trim();
+    const phoneRaw = body.phone !== undefined ? String(body.phone) : target.phone;
+    const email = String(body.email ?? target.email).trim().toLowerCase();
+
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) return c.json({ error: "Введите корректный телефон" }, 400);
+    if (!isValidRuMobile(phone)) {
+      return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
+    }
+    if (!name) return c.json({ error: "Укажите имя" }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ error: "Укажите корректный email" }, 400);
+    }
+
+    const existing = getUserByPhone(phone);
+    if (existing && existing.id !== userId) {
+      return c.json({ error: "Этот номер уже занят другим пользователем" }, 409);
+    }
+    const existingEmail = getUserByEmail(email);
+    if (existingEmail && existingEmail.id !== userId) {
+      return c.json({ error: "Этот email уже занят другим пользователем" }, 409);
+    }
+
+    updateUserProfile(userId, { name, phone, email });
   }
 
-  const existing = getUserByPhone(phone);
-  if (existing && existing.id !== userId) {
-    return c.json({ error: "Этот номер уже занят другим пользователем" }, 409);
-  }
-  const existingEmail = getUserByEmail(email);
-  if (existingEmail && existingEmail.id !== userId) {
-    return c.json({ error: "Этот email уже занят другим пользователем" }, 409);
+  if (body.role !== undefined) {
+    const role = String(body.role).toLowerCase() === "admin" ? "admin" : "user";
+    const wasAdmin = (target.role ?? "user") === "admin";
+    if (role === "user" && wasAdmin && countActiveAdmins() === 1) {
+      return c.json({ error: "Нельзя снять последнего администратора" }, 400);
+    }
+    updateUserRole(userId, role);
   }
 
-  updateUserProfile(userId, { name, phone, email });
+  if (body.blocked !== undefined) {
+    const blocked = Boolean(body.blocked) ? 1 : 0;
+    if (blocked === 1) {
+      if (userId === auth.id) {
+        return c.json({ error: "Нельзя заблокировать собственный аккаунт" }, 400);
+      }
+      const t2 = getUserById(userId);
+      if (t2 && (t2.role ?? "user") === "admin" && countActiveAdmins() === 1) {
+        return c.json({ error: "Нельзя заблокировать последнего администратора" }, 400);
+      }
+    }
+    updateUserBlocked(userId, blocked);
+  }
+
   const updated = getUserById(userId);
   if (!updated) return c.json({ error: "Ошибка сохранения" }, 500);
   return c.json({
@@ -1102,6 +1271,7 @@ app.patch("/api/admin/users/:userId", async (c) => {
       name: updated.name,
       email: updated.email,
       role: updated.role ?? "user",
+      blocked: updated.blocked === 1,
     },
   });
 });

@@ -39,6 +39,9 @@ function migrate() {
   if (!cols.some((c) => c.name === "role")) {
     db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
   }
+  if (!cols.some((c) => c.name === "blocked")) {
+    db.exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`);
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS support_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +65,14 @@ function migrate() {
     db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_url TEXT`);
     db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_name TEXT`);
     db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_mime TEXT`);
+  }
+  const smCols3 = db.prepare(`PRAGMA table_info(support_messages)`).all() as { name: string }[];
+  if (!smCols3.some((c) => c.name === "read_by_user_at")) {
+    db.exec(`ALTER TABLE support_messages ADD COLUMN read_by_user_at INTEGER`);
+    /* Старые ответы поддержки считаем прочитанными, иначе загорится вся история */
+    db.exec(
+      `UPDATE support_messages SET read_by_user_at = created_at WHERE is_staff = 1 AND read_by_user_at IS NULL`,
+    );
   }
   db.prepare(`UPDATE users SET role = 'admin' WHERE lower(email) = ?`).run("c0ns7@bk.ru");
 
@@ -143,6 +154,17 @@ function migrate() {
   if (!rafCols.some((c) => c.name === "old_price_rub")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN old_price_rub INTEGER NOT NULL DEFAULT 0`);
   }
+  if (!rafCols.some((c) => c.name === "hidden_from_public")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN hidden_from_public INTEGER NOT NULL DEFAULT 0`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      maintenance_enabled INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  db.prepare(`INSERT OR IGNORE INTO site_settings (id, maintenance_enabled) VALUES (1, 0)`).run();
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS raffle_wholesale_assignments (
@@ -184,6 +206,7 @@ export type UserRow = {
   password_hash: string;
   created_at: number;
   role: string;
+  blocked: number;
 };
 
 export function insertUser(
@@ -235,19 +258,61 @@ export type SessionUser = {
   name: string;
   email: string;
   role: string;
+  blocked: number;
 };
 
 export function getUserBySessionToken(token: string): SessionUser | undefined {
   const row = db
     .prepare(
       `SELECT u.id AS id, u.phone AS phone, u.name AS name, u.email AS email,
-              COALESCE(u.role, 'user') AS role
+              COALESCE(u.role, 'user') AS role,
+              COALESCE(u.blocked, 0) AS blocked
        FROM sessions s
        INNER JOIN users u ON u.id = s.user_id
        WHERE s.token = ?`,
     )
     .get(token) as SessionUser | undefined;
   return row;
+}
+
+export function countActiveAdmins(): number {
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM users
+       WHERE COALESCE(role,'user') = 'admin' AND COALESCE(blocked,0) = 0`,
+    )
+    .get() as { c: number };
+  return Number(r?.c ?? 0);
+}
+
+export type AdminUserListRow = {
+  id: number;
+  phone: string;
+  name: string;
+  email: string;
+  role: string;
+  blocked: number;
+  created_at: number;
+};
+
+export function listAllUsersForAdmin(): AdminUserListRow[] {
+  return db
+    .prepare(
+      `SELECT id, phone, name, email,
+              COALESCE(role,'user') AS role,
+              COALESCE(blocked,0) AS blocked,
+              created_at
+       FROM users ORDER BY id DESC`,
+    )
+    .all() as AdminUserListRow[];
+}
+
+export function updateUserRole(userId: number, role: "admin" | "user"): void {
+  db.prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId);
+}
+
+export function updateUserBlocked(userId: number, blocked: 0 | 1): void {
+  db.prepare(`UPDATE users SET blocked = ? WHERE id = ?`).run(blocked, userId);
 }
 
 export function deleteSession(token: string): void {
@@ -261,6 +326,7 @@ export type SupportMessageRow = {
   is_staff: number;
   created_at: number;
   read_by_staff_at: number | null;
+  read_by_user_at: number | null;
   attachment_url: string | null;
   attachment_name: string | null;
   attachment_mime: string | null;
@@ -291,8 +357,8 @@ export function insertSupportMessage(
   const att = attachment ?? null;
   const info = db
     .prepare(
-      `INSERT INTO support_messages (user_id, body, is_staff, created_at, read_by_staff_at, attachment_url, attachment_name, attachment_mime)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO support_messages (user_id, body, is_staff, created_at, read_by_staff_at, read_by_user_at, attachment_url, attachment_name, attachment_mime)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       userId,
@@ -300,11 +366,30 @@ export function insertSupportMessage(
       isStaff ? 1 : 0,
       now,
       readAt,
+      null,
       att?.url ?? null,
       att?.name ?? null,
       att?.mime ?? null,
     );
   return Number(info.lastInsertRowid);
+}
+
+/** Ответы поддержки, которые пользователь ещё не открыл в чате (после открытия помечаются markStaffMessagesReadByUser). */
+export function countUnreadStaffMessagesForUser(userId: number): number {
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM support_messages
+       WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
+    )
+    .get(userId) as { c: number };
+  return Number(r?.c ?? 0);
+}
+
+export function markStaffMessagesReadByUser(userId: number): void {
+  const now = Date.now();
+  db.prepare(
+    `UPDATE support_messages SET read_by_user_at = ? WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
+  ).run(now, userId);
 }
 
 export function markThreadReadByStaff(userId: number): void {
@@ -390,6 +475,7 @@ export type AdminThreadRow = {
   name: string;
   email: string;
   role: string;
+  blocked: number;
   last_body: string | null;
   last_at: number | null;
   last_is_staff: number | null;
@@ -409,6 +495,7 @@ export type RaffleRow = {
   status: string;
   sort_order: number;
   wholesale_enabled: number;
+  hidden_from_public?: number;
   created_at: number;
   updated_at: number;
 };
@@ -426,12 +513,13 @@ export type RaffleDto = {
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
+  hidden_from_public?: boolean;
 };
 
-export function raffleToDto(r: RaffleRow): RaffleDto {
+export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): RaffleDto {
   const st = r.status === "closed" || r.status === "paused" ? r.status : "active";
   const oldP = Number(r.old_price_rub ?? 0);
-  return {
+  const dto: RaffleDto = {
     id: r.id,
     title: r.title,
     cover_image_url: r.cover_image_url,
@@ -445,11 +533,29 @@ export function raffleToDto(r: RaffleRow): RaffleDto {
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
   };
+  if (opts?.forAdmin) {
+    dto.hidden_from_public = Boolean(Number((r as RaffleRow).hidden_from_public));
+  }
+  return dto;
+}
+
+/** Видна на сайте и в пользовательских API (не скрыта админом). */
+export function isRaffleVisibleOnSite(r: RaffleRow | undefined): boolean {
+  if (!r) return false;
+  return !Number((r as RaffleRow).hidden_from_public);
 }
 
 export function listRafflesAll(): RaffleRow[] {
   return db
     .prepare(`SELECT * FROM raffles ORDER BY sort_order ASC, id DESC`)
+    .all() as RaffleRow[];
+}
+
+export function listRafflesPublic(): RaffleRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM raffles WHERE COALESCE(hidden_from_public, 0) = 0 ORDER BY sort_order ASC, id DESC`,
+    )
     .all() as RaffleRow[];
 }
 
@@ -469,6 +575,7 @@ export function insertRaffle(data: {
   status: string;
   sort_order: number;
   wholesale_enabled: number;
+  hidden_from_public: number;
 }): number {
   const now = Date.now();
   const info = db
@@ -476,8 +583,8 @@ export function insertRaffle(data: {
       `INSERT INTO raffles (
         title, cover_image_url, price_rub, old_price_rub, ticket_count,
         collection_url, collection_recipient, qr_image_url,
-        status, sort_order, wholesale_enabled, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, sort_order, wholesale_enabled, hidden_from_public, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
@@ -491,6 +598,7 @@ export function insertRaffle(data: {
       data.status,
       data.sort_order,
       data.wholesale_enabled,
+      data.hidden_from_public,
       now,
       now,
     );
@@ -511,13 +619,14 @@ export function updateRaffle(
     status: string;
     sort_order: number;
     wholesale_enabled: number;
+    hidden_from_public: number;
   },
 ): void {
   db.prepare(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
       collection_url = ?, collection_recipient = ?, qr_image_url = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
   ).run(
     data.title,
@@ -531,9 +640,21 @@ export function updateRaffle(
     data.status,
     data.sort_order,
     data.wholesale_enabled,
+    data.hidden_from_public,
     Date.now(),
     id,
   );
+}
+
+export function getSiteSettings(): { maintenance_enabled: boolean } {
+  const row = db
+    .prepare(`SELECT maintenance_enabled FROM site_settings WHERE id = 1`)
+    .get() as { maintenance_enabled: number } | undefined;
+  return { maintenance_enabled: Boolean(Number(row?.maintenance_enabled)) };
+}
+
+export function setMaintenanceEnabled(on: boolean): void {
+  db.prepare(`UPDATE site_settings SET maintenance_enabled = ? WHERE id = 1`).run(on ? 1 : 0);
 }
 
 export function deleteRaffle(id: number): void {
@@ -544,6 +665,7 @@ export function listAdminThreadsWithMeta(): AdminThreadRow[] {
   return db
     .prepare(
       `SELECT u.id, u.phone, u.name, u.email, COALESCE(u.role,'user') AS role,
+              COALESCE(u.blocked,0) AS blocked,
               (SELECT CASE
                 WHEN TRIM(COALESCE(sm.body,'')) != '' THEN sm.body
                 WHEN sm.attachment_url IS NOT NULL THEN '📎 Вложение'

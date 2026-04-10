@@ -61,6 +61,21 @@
       .replace(/"/g, "&quot;");
   }
 
+  const BTN_ICO = {
+    users:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+    edit:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>',
+    trash:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+    pause:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>',
+    lock:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>',
+    play:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
+  };
+
   const listEl = document.getElementById("admin-raffles-list");
   const modalForm = document.getElementById("modal-raffle-form");
   const formTitle = document.getElementById("modal-raffle-form-title");
@@ -134,7 +149,12 @@
           (cover || "") +
           "</div>" +
           '<div class="admin-raffle-card__body">' +
+          '<div class="admin-raffle-card__badges">' +
           setStatusBadge(r.status) +
+          (r.hidden_from_public
+            ? '<span class="admin-raffle-badge admin-raffle-badge--hidden">Скрыта</span>'
+            : "") +
+          "</div>" +
           '<h3 class="admin-raffle-card__title">' +
           esc(String(r.title)) +
           "</h3>" +
@@ -149,30 +169,42 @@
           '<div class="admin-raffle-card__row">' +
           '<button type="button" class="admin-raffle-btn admin-raffle-btn--participants admin-raffle-participants-btn" data-id="' +
           r.id +
-          '">Участники</button>' +
+          '">' +
+          BTN_ICO.users +
+          "<span>Участники</span></button>" +
           '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-raffle-edit" data-id="' +
           r.id +
-          '">Изменить</button>' +
+          '">' +
+          BTN_ICO.edit +
+          "<span>Изменить</span></button>" +
           '<button type="button" class="admin-raffle-btn admin-raffle-btn--danger admin-raffle-delete" data-id="' +
           r.id +
-          '">Удалить</button>' +
+          '">' +
+          BTN_ICO.trash +
+          "<span>Удалить</span></button>" +
           "</div>" +
           '<div class="admin-raffle-card__row">' +
           '<button type="button" class="admin-raffle-btn admin-raffle-pause" data-id="' +
           r.id +
           '"' +
           (r.status === "paused" ? " disabled" : "") +
-          ">Тех. пауза</button>" +
+          ">" +
+          BTN_ICO.pause +
+          "<span>Тех. пауза</span></button>" +
           '<button type="button" class="admin-raffle-btn admin-raffle-close" data-id="' +
           r.id +
           '"' +
           (r.status === "closed" ? " disabled" : "") +
-          ">Закрыть продажи</button>" +
+          ">" +
+          BTN_ICO.lock +
+          "<span>Закрыть продажи</span></button>" +
           '<button type="button" class="admin-raffle-btn admin-raffle-active" data-id="' +
           r.id +
           '"' +
           (r.status === "active" ? " disabled" : "") +
-          ">В активные</button>" +
+          ">" +
+          BTN_ICO.play +
+          "<span>В активные</span></button>" +
           "</div></div></div></article>"
         );
       })
@@ -302,6 +334,8 @@
         );
     var whEl = document.getElementById("raffle-wholesale-enabled");
     if (whEl) whEl.checked = edit ? !!edit.wholesale_enabled : false;
+    var hidEl = document.getElementById("raffle-hidden-from-public");
+    if (hidEl) hidEl.checked = edit ? !!edit.hidden_from_public : false;
     var cf = document.getElementById("raffle-cover-file");
     var qf = document.getElementById("raffle-qr-file");
     if (cf) cf.value = "";
@@ -599,6 +633,10 @@
       wholesale_enabled: (function () {
         var w = document.getElementById("raffle-wholesale-enabled");
         return w ? !!w.checked : false;
+      })(),
+      hidden_from_public: (function () {
+        var h = document.getElementById("raffle-hidden-from-public");
+        return h ? !!h.checked : false;
       })(),
     };
     try {

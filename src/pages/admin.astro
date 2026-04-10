@@ -6,36 +6,140 @@ import "../styles/admin-raffles.css";
 <AdminBase
   title="Админка — поддержка"
   description="Панель администратора: обращения пользователей."
-  extraScripts={["/js/admin-raffles.js", "/js/admin-payments.js"]}
+  extraScripts={["/js/admin-raffles.js", "/js/admin-payments.js", "/js/admin-users.js", "/js/admin-settings.js"]}
 >
   <div class="app-shell app-shell--with-tabbar app-shell--admin">
     <div class="admin-shell">
     <div class="admin-page">
-      <header class="admin-head">
-        <a href="/" class="admin-back">← На сайт</a>
-        <p class="admin-nav-links">
-          <a href="/admin" id="nav-link-support">Поддержка</a>
-          <span aria-hidden="true"> · </span>
-          <a href="/admin?tab=raffles" id="nav-link-raffles">Акции</a>
-          <span aria-hidden="true"> · </span>
-          <a href="/admin?tab=payments" id="nav-link-payments">Оплаты</a>
-        </p>
-        <h1 id="admin-page-heading" class="admin-title">Поддержка</h1>
-        <p id="admin-page-sub" class="admin-sub">Пользователи и переписка</p>
-      </header>
+      <div id="admin-loading" class="admin-loading" aria-busy="true" aria-live="polite">
+        <div class="admin-loading__spinner" aria-hidden="true"></div>
+        <p class="admin-loading__text">Проверка доступа…</p>
+      </div>
 
-      <div id="admin-gate" class="admin-gate">
-        <p class="admin-gate__text">Нужна авторизация с правами администратора.</p>
-        <a href="/" class="btn btn--primary" style="max-width: 280px; margin: 0 auto">Открыть главную</a>
+      <div id="admin-gate" class="admin-gate" hidden>
+        <div class="admin-gate__card">
+          <div class="admin-gate__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 class="admin-gate__title">Нет доступа</h2>
+          <p class="admin-gate__text">Войдите под учётной записью администратора, чтобы открыть панель.</p>
+          <a href="/" class="admin-gate__btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            На главную
+          </a>
+        </div>
       </div>
 
       <div id="admin-root" hidden>
+      <header class="admin-head">
+        <div class="admin-head__bar">
+          <div class="admin-head__bar-top">
+            <div class="admin-brand">
+              <span class="admin-brand__badge" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                  <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                  <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                  <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                </svg>
+              </span>
+              <div class="admin-brand__text">
+                <span class="admin-brand__label">Админ-панель</span>
+                <span class="admin-brand__hint">andreybolotov.ru</span>
+              </div>
+            </div>
+            <a href="/" class="admin-exit">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>На сайт</span>
+            </a>
+          </div>
+
+          <nav class="admin-nav" aria-label="Разделы">
+            <a href="/admin" class="admin-nav__link" id="nav-link-support">
+              <span class="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </span>
+              <span class="admin-nav__text">Поддержка</span>
+            </a>
+            <a href="/admin?tab=users" class="admin-nav__link" id="nav-link-users">
+              <span class="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </span>
+              <span class="admin-nav__text">Пользователи</span>
+            </a>
+            <a href="/admin?tab=raffles" class="admin-nav__link" id="nav-link-raffles">
+              <span class="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+              </span>
+              <span class="admin-nav__text">Акции</span>
+            </a>
+            <a href="/admin?tab=payments" class="admin-nav__link" id="nav-link-payments">
+              <span class="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+              </span>
+              <span class="admin-nav__text">Оплаты</span>
+            </a>
+            <a href="/admin?tab=settings" class="admin-nav__link" id="nav-link-settings">
+              <span class="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                </svg>
+              </span>
+              <span class="admin-nav__text">Настройки</span>
+            </a>
+          </nav>
+        </div>
+
+        <div class="admin-head__hero">
+          <h1 id="admin-page-heading" class="admin-title">Поддержка</h1>
+          <p id="admin-page-sub" class="admin-sub">Пользователи и переписка</p>
+        </div>
+      </header>
+
       <div id="admin-app" class="admin-app" hidden>
         <div class="admin-layout">
           <aside class="admin-sidebar">
-            <h2 class="admin-sidebar__title">Пользователи</h2>
+            <h2 class="admin-sidebar__title">
+              <span class="admin-sidebar__title-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </span>
+              Диалоги
+            </h2>
             <div class="admin-tabs" role="tablist" aria-label="Фильтр диалогов">
-              <button type="button" class="admin-tab admin-tab--active" data-tab="all" role="tab" aria-selected="true">Все</button>
+              <button type="button" class="admin-tab admin-tab--active" data-tab="all" role="tab" aria-selected="true">
+                <span class="admin-tab__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                </span>
+                Все
+              </button>
               <button
                 type="button"
                 class="admin-tab"
@@ -44,15 +148,30 @@ import "../styles/admin-raffles.css";
                 aria-selected="false"
                 title="Непрочитанные"
               >
+                <span class="admin-tab__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </span>
                 Новые
               </button>
-              <button type="button" class="admin-tab" data-tab="unanswered" role="tab" aria-selected="false">Неотвеченные</button>
+              <button type="button" class="admin-tab" data-tab="unanswered" role="tab" aria-selected="false">
+                <span class="admin-tab__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M13 8H7"></path><path d="M17 12H7"></path></svg>
+                </span>
+                Без ответа
+              </button>
             </div>
             <div id="admin-user-list" class="admin-user-list custom-scrollbar"></div>
           </aside>
           <main class="admin-main">
             <div id="admin-empty" class="admin-empty">
-              <p>Выберите пользователя слева</p>
+              <div class="admin-empty__illu" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  <path d="M13 8H7"></path>
+                  <path d="M17 12H7"></path>
+                </svg>
+              </div>
+              <p>Выберите пользователя слева, чтобы открыть переписку</p>
             </div>
             <div id="admin-thread" class="admin-thread" hidden>
               <div class="admin-thread__head">
@@ -94,13 +213,29 @@ import "../styles/admin-raffles.css";
       </div>
 
       <div id="admin-raffles-app" class="admin-raffles-app" hidden>
-        <div class="admin-raffles-toolbar">
-          <div class="admin-raffles-toolbar__text">
-            <span class="admin-raffles-toolbar__label">Каталог</span>
-            <p class="admin-raffles-toolbar__hint">Карточки на главной идут по полю «Порядок» (меньше — выше).</p>
+        <div class="admin-raffles-toolbar admin-raffles-toolbar--raffles">
+          <div class="admin-raffles-toolbar__lead">
+            <span class="admin-raffles-toolbar__badge" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 12 20 22 4 22 4 12"></polyline>
+                <rect x="2" y="7" width="20" height="5" rx="1"></rect>
+                <line x1="12" y1="22" x2="12" y2="7"></line>
+                <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path>
+                <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>
+              </svg>
+            </span>
+            <div class="admin-raffles-toolbar__text">
+              <span class="admin-raffles-toolbar__label">Акции на сайте</span>
+              <p class="admin-raffles-toolbar__hint">Карточки на главной сортируются по полю «Порядок»: меньшее число — выше в списке.</p>
+            </div>
           </div>
           <button type="button" class="btn btn--primary admin-raffles-toolbar__btn" id="btn-raffle-new">
-            <span class="admin-raffles-toolbar__btn-icon" aria-hidden="true">+</span>
+            <span class="admin-raffles-toolbar__btn-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </span>
             Новая акция
           </button>
         </div>
@@ -110,24 +245,101 @@ import "../styles/admin-raffles.css";
       </div>
 
       <div id="admin-payments-app" class="admin-payments-app" hidden>
-        <div class="admin-raffles-toolbar">
-          <div class="admin-raffles-toolbar__text">
-            <span class="admin-raffles-toolbar__label">Оплаты</span>
-            <p class="admin-raffles-toolbar__hint">Подтвердите или отклоните чеки — номерки закрепятся после подтверждения.</p>
+        <div class="admin-raffles-toolbar admin-payments-toolbar">
+          <div class="admin-payments-toolbar__text">
+            <span class="admin-payments-toolbar__badge" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                <line x1="1" y1="10" x2="23" y2="10"></line>
+              </svg>
+            </span>
+            <div class="admin-raffles-toolbar__text">
+              <span class="admin-raffles-toolbar__label">Очередь оплат</span>
+              <p class="admin-raffles-toolbar__hint">Сверху — более ранние заявки по дате создания. Проверьте чек и подтвердите — номерки закрепятся за покупателем.</p>
+            </div>
           </div>
         </div>
         <div id="admin-payments-list" class="admin-payments-list"></div>
+      </div>
+
+      <div id="admin-users-app" class="admin-users-app" hidden>
+        <div class="admin-raffles-toolbar admin-users-toolbar">
+          <div class="admin-users-toolbar__lead">
+            <span class="admin-users-toolbar__badge" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
+            <div class="admin-raffles-toolbar__text">
+              <span class="admin-raffles-toolbar__label">Пользователи</span>
+              <p class="admin-raffles-toolbar__hint">Поиск по имени, телефону или email. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
+            </div>
+          </div>
+        </div>
+        <label class="admin-users-search-wrap">
+          <span class="visually-hidden">Поиск пользователей</span>
+          <input
+            id="admin-users-search"
+            class="input admin-users-search"
+            type="search"
+            placeholder="Поиск по имени, телефону, email…"
+            autocomplete="off"
+          />
+        </label>
+        <div id="admin-users-list" class="admin-users-list-wrap"></div>
+      </div>
+
+      <div id="admin-settings-app" class="admin-settings-app" hidden>
+        <header class="admin-settings-hero">
+          <div class="admin-settings-hero__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+            </svg>
+          </div>
+          <div class="admin-settings-hero__text">
+            <h2 class="admin-settings-hero__title">Состояние сайта</h2>
+            <p class="admin-settings-hero__lead">
+              Техработы не отключают доступ для администраторов: админка и запросы к API с ролью <strong>admin</strong> работают как обычно.
+            </p>
+          </div>
+        </header>
+        <div class="admin-settings-panel">
+          <div class="admin-settings-card">
+            <h2 class="admin-settings-card__title">Технические работы</h2>
+            <p class="admin-settings-card__text">
+              Для пользователей приложение и связанные запросы к API недоступны: их перенаправляет на страницу с сообщением. После отключения режима откроется доступ с главной.
+            </p>
+            <label class="admin-settings-toggle">
+              <input type="checkbox" id="admin-settings-maintenance" class="admin-settings-toggle__input" role="switch" />
+              <span class="admin-settings-toggle__track" aria-hidden="true"></span>
+              <span class="admin-settings-toggle__label">Техработы включены</span>
+            </label>
+            <p class="admin-settings-card__status" id="admin-settings-status" role="status"></p>
+          </div>
+        </div>
       </div>
     </div>
     </div>
     </div>
 
     <div id="modal-raffle-form" class="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-raffle-form-title">
-      <div class="modal admin-raffle-modal">
+      <div class="modal admin-raffle-modal admin-raffle-modal--form">
         <div class="modal__top admin-raffle-modal__top">
-          <span></span>
-          <h2 id="modal-raffle-form-title" class="modal__top-title">Акция</h2>
-          <button type="button" class="modal__close" id="modal-raffle-form-close" aria-label="Закрыть">
+          <span class="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div class="admin-raffle-modal__title-wrap">
+            <span class="admin-raffle-modal__title-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </span>
+            <h2 id="modal-raffle-form-title" class="modal__top-title admin-raffle-modal__title">Акция</h2>
+          </div>
+          <button type="button" class="modal__close admin-raffle-modal__close" id="modal-raffle-form-close" aria-label="Закрыть">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"></path>
             </svg>
@@ -137,7 +349,15 @@ import "../styles/admin-raffles.css";
           <form id="form-raffle" class="admin-raffle-form" novalidate>
             <input type="hidden" id="raffle-edit-id" value="" />
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-main">
-              <h3 id="raffle-sec-main" class="admin-raffle-section__title">Основное</h3>
+              <h3 id="raffle-sec-main" class="admin-raffle-section__title">
+                <span class="admin-raffle-section__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                  </svg>
+                </span>
+                Основное
+              </h3>
               <div class="form-group">
                 <label for="raffle-title">Заголовок</label>
                 <input id="raffle-title" class="input" type="text" maxlength="500" required placeholder="Например: Акция с призами" autocomplete="off" />
@@ -153,7 +373,15 @@ import "../styles/admin-raffles.css";
               </div>
             </section>
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-price">
-              <h3 id="raffle-sec-price" class="admin-raffle-section__title">Цена и лимит</h3>
+              <h3 id="raffle-sec-price" class="admin-raffle-section__title">
+                <span class="admin-raffle-section__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  </svg>
+                </span>
+                Цена и лимит
+              </h3>
               <div class="form-row-2">
                 <div class="form-group">
                   <label for="raffle-price">Цена билета, ₽</label>
@@ -182,7 +410,15 @@ import "../styles/admin-raffles.css";
               </div>
             </section>
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-pay">
-              <h3 id="raffle-sec-pay" class="admin-raffle-section__title">Оплата для пользователей</h3>
+              <h3 id="raffle-sec-pay" class="admin-raffle-section__title">
+                <span class="admin-raffle-section__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                    <line x1="1" y1="10" x2="23" y2="10"></line>
+                  </svg>
+                </span>
+                Оплата для пользователей
+              </h3>
               <p class="admin-raffle-section__lead">Два варианта: сбор в Сбербанке и QR на оплату ИП Болотов Н. А.</p>
               <div class="form-group">
                 <label for="raffle-collection-url">Ссылка на сбор (Сбербанк)</label>
@@ -203,7 +439,15 @@ import "../styles/admin-raffles.css";
               </div>
             </section>
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-pub">
-              <h3 id="raffle-sec-pub" class="admin-raffle-section__title">Публикация</h3>
+              <h3 id="raffle-sec-pub" class="admin-raffle-section__title">
+                <span class="admin-raffle-section__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </span>
+                Публикация
+              </h3>
               <div class="form-row-2">
                 <div class="form-group">
                   <label for="raffle-status">Статус</label>
@@ -229,10 +473,27 @@ import "../styles/admin-raffles.css";
                   Учёт от 10 подтверждённых номерков в этой акции: отдельный список оптовиков (№ 1, 2, 3… по очереди) и оранжевое выделение в списке участников.
                 </p>
               </div>
+              <div class="form-group admin-raffle-toggle-row">
+                <label class="admin-toggle" for="raffle-hidden-from-public">
+                  <input id="raffle-hidden-from-public" class="admin-toggle__input" type="checkbox" role="switch" />
+                  <span class="admin-toggle__track" aria-hidden="true"></span>
+                  <span class="admin-toggle__label">Скрыть с сайта</span>
+                </label>
+                <p class="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  Не показывать в приложении и не отдавать по API, пока включено. Исключение: у пользователя уже есть активная заявка (бронь или проверка чека) — он сможет её завершить.
+                </p>
+              </div>
             </section>
             <div class="form-actions form-actions--split admin-raffle-form__actions">
-              <button type="button" class="btn btn--ghost" id="btn-raffle-cancel">Отмена</button>
-              <button type="submit" class="btn btn--primary" id="btn-raffle-submit">
+              <button type="button" class="btn btn--ghost admin-raffle-form__btn-cancel" id="btn-raffle-cancel">Отмена</button>
+              <button type="submit" class="btn btn--primary admin-raffle-form__btn-save" id="btn-raffle-submit">
+                <span class="admin-raffle-form__btn-save-ico" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                </span>
                 <span id="btn-raffle-submit-label">Сохранить</span>
               </button>
             </div>
@@ -242,11 +503,21 @@ import "../styles/admin-raffles.css";
     </div>
 
     <div id="modal-raffle-participants" class="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-raffle-participants-title">
-      <div class="modal admin-raffle-modal">
+      <div class="modal admin-raffle-modal admin-raffle-modal--participants">
         <div class="modal__top admin-raffle-modal__top">
-          <span></span>
-          <h2 id="modal-raffle-participants-title" class="modal__top-title">Участники акции</h2>
-          <button type="button" class="modal__close" id="modal-raffle-participants-close" aria-label="Закрыть">
+          <span class="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div class="admin-raffle-modal__title-wrap">
+            <span class="admin-raffle-modal__title-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
+            <h2 id="modal-raffle-participants-title" class="modal__top-title admin-raffle-modal__title">Участники акции</h2>
+          </div>
+          <button type="button" class="modal__close admin-raffle-modal__close" id="modal-raffle-participants-close" aria-label="Закрыть">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"></path>
             </svg>
@@ -254,9 +525,15 @@ import "../styles/admin-raffles.css";
         </div>
         <div class="modal__body admin-raffle-modal__body">
           <div class="admin-raffle-participants">
-            <label class="form-group" for="raffle-participants-search">
-              <span>Поиск по номерку</span>
-              <input id="raffle-participants-search" class="input" type="search" inputmode="numeric" placeholder="Введите номерок" autocomplete="off" />
+            <label class="form-group admin-raffle-participants__search" for="raffle-participants-search">
+              <span class="admin-raffle-participants__search-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                Поиск по номерку
+              </span>
+              <input id="raffle-participants-search" class="input admin-raffle-participants__search-input" type="search" inputmode="numeric" placeholder="Например: 42" autocomplete="off" />
             </label>
             <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers" hidden>
               <h3 class="admin-raffle-wholesalers__title">Оптовики</h3>
@@ -276,18 +553,34 @@ import "../styles/admin-raffles.css";
       aria-modal="true"
       aria-labelledby="modal-raffle-buyer-title"
     >
-      <div class="modal admin-raffle-modal">
+      <div class="modal admin-raffle-modal admin-raffle-modal--buyer">
         <div class="modal__top admin-raffle-modal__top">
-          <span></span>
-          <h2 id="modal-raffle-buyer-title" class="modal__top-title">Покупатель</h2>
-          <button type="button" class="modal__close" id="modal-raffle-buyer-close" aria-label="Закрыть">
+          <span class="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div class="admin-raffle-modal__title-wrap">
+            <span class="admin-raffle-modal__title-icon admin-raffle-modal__title-icon--buyer" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </span>
+            <h2 id="modal-raffle-buyer-title" class="modal__top-title admin-raffle-modal__title">Покупатель</h2>
+          </div>
+          <button type="button" class="modal__close admin-raffle-modal__close" id="modal-raffle-buyer-close" aria-label="Закрыть">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"></path>
             </svg>
           </button>
         </div>
         <div class="modal__body admin-raffle-modal__body">
-          <p class="admin-raffle-buyer-modal__lead">Данные скрыты. Нажмите на блок ниже, чтобы показать.</p>
+          <p class="admin-raffle-buyer-modal__lead">
+            <span class="admin-raffle-buyer-modal__lead-ico" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </span>
+            Данные скрыты. Нажмите на блок ниже, чтобы показать.
+          </p>
           <div
             id="raffle-buyer-reveal"
             class="admin-raffle-buyer-modal__reveal"
@@ -350,57 +643,317 @@ import "../styles/admin-raffles.css";
 </AdminBase>
 
 <style is:global>
+  .app-shell--admin {
+    background:
+      radial-gradient(ellipse 120% 80% at 100% -20%, rgba(52, 120, 246, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 80% 60% at 0% 100%, rgba(99, 102, 241, 0.06) 0%, transparent 45%),
+      linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  }
+
   .admin-shell {
     width: 100%;
     margin: 0 auto;
-    padding: 0 12px;
+    padding: 0 16px;
     box-sizing: border-box;
+    max-width: 1160px;
   }
   .admin-page {
-    padding: 16px 0;
+    padding: 20px 0 32px;
     min-height: 100dvh;
   }
+
+  /* [hidden] + display в классе (например .admin-gate { display: flex }) — без !important плашка остаётся видимой */
+  #admin-gate[hidden],
+  .admin-gate[hidden] {
+    display: none !important;
+  }
+
+  #admin-root[hidden] {
+    display: none !important;
+  }
+
+  .admin-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: min(420px, 70dvh);
+    padding: 48px 20px 56px;
+  }
+
+  .admin-loading[hidden] {
+    display: none !important;
+  }
+
+  .admin-loading__spinner {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 3px solid #e2e8f0;
+    border-top-color: #3b82f6;
+    animation: adminLoadingSpin 0.75s linear infinite;
+  }
+
+  @keyframes adminLoadingSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .admin-loading__text {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #64748b;
+  }
+
   .admin-head {
+    margin-bottom: 24px;
+  }
+
+  .admin-head__bar {
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 18px;
+    box-shadow:
+      0 4px 24px rgba(15, 23, 42, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    padding: 14px 14px 12px;
     margin-bottom: 20px;
   }
-  .admin-nav-links {
-    margin: 8px 0 0;
-    font-size: 0.9rem;
-    color: var(--text-muted);
+
+  .admin-head__bar-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
   }
-  .admin-nav-links a {
-    color: var(--accent);
+
+  .admin-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .admin-brand__badge {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+    color: #fff;
+    box-shadow:
+      0 8px 20px rgba(37, 99, 235, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .admin-brand__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .admin-brand__label {
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #0f172a;
+    line-height: 1.2;
+  }
+
+  .admin-brand__hint {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #94a3b8;
+    letter-spacing: 0.02em;
+  }
+
+  .admin-exit {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    color: #475569;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .admin-exit:hover {
+    color: #2563eb;
+    border-color: #bfdbfe;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .admin-exit svg {
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+
+  .admin-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .admin-nav__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 0.88rem;
     font-weight: 600;
     text-decoration: none;
+    color: #64748b;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px solid transparent;
+    border-radius: 12px;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
-  .admin-nav-links a[aria-current="page"] {
-    color: var(--text);
-    font-weight: 700;
+
+  .admin-nav__link:hover {
+    color: #334155;
+    background: #fff;
+    border-color: #e2e8f0;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  }
+
+  .admin-nav__link[aria-current="page"] {
+    color: #1d4ed8;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #93c5fd;
+    box-shadow: 0 2px 12px rgba(37, 99, 235, 0.15);
     pointer-events: none;
   }
-  .admin-back {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
+
+  .admin-nav__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.9;
   }
+
+  .admin-nav__link[aria-current="page"] .admin-nav__icon {
+    color: #2563eb;
+  }
+
+  .admin-head__hero {
+    padding: 0 4px;
+  }
+
   .admin-title {
-    margin: 12px 0 4px;
-    font-size: 1.35rem;
-    font-weight: 700;
+    margin: 0 0 6px;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #0f172a;
+    line-height: 1.2;
   }
+
   .admin-sub {
     margin: 0;
-    font-size: 0.9rem;
-    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: #64748b;
+    max-width: 42rem;
   }
+
   .admin-gate {
-    text-align: center;
-    padding: 40px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 16px 56px;
   }
+
+  .admin-gate__card {
+    width: 100%;
+    max-width: 400px;
+    padding: 36px 28px 32px;
+    text-align: center;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 20px;
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+  }
+
+  .admin-gate__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    border-radius: 20px;
+    background: linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 100%);
+    color: #94a3b8;
+  }
+
+  .admin-gate__title {
+    margin: 0 0 10px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+  }
+
   .admin-gate__text {
-    margin-bottom: 16px;
-    color: var(--text-muted);
+    margin: 0 0 22px;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: #64748b;
+  }
+
+  .admin-gate__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 260px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    color: #fff;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .admin-gate__btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.4);
   }
   .admin-layout {
     display: grid;
@@ -418,8 +971,9 @@ import "../styles/admin-raffles.css";
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
+    padding: 16px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   }
   .admin-thread__head-text {
     min-width: 0;
@@ -427,65 +981,119 @@ import "../styles/admin-raffles.css";
   }
   .admin-thread__edit {
     flex-shrink: 0;
-    padding: 8px 14px;
+    padding: 9px 16px;
     font-size: 0.85rem;
     font-weight: 600;
     font-family: inherit;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
     background: #fff;
-    color: var(--accent);
+    color: #2563eb;
     cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
   .admin-thread__edit:hover {
     background: #eff6ff;
+    border-color: #bfdbfe;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
   }
   .admin-edit-modal {
     max-width: 420px;
   }
   .admin-sidebar {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
     overflow: hidden;
     min-width: 0;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
   }
   .admin-sidebar__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0;
-    padding: 12px 14px;
-    font-size: 0.75rem;
-    font-weight: 700;
+    padding: 14px 16px;
+    font-size: 0.8rem;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.07em;
+    color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   }
+
+  .admin-sidebar__title-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #fff;
+    color: #3b82f6;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  }
+
   .admin-tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 10px 10px 8px;
-    border-bottom: 1px solid var(--border);
-    background: #fafbfc;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   }
   .admin-tab {
     flex: 1;
     min-width: 0;
-    padding: 8px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 8px;
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: 700;
     font-family: inherit;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
     background: #fff;
-    color: var(--text-muted);
+    color: #64748b;
     cursor: pointer;
     line-height: 1.2;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
   }
+
+  .admin-tab__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+
+  .admin-tab:hover {
+    border-color: #cbd5e1;
+    color: #334155;
+  }
+
   .admin-tab--active {
-    background: #eff6ff;
+    background: linear-gradient(180deg, #fff 0%, #eff6ff 100%);
     border-color: #93c5fd;
-    color: var(--accent);
+    color: #1d4ed8;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  }
+
+  .admin-tab--active .admin-tab__icon {
+    color: #2563eb;
   }
   .admin-user-list {
     max-height: 60dvh;
@@ -499,18 +1107,20 @@ import "../styles/admin-raffles.css";
     min-width: 0;
     overflow: hidden;
     text-align: left;
-    padding: 12px 14px;
+    padding: 14px 16px;
     border: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid #f1f5f9;
     background: #fff;
     cursor: pointer;
     font-family: inherit;
+    transition: background 0.12s ease;
   }
   .admin-user-item:hover {
-    background: #fafbfc;
+    background: #f8fafc;
   }
   .admin-user-item.is-active {
-    background: #eff6ff;
+    background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 100%);
+    box-shadow: inset 3px 0 0 #3b82f6;
   }
   .admin-user-item__name {
     font-weight: 600;
@@ -557,21 +1167,46 @@ import "../styles/admin-raffles.css";
     display: none;
   }
   .admin-main {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
     min-height: 320px;
     min-width: 0;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.05);
   }
   .admin-empty {
     flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
-    padding: 24px;
+    gap: 14px;
+    color: #94a3b8;
+    padding: 40px 24px;
+    text-align: center;
+  }
+
+  .admin-empty__illu {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 100%);
+    color: #94a3b8;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .admin-empty p {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #64748b;
+    max-width: 240px;
+    line-height: 1.45;
   }
   /* Иначе display:flex выше перебивает UA [hidden] — плашка остаётся видимой */
   .admin-empty[hidden],
@@ -715,5 +1350,138 @@ import "../styles/admin-raffles.css";
     background: var(--accent);
     color: #fff;
     cursor: pointer;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .admin-users-app {
+    min-width: 0;
+  }
+
+  .admin-users-search-wrap {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .admin-users-search {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .admin-users-list-wrap {
+    min-width: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .admin-users-empty {
+    margin: 0;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+  }
+
+  .btn--small {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  /* Тулбары подразделов (акции, оплаты, пользователи) */
+  .admin-raffles-app .admin-raffles-toolbar,
+  .admin-payments-app .admin-raffles-toolbar,
+  .admin-users-app .admin-raffles-toolbar {
+    padding: 16px 18px;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
+    margin-bottom: 16px;
+  }
+
+  .admin-raffles-app .admin-raffles-toolbar__label,
+  .admin-payments-app .admin-raffles-toolbar__label,
+  .admin-users-app .admin-raffles-toolbar__label {
+    font-size: 0.68rem;
+    color: #64748b;
+  }
+
+  .admin-users-search {
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.92rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+
+  .admin-users-search:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .admin-app {
+    animation: adminSectionIn 0.4s ease-out;
+  }
+
+  .admin-raffles-app,
+  .admin-payments-app,
+  .admin-users-app {
+    animation: adminSectionIn 0.4s ease-out;
+  }
+
+  @keyframes adminSectionIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .admin-head__bar {
+      padding: 12px;
+    }
+
+    .admin-nav__text {
+      display: none;
+    }
+
+    .admin-nav__link {
+      padding: 12px;
+      border-radius: 14px;
+    }
+
+    .admin-exit span {
+      display: none;
+    }
+
+    .admin-exit {
+      padding: 10px 12px;
+    }
+
+    .admin-brand__hint {
+      display: none;
+    }
   }
 </style>

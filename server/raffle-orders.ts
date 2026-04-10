@@ -1,4 +1,4 @@
-import { db, getRaffleById } from "./db.js";
+import { db, getRaffleById, isRaffleVisibleOnSite } from "./db.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 10;
@@ -110,6 +110,9 @@ export function createReservation(
   cleanupExpiredRaffleOrders();
   const raffle = getRaffleById(raffleId);
   if (!raffle || raffle.status !== "active") {
+    return { ok: false, error: "Акция недоступна" };
+  }
+  if (!isRaffleVisibleOnSite(raffle)) {
     return { ok: false, error: "Акция недоступна" };
   }
   const existingOrder = db
@@ -267,7 +270,7 @@ export function listPendingPayments(): PendingPaymentRow[] {
        INNER JOIN raffles r ON r.id = o.raffle_id
        INNER JOIN users u ON u.id = o.user_id
        WHERE o.status = 'pending_review'
-       ORDER BY o.updated_at ASC`,
+       ORDER BY o.created_at ASC`,
     )
     .all() as PendingPaymentRow[];
 }

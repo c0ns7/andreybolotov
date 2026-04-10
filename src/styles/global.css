@@ -911,6 +911,35 @@ html:not(.raffle-grid-page) #tab-search {
   box-shadow: 0 4px 16px rgba(52, 199, 89, 0.28);
 }
 
+/* Непрочитанный ответ поддержки (пользователь ещё не открывал чат после ответа) */
+.bottom-nav-btn--chat-unread:not(.bottom-nav-btn--active) {
+  color: #059669;
+}
+.bottom-nav-btn--chat-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__icon {
+  background: linear-gradient(165deg, #d1fae5 0%, #6ee7b7 100%);
+  color: #047857;
+  box-shadow:
+    0 0 0 2px rgba(16, 185, 129, 0.5),
+    0 4px 18px rgba(16, 185, 129, 0.35);
+  animation: bottomNavChatUnreadPulse 2.2s ease-in-out infinite;
+}
+.bottom-nav-btn--chat-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__label {
+  color: #059669;
+}
+@keyframes bottomNavChatUnreadPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(16, 185, 129, 0.45),
+      0 4px 16px rgba(16, 185, 129, 0.28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(52, 211, 153, 0.75),
+      0 4px 22px rgba(16, 185, 129, 0.42);
+  }
+}
+
 /* Шапка авторизованного */
 .app-header {
   display: flex;
@@ -5043,4 +5072,76 @@ html.raffle-purchase-page .raffle-detail__step {
   font-size: 0.9rem;
   line-height: 1.55;
   color: #64748b;
+}
+
+/* Полноэкранная блокировка аккаунта */
+.account-blocked-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  pointer-events: auto;
+}
+
+.account-blocked-screen[hidden] {
+  display: none !important;
+}
+
+.account-blocked-screen__backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(239, 68, 68, 0.18) 0%, transparent 55%),
+    linear-gradient(165deg, #0f172a 0%, #1e293b 42%, #334155 100%);
+}
+
+.account-blocked-screen__card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  padding: 40px 28px 36px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 32px 64px -16px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+
+.account-blocked-screen__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #fecaca 0%, #fca5a5 100%);
+  color: #b91c1c;
+  box-shadow: 0 12px 28px rgba(185, 28, 28, 0.25);
+}
+
+.account-blocked-screen__title {
+  margin: 0 0 12px;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.account-blocked-screen__text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+html.js-account-blocked {
+  overflow: hidden;
 }

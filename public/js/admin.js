@@ -120,10 +120,13 @@
   }
 
   const gate = document.getElementById("admin-gate");
+  const adminLoading = document.getElementById("admin-loading");
   const adminRoot = document.getElementById("admin-root");
   const app = document.getElementById("admin-app");
   const rafflesApp = document.getElementById("admin-raffles-app");
   const paymentsApp = document.getElementById("admin-payments-app");
+  const usersApp = document.getElementById("admin-users-app");
+  const settingsApp = document.getElementById("admin-settings-app");
   const listEl = document.getElementById("admin-user-list");
   const empty = document.getElementById("admin-empty");
   const thread = document.getElementById("admin-thread");
@@ -136,10 +139,13 @@
   let selectedId = null;
   /** @type {{ id: number; phone: string; name: string; email: string; role: string } | null} */
   let selectedUserData = null;
+  /** Пока грузится тред, не сбрасывать selectedId в loadUsers (иначе гонка с WS). */
+  let threadLoadUserId = null;
 
   const modalEditUser = document.getElementById("modal-edit-user");
 
   function showGate(msg) {
+    if (adminLoading) adminLoading.hidden = true;
     if (gate) {
       gate.hidden = false;
       const p = gate.querySelector(".admin-gate__text");
@@ -149,6 +155,8 @@
     if (app) app.hidden = true;
     if (rafflesApp) rafflesApp.hidden = true;
     if (paymentsApp) paymentsApp.hidden = true;
+    if (usersApp) usersApp.hidden = true;
+    if (settingsApp) settingsApp.hidden = true;
   }
 
   function getAdminTab() {
@@ -157,6 +165,8 @@
       var t = u.searchParams.get("tab");
       if (t === "raffles") return "raffles";
       if (t === "payments") return "payments";
+      if (t === "users") return "users";
+      if (t === "settings") return "settings";
       return "support";
     } catch (_) {
       return "support";
@@ -168,16 +178,28 @@
     var heading = document.getElementById("admin-page-heading");
     var sub = document.getElementById("admin-page-sub");
     var navSupport = document.getElementById("nav-link-support");
+    var navUsers = document.getElementById("nav-link-users");
     var navRaffles = document.getElementById("nav-link-raffles");
     var navPayments = document.getElementById("nav-link-payments");
+    var navSettings = document.getElementById("nav-link-settings");
 
     if (app) app.hidden = tab !== "support";
     if (rafflesApp) rafflesApp.hidden = tab !== "raffles";
     if (paymentsApp) paymentsApp.hidden = tab !== "payments";
+    if (usersApp) usersApp.hidden = tab !== "users";
+    if (settingsApp) settingsApp.hidden = tab !== "settings";
 
     if (heading) {
       heading.textContent =
-        tab === "raffles" ? "Акции" : tab === "payments" ? "Оплаты акций" : "Поддержка";
+        tab === "raffles"
+          ? "Акции"
+          : tab === "payments"
+            ? "Оплаты акций"
+            : tab === "users"
+              ? "Пользователи"
+              : tab === "settings"
+                ? "Настройки"
+                : "Поддержка";
     }
     if (sub) {
       sub.textContent =
@@ -185,12 +207,18 @@
           ? "Каталог акций на главной"
           : tab === "payments"
             ? "Проверка чеков и закрепление номерков"
-            : "Пользователи и переписка";
+            : tab === "users"
+              ? "Все зарегистрированные пользователи"
+              : tab === "settings"
+                ? "Режим технических работ и параметры сайта"
+                : "Пользователи и переписка";
     }
 
     if (navSupport) navSupport.setAttribute("aria-current", tab === "support" ? "page" : "false");
+    if (navUsers) navUsers.setAttribute("aria-current", tab === "users" ? "page" : "false");
     if (navRaffles) navRaffles.setAttribute("aria-current", tab === "raffles" ? "page" : "false");
     if (navPayments) navPayments.setAttribute("aria-current", tab === "payments" ? "page" : "false");
+    if (navSettings) navSettings.setAttribute("aria-current", tab === "settings" ? "page" : "false");
 
     if (tab === "raffles" && typeof window.abInitRaffles === "function") {
       window.abInitRaffles();
@@ -198,12 +226,55 @@
     if (tab === "payments" && typeof window.abInitPayments === "function") {
       window.abInitPayments();
     }
+    if (tab === "users" && typeof window.abInitUsers === "function") {
+      window.abInitUsers();
+    }
+    if (tab === "settings" && typeof window.abInitSettings === "function") {
+      window.abInitSettings();
+    }
   }
 
   function showApp() {
+    if (adminLoading) adminLoading.hidden = true;
     if (gate) gate.hidden = true;
     if (adminRoot) adminRoot.hidden = false;
     applyAdminTab();
+  }
+
+  /** Из оплат и др.: вкладка «Поддержка», открыть переписку с userId (даже без истории в списке). */
+  window.abAdminOpenSupportChat = function (userId) {
+    var id = Number(userId);
+    if (!Number.isFinite(id)) return;
+    try {
+      history.replaceState({}, "", "/admin");
+    } catch (_) {}
+    adminTab = "all";
+    document.querySelectorAll(".admin-tab").forEach(function (b) {
+      var on = b.getAttribute("data-tab") === "all";
+      b.classList.toggle("admin-tab--active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    applyAdminTab();
+    selectedId = id;
+    if (empty) empty.hidden = true;
+    if (thread) thread.hidden = false;
+    loadThread(id).catch(function (e) {
+      alert(e.message || "Не удалось открыть чат");
+    });
+  };
+
+  function processAdminOpenUserQuery() {
+    try {
+      var u = new URL(location.href);
+      var raw = u.searchParams.get("openUser");
+      if (!raw) return;
+      var id = Number(raw);
+      if (!Number.isFinite(id)) return;
+      u.searchParams.delete("openUser");
+      var qs = u.searchParams.toString();
+      history.replaceState({}, "", u.pathname + (qs ? "?" + qs : "") + u.hash);
+      window.abAdminOpenSupportChat(id);
+    } catch (_) {}
   }
 
   function filterUsers(users) {
@@ -262,22 +333,53 @@
     });
   }
 
+  /** Пользователь без истории в чате не приходит с /api/admin/users — оставляем его в списке, если диалог уже открыт. */
+  function mergeOpenThreadIntoUserList() {
+    if (selectedId == null || !selectedUserData) return;
+    var uid = Number(selectedId);
+    if (!Number.isFinite(uid) || Number(selectedUserData.id) !== uid) return;
+    if (allUsersCache.some(function (u) {
+      return Number(u.id) === uid;
+    })) {
+      return;
+    }
+    allUsersCache.unshift({
+      id: selectedUserData.id,
+      phone: selectedUserData.phone,
+      name: selectedUserData.name,
+      email: selectedUserData.email,
+      role: selectedUserData.role || "user",
+      blocked: !!selectedUserData.blocked,
+      last_body: null,
+      last_at: null,
+      last_is_staff: null,
+      unread_count: 0,
+    });
+  }
+
   async function loadUsers() {
     const data = await apiJson("/api/admin/users", { headers: authHeaders() });
     allUsersCache = data.users || [];
+    mergeOpenThreadIntoUserList();
     renderUserList();
-    if (selectedId) {
+    if (selectedId != null) {
       const still = allUsersCache.some(function (u) {
-        return u.id === selectedId;
+        return Number(u.id) === Number(selectedId);
       });
       if (!still) {
-        selectedId = null;
-        if (thread) thread.hidden = true;
-        if (empty) empty.hidden = false;
+        var loadingThis =
+          threadLoadUserId != null && Number(threadLoadUserId) === Number(selectedId);
+        if (!loadingThis) {
+          selectedId = null;
+          if (thread) thread.hidden = true;
+          if (empty) empty.hidden = false;
+        }
       } else {
-        listEl.querySelectorAll(".admin-user-item").forEach(function (b) {
-          b.classList.toggle("is-active", Number(b.getAttribute("data-id")) === selectedId);
-        });
+        if (listEl) {
+          listEl.querySelectorAll(".admin-user-item").forEach(function (b) {
+            b.classList.toggle("is-active", Number(b.getAttribute("data-id")) === Number(selectedId));
+          });
+        }
       }
     }
   }
@@ -466,6 +568,21 @@
     document.body.style.overflow = "";
   }
 
+  /** С вкладки «Пользователи»: открыть модалку редактирования без переключения на поддержку. */
+  window.abAdminOpenUserEdit = function (user) {
+    if (!user || user.id == null) return;
+    selectedId = Number(user.id);
+    selectedUserData = {
+      id: selectedId,
+      name: user.name || "",
+      phone: user.phone || "",
+      email: user.email || "",
+      role: user.role || "user",
+      blocked: !!user.blocked,
+    };
+    openEditModal();
+  };
+
   function bindEditPhoneInput(el) {
     if (!el) return;
     el.addEventListener("input", function () {
@@ -495,24 +612,30 @@
   }
 
   async function loadThread(userId) {
+    var uid = Number(userId);
+    threadLoadUserId = Number.isFinite(uid) ? uid : null;
     stopUserTypingPoll();
     setUserTypingIndicatorVisible(false);
-    const data = await apiJson("/api/admin/users/" + userId + "/messages", {
-      headers: authHeaders(),
-      cache: "no-store",
-    });
-    selectedUserData = data.user;
-    if (threadName) threadName.textContent = data.user.name;
-    if (threadMeta) {
-      threadMeta.textContent =
-        formatRuPhone(data.user.phone) + " · " + data.user.email;
+    try {
+      const data = await apiJson("/api/admin/users/" + userId + "/messages", {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      selectedUserData = data.user;
+      if (threadName) threadName.textContent = data.user.name;
+      if (threadMeta) {
+        threadMeta.textContent =
+          formatRuPhone(data.user.phone) + " · " + data.user.email;
+      }
+      renderMessages(data.messages);
+      if (typeof data.user_typing === "boolean") {
+        setUserTypingIndicatorVisible(data.user_typing);
+      }
+      startUserTypingPoll(userId);
+      await loadUsers().catch(function () {});
+    } finally {
+      if (threadLoadUserId === uid) threadLoadUserId = null;
     }
-    renderMessages(data.messages);
-    if (typeof data.user_typing === "boolean") {
-      setUserTypingIndicatorVisible(data.user_typing);
-    }
-    startUserTypingPoll(userId);
-    await loadUsers().catch(function () {});
   }
 
   function authHeaders() {
@@ -600,6 +723,7 @@
   async function bootstrap() {
     const s = loadSession();
     if (!s || !s.token) {
+      if (adminLoading) adminLoading.hidden = true;
       location.replace("/");
       return;
     }
@@ -616,12 +740,14 @@
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       if (!isAdminRole(merged.role)) {
+        if (adminLoading) adminLoading.hidden = true;
         location.replace("/home");
         return;
       }
       showApp();
       init();
     } catch {
+      if (adminLoading) adminLoading.hidden = true;
       location.replace("/");
     }
   }
@@ -633,11 +759,15 @@
   function init() {
     bindTabs();
     connectAdminWs();
-    loadUsers().catch(function (e) {
-      if (e.status === 403 || e.status === 401) {
-        location.replace(e.status === 401 ? "/" : "/home");
-      }
-    });
+    loadUsers()
+      .catch(function (e) {
+        if (e.status === 403 || e.status === 401) {
+          location.replace(e.status === 401 ? "/" : "/home");
+        }
+      })
+      .finally(function () {
+        processAdminOpenUserQuery();
+      });
 
     const adminFileInput = document.getElementById("admin-chat-file-input");
     const btnAdminAttach = document.getElementById("btn-admin-chat-attach");

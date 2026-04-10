@@ -52,12 +52,17 @@
   /** true только после успешного /api/auth/me или сразу после входа/регистрации */
   let authVerified = false;
 
+  /** Доступ к сайту закрыт (сессия есть, выход недоступен) */
+  let accountBlocked = false;
+
   let appView = "feed";
 
   /** @type {WebSocket | null} */
   let chatWs = null;
   /** @type {number | null} */
   let chatMessagesPollTimer = null;
+  /** @type {number | null} */
+  let chatUnreadPollTimer = null;
 
   let staffTypingActive = false;
   /** @type {number | null} */
@@ -92,6 +97,8 @@
   var IS_RAFFLE_PURCHASE_PAGE = routePath === "/home/raffle";
   var IS_RAFFLE_PAY_PAGE = routePath === "/home/raffle/pay";
   var IS_RAFFLE_CONFIRM_PAGE = routePath === "/home/raffle/confirm";
+  var IS_MAINTENANCE_PAGE = routePath === "/maintenance";
+  var IS_HOME_RESET_PAGE = routePath === "/home/reset-password";
 
   function redirectByRoute() {
     try {
@@ -115,6 +122,60 @@
     return false;
   }
   if (redirectByRoute()) return;
+
+  (function enqueueMaintenanceRedirect() {
+    if (IS_MAINTENANCE_PAGE || IS_GUEST_LANDING) return;
+    var need =
+      (IS_HOME_APP ||
+        IS_RAFFLE_PURCHASE_PAGE ||
+        IS_RAFFLE_PAY_PAGE ||
+        IS_RAFFLE_CONFIRM_PAGE) &&
+      !IS_HOME_RESET_PAGE;
+    if (!need) return;
+    fetch("/api/site/status", { cache: "no-store" })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j || !j.maintenance) return;
+        var raw;
+        try {
+          raw = localStorage.getItem(STORAGE_KEY);
+        } catch (_) {
+          raw = null;
+        }
+        var jtok = null;
+        if (raw) {
+          try {
+            jtok = JSON.parse(raw);
+          } catch (_) {
+            jtok = null;
+          }
+        }
+        var hasTok = !!(jtok && jtok.token);
+        if (!hasTok) {
+          location.replace("/maintenance");
+          return;
+        }
+        fetch("/api/auth/me", {
+          headers: { Authorization: "Bearer " + jtok.token },
+          cache: "no-store",
+        })
+          .then(function (r) {
+            return r.json().then(function (d) {
+              return { ok: r.ok, d: d };
+            });
+          })
+          .then(function (x) {
+            if (x.ok && x.d && x.d.user && x.d.user.role === "admin") return;
+            location.replace("/maintenance");
+          })
+          .catch(function () {
+            location.replace("/maintenance");
+          });
+      })
+      .catch(function () {});
+  })();
 
   function saveSession(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -152,6 +213,24 @@
       return {};
     });
     if (!res.ok) {
+      if (res.status === 403 && data.code === "account_blocked") {
+        accountBlocked = true;
+        refreshAccountBlockedUI();
+        renderDashboard();
+        const err = new Error(data.error || data.message || "Аккаунт заблокирован");
+        err.status = 403;
+        err.accountBlocked = true;
+        throw err;
+      }
+      if (res.status === 503 && data.code === "maintenance") {
+        try {
+          location.replace("/maintenance");
+        } catch (_) {}
+        const err = new Error(data.error || data.message || "Технические работы");
+        err.status = 503;
+        err.maintenance = true;
+        throw err;
+      }
       if (res.status === 401 && headers.Authorization) {
         invalidateSession("Сессия истекла. Войдите снова.");
       }
@@ -165,8 +244,12 @@
   function invalidateSession(toastMsg) {
     clearSession();
     authVerified = false;
+    accountBlocked = false;
+    refreshAccountBlockedUI();
     session = null;
     appView = "feed";
+    stopChatUnreadPolling();
+    setChatTabUnreadHighlight(false);
     closeChatPanel();
     closeAllModals();
     updateScreens();
@@ -406,6 +489,58 @@
     }
   }
 
+  function setChatTabUnreadHighlight(on) {
+    var tab = document.getElementById("tab-chat");
+    if (!tab) return;
+    tab.classList.toggle("bottom-nav-btn--chat-unread", !!on);
+  }
+
+  function refreshChatUnreadCount() {
+    var s = loadSession();
+    if (!s || !s.token || !authVerified || accountBlocked) {
+      setChatTabUnreadHighlight(false);
+      return;
+    }
+    var panel = document.getElementById("panel-chat");
+    if (panel && !panel.classList.contains("screen--hidden")) {
+      setChatTabUnreadHighlight(false);
+      return;
+    }
+    fetch("/api/chat/unread", { headers: authHeaders(), cache: "no-store" })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        setChatTabUnreadHighlight((Number(j.unread_staff) || 0) > 0);
+      })
+      .catch(function () {});
+  }
+
+  function stopChatUnreadPolling() {
+    if (chatUnreadPollTimer != null) {
+      clearInterval(chatUnreadPollTimer);
+      chatUnreadPollTimer = null;
+    }
+  }
+
+  function startChatUnreadPolling() {
+    stopChatUnreadPolling();
+    refreshChatUnreadCount();
+    chatUnreadPollTimer = window.setInterval(refreshChatUnreadCount, 24000);
+  }
+
+  function postMarkStaffChatRead() {
+    return fetch("/api/chat/mark-staff-read", {
+      method: "POST",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      cache: "no-store",
+    }).catch(function () {});
+  }
+
   function startChatMessagesPolling() {
     stopChatMessagesPolling();
     chatMessagesPollTimer = window.setInterval(function () {
@@ -495,6 +630,8 @@
       if (d.type === "chat_message" && d.message) {
         const box = document.getElementById("chat-messages");
         if (!box) return;
+        var panel = document.getElementById("panel-chat");
+        var chatOpen = panel && !panel.classList.contains("screen--hidden");
         if (d.message.is_staff) setStaffTypingVisible(false);
         const empty = box.querySelector(".chat-empty");
         if (empty) empty.remove();
@@ -504,6 +641,13 @@
         if (row) box.appendChild(row);
         if (staffTypingActive) mountStaffTypingIndicator();
         box.scrollTop = box.scrollHeight;
+        if (d.message.is_staff && chatOpen) {
+          postMarkStaffChatRead().then(function () {
+            setChatTabUnreadHighlight(false);
+          });
+        } else if (d.message.is_staff && !chatOpen) {
+          setChatTabUnreadHighlight(true);
+        }
       }
     };
     ws.onerror = function () {
@@ -527,7 +671,14 @@
     panel.classList.remove("screen--hidden");
     panel.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    loadChatMessagesHttp();
+    setChatTabUnreadHighlight(false);
+    loadChatMessagesHttp()
+      .then(function () {
+        return postMarkStaffChatRead();
+      })
+      .finally(function () {
+        refreshChatUnreadCount();
+      });
     connectChatWs();
     startChatMessagesPolling();
     setBottomNavActive();
@@ -550,6 +701,7 @@
     disconnectChatWs();
     stopChatMessagesPolling();
     setBottomNavActive();
+    refreshChatUnreadCount();
   }
 
   function renderDashboard() {
@@ -588,7 +740,7 @@
       }
     }
     if (adminWrap) {
-      const show = authed && s.role === "admin";
+      const show = authed && s.role === "admin" && !accountBlocked;
       adminWrap.hidden = !show;
     }
     if (authed) syncProfileTicketCount();
@@ -1610,6 +1762,16 @@
       const data = await res.json().catch(function () {
         return {};
       });
+      if (res.status === 403 && data.code === "account_blocked") {
+        accountBlocked = true;
+        refreshAccountBlockedUI();
+        renderDashboard();
+        return;
+      }
+      if (res.status === 503 && data.code === "maintenance") {
+        location.replace("/maintenance");
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Ошибка");
       var list = data.raffles || [];
       renderRaffleCards("home-cards-app", list);
@@ -3459,8 +3621,28 @@
     }, duration);
   }
 
+  function refreshAccountBlockedUI() {
+    var el = document.getElementById("account-blocked-screen");
+    var root = document.documentElement;
+    var blocked = !!accountBlocked;
+    if (el) {
+      el.hidden = !blocked;
+      el.setAttribute("aria-hidden", blocked ? "false" : "true");
+    }
+    root.classList.toggle("js-account-blocked", blocked);
+    var btnLogout = document.getElementById("btn-profile-logout");
+    if (btnLogout) btnLogout.hidden = blocked;
+    if (blocked) {
+      closeChatPanel();
+      closeAllModals();
+    }
+  }
+
   function updateScreens() {
     session = loadSession();
+    try {
+      if (session && session.blocked) accountBlocked = true;
+    } catch (_) {}
     const authed = !!(session && session.token && session.phone && authVerified);
     /** На /home и страницах акции лента только после успешной проверки сессии */
     const showAuthedUi =
@@ -3500,8 +3682,16 @@
       closeChatPanel();
       if (modalProfile) closeModal(modalProfile);
     }
-    if (showAuthedUi && IS_HOME_APP) {
+    if (showAuthedUi && IS_HOME_APP && !accountBlocked) {
       syncCartChrome().catch(function () {});
+    }
+    refreshAccountBlockedUI();
+    if (authed && !IS_GUEST_LANDING) {
+      if (chatUnreadPollTimer == null) startChatUnreadPolling();
+      else refreshChatUnreadCount();
+    } else {
+      stopChatUnreadPolling();
+      setChatTabUnreadHighlight(false);
     }
   }
 
@@ -3513,12 +3703,14 @@
         headers: { Authorization: "Bearer " + s.token },
       });
       authVerified = true;
+      accountBlocked = !!data.user.blocked;
       saveSession({
         ...s,
         phone: data.user.phone,
         name: data.user.name,
         email: data.user.email,
         role: data.user.role || "user",
+        blocked: accountBlocked,
       });
       updateScreens();
     } catch (err) {
@@ -3526,6 +3718,7 @@
         return;
       }
       authVerified = false;
+      accountBlocked = false;
       updateScreens();
       showToast("Не удалось проверить сессию. Попробуйте войти снова.", "warning");
     }
@@ -3538,6 +3731,7 @@
       name: data.user.name,
       email: data.user.email,
       role: data.user.role || "user",
+      blocked: !!data.user.blocked,
     };
   }
 
@@ -3986,6 +4180,7 @@
     if (document.visibilityState !== "visible") return;
     var panel = document.getElementById("panel-chat");
     if (panel && !panel.classList.contains("screen--hidden")) loadChatMessagesHttp();
+    if (authVerified) refreshChatUnreadCount();
   });
 
 
@@ -3995,6 +4190,7 @@
   verifySessionOnLoad().then(function () {
     if (
       authVerified &&
+      !accountBlocked &&
       (IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE)
     ) {
       prefetchRaffleCaches()
@@ -4003,7 +4199,7 @@
           syncProfileTicketCount();
         });
     }
-    if (IS_HOME_APP && authVerified) {
+    if (IS_HOME_APP && authVerified && !accountBlocked) {
       try {
         var ptoast = sessionStorage.getItem("ab_pending_toast");
         if (ptoast) {
