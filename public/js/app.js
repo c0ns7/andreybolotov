@@ -3197,8 +3197,32 @@
   bindPasswordToggle(document.getElementById("toggle-pass-reg2"), "pass-reg2");
   bindPasswordToggle(document.getElementById("toggle-pass-login"), "pass-login");
 
+  function clearBottomSheetDrag(overlay) {
+    if (!overlay || !overlay.id) return;
+    if (overlay.id === "modal-cart") {
+      var cs = document.getElementById("modal-cart-sheet");
+      if (cs) cs.style.removeProperty("--sheet-drag-y");
+      return;
+    }
+    if (overlay.id === "modal-tickets") {
+      var ts = modalTickets && modalTickets.querySelector(".modal--tickets-sheet");
+      if (ts) ts.style.removeProperty("--sheet-drag-y");
+      return;
+    }
+    if (overlay.id === "modal-ticket-search") {
+      var ss = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
+      if (ss) ss.style.removeProperty("--sheet-drag-y");
+      return;
+    }
+    if (overlay.id === "modal-profile") {
+      var ps = modalProfile && modalProfile.querySelector(".profile-modal");
+      if (ps) ps.style.removeProperty("--sheet-drag-y");
+    }
+  }
+
   function openModal(overlay) {
     if (!overlay) return;
+    clearBottomSheetDrag(overlay);
     overlay.classList.add("is-open");
     overlay.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -3206,6 +3230,7 @@
 
   function closeModal(overlay) {
     if (!overlay) return;
+    clearBottomSheetDrag(overlay);
     overlay.classList.remove("is-open");
     overlay.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -3245,6 +3270,107 @@
   function closeProfileModal() {
     closeModal(modalProfile);
   }
+
+  /** Свайп вниз по нижним шторкам (мобильная ширина): закрытие как в нативных приложениях */
+  (function initBottomSheetSwipeDismiss() {
+    var mq = window.matchMedia("(max-width: 640px)");
+    var THRESHOLD = 100;
+    var cartSheet = document.getElementById("modal-cart-sheet");
+    var ticketsSheet = modalTickets && modalTickets.querySelector(".modal--tickets-sheet");
+    var searchSheet = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
+    var profileSheet = modalProfile && modalProfile.querySelector(".profile-modal");
+
+    function scrollArea(el) {
+      var n = el;
+      while (n && n !== document.body) {
+        if (
+          n.classList &&
+          (n.classList.contains("cart-sheet__body") ||
+            n.classList.contains("tickets-sheet__body") ||
+            n.classList.contains("ticket-search-sheet__body") ||
+            n.classList.contains("profile-modal__body"))
+        ) {
+          return n;
+        }
+        n = n.parentElement;
+      }
+      return null;
+    }
+
+    function bind(overlay, panel, closeFn) {
+      if (!overlay || !panel) return;
+      var startY = 0;
+      var startX = 0;
+      var lastDy = 0;
+      var active = false;
+      var ignore = false;
+      var moveHandler = null;
+
+      function detachMove() {
+        if (moveHandler) {
+          panel.removeEventListener("touchmove", moveHandler);
+          moveHandler = null;
+        }
+      }
+
+      function onTouchStart(e) {
+        detachMove();
+        if (!mq.matches) return;
+        if (!overlay.classList.contains("is-open")) return;
+        if (e.touches.length !== 1) return;
+        var target = e.target;
+        if (target.closest("button, a, input, textarea, select, [role='tab']")) return;
+        var sc = scrollArea(target);
+        if (sc && sc.scrollTop > 2) {
+          ignore = true;
+          return;
+        }
+        ignore = false;
+        active = true;
+        lastDy = 0;
+        startY = e.touches[0].clientY;
+        startX = e.touches[0].clientX;
+        moveHandler = function (ev) {
+          if (!active || ignore || !overlay.classList.contains("is-open")) return;
+          var y = ev.touches[0].clientY;
+          var x = ev.touches[0].clientX;
+          var dy = y - startY;
+          var dx = x - startX;
+          if (dy < 0) dy = 0;
+          if (Math.abs(dy) < 8 && Math.abs(dy) < Math.abs(dx)) return;
+          ev.preventDefault();
+          lastDy = dy;
+          panel.style.setProperty("--sheet-drag-y", dy + "px");
+        };
+        panel.addEventListener("touchmove", moveHandler, { passive: false });
+      }
+
+      function onTouchEnd() {
+        detachMove();
+        if (!active) return;
+        active = false;
+        if (ignore) {
+          ignore = false;
+          return;
+        }
+        var dy = lastDy;
+        panel.style.removeProperty("--sheet-drag-y");
+        if (dy > THRESHOLD) {
+          closeFn();
+        }
+        lastDy = 0;
+      }
+
+      panel.addEventListener("touchstart", onTouchStart, { passive: true });
+      panel.addEventListener("touchend", onTouchEnd);
+      panel.addEventListener("touchcancel", onTouchEnd);
+    }
+
+    bind(modalCart, cartSheet, closeCartModal);
+    bind(modalTickets, ticketsSheet, closeTicketsModal);
+    bind(modalTicketSearch, searchSheet, closeTicketSearchModal);
+    bind(modalProfile, profileSheet, closeProfileModal);
+  })();
 
   var TOAST_SVG = {
     success:
