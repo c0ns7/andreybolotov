@@ -19,8 +19,8 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
   const port = Number(process.env.SMTP_PORT || 587);
   const user = String(process.env.SMTP_USER).trim();
   const pass = String(process.env.SMTP_PASS);
-  const from =
-    process.env.SMTP_FROM?.trim() || `noreply@${host.replace(/^smtp\.?/i, "") || "localhost"}`;
+  /* Mail.ru и др.: «От» должен совпадать с SMTP_USER или быть явно задан в SMTP_FROM */
+  const from = process.env.SMTP_FROM?.trim() || user;
 
   const transporter = nodemailer.createTransport({
     host,

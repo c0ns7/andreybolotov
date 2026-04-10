@@ -462,7 +462,8 @@ app.post("/api/auth/forgot", async (c) => {
   try {
     await sendPasswordResetEmail(user.email, resetUrl);
   } catch (e) {
-    console.error("[auth/forgot] SMTP:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[auth/forgot] SMTP:", msg, e);
     return c.json({ error: "Не удалось отправить письмо. Попробуйте позже." }, 500);
   }
   return c.json(generic);

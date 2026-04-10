@@ -1192,7 +1192,8 @@ html:not(.raffle-grid-page) #tab-search {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  max-height: min(88vh, 88dvh);
+  /* Фактическая высота задаётся в блоке с transform ниже; здесь только верхняя граница */
+  max-height: min(72dvh, 78vh);
 }
 
 .cart-modal__nums-footer {
@@ -2080,28 +2081,67 @@ html:not(.raffle-grid-page) #tab-search {
   transform: translateY(0);
 }
 
-/* Корзина и «Мои билеты»: общие .modal и правило выше перебивают высоту и transform шторки — задаём после */
+/* Корзина и «Мои билеты»: высота по контенту, ограничение сверху — шторка не забирает весь экран */
 .modal-overlay--cart .modal.modal--cart.cart-sheet {
-  height: 40vh;
-  height: 40dvh;
-  max-height: 40vh;
-  max-height: 40dvh;
-  transform: translateY(calc(100% + 61px));
+  height: auto;
+  min-height: 0;
+  max-height: min(62dvh, 68vh);
+  transform: translateY(calc(100% + var(--dock-sheet-gap, 61px)));
   transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .modal-overlay--tickets .modal.modal--tickets-sheet {
-  height: 40vh;
-  height: 40dvh;
-  max-height: 40vh;
-  max-height: 40dvh;
-  transform: translateY(calc(100% + 61px));
+  height: auto;
+  min-height: 0;
+  max-height: min(62dvh, 68vh);
+  transform: translateY(calc(100% + var(--dock-sheet-gap, 61px)));
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-overlay--cart.is-open .modal.modal--cart.cart-sheet,
 .modal-overlay--tickets.is-open .modal.modal--tickets-sheet {
-  transform: translateY(61px);
+  transform: translateY(var(--dock-sheet-gap, 61px));
+}
+
+@media (max-width: 520px) {
+  .modal-overlay--cart,
+  .modal-overlay--tickets {
+    /* Чуть выше над таббаром — шторка визуально короче и ближе к верху */
+    --dock-sheet-gap: 52px;
+    padding-bottom: calc(56px + max(8px, env(safe-area-inset-bottom)));
+  }
+
+  .modal-overlay--cart .modal.modal--cart.cart-sheet,
+  .modal-overlay--tickets .modal.modal--tickets-sheet {
+    max-height: min(50dvh, 56vh);
+    border-radius: 22px 22px 0 0;
+  }
+
+  .cart-sheet__grabber {
+    padding: 8px 0 6px;
+  }
+
+  .cart-sheet__body {
+    padding: 0 16px 14px;
+  }
+
+  .tickets-sheet__header {
+    padding: 0 12px 10px;
+  }
+
+  .tickets-sheet__tabs {
+    margin-top: 8px;
+    padding: 0 10px 10px;
+  }
+
+  .tickets-sheet__body {
+    padding: 8px 12px 14px;
+  }
+
+  .modal-overlay--ticket-search .modal.ticket-search-sheet {
+    max-height: min(68dvh, 74vh);
+    border-radius: 22px 22px 0 0;
+  }
 }
 
 /* Поиск номера на странице акции */
@@ -3080,6 +3120,55 @@ a.raffle-pay__btn {
 
 .profile-modal__btn-logout:hover {
   color: #111827;
+}
+
+@media (max-width: 520px) {
+  .modal-overlay--profile {
+    align-items: flex-start;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .profile-modal {
+    max-height: min(68dvh, calc(100dvh - 56px));
+    padding: 14px 14px 16px;
+    border-radius: 20px;
+  }
+
+  .profile-modal__body {
+    min-height: 0;
+  }
+
+  .profile-modal__close {
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+  }
+
+  .profile-modal__hero {
+    margin-bottom: 16px;
+  }
+
+  .profile-modal__avatar {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 12px;
+  }
+
+  .profile-modal__title {
+    font-size: 1.28rem;
+  }
+
+  .profile-modal__stats {
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  .profile-modal__card {
+    padding: 12px;
+    margin-bottom: 10px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
