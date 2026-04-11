@@ -71,6 +71,31 @@ body {
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
 }
 
+/* Главная /: фото на фоне (public/step.webp) */
+.app-shell--index-hero {
+  background: transparent;
+}
+
+.app-shell--index-hero::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: url("/step.webp") center / cover no-repeat;
+  pointer-events: none;
+}
+
+.app-shell--index-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell--index-hero .welcome-splash {
+  background: rgba(245, 245, 247, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 .app-shell--with-tabbar {
   padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
