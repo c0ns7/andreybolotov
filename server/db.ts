@@ -337,7 +337,7 @@ export function countUsersForAdminBySearch(search: string): number {
   return Number(r?.c ?? 0);
 }
 
-/** Постраничный список пользователей для админки (ORDER BY id DESC). search — подстрока по имени/телефону/email. */
+/** Постраничный список: без поиска — новые сверху (id DESC); с поиском — старые регистрации раньше (id ASC), чтобы «давних» не прятать за 1-й страницей совпадений. */
 export function listUsersForAdminPage(offset: number, limit: number, search: string | null): AdminUserListRow[] {
   const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
   const off = Math.max(0, Math.floor(offset));
@@ -354,7 +354,7 @@ export function listUsersForAdminPage(offset: number, limit: number, search: str
          WHERE lower(name) LIKE lower(?)
             OR lower(ifnull(phone,'')) LIKE lower(?)
             OR lower(ifnull(email,'')) LIKE lower(?)
-         ORDER BY id DESC LIMIT ? OFFSET ?`,
+         ORDER BY id ASC LIMIT ? OFFSET ?`,
       )
       .all(pat, pat, pat, lim, off) as AdminUserListRow[];
   }

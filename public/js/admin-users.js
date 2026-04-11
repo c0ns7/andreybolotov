@@ -84,6 +84,8 @@
   let usersCache = [];
   let usersTotal = 0;
   let listLoading = false;
+  /** Увеличивается при каждом «сбросе» списка (поиск / перезагрузка), чтобы отбрасывать ответы устаревших запросов (в т.ч. догрузки по скроллу). */
+  let fetchGeneration = 0;
   let currentSearch = "";
   /** @type {IntersectionObserver | null} */
   let ioObserver = null;
@@ -295,7 +297,11 @@
   }
 
   async function fetchUsersPage(reset) {
-    if (listLoading) return;
+    if (!reset && listLoading) return;
+    if (reset) {
+      fetchGeneration += 1;
+    }
+    const myGen = fetchGeneration;
     listLoading = true;
     const offset = reset ? 0 : usersCache.length;
     const q = currentSearch.trim();
@@ -314,6 +320,7 @@
         headers: authHeaders(),
         cache: "no-store",
       });
+      if (myGen !== fetchGeneration) return;
       const rows = data.users || [];
       usersTotal = Number(data.total) || 0;
       if (reset) {
@@ -325,9 +332,11 @@
         usersTotal = usersCache.length;
       }
     } finally {
-      listLoading = false;
-      updateUsersTotalHeading();
-      renderUsers();
+      if (myGen === fetchGeneration) {
+        listLoading = false;
+        updateUsersTotalHeading();
+        renderUsers();
+      }
     }
   }
 
