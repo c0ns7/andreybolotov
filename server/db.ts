@@ -307,6 +307,68 @@ export function listAllUsersForAdmin(): AdminUserListRow[] {
     .all() as AdminUserListRow[];
 }
 
+export function countUsersForAdmin(): number {
+  const r = db.prepare(`SELECT COUNT(*) AS c FROM users`).get() as { c: number };
+  return Number(r?.c ?? 0);
+}
+
+/** Экранирование % и _ для LIKE */
+function adminUserLikePattern(raw: string): string {
+  const t = raw
+    .trim()
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+  return `%${t}%`;
+}
+
+export function countUsersForAdminBySearch(search: string): number {
+  const t = search.trim();
+  if (!t) return countUsersForAdmin();
+  const pat = adminUserLikePattern(t);
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM users
+       WHERE lower(name) LIKE lower(?)
+          OR lower(ifnull(phone,'')) LIKE lower(?)
+          OR lower(ifnull(email,'')) LIKE lower(?)`,
+    )
+    .get(pat, pat, pat) as { c: number };
+  return Number(r?.c ?? 0);
+}
+
+/** Постраничный список пользователей для админки (ORDER BY id DESC). search — подстрока по имени/телефону/email. */
+export function listUsersForAdminPage(offset: number, limit: number, search: string | null): AdminUserListRow[] {
+  const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
+  const off = Math.max(0, Math.floor(offset));
+  const t = search?.trim() ?? "";
+  if (t) {
+    const pat = adminUserLikePattern(t);
+    return db
+      .prepare(
+        `SELECT id, phone, name, email,
+                COALESCE(role,'user') AS role,
+                COALESCE(blocked,0) AS blocked,
+                created_at
+         FROM users
+         WHERE lower(name) LIKE lower(?)
+            OR lower(ifnull(phone,'')) LIKE lower(?)
+            OR lower(ifnull(email,'')) LIKE lower(?)
+         ORDER BY id DESC LIMIT ? OFFSET ?`,
+      )
+      .all(pat, pat, pat, lim, off) as AdminUserListRow[];
+  }
+  return db
+    .prepare(
+      `SELECT id, phone, name, email,
+              COALESCE(role,'user') AS role,
+              COALESCE(blocked,0) AS blocked,
+              created_at
+       FROM users ORDER BY id DESC LIMIT ? OFFSET ?`,
+    )
+    .all(lim, off) as AdminUserListRow[];
+}
+
 export function updateUserRole(userId: number, role: "admin" | "user"): void {
   db.prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId);
 }

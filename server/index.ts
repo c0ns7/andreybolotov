@@ -42,7 +42,9 @@ import {
   getSiteSettings,
   setMaintenanceEnabled,
   countActiveAdmins,
-  listAllUsersForAdmin,
+  listUsersForAdminPage,
+  countUsersForAdmin,
+  countUsersForAdminBySearch,
   updateUserRole,
   updateUserBlocked,
 } from "./db.js";
@@ -729,7 +731,15 @@ app.get("/api/admin/users/all", (c) => {
   const auth = requireAdmin(c);
   if (auth instanceof Response) return auth;
   c.header("Cache-Control", "no-store");
-  const rows = listAllUsersForAdmin();
+  const rawOff = c.req.query("offset");
+  const rawLim = c.req.query("limit");
+  const q = String(c.req.query("q") ?? "").trim();
+  const offset = Number(rawOff ?? "0");
+  const limit = Number(rawLim ?? "10");
+  const safeOff = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const safeLim = Number.isFinite(limit) ? Math.min(Math.max(1, Math.floor(limit)), 100) : 10;
+  const rows = listUsersForAdminPage(safeOff, safeLim, q || null);
+  const total = q ? countUsersForAdminBySearch(q) : countUsersForAdmin();
   return c.json({
     users: rows.map((x) => ({
       id: x.id,
@@ -740,6 +750,9 @@ app.get("/api/admin/users/all", (c) => {
       blocked: x.blocked === 1,
       created_at: x.created_at,
     })),
+    total,
+    offset: safeOff,
+    limit: safeLim,
   });
 });
 

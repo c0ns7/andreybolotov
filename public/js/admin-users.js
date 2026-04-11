@@ -82,31 +82,79 @@
 
   /** @type {Array<{id:number;phone:string;name:string;email:string;role:string;blocked:boolean;created_at:number}>} */
   let usersCache = [];
+  let usersTotal = 0;
+  let listLoading = false;
+  let currentSearch = "";
+  /** @type {IntersectionObserver | null} */
+  let ioObserver = null;
+  const PAGE_SIZE = 10;
 
   function updateUsersTotalHeading() {
-    var el = document.getElementById("admin-users-total-count");
+    const el = document.getElementById("admin-users-total-count");
     if (!el) return;
-    var n = usersCache.length;
-    el.textContent = "(" + String(n) + ")";
+    el.textContent = "(" + String(usersTotal) + ")";
+  }
+
+  function disconnectUsersIo() {
+    if (ioObserver) {
+      ioObserver.disconnect();
+      ioObserver = null;
+    }
+  }
+
+  function setupInfiniteScroll() {
+    const root = document.getElementById("admin-users-list");
+    const sent = document.getElementById("admin-users-io-sentinel");
+    if (!root || !sent) return;
+    disconnectUsersIo();
+    ioObserver = new IntersectionObserver(
+      function (entries) {
+        for (let i = 0; i < entries.length; i++) {
+          const en = entries[i];
+          if (!en.isIntersecting || listLoading) continue;
+          if (usersCache.length >= usersTotal) return;
+          fetchUsersPage(false).catch(function (e) {
+            if (e.status === 403 || e.status === 401) {
+              location.replace(e.status === 401 ? "/" : "/home");
+              return;
+            }
+            alert(e.message || "Ошибка загрузки");
+          });
+          return;
+        }
+      },
+      { root: root, rootMargin: "140px", threshold: 0 },
+    );
+    ioObserver.observe(sent);
   }
 
   function renderUsers() {
     const el = document.getElementById("admin-users-list");
-    const q = document.getElementById("admin-users-search");
     if (!el) return;
-    var query = q ? String(q.value || "").trim().toLowerCase() : "";
-    var list = usersCache.filter(function (u) {
-      if (!query) return true;
-      var hay = (u.name + " " + u.phone + " " + u.email).toLowerCase();
-      return hay.indexOf(query) !== -1;
-    });
-    if (!list.length) {
+    disconnectUsersIo();
+
+    if (listLoading && usersCache.length === 0) {
+      el.innerHTML = '<p class="admin-users-empty admin-users-empty--loading">Загрузка…</p>';
+      return;
+    }
+
+    if (!usersCache.length) {
       el.innerHTML = '<p class="admin-users-empty">Нет пользователей по фильтру</p>';
       return;
     }
+
+    const hasMore = usersCache.length < usersTotal;
+    const sentinel = hasMore
+      ? '<div id="admin-users-io-sentinel" class="admin-users-io-sentinel" aria-hidden="true"></div>'
+      : "";
+    const loadingMore =
+      listLoading && usersCache.length > 0
+        ? '<p class="admin-users-loading-more">Загрузка…</p>'
+        : "";
+
     el.innerHTML =
       '<div class="admin-users-grid" role="list">' +
-      list
+      usersCache
         .map(function (u) {
           var roleLabel = u.role === "admin" ? "Админ" : "Пользователь";
           var stLabel = u.blocked ? "Заблокирован" : "Активен";
@@ -179,7 +227,9 @@
           );
         })
         .join("") +
-      "</div>";
+      "</div>" +
+      sentinel +
+      loadingMore;
 
     el.querySelectorAll("[data-edit]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -227,6 +277,8 @@
         patchUser(id, { blocked: false });
       });
     });
+
+    if (hasMore) setupInfiniteScroll();
   }
 
   async function patchUser(id, body) {
@@ -236,20 +288,47 @@
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      await loadUsers();
+      await fetchUsersPage(true);
     } catch (e) {
       alert(e.message || "Ошибка");
     }
   }
 
-  async function loadUsers() {
-    const data = await apiJson("/api/admin/users/all", {
-      headers: authHeaders(),
-      cache: "no-store",
-    });
-    usersCache = data.users || [];
-    updateUsersTotalHeading();
-    renderUsers();
+  async function fetchUsersPage(reset) {
+    if (listLoading) return;
+    listLoading = true;
+    const offset = reset ? 0 : usersCache.length;
+    const q = currentSearch.trim();
+    if (reset) {
+      usersCache = [];
+      renderUsers();
+    }
+    try {
+      let url =
+        "/api/admin/users/all?offset=" +
+        String(offset) +
+        "&limit=" +
+        String(PAGE_SIZE);
+      if (q) url += "&q=" + encodeURIComponent(q);
+      const data = await apiJson(url, {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      const rows = data.users || [];
+      usersTotal = Number(data.total) || 0;
+      if (reset) {
+        usersCache = rows.slice();
+      } else {
+        for (let i = 0; i < rows.length; i++) usersCache.push(rows[i]);
+      }
+      if (!reset && rows.length === 0 && usersCache.length < usersTotal) {
+        usersTotal = usersCache.length;
+      }
+    } finally {
+      listLoading = false;
+      updateUsersTotalHeading();
+      renderUsers();
+    }
   }
 
   window.abInitUsers = function () {
@@ -257,12 +336,27 @@
     if (!el || el.dataset.inited === "1") return;
     el.dataset.inited = "1";
     var search = document.getElementById("admin-users-search");
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    var searchDebounceTimer = null;
     if (search) {
       search.addEventListener("input", function () {
-        renderUsers();
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(function () {
+          searchDebounceTimer = null;
+          var next = String(search.value || "").trim();
+          if (next === currentSearch) return;
+          currentSearch = next;
+          fetchUsersPage(true).catch(function (e) {
+            if (e.status === 403 || e.status === 401) {
+              location.replace(e.status === 401 ? "/" : "/home");
+              return;
+            }
+            alert(e.message || "Ошибка загрузки");
+          });
+        }, 320);
       });
     }
-    loadUsers().catch(function (e) {
+    fetchUsersPage(true).catch(function (e) {
       if (e.status === 403 || e.status === 401) {
         location.replace(e.status === 401 ? "/" : "/home");
         return;
