@@ -4053,9 +4053,29 @@
 
   const chatInput = document.getElementById("chat-input");
   const btnSend = document.getElementById("btn-chat-send");
+  var formChatEl = document.getElementById("form-chat");
+  var chatFileInput = document.getElementById("chat-file-input");
+  var btnChatAttach = document.getElementById("btn-chat-attach");
+  var chatSendInFlight = false;
+
   function syncChatSendState() {
     if (!chatInput || !btnSend) return;
+    if (chatSendInFlight) {
+      btnSend.disabled = true;
+      return;
+    }
     btnSend.disabled = !String(chatInput.value).trim();
+  }
+
+  function setChatComposerSending(sending) {
+    chatSendInFlight = !!sending;
+    var on = !!sending;
+    if (btnChatAttach) btnChatAttach.disabled = on;
+    if (chatInput) chatInput.disabled = on;
+    if (btnSend) {
+      if (on) btnSend.disabled = true;
+      else syncChatSendState();
+    }
   }
 
   function postChatMessage(text, attachment) {
@@ -4093,9 +4113,6 @@
     });
   }
 
-  var formChatEl = document.getElementById("form-chat");
-  var chatFileInput = document.getElementById("chat-file-input");
-  var btnChatAttach = document.getElementById("btn-chat-attach");
   if (btnChatAttach && chatFileInput) {
     btnChatAttach.addEventListener("click", function () {
       chatFileInput.click();
@@ -4105,7 +4122,8 @@
       if (!f) return;
       const s = loadSession();
       if (!s || !s.token || !authVerified) return;
-      btnChatAttach.disabled = true;
+      if (chatSendInFlight) return;
+      setChatComposerSending(true);
       var fd = new FormData();
       fd.append("file", f);
       fetch("/api/chat/upload", {
@@ -4140,7 +4158,8 @@
         })
         .finally(function () {
           chatFileInput.value = "";
-          btnChatAttach.disabled = false;
+          setChatComposerSending(false);
+          syncChatSendState();
         });
     });
   }
@@ -4151,17 +4170,25 @@
     const input = document.getElementById("chat-input");
     const text = input ? String(input.value).trim() : "";
     if (!text) return;
+    if (chatSendInFlight) return;
     clearTimeout(userTypingDebounceTimer);
     clearTimeout(userTypingIdleTimer);
     sendUserTyping(false);
-    postChatMessage(text, null)
+    var textToSend = text;
+    if (input) input.value = "";
+    syncChatSendState();
+    setChatComposerSending(true);
+    postChatMessage(textToSend, null)
       .then(function (data) {
         renderChatMessages(data.messages || []);
-        if (input) input.value = "";
-        syncChatSendState();
       })
       .catch(function (err) {
+        if (input) input.value = textToSend;
         showToast(err.message || "Не удалось отправить", "error");
+      })
+      .finally(function () {
+        setChatComposerSending(false);
+        syncChatSendState();
       });
   });
 
