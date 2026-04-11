@@ -197,15 +197,21 @@ import "../styles/admin-raffles.css";
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.38-8.38A4 4 0 1 1 18 12.84l-8.38 8.38a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                   </svg>
                 </button>
-                <input
+                <textarea
                   id="admin-reply-input"
-                  class="admin-reply__input"
-                  type="text"
+                  class="admin-reply__textarea"
+                  rows="2"
                   placeholder="Ответ от поддержки..."
                   maxlength="4000"
                   autocomplete="off"
-                />
-                <button type="submit" class="admin-reply__btn">Отправить</button>
+                ></textarea>
+                <button type="submit" class="admin-reply__btn" id="btn-admin-reply-send" aria-label="Отправить">
+                  <svg class="admin-reply__btn-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
+                    <path d="m21.854 2.147-10.94 10.939"></path>
+                  </svg>
+                  <span class="admin-reply__btn-label" aria-hidden="true">Отправить</span>
+                </button>
               </form>
             </div>
           </main>
@@ -274,7 +280,8 @@ import "../styles/admin-raffles.css";
               </svg>
             </span>
             <div class="admin-raffles-toolbar__text">
-              <span class="admin-raffles-toolbar__label">Пользователи</span>
+              <span class="admin-raffles-toolbar__label"
+                >Пользователи <span id="admin-users-total-count" class="admin-users-toolbar__count" aria-live="polite">(…)</span></span>
               <p class="admin-raffles-toolbar__hint">Поиск по имени, телефону или email. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
             </div>
           </div>
@@ -1293,7 +1300,7 @@ import "../styles/admin-raffles.css";
   }
   .admin-reply {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 8px;
     padding: 12px;
     border-top: 1px solid var(--border);
@@ -1332,17 +1339,26 @@ import "../styles/admin-raffles.css";
     font-weight: 600;
     word-break: break-all;
   }
-  .admin-reply__input {
+  .admin-reply__textarea {
     flex: 1;
+    min-height: 44px;
+    max-height: 160px;
+    resize: vertical;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 10px 12px;
     font-family: inherit;
     font-size: 0.95rem;
+    line-height: 1.4;
   }
   .admin-reply__btn {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     padding: 10px 16px;
+    min-height: 44px;
     font-weight: 600;
     font-family: inherit;
     border: none;
@@ -1350,6 +1366,33 @@ import "../styles/admin-raffles.css";
     background: var(--accent);
     color: #fff;
     cursor: pointer;
+  }
+  .admin-reply__btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .admin-reply__btn-icon {
+    flex-shrink: 0;
+  }
+  @media (max-width: 640px) {
+    .admin-reply__btn {
+      padding: 10px 12px;
+      min-width: 44px;
+    }
+    .admin-reply__btn-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .admin-reply__btn {
+      position: relative;
+    }
   }
 
   .visually-hidden {
@@ -1420,6 +1463,12 @@ import "../styles/admin-raffles.css";
   .admin-users-app .admin-raffles-toolbar__label {
     font-size: 0.68rem;
     color: #64748b;
+  }
+
+  .admin-users-toolbar__count {
+    font-weight: 800;
+    color: #334155;
+    letter-spacing: 0.02em;
   }
 
   .admin-users-search {

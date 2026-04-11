@@ -135,6 +135,7 @@
   const messagesEl = document.getElementById("admin-messages");
   const form = document.getElementById("admin-reply-form");
   const input = document.getElementById("admin-reply-input");
+  const btnAdminSend = document.getElementById("btn-admin-reply-send");
 
   let selectedId = null;
   /** @type {{ id: number; phone: string; name: string; email: string; role: string } | null} */
@@ -772,6 +773,18 @@
     const adminFileInput = document.getElementById("admin-chat-file-input");
     const btnAdminAttach = document.getElementById("btn-admin-chat-attach");
 
+    function setAdminComposerDisabled(disabled) {
+      if (input) {
+        input.disabled = !!disabled;
+      }
+      if (btnAdminSend) {
+        btnAdminSend.disabled = !!disabled;
+      }
+      if (btnAdminAttach) {
+        btnAdminAttach.disabled = !!disabled;
+      }
+    }
+
     function postAdminChatMessage(text, attachment) {
       if (selectedId == null) return Promise.reject(new Error("Нет диалога"));
       var body = { body: text };
@@ -790,7 +803,7 @@
       adminFileInput.addEventListener("change", function () {
         var f = adminFileInput.files && adminFileInput.files[0];
         if (!f || selectedId == null) return;
-        btnAdminAttach.disabled = true;
+        setAdminComposerDisabled(true);
         var fd = new FormData();
         fd.append("file", f);
         fetch("/api/admin/chat/upload", {
@@ -827,12 +840,18 @@
           })
           .finally(function () {
             adminFileInput.value = "";
-            btnAdminAttach.disabled = false;
+            setAdminComposerDisabled(false);
           });
       });
     }
 
     if (form && input) {
+      input.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" || !e.ctrlKey) return;
+        e.preventDefault();
+        if (form.requestSubmit) form.requestSubmit();
+        else form.dispatchEvent(new Event("submit", { cancelable: true }));
+      });
       input.addEventListener("input", function () {
         clearTimeout(adminTypingDebounceTimer);
         clearTimeout(adminTypingIdleTimer);
@@ -860,9 +879,11 @@
         if (!selectedId) return;
         const text = String(input.value).trim();
         if (!text) return;
+        if (btnAdminSend && btnAdminSend.disabled) return;
         clearTimeout(adminTypingDebounceTimer);
         clearTimeout(adminTypingIdleTimer);
         sendAdminTyping(false);
+        setAdminComposerDisabled(true);
         postAdminChatMessage(text, null)
           .then(function (data) {
             renderMessages(data.messages || []);
@@ -871,6 +892,9 @@
           })
           .catch(function (err) {
             alert(err.message || "Ошибка отправки");
+          })
+          .finally(function () {
+            setAdminComposerDisabled(false);
           });
       });
     }

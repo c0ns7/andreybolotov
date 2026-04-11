@@ -99,6 +99,22 @@
   var IS_RAFFLE_CONFIRM_PAGE = routePath === "/home/raffle/confirm";
   var IS_MAINTENANCE_PAGE = routePath === "/maintenance";
   var IS_HOME_RESET_PAGE = routePath === "/home/reset-password";
+  var IS_HOME_SETTINGS_PAGE = routePath === "/home/settings";
+
+  function applyStoredAppearance() {
+    try {
+      var r = document.documentElement;
+      if (localStorage.getItem("ab_theme") === "dark") r.classList.add("theme-dark");
+      else r.classList.remove("theme-dark");
+      if (localStorage.getItem("ab_a11y_large") === "1") r.classList.add("a11y-large-text");
+      else r.classList.remove("a11y-large-text");
+      if (localStorage.getItem("ab_a11y_contrast") === "1") r.classList.add("a11y-high-contrast");
+      else r.classList.remove("a11y-high-contrast");
+      if (localStorage.getItem("ab_a11y_reduce_motion") === "1") r.classList.add("reduce-motion");
+      else r.classList.remove("reduce-motion");
+    } catch (_) {}
+  }
+  applyStoredAppearance();
 
   function redirectByRoute() {
     try {
@@ -109,12 +125,25 @@
         location.replace("/home");
         return true;
       }
-      if ((IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE || IS_RAFFLE_CONFIRM_PAGE) && !hasLocal) {
+      if (
+        (IS_HOME_APP ||
+          IS_RAFFLE_PURCHASE_PAGE ||
+          IS_RAFFLE_PAY_PAGE ||
+          IS_RAFFLE_CONFIRM_PAGE ||
+          IS_HOME_SETTINGS_PAGE) &&
+        !hasLocal
+      ) {
         location.replace("/");
         return true;
       }
     } catch (_) {
-      if (IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE || IS_RAFFLE_CONFIRM_PAGE) {
+      if (
+        IS_HOME_APP ||
+        IS_RAFFLE_PURCHASE_PAGE ||
+        IS_RAFFLE_PAY_PAGE ||
+        IS_RAFFLE_CONFIRM_PAGE ||
+        IS_HOME_SETTINGS_PAGE
+      ) {
         location.replace("/");
         return true;
       }
@@ -129,7 +158,8 @@
       (IS_HOME_APP ||
         IS_RAFFLE_PURCHASE_PAGE ||
         IS_RAFFLE_PAY_PAGE ||
-        IS_RAFFLE_CONFIRM_PAGE) &&
+        IS_RAFFLE_CONFIRM_PAGE ||
+        IS_HOME_SETTINGS_PAGE) &&
       !IS_HOME_RESET_PAGE;
     if (!need) return;
     fetch("/api/site/status", { cache: "no-store" })
@@ -3686,12 +3716,12 @@
     const authed = !!(session && session.token && session.phone && authVerified);
     /** На /home и страницах акции лента только после успешной проверки сессии */
     const showAuthedUi =
-      IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE
+      IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE || IS_HOME_SETTINGS_PAGE
         ? !!(session && session.token && session.phone && authVerified)
         : IS_GUEST_LANDING
           ? false
           : authed;
-    if (IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE) {
+    if (IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE || IS_HOME_SETTINGS_PAGE) {
       const hasSession = !!(session && session.token && session.phone);
       if (!hasSession) {
         location.replace("/");
@@ -4270,7 +4300,7 @@
     }
   });
   syncChatSendState();
-  if (!IS_RAFFLE_PURCHASE_PAGE && !IS_RAFFLE_PAY_PAGE && !IS_RAFFLE_CONFIRM_PAGE) {
+  if (!IS_RAFFLE_PURCHASE_PAGE && !IS_RAFFLE_PAY_PAGE && !IS_RAFFLE_CONFIRM_PAGE && !IS_HOME_SETTINGS_PAGE) {
     loadRafflesFeed();
   }
 })();

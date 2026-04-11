@@ -587,6 +587,32 @@ app.post("/api/auth/reset-password", async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/auth/change-password", async (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  let body: { current_password?: string; new_password?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const current = String(body.current_password ?? "");
+  const next = String(body.new_password ?? "");
+  if (!current) return c.json({ error: "Введите текущий пароль" }, 400);
+  if (next.length < 6) {
+    return c.json({ error: "Новый пароль не короче 6 символов" }, 400);
+  }
+  if (next === current) {
+    return c.json({ error: "Новый пароль должен отличаться от текущего" }, 400);
+  }
+  const row = getUserById(u.id);
+  if (!row || !bcrypt.compareSync(current, row.password_hash)) {
+    return c.json({ error: "Неверный текущий пароль" }, 400);
+  }
+  updateUserPasswordHash(u.id, bcrypt.hashSync(next, 10));
+  return c.json({ ok: true });
+});
+
 app.get("/api/chat/unread", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;

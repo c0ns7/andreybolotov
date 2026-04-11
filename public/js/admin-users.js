@@ -83,6 +83,13 @@
   /** @type {Array<{id:number;phone:string;name:string;email:string;role:string;blocked:boolean;created_at:number}>} */
   let usersCache = [];
 
+  function updateUsersTotalHeading() {
+    var el = document.getElementById("admin-users-total-count");
+    if (!el) return;
+    var n = usersCache.length;
+    el.textContent = "(" + String(n) + ")";
+  }
+
   function renderUsers() {
     const el = document.getElementById("admin-users-list");
     const q = document.getElementById("admin-users-search");
@@ -241,6 +248,7 @@
       cache: "no-store",
     });
     usersCache = data.users || [];
+    updateUsersTotalHeading();
     renderUsers();
   }
 
