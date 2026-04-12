@@ -569,7 +569,7 @@ export function setPasswordResetTokenForUser(
   ).run(userId, tokenHash, expiresAt, Date.now());
 }
 
-/** Одноразовое использование: удаляет строку и возвращает user_id, если токен валиден. */
+/** При успешном сбросе удаляет строку токена и возвращает user_id, если токен ещё действителен. */
 export function consumePasswordResetToken(tokenHash: string): number | null {
   cleanupExpiredPasswordResetTokens();
   const now = Date.now();

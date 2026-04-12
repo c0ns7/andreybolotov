@@ -89,7 +89,26 @@ async function sendTransactionalMail(opts: {
     ].filter(Boolean);
     const detail = parts.join(" | ") || String(e);
     console.error("[mail] sendMail failed:", detail);
+    logSmtpFailureHint(e);
     throw new Error(detail);
+  }
+}
+
+/** Расшифровка типичных ответов SMTP в лог (для администратора сервера). */
+export function logSmtpFailureHint(e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  const resp = String((e as { response?: string }).response ?? "");
+  const combined = `${msg} ${resp}`.toLowerCase();
+  if (
+    combined.includes("application password") ||
+    combined.includes("parol prilozheniya") ||
+    combined.includes("neobhodim parol")
+  ) {
+    console.error(
+      "[mail] Mail.ru / VK: в SMTP_PASS нужен «Пароль для внешнего приложения», обычный пароль ящика не подходит. Создать: https://help.mail.ru/mail/security/protection/external",
+    );
+  } else if ((e as { code?: string }).code === "EAUTH" || combined.includes("invalid login")) {
+    console.error("[mail] Ошибка AUTH: проверьте SMTP_USER и SMTP_PASS (без лишних пробелов в .env).");
   }
 }
 
@@ -177,12 +196,12 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
     resetUrl,
     "",
     "Если вы не запрашивали сброс, проигнорируйте это письмо.",
-    "Ссылка действует 1 час.",
+    "Ссылка действует 1 час. После успешной смены пароля её нужно запросить заново.",
   ].join("\n");
 
   const inner =
     `<p style="margin:0 0 12px;">Здравствуйте!</p>
-<p style="margin:0 0 20px;">Нажмите кнопку ниже, чтобы перейти на страницу смены пароля. Ссылка одноразовая и действует <strong>1 час</strong>.</p>` +
+<p style="margin:0 0 20px;">Нажмите кнопку ниже, чтобы перейти на страницу смены пароля. Ссылка действует <strong>1 час</strong>; страницу можно открыть повторно, пока не сохраните новый пароль.</p>` +
     ctaButton(resetUrl, "Задать новый пароль") +
     `<p style="margin:16px 0 0;font-size:13px;color:#64748b;">Если кнопка не работает, скопируйте адрес в браузер:<br/><span style="word-break:break-all;">${escapeHtml(resetUrl)}</span></p>`;
 
