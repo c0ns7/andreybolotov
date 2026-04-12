@@ -194,6 +194,22 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_prt_user ON password_reset_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_prt_expires ON password_reset_tokens(expires_at);
   `);
+
+  const userCols2 = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
+  if (!userCols2.some((c) => c.name === "email_notify_chat")) {
+    db.exec(`ALTER TABLE users ADD COLUMN email_notify_chat INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!userCols2.some((c) => c.name === "email_notify_raffles")) {
+    db.exec(`ALTER TABLE users ADD COLUMN email_notify_raffles INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!userCols2.some((c) => c.name === "chat_unread_email_last_at")) {
+    db.exec(`ALTER TABLE users ADD COLUMN chat_unread_email_last_at INTEGER`);
+  }
+
+  const rafCols2 = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
+  if (!rafCols2.some((c) => c.name === "launch_notify_sent_at")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN launch_notify_sent_at INTEGER`);
+  }
 }
 
 migrate();
@@ -207,6 +223,9 @@ export type UserRow = {
   created_at: number;
   role: string;
   blocked: number;
+  email_notify_chat?: number;
+  email_notify_raffles?: number;
+  chat_unread_email_last_at?: number | null;
 };
 
 export function insertUser(
@@ -452,6 +471,7 @@ export function markStaffMessagesReadByUser(userId: number): void {
   db.prepare(
     `UPDATE support_messages SET read_by_user_at = ? WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
   ).run(now, userId);
+  db.prepare(`UPDATE users SET chat_unread_email_last_at = NULL WHERE id = ?`).run(userId);
 }
 
 export function markThreadReadByStaff(userId: number): void {
@@ -486,6 +506,77 @@ export function updateUserProfile(
     data.email,
     id,
   );
+}
+
+export function updateUserEmailNotifyPrefs(
+  userId: number,
+  prefs: { email_notify_chat?: boolean; email_notify_raffles?: boolean },
+): void {
+  const parts: string[] = [];
+  const vals: (number | string)[] = [];
+  if (prefs.email_notify_chat !== undefined) {
+    parts.push("email_notify_chat = ?");
+    vals.push(prefs.email_notify_chat ? 1 : 0);
+  }
+  if (prefs.email_notify_raffles !== undefined) {
+    parts.push("email_notify_raffles = ?");
+    vals.push(prefs.email_notify_raffles ? 1 : 0);
+  }
+  if (!parts.length) return;
+  vals.push(userId);
+  db.prepare(`UPDATE users SET ${parts.join(", ")} WHERE id = ?`).run(...vals);
+}
+
+/** Пользователи с непрочитанными ответами поддержки: давность последнего непрочитанного и пауза с прошлого письма. */
+export function listUsersForChatUnreadEmailReminder(
+  now: number,
+  minUnreadAgeMs: number,
+  reminderCooldownMs: number,
+): { id: number; email: string; name: string }[] {
+  const unreadBefore = now - minUnreadAgeMs;
+  const lastSentBefore = now - reminderCooldownMs;
+  return db
+    .prepare(
+      `SELECT u.id, u.email, u.name FROM users u
+       WHERE COALESCE(u.blocked, 0) = 0
+         AND COALESCE(u.email_notify_chat, 1) = 1
+         AND TRIM(COALESCE(u.email, '')) != ''
+         AND (
+           SELECT MAX(sm.created_at) FROM support_messages sm
+           WHERE sm.user_id = u.id AND sm.is_staff = 1 AND sm.read_by_user_at IS NULL
+         ) IS NOT NULL
+         AND (
+           SELECT MAX(sm.created_at) FROM support_messages sm
+           WHERE sm.user_id = u.id AND sm.is_staff = 1 AND sm.read_by_user_at IS NULL
+         ) < ?
+         AND (
+           u.chat_unread_email_last_at IS NULL OR u.chat_unread_email_last_at < ?
+         )`,
+    )
+    .all(unreadBefore, lastSentBefore) as { id: number; email: string; name: string }[];
+}
+
+export function setUserChatUnreadEmailLastAt(userId: number, ts: number): void {
+  db.prepare(`UPDATE users SET chat_unread_email_last_at = ? WHERE id = ?`).run(ts, userId);
+}
+
+export function listUsersForRaffleLaunchEmail(): { id: number; email: string; name: string }[] {
+  return db
+    .prepare(
+      `SELECT u.id, u.email, u.name FROM users u
+       WHERE COALESCE(u.blocked, 0) = 0
+         AND COALESCE(u.email_notify_raffles, 1) = 1
+         AND TRIM(COALESCE(u.email, '')) != ''`,
+    )
+    .all() as { id: number; email: string; name: string }[];
+}
+
+export function clearRaffleLaunchNotifySent(raffleId: number): void {
+  db.prepare(`UPDATE raffles SET launch_notify_sent_at = NULL WHERE id = ?`).run(raffleId);
+}
+
+export function markRaffleLaunchNotifySent(raffleId: number, ts: number): void {
+  db.prepare(`UPDATE raffles SET launch_notify_sent_at = ? WHERE id = ?`).run(ts, raffleId);
 }
 
 export function updateUserPasswordHash(userId: number, passwordHash: string): void {
@@ -558,6 +649,7 @@ export type RaffleRow = {
   sort_order: number;
   wholesale_enabled: number;
   hidden_from_public?: number;
+  launch_notify_sent_at?: number | null;
   created_at: number;
   updated_at: number;
 };

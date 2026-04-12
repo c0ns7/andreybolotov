@@ -18,6 +18,7 @@ import {
   getUserByPhone,
   getUserByEmail,
   getUserBySessionToken,
+  updateUserEmailNotifyPrefs,
   insertSupportMessage,
   insertUser,
   listAdminThreadsWithMeta,
@@ -83,6 +84,7 @@ import {
   extendReservedOrderOnce,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
+import { runChatUnreadEmailReminders, maybeSendRaffleLaunchEmails } from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -241,6 +243,8 @@ function maintenanceBypassPath(path: string): boolean {
     path === "/api/auth/register" ||
     path === "/api/auth/login" ||
     path === "/api/auth/me" ||
+    path === "/api/auth/change-password" ||
+    path === "/api/auth/email-notifications" ||
     path === "/api/auth/logout" ||
     path === "/api/auth/forgot" ||
     path === "/api/auth/reset-password"
@@ -505,6 +509,9 @@ app.get("/api/auth/me", (c) => {
   if (!token) return c.json({ error: "Не авторизован" }, 401);
   const user = getUserBySessionToken(token);
   if (!user) return c.json({ error: "Не авторизован" }, 401);
+  const row = getUserById(user.id);
+  const notifyChat = row ? Number(row.email_notify_chat ?? 1) !== 0 : true;
+  const notifyRaffles = row ? Number(row.email_notify_raffles ?? 1) !== 0 : true;
   return c.json({
     user: {
       phone: user.phone,
@@ -512,6 +519,8 @@ app.get("/api/auth/me", (c) => {
       email: user.email,
       role: user.role ?? "user",
       blocked: user.blocked === 1,
+      email_notify_chat: notifyChat,
+      email_notify_raffles: notifyRaffles,
     },
   });
 });
@@ -613,6 +622,32 @@ app.post("/api/auth/change-password", async (c) => {
   }
   updateUserPasswordHash(u.id, bcrypt.hashSync(next, 10));
   return c.json({ ok: true });
+});
+
+app.patch("/api/auth/email-notifications", async (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  let body: { email_notify_chat?: unknown; email_notify_raffles?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const patch: { email_notify_chat?: boolean; email_notify_raffles?: boolean } = {};
+  if (typeof body.email_notify_chat === "boolean") patch.email_notify_chat = body.email_notify_chat;
+  if (typeof body.email_notify_raffles === "boolean") {
+    patch.email_notify_raffles = body.email_notify_raffles;
+  }
+  if (patch.email_notify_chat === undefined && patch.email_notify_raffles === undefined) {
+    return c.json({ error: "Нет полей для сохранения" }, 400);
+  }
+  updateUserEmailNotifyPrefs(u.id, patch);
+  const row = getUserById(u.id);
+  return c.json({
+    ok: true,
+    email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
+    email_notify_raffles: row ? Number(row.email_notify_raffles ?? 1) !== 0 : true,
+  });
 });
 
 app.get("/api/chat/unread", (c) => {
@@ -1160,6 +1195,9 @@ app.post("/api/admin/raffles", async (c) => {
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
+  void maybeSendRaffleLaunchEmails(id).catch((e) =>
+    console.error("[admin/raffles POST] notify:", e instanceof Error ? e.message : e),
+  );
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
@@ -1195,6 +1233,9 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   recalculateWholesaleForRaffle(id);
+  void maybeSendRaffleLaunchEmails(id).catch((e) =>
+    console.error("[admin/raffles PATCH] notify:", e instanceof Error ? e.message : e),
+  );
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
@@ -1360,6 +1401,14 @@ server.on("upgrade", (request, socket, head) => {
     socket.destroy();
   }
 });
+
+const CHAT_EMAIL_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(() => {
+  void runChatUnreadEmailReminders().catch((e) =>
+    console.error("[notify] chat unread scan:", e instanceof Error ? e.message : e),
+  );
+}, CHAT_EMAIL_INTERVAL_MS);
+void runChatUnreadEmailReminders().catch(() => {});
 
 server.listen(PORT, () => {
   console.log(`HTTP + WebSocket ws://127.0.0.1:${PORT}/ws`);

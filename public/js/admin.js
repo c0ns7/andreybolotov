@@ -796,52 +796,114 @@
       });
     }
 
+    /** @param {File} f */
+    function uploadAdminChatFile(f) {
+      if (!f || !f.size || selectedId == null) return;
+      if (btnAdminSend && btnAdminSend.disabled) return;
+      setAdminComposerDisabled(true);
+      var fd = new FormData();
+      fd.append("file", f);
+      fetch("/api/admin/chat/upload", {
+        method: "POST",
+        headers: authHeaders(),
+        body: fd,
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
+            return data;
+          });
+        })
+        .then(function (data) {
+          var inp = document.getElementById("admin-reply-input");
+          var caption = inp ? String(inp.value).trim() : "";
+          clearTimeout(adminTypingDebounceTimer);
+          clearTimeout(adminTypingIdleTimer);
+          sendAdminTyping(false);
+          return postAdminChatMessage(caption, {
+            url: data.url,
+            name: data.name,
+            mime: data.mime,
+          });
+        })
+        .then(function (data) {
+          renderMessages(data.messages || []);
+          var inp = document.getElementById("admin-reply-input");
+          if (inp) inp.value = "";
+          loadUsers().catch(function () {});
+        })
+        .catch(function (err) {
+          alert(err.message || "Ошибка");
+        })
+        .finally(function () {
+          if (adminFileInput) adminFileInput.value = "";
+          setAdminComposerDisabled(false);
+        });
+    }
+
     if (btnAdminAttach && adminFileInput) {
       btnAdminAttach.addEventListener("click", function () {
         adminFileInput.click();
       });
       adminFileInput.addEventListener("change", function () {
         var f = adminFileInput.files && adminFileInput.files[0];
-        if (!f || selectedId == null) return;
-        setAdminComposerDisabled(true);
-        var fd = new FormData();
-        fd.append("file", f);
-        fetch("/api/admin/chat/upload", {
-          method: "POST",
-          headers: authHeaders(),
-          body: fd,
-        })
-          .then(function (res) {
-            return res.json().then(function (data) {
-              if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
-              return data;
-            });
-          })
-          .then(function (data) {
-            var inp = document.getElementById("admin-reply-input");
-            var caption = inp ? String(inp.value).trim() : "";
-            clearTimeout(adminTypingDebounceTimer);
-            clearTimeout(adminTypingIdleTimer);
-            sendAdminTyping(false);
-            return postAdminChatMessage(caption, {
-              url: data.url,
-              name: data.name,
-              mime: data.mime,
-            });
-          })
-          .then(function (data) {
-            renderMessages(data.messages || []);
-            var inp = document.getElementById("admin-reply-input");
-            if (inp) inp.value = "";
-            loadUsers().catch(function () {});
-          })
-          .catch(function (err) {
-            alert(err.message || "Ошибка");
-          })
-          .finally(function () {
-            adminFileInput.value = "";
-            setAdminComposerDisabled(false);
-          });
+        if (!f) return;
+        uploadAdminChatFile(f);
+      });
+    }
+
+    const adminChatDropzone = document.getElementById("admin-chat-dropzone");
+    if (adminChatDropzone) {
+      adminChatDropzone.addEventListener("dragenter", function (e) {
+        if (thread && thread.hasAttribute("hidden")) return;
+        if (selectedId == null) return;
+        e.preventDefault();
+        adminChatDropzone.classList.add("is-drag-over");
+      });
+      adminChatDropzone.addEventListener("dragover", function (e) {
+        if (selectedId == null) return;
+        e.preventDefault();
+        try {
+          e.dataTransfer.dropEffect = "copy";
+        } catch (_) {}
+      });
+      adminChatDropzone.addEventListener("dragleave", function (e) {
+        e.preventDefault();
+        var rel = e.relatedTarget;
+        if (rel && adminChatDropzone.contains(/** @type {Node} */ (rel))) return;
+        adminChatDropzone.classList.remove("is-drag-over");
+      });
+      adminChatDropzone.addEventListener("drop", function (e) {
+        e.preventDefault();
+        adminChatDropzone.classList.remove("is-drag-over");
+        if (selectedId == null) return;
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f || !f.size) return;
+        uploadAdminChatFile(f);
+      });
+    }
+
+    if (input) {
+      input.addEventListener("paste", function (e) {
+        if (selectedId == null) return;
+        if (btnAdminSend && btnAdminSend.disabled) return;
+        var dt = e.clipboardData;
+        if (!dt) return;
+        /** @type {File | null} */
+        var f = null;
+        if (dt.files && dt.files.length) {
+          f = dt.files[0];
+        } else if (dt.items && dt.items.length) {
+          for (var i = 0; i < dt.items.length; i++) {
+            if (dt.items[i].kind === "file") {
+              f = dt.items[i].getAsFile();
+              break;
+            }
+          }
+        }
+        if (!f || !f.size) return;
+        e.preventDefault();
+        uploadAdminChatFile(f);
       });
     }
 

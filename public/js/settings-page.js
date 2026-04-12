@@ -174,6 +174,57 @@
       });
     }
 
+    function saveEmailNotify(patch) {
+      var errEl = document.getElementById("settings-notify-error");
+      if (errEl) {
+        errEl.textContent = "";
+        errEl.hidden = true;
+      }
+      return apiJson("/api/auth/email-notifications", {
+        method: "PATCH",
+        headers: Object.assign({}, authHeaders(), { "Content-Type": "application/json" }),
+        body: JSON.stringify(patch),
+      }).catch(function (er) {
+        if (errEl) {
+          errEl.textContent = (er && er.message) || "Не удалось сохранить";
+          errEl.hidden = false;
+        }
+        throw er;
+      });
+    }
+
+    var cbNotifyChat = document.getElementById("settings-notify-chat");
+    var cbNotifyRaffles = document.getElementById("settings-notify-raffles");
+    var sessNotify = loadSession();
+    if (sessNotify && sessNotify.token) {
+      apiJson("/api/auth/me", { headers: authHeaders(), cache: "no-store" })
+        .then(function (data) {
+          var u = (data && data.user) || {};
+          if (cbNotifyChat) cbNotifyChat.checked = u.email_notify_chat !== false;
+          if (cbNotifyRaffles) cbNotifyRaffles.checked = u.email_notify_raffles !== false;
+        })
+        .catch(function () {});
+    } else {
+      if (cbNotifyChat) cbNotifyChat.disabled = true;
+      if (cbNotifyRaffles) cbNotifyRaffles.disabled = true;
+    }
+    if (cbNotifyChat && sessNotify && sessNotify.token) {
+      cbNotifyChat.addEventListener("change", function () {
+        var want = cbNotifyChat.checked;
+        saveEmailNotify({ email_notify_chat: want }).catch(function () {
+          cbNotifyChat.checked = !want;
+        });
+      });
+    }
+    if (cbNotifyRaffles && sessNotify && sessNotify.token) {
+      cbNotifyRaffles.addEventListener("change", function () {
+        var want = cbNotifyRaffles.checked;
+        saveEmailNotify({ email_notify_raffles: want }).catch(function () {
+          cbNotifyRaffles.checked = !want;
+        });
+      });
+    }
+
     var formPw = document.getElementById("form-settings-password");
     if (formPw) {
       formPw.addEventListener("submit", function (e) {

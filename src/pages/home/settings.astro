@@ -4,7 +4,7 @@ import AppDockNav from "../../components/AppDockNav.astro";
 import AppDockModals from "../../components/AppDockModals.astro";
 ---
 
-<Base title="Настройки" description="Пароль, тема оформления и параметры доступности.">
+<Base title="Настройки" description="Пароль, тема, уведомления на почту и доступность.">
   <div class="app-shell app-shell--with-tabbar" id="app-shell">
     <div class="settings-page screen home-screen" id="settings-page-root">
       <div class="settings-page__inner home-inner">
@@ -23,6 +23,9 @@ import AppDockModals from "../../components/AppDockModals.astro";
           </button>
           <button type="button" class="settings-tab" role="tab" id="tab-settings-theme" data-tab="theme" aria-selected="false" aria-controls="settings-panel-theme" tabindex="-1">
             Тема
+          </button>
+          <button type="button" class="settings-tab" role="tab" id="tab-settings-notify" data-tab="notify" aria-selected="false" aria-controls="settings-panel-notify" tabindex="-1">
+            Почта
           </button>
           <button type="button" class="settings-tab" role="tab" id="tab-settings-a11y" data-tab="a11y" aria-selected="false" aria-controls="settings-panel-a11y" tabindex="-1">
             Доступность
@@ -63,6 +66,28 @@ import AppDockModals from "../../components/AppDockModals.astro";
               <button type="button" class="settings-seg__btn settings-seg__btn--active" id="settings-theme-light" aria-pressed="true">Светлая</button>
               <button type="button" class="settings-seg__btn" id="settings-theme-dark" aria-pressed="false">Тёмная</button>
             </div>
+          </div>
+        </div>
+
+        <div id="settings-panel-notify" class="settings-tab-panel" role="tabpanel" aria-labelledby="tab-settings-notify" hidden>
+          <div class="settings-card">
+            <h2 class="settings-card__title">Уведомления на почту</h2>
+            <p class="settings-card__lead">Письма уходят на адрес из вашего профиля. Пароль и важные письма по безопасности приходят всегда.</p>
+            <p id="settings-notify-error" class="settings-msg settings-msg--err" hidden></p>
+            <label class="settings-option">
+              <input type="checkbox" id="settings-notify-chat" />
+              <span class="settings-option__text">
+                <span class="settings-option__label">Чат поддержки</span>
+                <span class="settings-option__hint">Если вы не прочитали ответ в приложении, мы напомним на почту (не чаще раза в несколько часов).</span>
+              </span>
+            </label>
+            <label class="settings-option">
+              <input type="checkbox" id="settings-notify-raffles" />
+              <span class="settings-option__text">
+                <span class="settings-option__label">Новые акции на сайте</span>
+                <span class="settings-option__hint">Одно письмо, когда акция становится доступна на главной.</span>
+              </span>
+            </label>
           </div>
         </div>
 

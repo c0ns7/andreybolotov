@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 
 function smtpConfigured(): boolean {
   const host = process.env.SMTP_HOST?.trim();
@@ -11,25 +12,46 @@ export function isSmtpReady(): boolean {
   return smtpConfigured();
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
-  if (!smtpConfigured()) {
-    throw new Error("SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASS)");
-  }
+function smtpFromAddress(): string {
+  const user = String(process.env.SMTP_USER ?? "").trim();
+  return process.env.SMTP_FROM?.trim() || user;
+}
+
+function createTransporter(): Transporter {
   const host = String(process.env.SMTP_HOST).trim();
   const port = Number(process.env.SMTP_PORT || 587);
   const user = String(process.env.SMTP_USER).trim();
   const pass = String(process.env.SMTP_PASS);
-  /* Mail.ru и др.: «От» должен совпадать с SMTP_USER или быть явно задан в SMTP_FROM */
-  const from = process.env.SMTP_FROM?.trim() || user;
-
-  const transporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
     ...(port === 587 ? { requireTLS: true } : {}),
   });
+}
 
+async function sendTransactionalMail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<void> {
+  if (!smtpConfigured()) {
+    throw new Error("SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASS)");
+  }
+  const transporter = createTransporter();
+  const from = smtpFromAddress();
+  await transporter.sendMail({
+    from,
+    to: opts.to,
+    subject: opts.subject,
+    text: opts.text,
+    html: opts.html,
+  });
+}
+
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   const subject = "Восстановление пароля";
   const text = [
     "Здравствуйте!",
@@ -47,13 +69,59 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
 <p><a href="${escapeHtmlAttr(resetUrl)}">${escapeHtml(resetUrl)}</a></p>
 <p style="color:#64748b;font-size:14px;">Если вы не запрашивали сброс, проигнорируйте это письмо. Ссылка действует 1 час.</p>`;
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject,
-    text,
-    html,
-  });
+  await sendTransactionalMail({ to, subject, text, html });
+}
+
+/** Непрочитанные сообщения поддержки в чате (напоминание на почту). */
+export async function sendChatUnreadReminderEmail(
+  to: string,
+  name: string,
+  openChatUrl: string,
+): Promise<void> {
+  const subject = "Вам ответили в чате поддержки";
+  const greeting = name.trim() ? `Здравствуйте, ${name.trim()}!` : "Здравствуйте!";
+  const text = [
+    greeting,
+    "",
+    "У вас есть непрочитанные сообщения от поддержки в личном чате на сайте.",
+    "Откройте приложение и вкладку «Чат», чтобы прочитать ответ:",
+    openChatUrl,
+    "",
+    "Это письмо отправлено автоматически. Отключить такие уведомления можно в разделе «Настройки» → «Уведомления на почту».",
+  ].join("\n");
+  const html = `<p>${escapeHtml(greeting)}</p>
+<p>У вас есть <strong>непрочитанные сообщения</strong> от поддержки в личном чате на сайте.</p>
+<p><a href="${escapeHtmlAttr(openChatUrl)}">Открыть чат</a></p>
+<p style="color:#64748b;font-size:14px;">Отключить уведомления: Настройки → «Уведомления на почту».</p>`;
+  await sendTransactionalMail({ to, subject, text, html });
+}
+
+/** Акция стала доступна на сайте. */
+export async function sendRaffleLaunchedEmail(
+  to: string,
+  name: string,
+  raffleTitle: string,
+  raffleUrl: string,
+): Promise<void> {
+  const subject = `Новая акция: ${raffleTitle}`;
+  const greeting = name.trim() ? `Здравствуйте, ${name.trim()}!` : "Здравствуйте!";
+  const text = [
+    greeting,
+    "",
+    "На сайте запущена акция:",
+    raffleTitle,
+    "",
+    "Подробности и участие:",
+    raffleUrl,
+    "",
+    "Отключить рассылку о новых акциях можно в «Настройки» → «Уведомления на почту».",
+  ].join("\n");
+  const html = `<p>${escapeHtml(greeting)}</p>
+<p>На сайте запущена акция:</p>
+<p><strong>${escapeHtml(raffleTitle)}</strong></p>
+<p><a href="${escapeHtmlAttr(raffleUrl)}">Открыть страницу акции</a></p>
+<p style="color:#64748b;font-size:14px;">Отключить уведомления о новых акциях: Настройки → «Уведомления на почту».</p>`;
+  await sendTransactionalMail({ to, subject, text, html });
 }
 
 function escapeHtml(s: string): string {
