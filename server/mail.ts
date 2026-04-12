@@ -18,16 +18,22 @@ function smtpFromAddress(): string {
 }
 
 function createTransporter(): Transporter {
-  const host = String(process.env.SMTP_HOST).trim();
+  /** Везде .trim() как в smtpConfigured(), иначе проверка «SMTP есть» проходит, а auth падает из‑за пробелов/переноса в .env */
+  const host = String(process.env.SMTP_HOST ?? "").trim();
   const port = Number(process.env.SMTP_PORT || 587);
-  const user = String(process.env.SMTP_USER).trim();
-  const pass = String(process.env.SMTP_PASS);
+  const user = String(process.env.SMTP_USER ?? "").trim();
+  const pass = String(process.env.SMTP_PASS ?? "").trim();
+  const requireTls = String(process.env.SMTP_REQUIRE_TLS ?? "").trim() !== "0";
   return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
     auth: { user, pass },
-    ...(port === 587 ? { requireTLS: true } : {}),
+    ...(port === 587 && requireTls ? { requireTLS: true } : {}),
+    ...(String(process.env.SMTP_TLS_REJECT_UNAUTHORIZED ?? "").trim() === "0"
+      ? { tls: { rejectUnauthorized: false } }
+      : {}),
+    ...(String(process.env.SMTP_DEBUG ?? "").trim() === "1" ? { debug: true, logger: true } : {}),
   });
 }
 
@@ -42,13 +48,25 @@ async function sendTransactionalMail(opts: {
   }
   const transporter = createTransporter();
   const from = smtpFromAddress();
-  await transporter.sendMail({
-    from,
-    to: opts.to,
-    subject: opts.subject,
-    text: opts.text,
-    html: opts.html,
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html,
+    });
+  } catch (e: unknown) {
+    const err = e as { message?: string; response?: string; responseCode?: string | number };
+    const parts = [
+      err.message,
+      err.responseCode != null ? `code=${err.responseCode}` : "",
+      err.response ? `resp=${String(err.response).slice(0, 500)}` : "",
+    ].filter(Boolean);
+    const detail = parts.join(" | ") || String(e);
+    console.error("[mail] sendMail failed:", detail);
+    throw new Error(detail);
+  }
 }
 
 function escapeHtml(s: string): string {
@@ -74,9 +92,10 @@ function emailLayout(opts: {
   /** Подпись внизу карточки */
   footerNote: string;
 }): string {
-  const pre = escapeHtml(opts.preheader.slice(0, 140));
-  const head = escapeHtml(opts.headline);
-  const foot = escapeHtml(opts.footerNote);
+  const preRaw = String(opts.preheader ?? "").slice(0, 140);
+  const pre = escapeHtml(preRaw);
+  const head = escapeHtml(String(opts.headline ?? ""));
+  const foot = escapeHtml(String(opts.footerNote ?? ""));
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
