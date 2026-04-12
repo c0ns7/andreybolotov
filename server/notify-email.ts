@@ -1,27 +1,13 @@
 import {
   clearRaffleLaunchNotifySent,
   getRaffleById,
+  getUserById,
   isRaffleVisibleOnSite,
-  listUsersForChatUnreadEmailReminder,
   listUsersForRaffleLaunchEmail,
   markRaffleLaunchNotifySent,
-  setUserChatUnreadEmailLastAt,
 } from "./db.js";
 import type { RaffleRow } from "./db.js";
-import { sendChatUnreadReminderEmail, sendRaffleLaunchedEmail, isSmtpReady } from "./mail.js";
-
-function envMs(name: string, def: number): number {
-  const n = Number(process.env[name]);
-  return Number.isFinite(n) && n >= 0 ? n : def;
-}
-
-/**
- * Минимальный возраст последнего непрочитанного ответа поддержки перед письмом.
- * Переменная окружения: NOTIFY_CHAT_UNREAD_MIN_AGE_MS (мс). По умолчанию 2 минуты.
- */
-export const CHAT_UNREAD_MIN_AGE_MS = envMs("NOTIFY_CHAT_UNREAD_MIN_AGE_MS", 2 * 60 * 1000);
-/** Пауза между повторными письмами одному пользователю. NOTIFY_CHAT_UNREAD_COOLDOWN_MS */
-export const CHAT_UNREAD_COOLDOWN_MS = envMs("NOTIFY_CHAT_UNREAD_COOLDOWN_MS", 6 * 60 * 60 * 1000);
+import { sendRaffleLaunchedEmail, sendStaffChatReplyEmail, isSmtpReady } from "./mail.js";
 
 let warnedNoSmtp = false;
 
@@ -30,21 +16,8 @@ export function warnIfNoSmtpOnce(): void {
   if (isSmtpReady() || warnedNoSmtp) return;
   warnedNoSmtp = true;
   console.warn(
-    "[notify] SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASS) — письма о непрочитанном чате и новых акциях не отправляются.",
+    "[notify] SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASS) — письма о чате и акциях не отправляются.",
   );
-}
-
-/**
- * Дополнительная проверка после ответа поддержки (не ждать только интервал 5 мин).
- * Задержка = max(MIN_AGE + 3с, 30с).
- */
-export function scheduleChatUnreadReminderCheck(): void {
-  const delay = Math.max(CHAT_UNREAD_MIN_AGE_MS + 3_000, 30_000);
-  setTimeout(() => {
-    void runChatUnreadEmailReminders().catch((e) =>
-      console.error("[notify] отложенная проверка чата:", e instanceof Error ? e.message : e),
-    );
-  }, delay);
 }
 
 function appOrigin(): string {
@@ -53,31 +26,41 @@ function appOrigin(): string {
   return "http://127.0.0.1:4321";
 }
 
-export async function runChatUnreadEmailReminders(): Promise<void> {
+/** Сразу после ответа поддержки: письмо с текстом сообщения (если включено в настройках). */
+export function notifyUserEmailStaffReply(
+  userId: number,
+  payload: { body: string; attachmentName: string | null; attachmentMime: string | null },
+): void {
   warnIfNoSmtpOnce();
   if (!isSmtpReady()) return;
-  const now = Date.now();
-  const rows = listUsersForChatUnreadEmailReminder(
-    now,
-    CHAT_UNREAD_MIN_AGE_MS,
-    CHAT_UNREAD_COOLDOWN_MS,
-  );
-  if (rows.length === 0) return;
-  const openUrl = `${appOrigin()}/home`;
-  let ok = 0;
-  for (const u of rows) {
-    try {
-      await sendChatUnreadReminderEmail(u.email, u.name, openUrl);
-      setUserChatUnreadEmailLastAt(u.id, now);
-      ok += 1;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[notify] chat unread email user", u.id, msg);
+  const u = getUserById(userId);
+  if (!u || u.blocked === 1) return;
+  if (Number(u.email_notify_chat ?? 1) === 0) return;
+  const email = String(u.email || "").trim();
+  if (!email) return;
+
+  let attachmentHint: string | null = null;
+  const name = payload.attachmentName?.trim() || "";
+  const mime = String(payload.attachmentMime || "").toLowerCase();
+  if (name || mime) {
+    if (mime.startsWith("image/")) {
+      attachmentHint = name ? `Изображение: ${name}` : "К сообщению приложено изображение (смотрите в чате).";
+    } else {
+      attachmentHint = name ? `Файл: ${name}` : "К сообщению приложён файл (смотрите в чате).";
     }
   }
-  if (ok > 0) {
-    console.log("[notify] непрочитанный чат: отправлено напоминаний:", ok, "из", rows.length);
-  }
+
+  const openUrl = `${appOrigin()}/home`;
+  void sendStaffChatReplyEmail({
+    to: email,
+    name: u.name,
+    body: payload.body,
+    attachmentHint,
+    openChatUrl: openUrl,
+  }).catch((e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[notify] письмо с ответом поддержки user", userId, msg);
+  });
 }
 
 function raffleIsLaunched(r: RaffleRow): boolean {

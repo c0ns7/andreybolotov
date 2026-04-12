@@ -84,12 +84,7 @@ import {
   extendReservedOrderOnce,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
-import {
-  runChatUnreadEmailReminders,
-  maybeSendRaffleLaunchEmails,
-  scheduleChatUnreadReminderCheck,
-  warnIfNoSmtpOnce,
-} from "./notify-email.js";
+import { maybeSendRaffleLaunchEmails, notifyUserEmailStaffReply, warnIfNoSmtpOnce } from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -1381,8 +1376,12 @@ app.post("/api/admin/users/:userId/messages", async (c) => {
   broadcastThreadReadByStaff(userId);
   const row = getSupportMessageById(id);
   if (row) broadcastChatMessage(userId, messageToDto(row));
+  notifyUserEmailStaffReply(userId, {
+    body: parsed.text,
+    attachmentName: parsed.attachment?.name ?? null,
+    attachmentMime: parsed.attachment?.mime ?? null,
+  });
   const rows = listSupportMessagesForUser(userId);
-  scheduleChatUnreadReminderCheck();
   return c.json({
     messages: rows.map((r) => messageToDto(r)),
   });
@@ -1407,14 +1406,6 @@ server.on("upgrade", (request, socket, head) => {
     socket.destroy();
   }
 });
-
-const CHAT_EMAIL_INTERVAL_MS = 5 * 60 * 1000;
-setInterval(() => {
-  void runChatUnreadEmailReminders().catch((e) =>
-    console.error("[notify] chat unread scan:", e instanceof Error ? e.message : e),
-  );
-}, CHAT_EMAIL_INTERVAL_MS);
-void runChatUnreadEmailReminders().catch(() => {});
 
 server.listen(PORT, () => {
   warnIfNoSmtpOnce();

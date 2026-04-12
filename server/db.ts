@@ -471,7 +471,6 @@ export function markStaffMessagesReadByUser(userId: number): void {
   db.prepare(
     `UPDATE support_messages SET read_by_user_at = ? WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
   ).run(now, userId);
-  db.prepare(`UPDATE users SET chat_unread_email_last_at = NULL WHERE id = ?`).run(userId);
 }
 
 export function markThreadReadByStaff(userId: number): void {
@@ -525,39 +524,6 @@ export function updateUserEmailNotifyPrefs(
   if (!parts.length) return;
   vals.push(userId);
   db.prepare(`UPDATE users SET ${parts.join(", ")} WHERE id = ?`).run(...vals);
-}
-
-/** Пользователи с непрочитанными ответами поддержки: давность последнего непрочитанного и пауза с прошлого письма. */
-export function listUsersForChatUnreadEmailReminder(
-  now: number,
-  minUnreadAgeMs: number,
-  reminderCooldownMs: number,
-): { id: number; email: string; name: string }[] {
-  const unreadBefore = now - minUnreadAgeMs;
-  const lastSentBefore = now - reminderCooldownMs;
-  return db
-    .prepare(
-      `SELECT u.id, u.email, u.name FROM users u
-       WHERE COALESCE(u.blocked, 0) = 0
-         AND COALESCE(u.email_notify_chat, 1) = 1
-         AND TRIM(COALESCE(u.email, '')) != ''
-         AND (
-           SELECT MAX(sm.created_at) FROM support_messages sm
-           WHERE sm.user_id = u.id AND sm.is_staff = 1 AND sm.read_by_user_at IS NULL
-         ) IS NOT NULL
-         AND (
-           SELECT MAX(sm.created_at) FROM support_messages sm
-           WHERE sm.user_id = u.id AND sm.is_staff = 1 AND sm.read_by_user_at IS NULL
-         ) < ?
-         AND (
-           u.chat_unread_email_last_at IS NULL OR u.chat_unread_email_last_at < ?
-         )`,
-    )
-    .all(unreadBefore, lastSentBefore) as { id: number; email: string; name: string }[];
-}
-
-export function setUserChatUnreadEmailLastAt(userId: number, ts: number): void {
-  db.prepare(`UPDATE users SET chat_unread_email_last_at = ? WHERE id = ?`).run(ts, userId);
 }
 
 export function listUsersForRaffleLaunchEmail(): { id: number; email: string; name: string }[] {

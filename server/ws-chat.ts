@@ -10,7 +10,7 @@ import {
   messageToDto,
 } from "./db.js";
 import { parseChatAttachmentFromMessage } from "./chat-attachments.js";
-import { scheduleChatUnreadReminderCheck } from "./notify-email.js";
+import { notifyUserEmailStaffReply } from "./notify-email.js";
 import { setStaffTypingForUser, setUserTyping } from "./typing-state.js";
 
 const OPEN = WebSocket.OPEN;
@@ -194,7 +194,11 @@ function routeAdminSocketMessage(ws: WebSocket, raw: string) {
   if (!row) return;
   const dto = messageToDto(row);
   broadcastChatMessage(userId, dto);
-  scheduleChatUnreadReminderCheck();
+  notifyUserEmailStaffReply(userId, {
+    body: text,
+    attachmentName: att?.name ?? null,
+    attachmentMime: att?.mime ?? null,
+  });
 }
 
 export function attachWebSocket(wss: WebSocketServer) {
