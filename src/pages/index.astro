@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import InstallAppModal from "../components/InstallAppModal.astro";
 ---
 
 <Base
@@ -30,6 +31,15 @@ import Base from "../layouts/Base.astro";
           <div class="welcome-splash__actions">
             <button type="button" class="welcome-splash__btn welcome-splash__btn--primary" id="btn-splash-register">Зарегистрироваться</button>
             <button type="button" class="welcome-splash__btn welcome-splash__btn--ghost" id="btn-splash-login">Уже есть аккаунт? Войти</button>
+            <button type="button" class="welcome-splash__btn welcome-splash__btn--install install-app-promo" id="btn-splash-install-app">
+              <span class="welcome-splash__btn-install-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                  <path d="M12 18h.01"></path>
+                </svg>
+              </span>
+              Установить приложение
+            </button>
           </div>
           <div class="welcome-splash__footer">
             <div class="welcome-splash__mark" aria-hidden="true">
@@ -365,4 +375,6 @@ import Base from "../layouts/Base.astro";
       </div>
     </div>
   </div>
+
+  <InstallAppModal />
 </Base>

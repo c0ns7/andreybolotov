@@ -55,6 +55,13 @@ const { title, description } = Astro.props;
         } catch (e) {
           r.classList.add("js-guest");
         }
+        try {
+          if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) {
+            r.classList.add("js-pwa-standalone");
+          } else if (window.navigator && window.navigator.standalone === true) {
+            r.classList.add("js-pwa-standalone");
+          }
+        } catch (e2) {}
       })();
     </script>
   </head>

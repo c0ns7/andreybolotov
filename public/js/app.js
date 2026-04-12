@@ -821,6 +821,95 @@
   const modalCart = document.getElementById("modal-cart");
   const modalTickets = document.getElementById("modal-tickets");
   const modalTicketSearch = document.getElementById("modal-ticket-search");
+  const modalInstallApp = document.getElementById("modal-install-app");
+
+  function detectInstallAppPlatform() {
+    var ua = navigator.userAgent || "";
+    var iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (iOS) return "ios";
+    if (/Android/i.test(ua)) return "android";
+    return "desktop";
+  }
+
+  function setInstallAppTab(which) {
+    var pIos = document.getElementById("install-app-panel-ios");
+    var pAnd = document.getElementById("install-app-panel-android");
+    var tIos = document.getElementById("install-app-tab-ios");
+    var tAnd = document.getElementById("install-app-tab-android");
+    if (!pIos || !pAnd) return;
+    var isIos = which === "ios";
+    pIos.hidden = !isIos;
+    pAnd.hidden = isIos;
+    if (tIos) {
+      tIos.classList.toggle("install-app-seg__btn--active", isIos);
+      tIos.setAttribute("aria-selected", isIos ? "true" : "false");
+    }
+    if (tAnd) {
+      tAnd.classList.toggle("install-app-seg__btn--active", !isIos);
+      tAnd.setAttribute("aria-selected", isIos ? "false" : "true");
+    }
+  }
+
+  function syncInstallAppModalLayout() {
+    var plat = detectInstallAppPlatform();
+    var seg = document.getElementById("install-app-seg");
+    var lead = document.getElementById("install-app-lead");
+    var wrap = document.getElementById("install-app-prompt-wrap");
+    var pIos = document.getElementById("install-app-panel-ios");
+    var pAnd = document.getElementById("install-app-panel-android");
+    if (plat === "ios") {
+      if (seg) seg.hidden = true;
+      if (pIos) pIos.hidden = false;
+      if (pAnd) pAnd.hidden = true;
+      if (lead) {
+        lead.textContent =
+          "Сайт откроется на весь экран, как отдельное приложение — без лишних элементов браузера.";
+      }
+      if (wrap) wrap.hidden = true;
+    } else if (plat === "android") {
+      if (seg) seg.hidden = true;
+      if (pIos) pIos.hidden = true;
+      if (pAnd) pAnd.hidden = false;
+      if (lead) {
+        lead.textContent =
+          "Добавьте ярлык на главный экран или установите из Chrome — если ниже появится кнопка браузера.";
+      }
+      if (wrap) wrap.hidden = !deferredInstallPrompt;
+    } else {
+      if (seg) seg.hidden = false;
+      setInstallAppTab("ios");
+      if (lead) {
+        lead.textContent = "Выберите вашу систему. На телефоне откройте эту страницу и повторите шаги.";
+      }
+      if (wrap) wrap.hidden = !deferredInstallPrompt;
+    }
+  }
+
+  function openInstallAppModal() {
+    if (!modalInstallApp) return;
+    syncInstallAppModalLayout();
+    openModal(modalInstallApp);
+  }
+
+  function refreshInstallPromptVisibility() {
+    var wrap = document.getElementById("install-app-prompt-wrap");
+    if (!wrap) return;
+    var modal = document.getElementById("modal-install-app");
+    if (!modal || !modal.classList.contains("is-open")) return;
+    var plat = detectInstallAppPlatform();
+    if (plat === "ios") {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = !deferredInstallPrompt;
+  }
+
+  var deferredInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    refreshInstallPromptVisibility();
+  });
 
   var ticketsModalDataCache = { reserved: [], confirmed: [] };
   var lastCartChromeTotal = -1;
@@ -3508,7 +3597,7 @@
     closeCartModal();
     closeTicketsModal();
     closeTicketSearchModal();
-    [modalRegister, modalLogin, modalForgot, modalProfile].forEach(closeModal);
+    [modalRegister, modalLogin, modalForgot, modalProfile, modalInstallApp].forEach(closeModal);
     closeRaffleUnavailableModal();
   }
 
@@ -3856,6 +3945,39 @@
       openModal(modalLogin);
     });
   }
+
+  document.getElementById("btn-splash-install-app")?.addEventListener("click", function () {
+    openInstallAppModal();
+  });
+  document.getElementById("btn-home-install-app")?.addEventListener("click", function () {
+    openInstallAppModal();
+  });
+
+  document.getElementById("modal-install-app-close")?.addEventListener("click", function () {
+    closeModal(modalInstallApp);
+  });
+  if (modalInstallApp) {
+    modalInstallApp.addEventListener("click", function (e) {
+      if (e.target === modalInstallApp) closeModal(modalInstallApp);
+    });
+  }
+  document.getElementById("install-app-tab-ios")?.addEventListener("click", function () {
+    setInstallAppTab("ios");
+  });
+  document.getElementById("install-app-tab-android")?.addEventListener("click", function () {
+    setInstallAppTab("android");
+  });
+  document.getElementById("btn-install-app-chrome")?.addEventListener("click", function () {
+    if (!deferredInstallPrompt) return;
+    var p = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    p.prompt();
+    if (p.userChoice && typeof p.userChoice.then === "function") {
+      p.userChoice.then(function () {}).catch(function () {});
+    }
+    var w = document.getElementById("install-app-prompt-wrap");
+    if (w) w.hidden = true;
+  });
 
   var modalRegClose = document.getElementById("modal-reg-close");
   if (modalRegClose) modalRegClose.addEventListener("click", function () {

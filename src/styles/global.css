@@ -6409,3 +6409,205 @@ html.theme-dark .account-blocked-screen__title {
 html.theme-dark .account-blocked-screen__text {
   color: var(--text-muted);
 }
+
+/* «Установить приложение» — ярлык на экран Домой */
+html.js-pwa-standalone .install-app-promo {
+  display: none !important;
+}
+
+.welcome-splash__btn--install {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.75);
+  color: #374151;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+}
+
+.welcome-splash__btn--install:hover {
+  background: #fff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #111827;
+}
+
+.welcome-splash__btn-install-icon {
+  display: flex;
+  color: var(--accent, #0071e3);
+  flex-shrink: 0;
+}
+
+.home-install-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.home-install-btn:hover {
+  background: #fff;
+  border-color: color-mix(in srgb, var(--apple-blue) 35%, transparent);
+  color: var(--apple-blue);
+}
+
+.home-install-btn:active {
+  transform: scale(0.96);
+}
+
+.modal--install-app .modal__body {
+  max-height: min(72vh, 520px);
+  overflow-y: auto;
+}
+
+.install-app-lead {
+  margin-top: 0;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.install-app-seg {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.install-app-seg[hidden] {
+  display: none !important;
+}
+
+.install-app-seg__btn {
+  flex: 1;
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: 2px solid var(--border, rgba(15, 23, 42, 0.1));
+  background: var(--bg, #f5f5f7);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+
+.install-app-seg__btn--active {
+  border-color: var(--accent, #0071e3);
+  color: var(--accent, #0071e3);
+  background: color-mix(in srgb, var(--accent, #0071e3) 10%, var(--surface, #fff));
+}
+
+.install-app-panel {
+  margin-bottom: 4px;
+}
+
+.install-app-hint {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text-muted, #64748b);
+}
+
+.install-app-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text, #1f2937);
+}
+
+.install-app-steps li {
+  margin-bottom: 10px;
+}
+
+.install-app-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.install-app-footnote {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted, #94a3b8);
+}
+
+.install-app-prompt-wrap {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border, rgba(15, 23, 42, 0.08));
+}
+
+.install-app-prompt-wrap[hidden] {
+  display: none !important;
+}
+
+.install-app-prompt-btn {
+  width: 100%;
+}
+
+.install-app-prompt-note {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-muted, #94a3b8);
+  text-align: center;
+}
+
+html.theme-dark .welcome-splash__btn--install {
+  background: rgba(30, 30, 38, 0.85);
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.theme-dark .welcome-splash__btn--install:hover {
+  background: #1e1e26;
+  color: #fff;
+}
+
+html.theme-dark .home-install-btn {
+  background: var(--surface-muted, #1e1e26);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+}
+
+html.theme-dark .home-install-btn:hover {
+  border-color: color-mix(in srgb, var(--apple-blue) 45%, transparent);
+  color: #93c5fd;
+}
+
+html.theme-dark .install-app-seg__btn {
+  background: var(--surface-muted, #1e1e26);
+  border-color: var(--border, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted, #9ca3af);
+}
+
+html.theme-dark .install-app-seg__btn--active {
+  background: color-mix(in srgb, var(--accent, #0071e3) 18%, var(--surface, #16161d));
+}
+
+html.theme-dark .install-app-steps {
+  color: var(--text, #e5e7eb);
+}
+
+html.theme-dark .install-app-footnote,
+html.theme-dark .install-app-prompt-note {
+  color: var(--text-muted, #9ca3af);
+}
