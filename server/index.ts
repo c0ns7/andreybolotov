@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env.js";
 import { createServer } from "node:http";
 import { mkdirSync, existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
@@ -563,11 +563,14 @@ app.post("/api/auth/forgot", async (c) => {
   const expiresAt = Date.now() + PASSWORD_RESET_TTL_MS;
   setPasswordResetTokenForUser(user.id, tokenHash, expiresAt);
   const resetUrl = `${publicAppOrigin()}/home/reset-password?token=${encodeURIComponent(rawToken)}`;
+  console.log("[auth/forgot] send reset email →", user.email);
   try {
     await sendPasswordResetEmail(user.email, resetUrl);
+    console.log("[auth/forgot] reset email accepted by SMTP");
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("[auth/forgot] SMTP:", msg, e);
+    console.error("[auth/forgot] SMTP failed:", msg);
+    console.error(e);
     return c.json({ error: "Не удалось отправить письмо. Попробуйте позже." }, 500);
   }
   return c.json(generic);

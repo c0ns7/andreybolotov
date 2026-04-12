@@ -1,6 +1,13 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
+function smtpDebugEnabled(): boolean {
+  const v = String(process.env.SMTP_DEBUG ?? "")
+    .trim()
+    .toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 function smtpConfigured(): boolean {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
@@ -24,7 +31,18 @@ function createTransporter(): Transporter {
   const user = String(process.env.SMTP_USER ?? "").trim();
   const pass = String(process.env.SMTP_PASS ?? "").trim();
   const requireTls = String(process.env.SMTP_REQUIRE_TLS ?? "").trim() !== "0";
-  return nodemailer.createTransport({
+  const smtpLogger = smtpDebugEnabled()
+    ? {
+        debug: (msg: unknown) => console.log("[smtp]", msg),
+        info: (msg: unknown) => console.log("[smtp]", msg),
+        warn: (msg: unknown) => console.warn("[smtp]", msg),
+        error: (msg: unknown) => console.error("[smtp]", msg),
+      }
+    : undefined;
+  if (smtpDebugEnabled()) {
+    console.log("[mail] createTransport", { host, port, secure: port === 465, user: user ? `${user.slice(0, 3)}…` : "" });
+  }
+  const transportOpts = {
     host,
     port,
     secure: port === 465,
@@ -33,8 +51,11 @@ function createTransporter(): Transporter {
     ...(String(process.env.SMTP_TLS_REJECT_UNAUTHORIZED ?? "").trim() === "0"
       ? { tls: { rejectUnauthorized: false } }
       : {}),
-    ...(String(process.env.SMTP_DEBUG ?? "").trim() === "1" ? { debug: true, logger: true } : {}),
-  });
+    ...(smtpDebugEnabled() ? { debug: true, logger: smtpLogger } : {}),
+  };
+  return nodemailer.createTransport(
+    transportOpts as Parameters<typeof nodemailer.createTransport>[0],
+  );
 }
 
 async function sendTransactionalMail(opts: {
@@ -48,6 +69,9 @@ async function sendTransactionalMail(opts: {
   }
   const transporter = createTransporter();
   const from = smtpFromAddress();
+  if (smtpDebugEnabled()) {
+    console.log("[mail] sendMail →", opts.to, "subject:", String(opts.subject).slice(0, 60));
+  }
   try {
     await transporter.sendMail({
       from,
