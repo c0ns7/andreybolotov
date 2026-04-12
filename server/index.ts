@@ -84,7 +84,12 @@ import {
   extendReservedOrderOnce,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
-import { runChatUnreadEmailReminders, maybeSendRaffleLaunchEmails } from "./notify-email.js";
+import {
+  runChatUnreadEmailReminders,
+  maybeSendRaffleLaunchEmails,
+  scheduleChatUnreadReminderCheck,
+  warnIfNoSmtpOnce,
+} from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -1377,6 +1382,7 @@ app.post("/api/admin/users/:userId/messages", async (c) => {
   const row = getSupportMessageById(id);
   if (row) broadcastChatMessage(userId, messageToDto(row));
   const rows = listSupportMessagesForUser(userId);
+  scheduleChatUnreadReminderCheck();
   return c.json({
     messages: rows.map((r) => messageToDto(r)),
   });
@@ -1411,6 +1417,7 @@ setInterval(() => {
 void runChatUnreadEmailReminders().catch(() => {});
 
 server.listen(PORT, () => {
+  warnIfNoSmtpOnce();
   console.log(`HTTP + WebSocket ws://127.0.0.1:${PORT}/ws`);
   console.log(`SQLite: ./data/app.db`);
 });
