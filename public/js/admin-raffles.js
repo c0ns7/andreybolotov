@@ -361,7 +361,8 @@
       .replace(/[^\d]/g, "");
     const filtered = participantsCache.filter(function (x) {
       const n = String(Number(x.ticket_number) || 0);
-      return !query || n.indexOf(query) !== -1;
+      const phoneDigits = String(x.user_phone || "").replace(/[^\d]/g, "");
+      return !query || n.indexOf(query) !== -1 || phoneDigits.indexOf(query) !== -1;
     });
     if (!filtered.length) {
       participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Ничего не найдено.</p>';
@@ -372,6 +373,7 @@
         const key = String(x.ticket_number) + "|" + String(x.user_phone || "");
         const revealed = revealedPhones.has(key);
         const wholesaleCls = x.is_wholesale ? " admin-raffle-participant-card--wholesale" : "";
+        const preCls = x.order_status === "preassigned" ? " admin-raffle-participant-card--preassigned" : "";
         var isBought = x.order_status === "confirmed";
         var ticketBlock = isBought
           ? '<button type="button" class="admin-raffle-participant-card__ticket admin-raffle-participant-card__ticket--bought" data-ticket="' +
@@ -388,11 +390,19 @@
           : '<div class="admin-raffle-participant-card__ticket">№ ' +
             esc(String(x.ticket_number)) +
             "</div>";
+        var statusLine =
+          x.order_status === "preassigned"
+            ? '<div class="admin-raffle-participant-card__status">До регистрации</div>'
+            : "";
         return (
           '<article class="admin-raffle-participant-card' +
           wholesaleCls +
+          preCls +
           '">' +
+          '<div class="admin-raffle-participant-card__ticket-wrap">' +
           ticketBlock +
+          statusLine +
+          "</div>" +
           '<button type="button" class="admin-raffle-participant-card__phone' +
           (revealed ? "" : " is-masked") +
           '" data-key="' +
@@ -449,6 +459,16 @@
     wholesalersCache = [];
     revealedPhones.clear();
     if (participantsSearch) participantsSearch.value = "";
+    var bulkTa = document.getElementById("raffle-bulk-phones");
+    var bulkStart = document.getElementById("raffle-bulk-start");
+    var bulkRes = document.getElementById("raffle-bulk-result");
+    if (bulkTa) bulkTa.value = "";
+    if (bulkStart) bulkStart.value = "1";
+    if (bulkRes) {
+      bulkRes.hidden = true;
+      bulkRes.textContent = "";
+      bulkRes.className = "admin-raffle-bulk-assign__result";
+    }
     participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
     modalParticipants.classList.add("is-open");
     modalParticipants.setAttribute("aria-hidden", "false");
@@ -561,6 +581,55 @@
     ?.addEventListener("click", closeParticipants);
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
   participantsSearch?.addEventListener("input", renderParticipantsList);
+  document.getElementById("raffle-bulk-submit")?.addEventListener("click", async function () {
+    if (!participantsRaffleId) return;
+    const ta = document.getElementById("raffle-bulk-phones");
+    const startEl = document.getElementById("raffle-bulk-start");
+    const resultEl = document.getElementById("raffle-bulk-result");
+    const text = ta && ta.value ? String(ta.value) : "";
+    const start_number = startEl && String(startEl.value).trim() !== "" ? Number(startEl.value) : 1;
+    if (!Number.isFinite(start_number) || start_number < 1) {
+      alert("Укажите корректный первый номерок (от 1)");
+      return;
+    }
+    try {
+      const data = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/bulk-assign-phones", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, start_number: start_number }),
+      });
+      const assigned = data.assigned != null ? Number(data.assigned) : 0;
+      const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+      if (resultEl) {
+        resultEl.hidden = false;
+        var msg = "Назначено номерков: " + String(assigned);
+        if (skipped.length) {
+          msg +=
+            ". Пропущено строк: " +
+            String(skipped.length) +
+            " (номерок уже занят или дубликат в списке).";
+          resultEl.className = "admin-raffle-bulk-assign__result is-warn";
+        } else {
+          resultEl.className = "admin-raffle-bulk-assign__result is-ok";
+        }
+        resultEl.textContent = msg;
+      }
+      const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      if (participantsRaffleId) {
+        participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
+        wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
+        var whWrap = document.getElementById("raffle-wholesalers-wrap");
+        if (whWrap) whWrap.hidden = !bundle.wholesale_enabled;
+        renderWholesalersList();
+        renderParticipantsList();
+      }
+    } catch (e) {
+      alert((e && e.message) || "Не удалось назначить");
+    }
+  });
   participantsList?.addEventListener("click", function (e) {
     var btn = e.target && e.target.closest && e.target.closest(".admin-raffle-participant-card__ticket--bought");
     if (!btn) return;

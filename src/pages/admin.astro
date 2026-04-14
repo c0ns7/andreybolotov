@@ -534,6 +534,40 @@ import "../styles/admin-raffles.css";
         </div>
         <div class="modal__body admin-raffle-modal__body">
           <div class="admin-raffle-participants">
+            <div class="admin-raffle-bulk-assign">
+              <label class="admin-raffle-bulk-assign__label" for="raffle-bulk-phones">
+                Быстрое назначение номерков по списку телефонов
+              </label>
+              <p class="admin-raffle-bulk-assign__hint">
+                По одному номеру на строку (как в блокноте). Первой строке — номерок с указанного числа, далее по порядку. Уже
+                зарегистрированным номер сразу попадёт в подтверждённые; если аккаунта ещё нет — номерок зарезервирован до входа по
+                этому телефону.
+              </p>
+              <textarea
+                id="raffle-bulk-phones"
+                class="input admin-raffle-bulk-assign__textarea"
+                rows="5"
+                placeholder="89144617846&#10;89143687442&#10;…"
+                autocomplete="off"
+              ></textarea>
+              <div class="admin-raffle-bulk-assign__row">
+                <label class="admin-raffle-bulk-assign__start">
+                  <span class="admin-raffle-bulk-assign__start-label">Первый номерок</span>
+                  <input
+                    id="raffle-bulk-start"
+                    class="input admin-raffle-bulk-assign__start-input"
+                    type="number"
+                    min="1"
+                    value="1"
+                    inputmode="numeric"
+                  />
+                </label>
+                <button type="button" class="btn btn--primary admin-raffle-bulk-assign__btn" id="raffle-bulk-submit">
+                  Назначить
+                </button>
+              </div>
+              <p id="raffle-bulk-result" class="admin-raffle-bulk-assign__result" role="status" hidden></p>
+            </div>
             <label class="form-group admin-raffle-participants__search" for="raffle-participants-search">
               <span class="admin-raffle-participants__search-label">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

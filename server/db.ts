@@ -183,6 +183,19 @@ function migrate() {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS raffle_phone_preassignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      raffle_id INTEGER NOT NULL,
+      ticket_number INTEGER NOT NULL,
+      phone TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
+      UNIQUE (raffle_id, ticket_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rpp_raffle_phone ON raffle_phone_preassignments(raffle_id, phone);
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

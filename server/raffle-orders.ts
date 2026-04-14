@@ -1,4 +1,5 @@
-import { db, getRaffleById, isRaffleVisibleOnSite } from "./db.js";
+import { db, getRaffleById, getUserById, getUserByPhone, isRaffleVisibleOnSite } from "./db.js";
+import { isValidRuMobile, normalizePhone } from "./phone.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 10;
@@ -57,13 +58,48 @@ function getHoldForNumber(raffleId: number, ticketNumber: number) {
     | undefined;
 }
 
+/** Занят ли номерок активной заявкой или предназначен заранее по телефону (ещё без аккаунта). */
+export function isRaffleTicketBlocked(raffleId: number, ticketNumber: number): boolean {
+  const held = db
+    .prepare(
+      `SELECT 1 FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')`,
+    )
+    .get(raffleId, ticketNumber);
+  if (held) return true;
+  const pre = db
+    .prepare(
+      `SELECT 1 FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
+    )
+    .get(raffleId, ticketNumber);
+  return Boolean(pre);
+}
+
+function getPreassignmentPhone(raffleId: number, ticketNumber: number): string | null {
+  const row = db
+    .prepare(
+      `SELECT phone FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
+    )
+    .get(raffleId, ticketNumber) as { phone: string } | undefined;
+  return row ? row.phone : null;
+}
+
 export function getTicketCellKind(
   raffleId: number,
   ticketNumber: number,
   currentUserId: number,
 ): TicketCellKind {
   const row = getHoldForNumber(raffleId, ticketNumber);
-  if (!row) return "free";
+  if (!row) {
+    const prePhone = getPreassignmentPhone(raffleId, ticketNumber);
+    if (prePhone) {
+      const u = getUserById(currentUserId);
+      if (u && u.phone === prePhone) return "self_confirmed";
+      return "taken";
+    }
+    return "free";
+  }
   const st = row.order_status;
   if (st === "expired" || st === "rejected") return "free";
   if (row.order_user_id !== currentUserId) return "taken";
@@ -98,7 +134,10 @@ export function getTicketGridSlice(
        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
     )
     .get(raffleId) as { c: number };
-  const free_count = Math.max(0, maxN - (occupied?.c ?? 0));
+  const preC = db
+    .prepare(`SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`)
+    .get(raffleId) as { c: number };
+  const free_count = Math.max(0, maxN - (occupied?.c ?? 0) - (preC?.c ?? 0));
   return { cells, free_count };
 }
 
@@ -146,14 +185,7 @@ export function createReservation(
   try {
     const tx = db.transaction(() => {
       for (const n of uniq) {
-        const taken = db
-          .prepare(
-            `SELECT 1 FROM raffle_ticket_holds h
-             INNER JOIN raffle_orders o ON o.id = h.order_id
-             WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')`,
-          )
-          .get(raffleId, n);
-        if (taken) throw new Error("OCCUPIED");
+        if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
       }
       const info = db
         .prepare(
@@ -505,6 +537,205 @@ export type AdminRaffleParticipantView = {
   user_email: string;
 };
 
+/** Подтверждённые номерки без оплаты (админ): одна или несколько записей в одном заказе. */
+export function createOrAppendConfirmedTicketsForUser(
+  raffleId: number,
+  userId: number,
+  numbers: number[],
+): void {
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) throw new Error("NO_RAFFLE");
+  const uniq = [...new Set(numbers.map((x) => Math.floor(Number(x))))].filter((n) => Number.isFinite(n));
+  uniq.sort((a, b) => a - b);
+  if (uniq.length === 0) return;
+  for (const n of uniq) {
+    if (n < 1 || n > raffle.ticket_count) throw new Error("BAD_NUM");
+  }
+  const now = Date.now();
+  const existing = db
+    .prepare(
+      `SELECT id, ticket_count, amount_rub FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status = 'confirmed' ORDER BY id DESC LIMIT 1`,
+    )
+    .get(raffleId, userId) as { id: number; ticket_count: number; amount_rub: number } | undefined;
+
+  const insHold = db.prepare(
+    `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
+     VALUES (?, ?, ?, ?, 'confirmed', NULL, ?)`,
+  );
+
+  if (existing) {
+    const existingNums = new Set(getTicketNumbersForOrder(existing.id));
+    const toAdd = uniq.filter((n) => !existingNums.has(n));
+    if (toAdd.length === 0) return;
+    for (const n of toAdd) {
+      if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
+    }
+    for (const n of toAdd) {
+      insHold.run(raffleId, existing.id, userId, n, now);
+    }
+    const totalCount = existing.ticket_count + toAdd.length;
+    const amount = totalCount * raffle.price_rub;
+    db.prepare(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`).run(
+      amount,
+      totalCount,
+      now,
+      existing.id,
+    );
+    return;
+  }
+
+  for (const n of uniq) {
+    if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
+  }
+  const amount = uniq.length * raffle.price_rub;
+  const info = db
+    .prepare(
+      `INSERT INTO raffle_orders (
+        raffle_id, user_id, bank, amount_rub, ticket_count, status,
+        reserved_until, receipt_url, receipt_name, receipt_mime, created_at, updated_at
+      ) VALUES (?, ?, NULL, ?, ?, 'confirmed', 0, NULL, NULL, NULL, ?, ?)`,
+    )
+    .run(raffleId, userId, amount, uniq.length, now, now);
+  const orderId = Number(info.lastInsertRowid);
+  for (const n of uniq) {
+    insHold.run(raffleId, orderId, userId, n, now);
+  }
+}
+
+/** Перенос предназначенных по телефону номерков в реальные подтверждённые заявки после регистрации/входа. */
+export function materializeRafflePreassignmentsForUser(userId: number): void {
+  const u = getUserById(userId);
+  if (!u) return;
+  const phone = u.phone;
+  const rows = db
+    .prepare(`SELECT raffle_id, ticket_number FROM raffle_phone_preassignments WHERE phone = ?`)
+    .all(phone) as Array<{ raffle_id: number; ticket_number: number }>;
+  if (!rows.length) return;
+
+  const byRaffle = new Map<number, number[]>();
+  for (const r of rows) {
+    const arr = byRaffle.get(r.raffle_id) ?? [];
+    arr.push(r.ticket_number);
+    byRaffle.set(r.raffle_id, arr);
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare(`DELETE FROM raffle_phone_preassignments WHERE phone = ?`).run(phone);
+    for (const [raffleId, nums] of byRaffle) {
+      nums.sort((a, b) => a - b);
+      createOrAppendConfirmedTicketsForUser(raffleId, userId, nums);
+    }
+    for (const raffleId of byRaffle.keys()) {
+      recalculateWholesaleForRaffle(raffleId);
+    }
+  });
+  tx();
+}
+
+export type BulkAssignSkip = {
+  line: number;
+  phone: string;
+  ticket_number: number;
+  reason: string;
+};
+
+/**
+ * Одна строка списка — один телефон; номерки идут подряд с start_number (по умолчанию 1).
+ * Зарегистрированным — сразу подтверждённый заказ; незарегистрированным — запись до входа по этому телефону.
+ */
+export function adminBulkAssignPhoneLinesToRaffle(
+  raffleId: number,
+  rawLines: string[],
+  startNumber: number,
+): { ok: true; assigned: number; skipped: BulkAssignSkip[] } | { ok: false; error: string } {
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const maxN = raffle.ticket_count;
+  const start = Math.max(1, Math.floor(Number(startNumber)) || 1);
+
+  type Entry = { line: number; phone: string; ticket_number: number };
+  const entries: Entry[] = [];
+  let seq = 0;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = i + 1;
+    const raw = String(rawLines[i] ?? "").trim();
+    if (!raw) continue;
+    const phone = normalizePhone(raw);
+    if (!phone || !isValidRuMobile(phone)) {
+      return { ok: false, error: "Строка " + line + ": некорректный мобильный телефон РФ" };
+    }
+    const ticket_number = start + seq;
+    seq += 1;
+    if (ticket_number > maxN) {
+      return { ok: false, error: "Номерок " + ticket_number + " (строка " + line + ") больше лимита акции (" + maxN + ")" };
+    }
+    entries.push({ line, phone, ticket_number });
+  }
+
+  if (entries.length === 0) return { ok: false, error: "Нет ни одной строки с телефоном" };
+
+  const skipped: BulkAssignSkip[] = [];
+  const virt = new Set<string>();
+  const valid: Entry[] = [];
+
+  for (const e of entries) {
+    const k = String(raffleId) + ":" + e.ticket_number;
+    if (virt.has(k)) {
+      skipped.push({
+        line: e.line,
+        phone: e.phone,
+        ticket_number: e.ticket_number,
+        reason: "Дубликат номерка в списке",
+      });
+      continue;
+    }
+    if (isRaffleTicketBlocked(raffleId, e.ticket_number)) {
+      skipped.push({
+        line: e.line,
+        phone: e.phone,
+        ticket_number: e.ticket_number,
+        reason: "Номерок уже занят",
+      });
+      continue;
+    }
+    virt.add(k);
+    valid.push(e);
+  }
+
+  if (!valid.length) return { ok: true, assigned: 0, skipped };
+
+  const byPhone = new Map<string, Entry[]>();
+  for (const e of valid) {
+    const arr = byPhone.get(e.phone) ?? [];
+    arr.push(e);
+    byPhone.set(e.phone, arr);
+  }
+
+  const tx = db.transaction(() => {
+    for (const [, list] of byPhone) {
+      list.sort((a, b) => a.ticket_number - b.ticket_number);
+      const tickets = list.map((x) => x.ticket_number);
+      const phone = list[0]!.phone;
+      const user = getUserByPhone(phone);
+      if (user) {
+        createOrAppendConfirmedTicketsForUser(raffleId, user.id, tickets);
+      } else {
+        const now = Date.now();
+        const ins = db.prepare(
+          `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
+        );
+        for (const t of tickets) {
+          ins.run(raffleId, t, phone, now);
+        }
+      }
+    }
+    recalculateWholesaleForRaffle(raffleId);
+  });
+  tx();
+
+  return { ok: true, assigned: valid.length, skipped };
+}
+
 export function getAdminRaffleParticipantsBundle(raffleId: number): {
   wholesale_enabled: boolean;
   participants: AdminRaffleParticipantView[];
@@ -544,7 +775,7 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
     user_email: string;
   }>;
 
-  const participants: AdminRaffleParticipantView[] = partRows.map((row) => ({
+  const fromOrders: AdminRaffleParticipantView[] = partRows.map((row) => ({
     ticket_number: row.ticket_number,
     user_phone: row.user_phone,
     order_status: row.order_status,
@@ -554,6 +785,26 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
     user_name: row.user_name ?? "",
     user_email: row.user_email ?? "",
   }));
+
+  const preRows = db
+    .prepare(
+      `SELECT ticket_number, phone FROM raffle_phone_preassignments WHERE raffle_id = ? ORDER BY ticket_number ASC`,
+    )
+    .all(raffleId) as Array<{ ticket_number: number; phone: string }>;
+
+  const fromPre: AdminRaffleParticipantView[] = preRows.map((row) => ({
+    ticket_number: row.ticket_number,
+    user_phone: row.phone,
+    order_status: "preassigned",
+    is_wholesale: false,
+    user_id: 0,
+    user_name: "",
+    user_email: "",
+  }));
+
+  const participants: AdminRaffleParticipantView[] = [...fromOrders, ...fromPre].sort(
+    (a, b) => a.ticket_number - b.ticket_number,
+  );
 
   let wholesalers: AdminWholesalerRow[] = [];
   if (wholesale_enabled) {
@@ -604,14 +855,7 @@ export function addTicketsToReservedOrder(
   try {
     const tx = db.transaction(() => {
       for (const n of toAdd) {
-        const taken = db
-          .prepare(
-            `SELECT 1 FROM raffle_ticket_holds h
-             INNER JOIN raffle_orders o2 ON o2.id = h.order_id
-             WHERE h.raffle_id = ? AND h.ticket_number = ? AND o2.status NOT IN ('expired', 'rejected')`,
-          )
-          .get(o.raffle_id, n);
-        if (taken) throw new Error("OCCUPIED");
+        if (isRaffleTicketBlocked(o.raffle_id, n)) throw new Error("OCCUPIED");
       }
       const ins = db.prepare(
         `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
@@ -664,7 +908,13 @@ export function appendRandomTicketsToReservedOrder(
        WHERE h.raffle_id = ? AND o2.status NOT IN ('expired', 'rejected')`,
     )
     .all(o.raffle_id) as { ticket_number: number }[];
-  const occ = new Set(occupiedRows.map((r) => r.ticket_number));
+  const preRows = db
+    .prepare(`SELECT ticket_number FROM raffle_phone_preassignments WHERE raffle_id = ?`)
+    .all(o.raffle_id) as { ticket_number: number }[];
+  const occ = new Set([
+    ...occupiedRows.map((r) => r.ticket_number),
+    ...preRows.map((r) => r.ticket_number),
+  ]);
 
   const free: number[] = [];
   for (let n = 1; n <= raffle.ticket_count; n++) {

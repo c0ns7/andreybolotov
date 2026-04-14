@@ -82,6 +82,8 @@ import {
   removeTicketFromReservedOrder,
   setOrderBank,
   extendReservedOrderOnce,
+  materializeRafflePreassignmentsForUser,
+  adminBulkAssignPhoneLinesToRaffle,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import { maybeSendRaffleLaunchEmails, notifyUserEmailStaffReply, warnIfNoSmtpOnce } from "./notify-email.js";
@@ -446,6 +448,11 @@ app.post("/api/auth/register", async (c) => {
 
   const passwordHash = bcrypt.hashSync(password, 10);
   const userId = insertUser(phone, name, email, passwordHash);
+  try {
+    materializeRafflePreassignmentsForUser(userId);
+  } catch (e) {
+    console.error("[register] materialize preassign:", e instanceof Error ? e.message : e);
+  }
   const row = getUserById(userId);
   const token = randomUUID();
   createSession(token, userId);
@@ -490,6 +497,11 @@ app.post("/api/auth/login", async (c) => {
 
   const token = randomUUID();
   createSession(token, user.id);
+  try {
+    materializeRafflePreassignmentsForUser(user.id);
+  } catch (e) {
+    console.error("[login] materialize preassign:", e instanceof Error ? e.message : e);
+  }
 
   return c.json({
     token,
@@ -509,6 +521,11 @@ app.get("/api/auth/me", (c) => {
   if (!token) return c.json({ error: "Не авторизован" }, 401);
   const user = getUserBySessionToken(token);
   if (!user) return c.json({ error: "Не авторизован" }, 401);
+  try {
+    materializeRafflePreassignmentsForUser(user.id);
+  } catch (e) {
+    console.error("[me] materialize preassign:", e instanceof Error ? e.message : e);
+  }
   const row = getUserById(user.id);
   const notifyChat = row ? Number(row.email_notify_chat ?? 1) !== 0 : true;
   const notifyRaffles = row ? Number(row.email_notify_raffles ?? 1) !== 0 : true;
@@ -1276,6 +1293,30 @@ app.get("/api/admin/raffles/:id/participants", (c) => {
     })),
     wholesalers: bundle.wholesalers,
   });
+});
+
+app.post("/api/admin/raffles/:id/bulk-assign-phones", async (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  let body: { text?: string; start_number?: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const text = String(body.text ?? "");
+  const startNum =
+    body.start_number !== undefined && body.start_number !== null
+      ? Number(body.start_number)
+      : 1;
+  const lines = text.split(/\r?\n/);
+  const r = adminBulkAssignPhoneLinesToRaffle(id, lines, startNum);
+  if (!r.ok) return c.json({ error: r.error }, 400);
+  return c.json({ assigned: r.assigned, skipped: r.skipped });
 });
 
 app.patch("/api/admin/users/:userId", async (c) => {
