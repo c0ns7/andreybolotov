@@ -1109,6 +1109,7 @@ app.get("/api/admin/raffle-payments", (c) => {
   c.header("Cache-Control", "no-store");
   const rows = listPendingPayments();
   return c.json({
+    server_time_ms: Date.now(),
     payments: rows.map((row) => ({
       ...orderToDto(row),
       raffle_title: row.raffle_title,

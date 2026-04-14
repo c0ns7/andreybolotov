@@ -1603,6 +1603,25 @@
   color: #475569;
 }
 
+.admin-payment-card__icon-wrap--teal {
+  background: linear-gradient(145deg, #ccfbf1 0%, #99f6e4 100%);
+  color: #0f766e;
+}
+
+.admin-payments-skew {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #fed7aa;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #9a3412;
+}
+.admin-payments-skew p {
+  margin: 0;
+}
+
 .admin-payment-card__facts {
   list-style: none;
   margin: 0;
@@ -1624,6 +1643,12 @@
 .admin-payment-card__fact strong {
   font-weight: 800;
   color: #0f172a;
+}
+
+.admin-payment-card__tz-hint {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .admin-payment-card__fact--receipt {

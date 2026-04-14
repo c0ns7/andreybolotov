@@ -23,6 +23,8 @@
       '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg>',
     inbox:
       '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>',
+    time:
+      '<svg class="admin-payment-ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
     chat:
       '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
   };
@@ -44,6 +46,49 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+  }
+
+  /** Метка времени заявки в часовом поясе браузера (локально для администратора). */
+  function formatOrderCreatedLocal(ms) {
+    var n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    var d = new Date(n);
+    return d.toLocaleString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "short",
+    });
+  }
+
+  /** Если часы устройства заметно расходятся с сервером — короткая подсказка. */
+  function renderServerSkewNote(serverMs) {
+    if (serverMs == null || !Number.isFinite(Number(serverMs))) return "";
+    var deltaSec = Math.round((Number(serverMs) - Date.now()) / 1000);
+    if (Math.abs(deltaSec) <= 30) return "";
+    var absSec = Math.abs(deltaSec);
+    var human =
+      absSec < 120
+        ? String(absSec) + " с"
+        : absSec < 7200
+          ? String(Math.round(absSec / 60)) + " мин"
+          : String(Math.round(absSec / 3600)) + " ч";
+    var dir =
+      deltaSec > 0
+        ? "время на сервере опережает часы устройства"
+        : "время на сервере отстаёт от часов устройства";
+    return (
+      '<div class="admin-payments-skew" role="status">' +
+      "<p>Замечено расхождение примерно на " +
+      esc(human) +
+      ": " +
+      esc(dir) +
+      ". Дата и время заявки ниже показаны <strong>в часовом поясе этого браузера</strong> (ваше локальное время).</p>" +
+      "</div>"
+    );
   }
 
   function loadList() {
@@ -72,8 +117,10 @@
       .then(function (x) {
         if (!x.ok) throw new Error(x.data.error || "Ошибка");
         const payments = x.data.payments || [];
+        const skewHtml = renderServerSkewNote(x.data.server_time_ms);
         if (!payments.length) {
           listEl.innerHTML =
+            skewHtml +
             '<div class="admin-payments-empty">' +
             '<div class="admin-payments-empty__illu">' +
             ICO.inbox +
@@ -83,9 +130,13 @@
             "</div>";
           return;
         }
-        listEl.innerHTML = payments.map(function (p) {
-          return renderCard(p);
-        }).join("");
+        listEl.innerHTML =
+          skewHtml +
+          payments
+            .map(function (p) {
+              return renderCard(p);
+            })
+            .join("");
         listEl.querySelectorAll("[data-confirm-order]").forEach(function (btn) {
           btn.addEventListener("click", function () {
             const id = Number(btn.getAttribute("data-confirm-order"));
@@ -170,6 +221,13 @@
       esc(String(p.amount_rub ?? 0)) +
       " <span class=\"admin-payment-card__currency\">₽</span></p></div></div></header>" +
       '<ul class="admin-payment-card__facts">' +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--teal">' +
+      ICO.time +
+      "</span>" +
+      "<span><strong>Создано</strong> · " +
+      esc(formatOrderCreatedLocal(p.created_at)) +
+      " <span class=\"admin-payment-card__tz-hint\">(ваш часовой пояс)</span></span></li>" +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
       ICO.user +
