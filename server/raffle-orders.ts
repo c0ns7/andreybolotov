@@ -639,9 +639,28 @@ export type BulkAssignSkip = {
   reason: string;
 };
 
+/** У телефона уже есть любой номерок в этой акции (бронь / проверка / подтверждённый или предназначение до регистрации). */
+function phoneHasAssignmentInRaffle(raffleId: number, phone: string): boolean {
+  const pre = db
+    .prepare(`SELECT 1 FROM raffle_phone_preassignments WHERE raffle_id = ? AND phone = ? LIMIT 1`)
+    .get(raffleId, phone);
+  if (pre) return true;
+  const row = db
+    .prepare(
+      `SELECT 1 FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN users u ON u.id = h.user_id
+       WHERE h.raffle_id = ? AND u.phone = ? AND o.status NOT IN ('expired', 'rejected')
+       LIMIT 1`,
+    )
+    .get(raffleId, phone);
+  return Boolean(row);
+}
+
 /**
- * Одна строка списка — один телефон; номерки идут подряд с start_number (по умолчанию 1).
- * Зарегистрированным — сразу подтверждённый заказ; незарегистрированным — запись до входа по этому телефону.
+ * Одна строка — один телефон; желаемый номерок = start + индекс строки среди непустых.
+ * Если занят — берём следующий свободный до max.
+ * Если у телефона уже есть номерок в акции или он уже получил номер в этой загрузке — строка пропускается (без второго номерка).
  */
 export function adminBulkAssignPhoneLinesToRaffle(
   raffleId: number,
@@ -653,9 +672,9 @@ export function adminBulkAssignPhoneLinesToRaffle(
   const maxN = raffle.ticket_count;
   const start = Math.max(1, Math.floor(Number(startNumber)) || 1);
 
-  type Entry = { line: number; phone: string; ticket_number: number };
-  const entries: Entry[] = [];
-  let seq = 0;
+  type Parsed = { line: number; phone: string; idealFirst: number };
+  const parsed: Parsed[] = [];
+  let nonEmptyIndex = 0;
   for (let i = 0; i < rawLines.length; i++) {
     const line = i + 1;
     const raw = String(rawLines[i] ?? "").trim();
@@ -664,42 +683,62 @@ export function adminBulkAssignPhoneLinesToRaffle(
     if (!phone || !isValidRuMobile(phone)) {
       return { ok: false, error: "Строка " + line + ": некорректный мобильный телефон РФ" };
     }
-    const ticket_number = start + seq;
-    seq += 1;
-    if (ticket_number > maxN) {
-      return { ok: false, error: "Номерок " + ticket_number + " (строка " + line + ") больше лимита акции (" + maxN + ")" };
-    }
-    entries.push({ line, phone, ticket_number });
+    const idealFirst = start + nonEmptyIndex;
+    nonEmptyIndex += 1;
+    parsed.push({ line, phone, idealFirst });
   }
 
-  if (entries.length === 0) return { ok: false, error: "Нет ни одной строки с телефоном" };
+  if (parsed.length === 0) return { ok: false, error: "Нет ни одной строки с телефоном" };
 
+  type Entry = { line: number; phone: string; ticket_number: number };
   const skipped: BulkAssignSkip[] = [];
-  const virt = new Set<string>();
+  /** Номерки, выбранные в этой загрузке (пока не в БД). */
+  const virt = new Set<number>();
   const valid: Entry[] = [];
+  /** Первое вхождение телефона в файле — дальше строки с тем же номером пропускаем. */
+  const seenPhoneInFile = new Set<string>();
 
-  for (const e of entries) {
-    const k = String(raffleId) + ":" + e.ticket_number;
-    if (virt.has(k)) {
+  for (const p of parsed) {
+    if (seenPhoneInFile.has(p.phone)) {
       skipped.push({
-        line: e.line,
-        phone: e.phone,
-        ticket_number: e.ticket_number,
-        reason: "Дубликат номерка в списке",
+        line: p.line,
+        phone: p.phone,
+        ticket_number: p.idealFirst,
+        reason: "Повтор телефона в списке — одному номеру один номерок за загрузку",
       });
       continue;
     }
-    if (isRaffleTicketBlocked(raffleId, e.ticket_number)) {
+    seenPhoneInFile.add(p.phone);
+
+    if (phoneHasAssignmentInRaffle(raffleId, p.phone)) {
       skipped.push({
-        line: e.line,
-        phone: e.phone,
-        ticket_number: e.ticket_number,
-        reason: "Номерок уже занят",
+        line: p.line,
+        phone: p.phone,
+        ticket_number: p.idealFirst,
+        reason: "Уже есть номерок в этой акции",
       });
       continue;
     }
-    virt.add(k);
-    valid.push(e);
+
+    let found: number | null = null;
+    for (let cand = p.idealFirst; cand <= maxN; cand++) {
+      if (!virt.has(cand) && !isRaffleTicketBlocked(raffleId, cand)) {
+        found = cand;
+        break;
+      }
+    }
+    if (found == null) {
+      skipped.push({
+        line: p.line,
+        phone: p.phone,
+        ticket_number: p.idealFirst,
+        reason: "Нет свободных номерков начиная с " + p.idealFirst,
+      });
+      continue;
+    }
+
+    virt.add(found);
+    valid.push({ line: p.line, phone: p.phone, ticket_number: found });
   }
 
   if (!valid.length) return { ok: true, assigned: 0, skipped };

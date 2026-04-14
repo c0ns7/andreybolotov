@@ -616,12 +616,12 @@
           if (resultEl) {
             resultEl.hidden = false;
             var msg = "Назначено номерков: " + String(assigned);
-            if (skipped.length) {
-              msg +=
-                ". Пропущено строк: " +
-                String(skipped.length) +
-                " (номерок уже занят или дубликат в списке).";
-              resultEl.className = "admin-raffle-bulk-assign__result is-warn";
+        if (skipped.length) {
+          msg +=
+            ". Пропущено строк: " +
+            String(skipped.length) +
+            " (повтор телефона, уже есть в акции или не нашлось свободного номера с нужного места).";
+          resultEl.className = "admin-raffle-bulk-assign__result is-warn";
             } else {
               resultEl.className = "admin-raffle-bulk-assign__result is-ok";
             }
