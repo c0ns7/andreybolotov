@@ -726,6 +726,8 @@
   align-items: flex-end;
   gap: 12px;
   margin-top: 10px;
+  position: relative;
+  z-index: 2;
 }
 .admin-raffle-bulk-assign__start {
   display: flex;
@@ -744,6 +746,9 @@
 .admin-raffle-bulk-assign__btn {
   padding: 11px 20px;
   border-radius: 12px;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 .admin-raffle-bulk-assign__result {
   margin: 10px 0 0;
