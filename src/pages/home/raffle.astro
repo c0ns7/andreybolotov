@@ -44,9 +44,33 @@ import AppDockModals from "../../components/AppDockModals.astro";
             </button>
           </div>
         </div>
-        <div class="raffle-purchase-hero-spacer" id="raffle-page-topbar-spacer" hidden aria-hidden="true"></div>
+        <div class="raffle-purchase-hero-viewers" id="raffle-page-viewers" hidden aria-live="polite">
+          <span class="raffle-purchase-hero-viewers__dot" aria-hidden="true"></span>
+          <span id="raffle-page-viewers-text">Онлайн: 0</span>
+        </div>
       </div>
       <div class="raffle-purchase-hero__controls">
+        <div id="raffle-fast-input" class="raffle-fast-input" aria-label="Быстрый набор номерка">
+          <button
+            type="button"
+            class="raffle-fast-input__random"
+            id="raffle-fast-random"
+            title="Случайный свободный билет"
+            aria-label="Случайный свободный билет"
+          >
+            <img src="/dice.png" alt="Random" width="30" height="30" />
+          </button>
+          <div class="raffle-fast-input__divider" aria-hidden="true"></div>
+          <input
+            id="raffle-fast-number"
+            class="raffle-fast-input__field"
+            type="number"
+            inputmode="decimal"
+            placeholder="Быстрый набор номерка"
+            min="1"
+          />
+          <div class="raffle-fast-input__state" id="raffle-fast-state"></div>
+        </div>
         <div class="raffle-range-toolbar">
           <button
             type="button"
@@ -63,22 +87,24 @@ import AppDockModals from "../../components/AppDockModals.astro";
           </button>
           <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
         </div>
-        <div id="raffle-page-legend" class="raffle-legend" aria-label="Обозначения на сетке">
-          <span class="raffle-legend__item">
-            <span class="raffle-legend__swatch raffle-legend__swatch--free"></span>
-            Свободно
-          </span>
-          <span class="raffle-legend__item">
-            <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
-            Ваш выбор
-          </span>
-          <span class="raffle-legend__item">
-            <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
-            Забронировано
-          </span>
-        </div>
       </div>
     </header>
+    <div class="raffle-legend-island-wrap">
+      <div id="raffle-page-legend" class="raffle-legend raffle-legend--island" aria-label="Обозначения на сетке">
+        <span class="raffle-legend__item">
+          <span class="raffle-legend__swatch raffle-legend__swatch--free"></span>
+          Свободно
+        </span>
+        <span class="raffle-legend__item">
+          <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
+          Ваш выбор
+        </span>
+        <span class="raffle-legend__item">
+          <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
+          Забронировано
+        </span>
+      </div>
+    </div>
 
     <main class="raffle-purchase-main">
       <p id="raffle-page-timer" class="raffle-detail__timer raffle-purchase-timer" hidden></p>

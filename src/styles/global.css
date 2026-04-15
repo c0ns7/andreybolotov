@@ -12,7 +12,7 @@
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   --radius: 14px;
   --radius-sm: 10px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* Тёмная тема и доступность — классы на <html> (localStorage, см. app.js и /home/settings) */
@@ -1080,6 +1080,10 @@ html.js-intro-done #welcome-splash {
   padding: 0 16px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   pointer-events: none;
+  opacity: 1;
+  transition:
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease;
 }
 
 .bottom-nav::before {
@@ -1094,6 +1098,17 @@ html.js-intro-done #welcome-splash {
   box-shadow: 0 -14px 28px color-mix(in srgb, var(--bg) 82%, transparent);
   z-index: -1;
   pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+html.bottom-nav-hidden-by-fast-input .bottom-nav {
+  transform: translateX(-50%) translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
+  opacity: 0;
 }
 
 .bottom-nav__inner {
@@ -3108,16 +3123,26 @@ a.raffle-pay__btn {
 
 .modal-overlay--reserve-flow {
   z-index: 130;
-  padding: 16px;
+  padding: 14px;
+  background:
+    radial-gradient(120% 120% at 10% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 55%),
+    radial-gradient(120% 120% at 100% 0%, rgba(16, 185, 129, 0.1) 0%, transparent 58%),
+    rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .reserve-flow-modal {
   max-width: 380px;
   width: 100%;
-  border-radius: 28px;
+  border-radius: 24px;
   padding: 18px 16px 16px;
-  background: #f3f4f6;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .reserve-flow-btn {
@@ -3125,18 +3150,32 @@ a.raffle-pay__btn {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 50px;
-  border-radius: 14px;
+  min-height: 48px;
+  border-radius: 13px;
   border: 0;
   text-decoration: none;
   font-weight: 800;
   letter-spacing: 0.01em;
   cursor: pointer;
+  transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.2s ease;
 }
 
-.reserve-flow-btn--dark { background: #0f172a; color: #fff; }
-.reserve-flow-btn--black { background: #000; color: #fff; }
-.reserve-flow-btn--green { background: #10b981; color: #fff; }
+.reserve-flow-btn:active { transform: scale(0.985); }
+.reserve-flow-btn--dark {
+  background: linear-gradient(180deg, #111827 0%, #020617 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.24);
+}
+.reserve-flow-btn--black {
+  background: linear-gradient(180deg, #111827 0%, #000 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.24);
+}
+.reserve-flow-btn--green {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.3);
+}
 .reserve-flow-btn--disabled { opacity: 0.55; pointer-events: none; }
 
 .reserve-success-modal__hero { position: relative; display: flex; justify-content: center; margin: 4px 0 10px; }
@@ -3153,62 +3192,75 @@ a.raffle-pay__btn {
   display: flex; align-items: center; justify-content: center;
   color: #10b981; border: 2px solid rgba(16, 185, 129, 0.65); background: #ecfdf5; z-index: 1;
 }
-.reserve-success-modal__title { margin: 0; text-align: center; font-size: 2rem; font-weight: 900; color: #111827; }
-.reserve-success-modal__sub { margin: 8px 0 16px; text-align: center; color: #4b5563; font-size: 1.02rem; line-height: 1.35; }
+.reserve-success-modal__title { margin: 0; text-align: center; font-size: 1.8rem; font-weight: 900; color: #111827; letter-spacing: -0.01em; }
+.reserve-success-modal__sub { margin: 8px 0 16px; text-align: center; color: #475569; font-size: 0.98rem; line-height: 1.35; }
 .reserve-success-modal__card {
-  background: #e5e7eb; border: 1px solid #d1d5db; border-radius: 16px; padding: 12px; margin-bottom: 14px;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid #dbe5f1;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 14px;
 }
 .reserve-success-modal__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reserve-success-modal__label { color: #6b7280; font-size: 0.79rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
 .reserve-success-modal__order-id {
-  font-size: 0.84rem; font-weight: 800; color: #111827; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 4px 8px;
+  font-size: 0.84rem; font-weight: 800; color: #111827; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 4px 8px;
 }
 .reserve-success-modal__numbers { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
 .reserve-success-modal__chip {
-  min-width: 42px; min-height: 38px; border-radius: 12px; border: 1px solid #93c5fd; background: #dbeafe; color: #1d4ed8; font-weight: 800;
+  min-width: 42px; min-height: 36px; border-radius: 11px; border: 1px solid #93c5fd; background: #eaf3ff; color: #1d4ed8; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; padding: 0 10px;
 }
-.reserve-success-modal__amount { font-size: 1.85rem; font-weight: 900; color: #111827; }
+.reserve-success-modal__amount { font-size: 1.62rem; font-weight: 900; color: #0f172a; }
 
 .reserve-payment-modal__head { display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; gap: 6px; margin-bottom: 10px; }
 .reserve-payment-modal__back,
 .reserve-payment-modal__close {
-  width: 36px; height: 36px; border: 0; border-radius: 50%; background: #e5e7eb; color: #374151;
+  width: 36px; height: 36px; border: 1px solid #e2e8f0; border-radius: 50%; background: #fff; color: #334155;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.reserve-payment-modal__title { margin: 0; font-size: 1.55rem; line-height: 1.1; color: #111827; }
-.reserve-payment-modal__order-id { margin: 3px 0 0; font-size: 0.8rem; color: #6b7280; font-weight: 600; }
-.reserve-payment-modal__progress-track { height: 5px; border-radius: 999px; background: #d1d5db; overflow: hidden; margin-bottom: 10px; }
+.reserve-payment-modal__title { margin: 0; font-size: 1.34rem; line-height: 1.1; color: #0f172a; letter-spacing: -0.01em; }
+.reserve-payment-modal__order-id { margin: 4px 0 0; font-size: 0.78rem; color: #64748b; font-weight: 700; }
+.reserve-payment-modal__progress-track { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin-bottom: 12px; }
 .reserve-payment-modal__progress-fill {
   height: 100%; width: 100%; background: linear-gradient(90deg, #34d399, #10b981); transition: width 0.4s linear;
 }
-.reserve-payment-modal__timer-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
-.reserve-payment-modal__timer { min-width: 78px; padding: 8px 12px; border-radius: 12px; background: #fff7ed; color: #ea580c; font-weight: 800; }
+.reserve-payment-modal__timer-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.reserve-payment-modal__timer { min-width: 78px; padding: 8px 12px; border-radius: 11px; background: #fff7ed; color: #ea580c; font-weight: 800; border: 1px solid #fed7aa; }
 .reserve-payment-modal__amount-wrap { text-align: right; }
-.reserve-payment-modal__amount-label { display: block; font-size: 0.68rem; letter-spacing: 0.08em; color: #9ca3af; }
-.reserve-payment-modal__amount { font-size: 2rem; line-height: 1; color: #111827; }
+.reserve-payment-modal__amount-label { display: block; font-size: 0.66rem; letter-spacing: 0.08em; color: #94a3b8; }
+.reserve-payment-modal__amount { font-size: 1.68rem; line-height: 1; color: #0f172a; }
 .reserve-payment-modal__info {
-  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; color: #065f46;
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; padding: 11px 12px; margin-bottom: 12px; color: #065f46;
 }
 .reserve-payment-modal__info h4 { margin: 0 0 8px; font-size: 1rem; }
 .reserve-payment-modal__info ol,
-.reserve-payment-modal__info ul { margin: 0; padding-left: 18px; line-height: 1.45; font-size: 0.93rem; }
-.reserve-payment-modal__collect { background: #0f172a; color: #e5e7eb; border-radius: 16px; padding: 12px; margin-bottom: 12px; }
+.reserve-payment-modal__info ul { margin: 0; padding-left: 18px; line-height: 1.45; font-size: 0.9rem; }
+.reserve-payment-modal__collect {
+  background: linear-gradient(160deg, #111827 0%, #020617 100%);
+  color: #e5e7eb;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
 .reserve-payment-modal__collect-head {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.8rem; font-weight: 800; color: #34d399;
 }
 .reserve-payment-modal__collect-item {
-  background: #020617; border: 1px solid #1f2937; border-radius: 12px; padding: 8px 10px; margin-bottom: 8px;
+  background: rgba(2, 6, 23, 0.9); border: 1px solid #1f2937; border-radius: 11px; padding: 8px 10px; margin-bottom: 8px;
 }
 .reserve-payment-modal__collect-item span { display: block; color: #9ca3af; font-size: 0.7rem; letter-spacing: 0.08em; margin-bottom: 3px; }
 .reserve-payment-modal__collect-item strong { color: #f8fafc; }
 .reserve-payment-modal__upload {
   display: block; border: 1px dashed #60a5fa; border-radius: 14px; padding: 14px; background: #eff6ff; margin-bottom: 12px; cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
+.reserve-payment-modal__upload:hover { border-color: #2563eb; background: #dbeafe; }
 .reserve-payment-modal__upload-title { display: block; font-weight: 800; color: #1e3a8a; }
 .reserve-payment-modal__upload-sub { display: block; margin-top: 4px; color: #6b7280; font-size: 0.86rem; }
 .reserve-payment-modal__back-link {
-  width: 100%; margin-top: 8px; border: 0; background: transparent; color: #4b5563; text-decoration: underline; cursor: pointer; font-size: 0.92rem;
+  width: 100%; margin-top: 8px; border: 0; background: transparent; color: #475569; text-decoration: underline; cursor: pointer; font-size: 0.9rem;
 }
 
 @keyframes reservePulse {
@@ -3237,24 +3289,25 @@ a.raffle-pay__btn {
 .wait-receipt-modal__title {
   margin: 0;
   text-align: center;
-  font-size: 1.95rem;
+  font-size: 1.58rem;
   font-weight: 900;
-  color: #111827;
+  color: #0f172a;
 }
 
 .wait-receipt-modal__sub {
-  margin: 8px 0 8px;
+  margin: 8px 0 10px;
   text-align: center;
-  color: #6b7280;
+  color: #64748b;
   line-height: 1.34;
+  font-size: 0.95rem;
 }
 
 .wait-receipt-modal__amount {
   margin: 0 0 14px;
   text-align: center;
-  font-size: 2rem;
+  font-size: 1.66rem;
   font-weight: 900;
-  color: #111827;
+  color: #0f172a;
 }
 
 .wait-receipt-modal__left {
@@ -3285,16 +3338,17 @@ a.raffle-pay__btn {
 .reserve-expired-modal__title {
   margin: 0;
   text-align: center;
-  font-size: 1.95rem;
+  font-size: 1.58rem;
   font-weight: 900;
-  color: #111827;
+  color: #0f172a;
 }
 
 .reserve-expired-modal__sub {
   margin: 8px 0 14px;
   text-align: center;
-  color: #6b7280;
+  color: #64748b;
   line-height: 1.34;
+  font-size: 0.95rem;
 }
 
 @keyframes waitCheckBlink {
@@ -4413,10 +4467,51 @@ a.raffle-pay__btn {
   grid-template-columns: repeat(auto-fill, 64px);
   gap: 10px;
   margin-bottom: 14px;
+  position: relative;
+  min-height: 220px;
   overflow-y: auto;
   padding: 4px 2px;
   -webkit-overflow-scrolling: touch;
   justify-content: start;
+}
+
+.raffle-ticket-grid--loading .raffle-cell {
+  opacity: 0.38;
+}
+
+.raffle-ticket-grid__loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  border-radius: 14px;
+  z-index: 3;
+}
+
+.raffle-ticket-grid__loader-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(16, 185, 129, 0.22);
+  border-top-color: rgba(16, 185, 129, 0.95);
+  animation: raffleGridLoaderSpin 0.85s linear infinite;
+}
+
+.raffle-ticket-grid__loader-text {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text) 84%, transparent);
+}
+
+@keyframes raffleGridLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .raffle-cell {
@@ -4655,7 +4750,7 @@ html.raffle-grid-page body {
 }
 
 html.raffle-grid-page .app-shell {
-  max-width: 1200px;
+  max-width: 920px;
   background: var(--bg);
 }
 
@@ -4855,6 +4950,42 @@ html.raffle-purchase-page:not(.raffle-grid-page) body {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
+}
+
+.raffle-purchase-hero-viewers {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.raffle-purchase-hero-viewers__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+  animation: raffleHeroViewersPulse 2s ease-in-out infinite;
+}
+
+@keyframes raffleHeroViewersPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+    opacity: 0.95;
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
+    opacity: 0.7;
+  }
 }
 
 .raffle-checkout-bar {
@@ -5285,17 +5416,20 @@ html.raffle-confirm-page body {
 
 .raffle-price-badge--hero {
   margin: 0;
-  display: inline-block;
-  padding: 3px 9px;
-  font-size: 0.56rem;
+  margin-top: 0.125rem;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  padding: 2px 8px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #fff;
-  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  background: rgba(16, 185, 129, 0.9);
+  border: 1px solid rgba(52, 211, 153, 1);
+  border-radius: 0.375rem;
+  box-shadow: none;
 }
 
 .raffle-checkout-bar--hero {
@@ -5368,7 +5502,7 @@ html.raffle-confirm-page body {
 }
 
 html.raffle-grid-page .raffle-purchase-hero {
-  min-height: 170px;
+  min-height: 132px;
 }
 
 .raffle-purchase-back.raffle-purchase-back--hero:hover {
@@ -5415,7 +5549,7 @@ html.raffle-grid-page .raffle-purchase-hero {
 }
 
 html.raffle-grid-page .raffle-purchase-layout:not(.raffle-purchase-layout--pay-screen) {
-  max-width: 1200px;
+  max-width: 920px;
   background: var(--bg);
 }
 
@@ -5423,9 +5557,59 @@ html.raffle-grid-page .raffle-purchase-hero {
   width: auto;
   margin-left: -2px;
   margin-right: -2px;
-  border-radius: 0 0 22px 22px;
-  padding-left: 12px;
-  padding-right: 12px;
+  border-radius: 0 0 18px 18px;
+  padding: 12px 14px 6px;
+  background:
+    radial-gradient(120% 130% at 10% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 48%),
+    radial-gradient(120% 130% at 100% 0%, rgba(16, 185, 129, 0.1) 0%, transparent 52%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 55%, #f5f8fc 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, #ffffff);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, #0f172a 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+html.raffle-grid-page .raffle-purchase-hero__bg,
+html.raffle-grid-page .raffle-purchase-hero__watermark {
+  display: none;
+}
+
+html.raffle-grid-page .raffle-purchase-hero__bar {
+  max-width: 920px;
+  gap: 10px 12px;
+  padding-top: 2px;
+}
+
+@media (min-width: 768px) {
+  html.raffle-grid-page .raffle-purchase-hero-viewers {
+    display: inline-flex;
+  }
+}
+
+html.raffle-grid-page .raffle-purchase-title--hero {
+  color: var(--text);
+  font-size: clamp(0.9rem, 1.7vw, 1.05rem);
+  line-height: 1.2;
+  text-shadow: none;
+}
+
+html.raffle-grid-page .raffle-price-badge--hero,
+html.raffle-grid-page .raffle-price-badge.raffle-price-badge--hero {
+  margin-top: 1px;
+}
+
+html.raffle-grid-page .raffle-purchase-back.raffle-purchase-back--hero {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--text);
+  box-shadow: 0 4px 14px color-mix(in srgb, #0f172a 14%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html.raffle-grid-page .raffle-purchase-back.raffle-purchase-back--hero:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: var(--surface);
 }
 
 html.raffle-grid-page .raffle-purchase-hero__controls {
@@ -5435,18 +5619,305 @@ html.raffle-grid-page .raffle-purchase-hero__controls {
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  max-width: 1200px;
-  margin: 12px auto 0;
+  max-width: 920px;
+  margin: 4px auto 0;
 }
 
-html.raffle-grid-page .raffle-purchase-hero__controls .raffle-legend {
-  margin: 0 auto 0;
-  padding: 0;
+html.raffle-grid-page .raffle-fast-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+  height: 46px;
+  margin: 0 auto 6px;
+  padding-right: 6px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html.raffle-grid-page .raffle-fast-input:focus-within {
+  border-color: color-mix(in srgb, var(--apple-blue) 38%, #fff);
+  box-shadow:
+    0 2px 16px rgba(0, 0, 0, 0.06),
+    0 0 0 3px color-mix(in srgb, var(--apple-blue) 16%, transparent);
+}
+
+html.raffle-grid-page .raffle-fast-input__random {
+  width: 52px;
+  height: 100%;
+  border: 0;
   background: transparent;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+html.raffle-grid-page .raffle-fast-input__random img {
+  width: 28px;
+  height: 28px;
+  opacity: 0.72;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+html.raffle-grid-page .raffle-fast-input__random:hover img {
+  opacity: 1;
+}
+
+html.raffle-grid-page .raffle-fast-input__random:active img {
+  transform: scale(0.92);
+}
+
+html.raffle-grid-page .raffle-fast-input__divider {
+  width: 1px;
+  height: 22px;
+  background: #e5e7eb;
+  flex-shrink: 0;
+}
+
+html.raffle-grid-page .raffle-fast-input__field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+html.raffle-grid-page .raffle-fast-input__field::placeholder {
+  font-size: 14px;
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+html.raffle-grid-page .raffle-fast-input__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: max-content;
+  height: 100%;
+  padding-right: 2px;
+}
+
+html.raffle-grid-page .raffle-fast-input__ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+html.raffle-grid-page .raffle-fast-input__free {
+  font-size: 12px;
+  font-weight: 700;
+  color: #16a34a;
+  white-space: nowrap;
+}
+
+html.raffle-grid-page .raffle-fast-input__add {
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #22c55e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(34, 197, 94, 0.35);
+  transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+html.raffle-grid-page .raffle-fast-input__add:hover {
+  filter: brightness(0.95);
+}
+
+html.raffle-grid-page .raffle-fast-input__add:active {
+  transform: scale(0.96);
+}
+
+html.raffle-grid-page .raffle-fast-input__badge {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+html.raffle-grid-page .raffle-fast-input__badge--loading {
+  color: #6b7280;
+}
+
+html.raffle-grid-page .raffle-fast-input__badge--invalid,
+html.raffle-grid-page .raffle-fast-input__badge--taken {
+  color: #b91c1c;
+}
+
+html.raffle-grid-page .raffle-fast-input__badge--self {
+  color: #0f766e;
+}
+
+html.raffle-grid-page .raffle-range-toolbar {
+  gap: 8px;
+  padding: 2px 8px 4px;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+html.raffle-grid-page .raffle-range-eye {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  color: var(--text-muted);
+}
+
+html.raffle-grid-page .raffle-range-toolbar .raffle-range-tabs {
+  margin-bottom: 0;
+  flex: 0 1 auto;
+  position: relative;
+  padding-left: 10px;
+}
+
+html.raffle-grid-page .raffle-range-toolbar .raffle-range-tabs::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}
+
+html.raffle-grid-page .raffle-range-eye:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+html.raffle-grid-page .raffle-range-eye--active {
+  color: #2563eb;
+  border-color: color-mix(in srgb, #2563eb 48%, var(--border));
+  background: color-mix(in srgb, #dbeafe 72%, var(--surface));
+}
+
+html.raffle-grid-page .raffle-range-eye--active::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  width: 18px;
+  height: 2px;
+  border-radius: 99px;
+  background: currentColor;
+  transform: rotate(-34deg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+html.raffle-grid-page .raffle-range-tabs {
+  gap: 7px;
+  justify-content: center;
+}
+
+html.raffle-grid-page .raffle-range-tab {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--surface) 58%, transparent);
+  color: var(--text-muted);
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+}
+
+html.raffle-grid-page .raffle-range-tab--active {
+  background: #fff;
+  border-color: color-mix(in srgb, var(--text) 12%, var(--border));
+  color: var(--text);
+  box-shadow: 0 2px 12px color-mix(in srgb, #000 8%, transparent);
+}
+
+html.raffle-grid-page .raffle-legend-island-wrap {
+  width: 100%;
+  max-width: 920px;
+  margin: 8px auto 0;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+html.raffle-grid-page .raffle-legend--island {
+  margin: 0 auto;
+  width: max-content;
+  max-width: 100%;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 66%, transparent);
+  border: 1px solid color-mix(in srgb, #ffffff 48%, var(--border));
+  box-shadow:
+    0 10px 24px color-mix(in srgb, #0f172a 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 54%, transparent);
+  color: var(--text-muted);
+  backdrop-filter: blur(14px) saturate(118%);
+  -webkit-backdrop-filter: blur(14px) saturate(118%);
+}
+
+@media (min-width: 1024px) {
+  html.raffle-grid-page .raffle-purchase-hero {
+    border-radius: 0 0 14px 14px;
+    padding: 8px 14px 4px;
+  }
+
+  html.raffle-grid-page .raffle-purchase-hero__bar {
+    gap: 8px 12px;
+    padding-top: 0;
+  }
+
+  html.raffle-grid-page .raffle-purchase-title--hero {
+    font-size: 0.98rem;
+  }
+
+  html.raffle-grid-page .raffle-price-badge--hero,
+  html.raffle-grid-page .raffle-price-badge.raffle-price-badge--hero {
+    margin-top: 2px;
+  }
+
+  html.raffle-grid-page .raffle-purchase-hero__controls {
+    display: flex;
+    justify-content: center;
+    margin: 2px auto 0;
+  }
+
+  html.raffle-grid-page .raffle-range-toolbar {
+    width: max-content;
+    min-width: 0;
+  }
+
+  html.raffle-grid-page .raffle-fast-input {
+    max-width: 390px;
+    margin-bottom: 4px;
+  }
+
+  html.raffle-grid-page .raffle-range-tabs {
+    justify-content: flex-start;
+  }
+
+  html.raffle-grid-page .raffle-legend--island {
+    justify-content: center;
+    white-space: normal;
+    font-size: 0.72rem;
+    gap: 8px 10px;
+    margin: 0;
+  }
 }
 
 html.raffle-purchase-page .raffle-purchase-layout:not(.raffle-purchase-layout--pay-screen) .raffle-purchase-main {
@@ -5456,7 +5927,7 @@ html.raffle-purchase-page .raffle-purchase-layout:not(.raffle-purchase-layout--p
 }
 
 html.raffle-grid-page .raffle-purchase-layout:not(.raffle-purchase-layout--pay-screen) .raffle-purchase-main {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .raffle-purchase-panel {
@@ -5487,9 +5958,9 @@ html.raffle-purchase-page .raffle-ticket-grid {
 
 @media (min-width: 1024px) {
   html.raffle-grid-page .raffle-ticket-grid {
-    grid-template-columns: repeat(15, minmax(0, 1fr));
-    gap: 6px;
-    padding: 6px 0;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 7px;
+    padding: 8px 0;
   }
 
   html.raffle-grid-page .raffle-ticket-grid .raffle-cell {
@@ -5498,7 +5969,7 @@ html.raffle-purchase-page .raffle-ticket-grid {
     min-width: 0;
     min-height: 0;
     aspect-ratio: 1 / 1;
-    font-size: 1.02rem;
+    font-size: 1.06rem;
     border-radius: 14px;
   }
 }
@@ -5509,10 +5980,32 @@ html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
   font-size: 0.9rem;
 }
 
+@media (min-width: 768px) and (max-width: 1023px) {
+  html.raffle-grid-page .raffle-fast-input {
+    max-width: 440px;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 2px;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+}
+
 @media (max-width: 767px) {
   html.raffle-purchase-page .raffle-ticket-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 5px;
     padding: 6px 0;
   }
 
@@ -5522,6 +6015,17 @@ html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
     min-width: 0;
     min-height: 0;
     aspect-ratio: 1 / 1;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  html.raffle-purchase-page .raffle-ticket-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
     font-size: 0.88rem;
   }
 }
@@ -5622,6 +6126,13 @@ html.raffle-grid-page #raffle-page-tabs {
   width: 100%;
 }
 
+html.raffle-grid-page #raffle-page-legend.raffle-legend--island {
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
 html.raffle-purchase-page .raffle-detail__cart-block {
   margin-top: 10px;
   padding-top: 4px;
@@ -5668,13 +6179,20 @@ html.raffle-purchase-page .raffle-detail__step {
 
 .raffle-price-badge.raffle-price-badge--hero {
   margin: 0;
-  padding: 5px 12px;
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
+  margin-top: 0.125rem;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: #fff;
-  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  background: rgba(16, 185, 129, 0.9);
+  border: 1px solid rgba(52, 211, 153, 1);
+  border-radius: 0.375rem;
+  box-shadow: none;
 }
 
 .raffle-price-badge--hero.raffle-price-badge--hero-sale {

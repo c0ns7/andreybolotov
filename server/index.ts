@@ -52,6 +52,7 @@ import {
 import {
   attachWebSocket,
   broadcastChatMessage,
+  broadcastRaffleTicketsUpdated,
   broadcastThreadReadByStaff,
   broadcastTypingStaffToUser,
   broadcastTypingUserToAdmins,
@@ -1022,6 +1023,7 @@ app.post("/api/raffles/orders/:orderId/add-tickets", async (c) => {
   const r = addTicketsToReservedOrder(orderId, u.id, numbers);
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
+  broadcastRaffleTicketsUpdated(u.id);
   return c.json({
     order: order ? orderToDto(order) : null,
     numbers: getTicketNumbersForOrder(orderId),
@@ -1043,6 +1045,7 @@ app.post("/api/raffles/orders/:orderId/random-tickets", async (c) => {
   const r = appendRandomTicketsToReservedOrder(orderId, u.id, count);
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
+  broadcastRaffleTicketsUpdated(u.id);
   return c.json({
     order: order ? orderToDto(order) : null,
     numbers: getTicketNumbersForOrder(orderId),
@@ -1061,6 +1064,7 @@ app.delete("/api/raffles/orders/:orderId/tickets/:ticketNum", (c) => {
   }
   const r = removeTicketFromReservedOrder(orderId, u.id, ticketNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
+  broadcastRaffleTicketsUpdated(u.id);
   return c.json({ order: r.order, numbers: r.numbers });
 });
 
@@ -1102,6 +1106,7 @@ app.post("/api/raffles/:id/reserve", async (c) => {
   const order = getOrderByIdForUser(r.order_id, u.id);
   if (!order) return c.json({ error: "Ошибка создания заявки" }, 500);
   const nums = getTicketNumbersForOrder(r.order_id);
+  broadcastRaffleTicketsUpdated(u.id);
   return c.json({ order: orderToDto(order), numbers: nums, reserved_until: r.reserved_until });
 });
 
@@ -1149,6 +1154,7 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   if (!res.ok) return c.json({ error: res.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   if (!order) return c.json({ error: "Ошибка" }, 500);
+  broadcastRaffleTicketsUpdated(u.id);
   return c.json({ order: orderToDto(order) });
 });
 
@@ -1174,8 +1180,12 @@ app.post("/api/admin/raffle-payments/:orderId/confirm", (c) => {
   if (auth instanceof Response) return auth;
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
+  const owner = listPendingPayments().find((p) => Number(p.id) === orderId);
   const res = confirmOrderByAdmin(orderId);
   if (!res.ok) return c.json({ error: res.error }, 400);
+  if (owner && Number.isFinite(Number(owner.user_id))) {
+    broadcastRaffleTicketsUpdated(Number(owner.user_id));
+  }
   return c.json({ ok: true });
 });
 
@@ -1184,8 +1194,12 @@ app.post("/api/admin/raffle-payments/:orderId/reject", (c) => {
   if (auth instanceof Response) return auth;
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
+  const owner = listPendingPayments().find((p) => Number(p.id) === orderId);
   const res = rejectOrderByAdmin(orderId);
   if (!res.ok) return c.json({ error: res.error }, 400);
+  if (owner && Number.isFinite(Number(owner.user_id))) {
+    broadcastRaffleTicketsUpdated(Number(owner.user_id));
+  }
   return c.json({ ok: true });
 });
 

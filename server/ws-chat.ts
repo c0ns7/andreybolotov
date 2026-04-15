@@ -90,6 +90,22 @@ export function broadcastChatMessage(userId: number, message: ReturnType<typeof 
   }
 }
 
+/** Уведомление клиенту: обновились данные "Мои билеты" */
+export function broadcastRaffleTicketsUpdated(userId: number) {
+  const id = uid(userId);
+  if (!id) return;
+  const payload = JSON.stringify({ type: "raffle_tickets_updated" });
+  const set = userSockets.get(id);
+  if (!set) return;
+  for (const ws of set) {
+    try {
+      if (ws.readyState === OPEN) ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Пользователь печатает → всем админам (видно в выбранном диалоге) */
 export function broadcastTypingUserToAdmins(userId: number, active: boolean) {
   const id = uid(userId);

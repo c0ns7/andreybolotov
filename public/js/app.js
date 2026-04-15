@@ -59,6 +59,11 @@
 
   /** @type {WebSocket | null} */
   let chatWs = null;
+  /** @type {WebSocket | null} */
+  let liveWs = null;
+  let liveWsReconnectTimer = null;
+  let raffleTicketsRealtimeInFlight = false;
+  let raffleTicketsRealtimeQueued = false;
   /** @type {number | null} */
   let chatMessagesPollTimer = null;
   /** @type {number | null} */
@@ -281,6 +286,7 @@
     stopChatUnreadPolling();
     setChatTabUnreadHighlight(false);
     closeChatPanel();
+    disconnectLiveWs();
     closeAllModals();
     updateScreens();
     setBottomNavActive();
@@ -618,6 +624,85 @@
     }
   }
 
+  function disconnectLiveWs() {
+    if (liveWsReconnectTimer) {
+      clearTimeout(liveWsReconnectTimer);
+      liveWsReconnectTimer = null;
+    }
+    if (liveWs) {
+      try {
+        liveWs.close();
+      } catch (_) {}
+      liveWs = null;
+    }
+  }
+
+  function scheduleLiveWsReconnect() {
+    if (liveWsReconnectTimer) return;
+    liveWsReconnectTimer = setTimeout(function () {
+      liveWsReconnectTimer = null;
+      connectLiveWs();
+    }, 2000);
+  }
+
+  async function handleRaffleTicketsRealtimeUpdate() {
+    if (raffleTicketsRealtimeInFlight) {
+      raffleTicketsRealtimeQueued = true;
+      return;
+    }
+    raffleTicketsRealtimeInFlight = true;
+    try {
+      var data = await fetchTicketsFromApi();
+      if (modalTickets && modalTickets.classList.contains("is-open")) {
+        renderTicketsModalBody(data);
+      }
+      syncProfileTicketCount();
+    } catch (_) {
+      // silent realtime failure; next event/poll will recover
+    } finally {
+      raffleTicketsRealtimeInFlight = false;
+      if (raffleTicketsRealtimeQueued) {
+        raffleTicketsRealtimeQueued = false;
+        handleRaffleTicketsRealtimeUpdate();
+      }
+    }
+  }
+
+  function connectLiveWs() {
+    disconnectLiveWs();
+    const s = loadSession();
+    if (!s || !s.token || !authVerified || accountBlocked) return;
+    const url = buildChatWebSocketUrl(s.token);
+    let ws;
+    try {
+      ws = new WebSocket(url);
+    } catch (_) {
+      return;
+    }
+    liveWs = ws;
+    ws.onmessage = function (ev) {
+      let d;
+      try {
+        d = JSON.parse(ev.data);
+      } catch (_) {
+        return;
+      }
+      if (d.type === "raffle_tickets_updated") {
+        handleRaffleTicketsRealtimeUpdate();
+      }
+    };
+    ws.onclose = function () {
+      if (liveWs === ws) liveWs = null;
+      const s2 = loadSession();
+      if (s2 && s2.token && authVerified && !accountBlocked) {
+        scheduleLiveWsReconnect();
+      }
+    };
+    ws.onerror = function () {
+      // keep silent; onclose will handle reconnect
+    };
+  }
+
   function connectChatWs() {
     disconnectChatWs();
     const s = loadSession();
@@ -919,10 +1004,13 @@
   var lastCartChromeTotal = -1;
   var ticketSearchLookupTimer = null;
   var ticketSearchLastLookup = { n: NaN, kind: null };
+  var raffleFastLookupTimer = null;
+  var raffleFastLookupState = { n: NaN, kind: null };
   var ticketSearchRandomQty = 5;
   var ticketsModalActiveTab = "reserved";
   var homeRafflesRefreshTimer = null;
   var raffleViewHeartbeatTimer = null;
+  var rafflePageViewersRefreshTimer = null;
   var raffleSelectionSyncTimer = null;
   var raffleSelectionSyncInFlight = false;
   var raffleSelectionSyncQueued = false;
@@ -951,7 +1039,7 @@
 
   const RAFFLE_MAX_SELECT = 10;
 
-  /** @type {{ elPrefix: string, raffle: Record<string, unknown> | null, rangeFrom: number, rangeTo: number, selected: Set<number>, order: Record<string, unknown> | null, orderNumbers: number[], timerId: ReturnType<typeof setInterval> | null, sberMethod: "collection" | "qr" | null, currentPayStep: string | null, onlyFreeView: boolean, lastCells: Array<{n:number,kind:string}> }} */
+  /** @type {{ elPrefix: string, raffle: Record<string, unknown> | null, rangeFrom: number, rangeTo: number, selected: Set<number>, order: Record<string, unknown> | null, orderNumbers: number[], timerId: ReturnType<typeof setInterval> | null, sberMethod: "collection" | "qr" | null, currentPayStep: string | null, onlyFreeView: boolean, lastCells: Array<{n:number,kind:string}>, rangeParts: Array<{from:number,to:number}> }} */
   var raffleDetailState = {
     elPrefix: "raffle-page",
     raffle: null,
@@ -965,6 +1053,7 @@
     currentPayStep: null,
     onlyFreeView: false,
     lastCells: [],
+    rangeParts: [],
   };
 
   function clearRaffleDetailTimer() {
@@ -2464,6 +2553,52 @@
     }
   }
 
+  function stopRafflePageViewersAutoRefresh() {
+    if (rafflePageViewersRefreshTimer) {
+      clearInterval(rafflePageViewersRefreshTimer);
+      rafflePageViewersRefreshTimer = null;
+    }
+  }
+
+  async function refreshRafflePageViewersCount(raffleId) {
+    var viewersEl = document.getElementById("raffle-page-viewers");
+    var viewersTextEl = document.getElementById("raffle-page-viewers-text");
+    if (!viewersEl || !viewersTextEl) return;
+    if (!Number.isFinite(Number(raffleId)) || Number(raffleId) < 1) return;
+    try {
+      var res = await fetch("/api/raffles", { cache: "no-store", headers: authHeaders() });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok || !Array.isArray(data.raffles)) return;
+      var rid = Number(raffleId);
+      var found = null;
+      for (var i = 0; i < data.raffles.length; i++) {
+        if (Number(data.raffles[i] && data.raffles[i].id) === rid) {
+          found = data.raffles[i];
+          break;
+        }
+      }
+      if (!found) return;
+      var viewersCount = Math.max(0, Number(found.viewers_count) || 0);
+      viewersTextEl.textContent = "Онлайн: " + String(viewersCount);
+      viewersEl.hidden = false;
+      if (raffleDetailState.raffle && Number(raffleDetailState.raffle.id) === rid) {
+        raffleDetailState.raffle.viewers_count = viewersCount;
+      }
+    } catch (_) {}
+  }
+
+  function startRafflePageViewersAutoRefresh(raffleId) {
+    stopRafflePageViewersAutoRefresh();
+    if (!Number.isFinite(Number(raffleId)) || Number(raffleId) < 1) return;
+    refreshRafflePageViewersCount(raffleId).catch(function () {});
+    rafflePageViewersRefreshTimer = setInterval(function () {
+      if (document.visibilityState !== "visible") return;
+      refreshRafflePageViewersCount(raffleId).catch(function () {});
+    }, 60 * 1000);
+  }
+
   function pingRaffleView(raffleId) {
     if (!Number.isFinite(Number(raffleId)) || Number(raffleId) < 1) return;
     if (!authVerified || document.visibilityState !== "visible") return;
@@ -2821,17 +2956,23 @@
     var id = Number(r.id);
     var from = raffleDetailState.rangeFrom;
     var to = raffleDetailState.rangeTo;
-    var res = await fetch(
-      "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
-      { cache: "no-store", headers: authHeaders() },
-    );
-    var data = await res.json().catch(function () {
-      return {};
-    });
-    if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
-    var cells = data.cells || [];
-    raffleDetailState.lastCells = cells;
-    renderRaffleGrid(cells);
+    setRaffleGridLoading(true);
+    try {
+      var res = await fetch(
+        "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
+        { cache: "no-store", headers: authHeaders() },
+      );
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
+      var cells = data.cells || [];
+      raffleDetailState.lastCells = cells;
+      renderRaffleGrid(cells);
+      scheduleRaffleFastInputLookup();
+    } finally {
+      setRaffleGridLoading(false);
+    }
   }
 
   function getRangeTabForTicketN(ticketCount, n) {
@@ -2864,6 +3005,30 @@
     raffleDetailState.rangeTo = part.to;
     await loadRaffleTicketSlice();
   }
+
+  function markActiveRangeTab(from) {
+    var tabs = raffleDetailEl("tabs");
+    if (!tabs) return;
+    tabs.querySelectorAll(".raffle-range-tab").forEach(function (b) {
+      var f = Number(b.getAttribute("data-from"));
+      b.classList.toggle("raffle-range-tab--active", f === Number(from));
+    });
+  }
+
+  async function setRaffleRange(from, to, scrollAnchor) {
+    raffleDetailState.rangeFrom = Number(from);
+    raffleDetailState.rangeTo = Number(to);
+    markActiveRangeTab(from);
+    await loadRaffleTicketSlice();
+    var grid = raffleDetailEl("grid");
+    if (!grid) return;
+    if (scrollAnchor === "end") {
+      grid.scrollTop = grid.scrollHeight;
+    } else if (scrollAnchor === "start") {
+      grid.scrollTop = 0;
+    }
+  }
+
 
   function renderRaffleGrid(cells) {
     var grid = raffleDetailEl("grid");
@@ -2950,6 +3115,190 @@
     grid.innerHTML = html;
   }
 
+  function setRaffleGridLoading(loading) {
+    var grid = raffleDetailEl("grid");
+    if (!grid) return;
+    var loader = grid.querySelector(".raffle-ticket-grid__loader");
+    if (loading) {
+      grid.classList.add("raffle-ticket-grid--loading");
+      if (!loader) {
+        loader = document.createElement("div");
+        loader.className = "raffle-ticket-grid__loader";
+        loader.setAttribute("aria-hidden", "true");
+        loader.innerHTML =
+          '<span class="raffle-ticket-grid__loader-ring"></span><span class="raffle-ticket-grid__loader-text">Загружаем номерки…</span>';
+        grid.appendChild(loader);
+      }
+      return;
+    }
+    grid.classList.remove("raffle-ticket-grid--loading");
+    if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+  }
+
+  function getRaffleFastInputNumber() {
+    var inp = document.getElementById("raffle-fast-number");
+    if (!inp) return NaN;
+    var digits = String(inp.value || "").replace(/\D/g, "");
+    var n = parseInt(digits, 10);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  function renderRaffleFastInputState() {
+    var stateEl = document.getElementById("raffle-fast-state");
+    if (!stateEl) return;
+    var n = getRaffleFastInputNumber();
+    var r = raffleDetailState.raffle;
+    if (!Number.isFinite(n) || n < 1 || !r || !r.id) {
+      stateEl.innerHTML = "";
+      return;
+    }
+    var maxN = Math.max(1, Math.floor(Number(r.ticket_count) || 1));
+    if (n > maxN) {
+      stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--invalid">Нет такого</span>';
+      return;
+    }
+    var lk = raffleFastLookupState;
+    if (!lk || lk.n !== n) {
+      stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--loading">Проверяем…</span>';
+      return;
+    }
+    var kind = String(lk.kind || "");
+    if (kind === "free") {
+      stateEl.innerHTML =
+        '<div class="raffle-fast-input__ok"><span class="raffle-fast-input__free">Свободен</span><button type="button" class="raffle-fast-input__add" id="raffle-fast-add">В корзину</button></div>';
+      return;
+    }
+    if (kind === "self_reserved" || kind === "self_pending" || kind === "self_confirmed") {
+      stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--self">Ваш</span>';
+      return;
+    }
+    if (kind === "taken") {
+      stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--taken">Занят</span>';
+      return;
+    }
+    if (kind === "error") {
+      stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--invalid">Ошибка</span>';
+      return;
+    }
+    stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--invalid">Нет такого</span>';
+  }
+
+  function scheduleRaffleFastInputLookup() {
+    if (raffleFastLookupTimer) {
+      clearTimeout(raffleFastLookupTimer);
+      raffleFastLookupTimer = null;
+    }
+    var r = raffleDetailState.raffle;
+    var n = getRaffleFastInputNumber();
+    if (!r || !r.id || !Number.isFinite(n) || n < 1) {
+      raffleFastLookupState = { n: NaN, kind: null };
+      renderRaffleFastInputState();
+      return;
+    }
+    var maxN = Math.max(1, Math.floor(Number(r.ticket_count) || 1));
+    if (n > maxN) {
+      raffleFastLookupState = { n: n, kind: "invalid" };
+      renderRaffleFastInputState();
+      return;
+    }
+    if (n >= Number(raffleDetailState.rangeFrom) && n <= Number(raffleDetailState.rangeTo)) {
+      var localCells = Array.isArray(raffleDetailState.lastCells) ? raffleDetailState.lastCells : [];
+      for (var ci = 0; ci < localCells.length; ci++) {
+        var c = localCells[ci];
+        if (Number(c && c.n) === n) {
+          raffleFastLookupState = { n: n, kind: String(c.kind || "invalid") };
+          renderRaffleFastInputState();
+          return;
+        }
+      }
+    }
+    raffleFastLookupState = { n: n, kind: null };
+    renderRaffleFastInputState();
+    raffleFastLookupTimer = setTimeout(function () {
+      var part = getRangeTabForTicketN(Number(r.ticket_count), n);
+      if (!part) {
+        raffleFastLookupState = { n: n, kind: "invalid" };
+        renderRaffleFastInputState();
+        return;
+      }
+      fetch(
+        "/api/raffles/" + String(r.id) + "/tickets?from=" + String(part.from) + "&to=" + String(part.to),
+        { cache: "no-store", headers: authHeaders() },
+      )
+        .then(function (res2) {
+          return res2.json().then(function (d2) {
+            return { ok: res2.ok, d: d2 };
+          });
+        })
+        .then(function (x2) {
+          var cur2 = getRaffleFastInputNumber();
+          if (!Number.isFinite(cur2) || cur2 !== n) return;
+          if (!x2.ok || !Array.isArray(x2.d && x2.d.cells)) {
+            raffleFastLookupState = { n: n, kind: "invalid" };
+            renderRaffleFastInputState();
+            return;
+          }
+          var cells = x2.d.cells;
+          var kind2 = null;
+          for (var i2 = 0; i2 < cells.length; i2++) {
+            if (Number(cells[i2] && cells[i2].n) === n) {
+              kind2 = String(cells[i2].kind || "");
+              break;
+            }
+          }
+          raffleFastLookupState = { n: n, kind: kind2 || "invalid" };
+          renderRaffleFastInputState();
+        })
+        .catch(function () {
+          var cur3 = getRaffleFastInputNumber();
+          if (!Number.isFinite(cur3) || cur3 !== n) return;
+          raffleFastLookupState = { n: n, kind: "error" };
+          renderRaffleFastInputState();
+        });
+    }, 300);
+  }
+
+  function addRaffleFastNumberToSelection(n) {
+    if (!Number.isFinite(n) || n < 1) return;
+    if (raffleDetailState.selected.has(n)) {
+      showToast("Номер уже в корзине", "warning");
+      return;
+    }
+    if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
+      showToast("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+      return;
+    }
+    raffleDetailState.selected.add(n);
+    updateRaffleSelectionLabel();
+    loadRaffleTicketSlice().catch(function () {});
+    scheduleRaffleSelectionSync();
+    showToast("Номер " + String(n) + " добавлен в корзину", "success");
+    scheduleRaffleFastInputLookup();
+  }
+
+  function pickRandomFreeFromCurrentRange() {
+    var cells = Array.isArray(raffleDetailState.lastCells) ? raffleDetailState.lastCells : [];
+    var free = cells
+      .filter(function (c) {
+        return c && String(c.kind) === "free" && Number.isFinite(Number(c.n));
+      })
+      .map(function (c) {
+        return Number(c.n);
+      })
+      .filter(function (n) {
+        return !raffleDetailState.selected.has(n);
+      });
+    if (!free.length) {
+      showToast("Свободных номерков в этой таблице нет", "warning");
+      return;
+    }
+    var rnd = free[Math.floor(Math.random() * free.length)];
+    var inp = document.getElementById("raffle-fast-number");
+    if (inp) inp.value = String(rnd);
+    raffleFastLookupState = { n: rnd, kind: "free" };
+    renderRaffleFastInputState();
+  }
+
   function buildRaffleRangeTabs(ticketCount) {
     var tabs = raffleDetailEl("tabs");
     if (!tabs) return;
@@ -2962,6 +3311,7 @@
       parts.push({ from: start, to: end });
       start = end + 1;
     }
+    raffleDetailState.rangeParts = parts.slice();
     tabs.innerHTML = parts
       .map(function (p, idx) {
         var label = String(p.from) + "–" + String(p.to);
@@ -2980,13 +3330,9 @@
       .join("");
     tabs.querySelectorAll(".raffle-range-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        tabs.querySelectorAll(".raffle-range-tab").forEach(function (b) {
-          b.classList.remove("raffle-range-tab--active");
-        });
-        btn.classList.add("raffle-range-tab--active");
-        raffleDetailState.rangeFrom = Number(btn.getAttribute("data-from"));
-        raffleDetailState.rangeTo = Number(btn.getAttribute("data-to"));
-        loadRaffleTicketSlice().catch(function (e) {
+        var from = Number(btn.getAttribute("data-from"));
+        var to = Number(btn.getAttribute("data-to"));
+        setRaffleRange(from, to, "start").catch(function (e) {
           showToast(String(e.message || "Ошибка"), "error");
         });
       });
@@ -3102,6 +3448,51 @@
     updateRafflePurchaseChrome();
   }
 
+  async function selectBestRangeByFreeCount() {
+    var r = raffleDetailState.raffle;
+    if (!r || !r.id) return;
+    var parts = raffleDetailState.rangeParts || [];
+    if (parts.length < 2) return;
+    var rid = Number(r.id);
+    var requests = parts.map(function (p) {
+      return fetch(
+        "/api/raffles/" + String(rid) + "/tickets?from=" + String(p.from) + "&to=" + String(p.to),
+        { cache: "no-store", headers: authHeaders() },
+      )
+        .then(function (res) {
+          return res.json().then(function (d) {
+            return { ok: res.ok, d: d };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok) return -1;
+          var cells = x.d && Array.isArray(x.d.cells) ? x.d.cells : [];
+          var free = 0;
+          for (var i = 0; i < cells.length; i++) {
+            if (String(cells[i].kind) === "free") free++;
+          }
+          return free;
+        })
+        .catch(function () {
+          return -1;
+        });
+    });
+    var counts = await Promise.all(requests);
+    var bestIdx = 0;
+    var bestFree = counts[0] == null ? -1 : counts[0];
+    for (var j = 1; j < counts.length; j++) {
+      if (counts[j] > bestFree) {
+        bestFree = counts[j];
+        bestIdx = j;
+      }
+    }
+    var best = parts[bestIdx];
+    if (!best) return;
+    raffleDetailState.rangeFrom = Number(best.from);
+    raffleDetailState.rangeTo = Number(best.to);
+    markActiveRangeTab(best.from);
+  }
+
   function openRaffleUnavailableModal(r) {
     if (!modalRaffleUnavailable) return;
     var st = String(r.status || "active");
@@ -3186,6 +3577,30 @@
       btn.classList.remove("raffle-cell--flash");
       void btn.offsetWidth;
       btn.classList.add("raffle-cell--flash");
+    });
+
+    document.getElementById("raffle-fast-number")?.addEventListener("input", function () {
+      scheduleRaffleFastInputLookup();
+    });
+    document.getElementById("raffle-fast-number")?.addEventListener("focus", function () {
+      document.documentElement.classList.add("bottom-nav-hidden-by-fast-input");
+    });
+    document.getElementById("raffle-fast-number")?.addEventListener("blur", function () {
+      setTimeout(function () {
+        var active = document.activeElement;
+        if (active && active.id === "raffle-fast-number") return;
+        document.documentElement.classList.remove("bottom-nav-hidden-by-fast-input");
+      }, 40);
+    });
+    document.getElementById("raffle-fast-random")?.addEventListener("click", function () {
+      pickRandomFreeFromCurrentRange();
+    });
+    document.getElementById("raffle-fast-input")?.addEventListener("click", function (e) {
+      var addBtn = e.target.closest("#raffle-fast-add");
+      if (!addBtn) return;
+      var n = getRaffleFastInputNumber();
+      if (!Number.isFinite(n) || n < 1) return;
+      addRaffleFastNumberToSelection(n);
     });
 
     document.getElementById("raffle-page-only-free")?.addEventListener("click", function () {
@@ -3289,6 +3704,7 @@
       return;
     }
     clearRaffleDetailTimer();
+    stopRafflePageViewersAutoRefresh();
     resetRaffleDetailSelection();
     raffleDetailState.order = null;
     raffleDetailState.orderNumbers = [];
@@ -3320,11 +3736,21 @@
         priceBadge.textContent = "БИЛЕТ: " + fmt + " ₽";
         priceBadge.hidden = false;
       }
+      var viewersEl = document.getElementById("raffle-page-viewers");
+      var viewersTextEl = document.getElementById("raffle-page-viewers-text");
+      if (viewersEl && viewersTextEl) {
+        var viewersCount = Math.max(0, Number(r.viewers_count) || 0);
+        viewersTextEl.textContent = "Онлайн: " + String(viewersCount);
+        viewersEl.hidden = false;
+      }
+      startRafflePageViewersAutoRefresh(Number(r.id));
       buildRaffleRangeTabs(r.ticket_count);
+      await selectBestRangeByFreeCount();
       updateRaffleSelectionLabel();
       await syncRaffleOrderAndUi();
       await loadRaffleTicketSlice();
       bindRafflePurchasePageEvents();
+      renderRaffleFastInputState();
       if (isRaffleLockedByReceiptPending()) {
         openWaitReceiptModal();
       }
@@ -3934,6 +4360,14 @@
     }
 
     if (lk.kind === "free") {
+      if (raffleDetailState.selected && raffleDetailState.selected.has(n)) {
+        apply.disabled = true;
+        apply.textContent = "Уже выбран №" + String(n);
+        apply.className = "btn btn--primary ticket-search-sheet__cta";
+        setField("self");
+        setBadge("УЖЕ В КОРЗИНЕ", "self");
+        return;
+      }
       apply.disabled = false;
       apply.textContent = "Добавить №" + String(n);
       apply.className = "btn btn--primary ticket-search-sheet__cta ticket-search-sheet__cta--primary-dark";
@@ -4110,6 +4544,11 @@
     var n = parseInt(String(raw && raw.value ? raw.value : "").replace(/\D/g, ""), 10);
     if (!Number.isFinite(n) || n < 1) return;
     if (ticketSearchLastLookup.kind !== "free" || ticketSearchLastLookup.n !== n) return;
+    if (raffleDetailState.selected && raffleDetailState.selected.has(n)) {
+      showToast("Номер уже выбран", "warning");
+      updateTicketSearchApplyUI();
+      return;
+    }
     ensureRaffleTabForNumber(n)
       .then(function () {
         if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
@@ -4531,9 +4970,11 @@
     if (authed && !IS_GUEST_LANDING) {
       if (chatUnreadPollTimer == null) startChatUnreadPolling();
       else refreshChatUnreadCount();
+      if (!liveWs) connectLiveWs();
     } else {
       stopChatUnreadPolling();
       setChatTabUnreadHighlight(false);
+      disconnectLiveWs();
     }
   }
 
