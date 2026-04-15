@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import path from "node:path";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
@@ -58,6 +60,21 @@ function createTransporter(): Transporter {
   );
 }
 
+function logMailFailureLine(line: string): void {
+  try {
+    const raw = process.env.MAIL_FAILURE_LOG?.trim();
+    const file = raw || path.join(process.cwd(), "data", "mail-failures.log");
+    mkdirSync(path.dirname(file), { recursive: true });
+    appendFileSync(file, `[${new Date().toISOString()}] ${line}\n`, "utf8");
+  } catch (e) {
+    console.error("[mail] cannot write failure log", e);
+  }
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function sendTransactionalMail(opts: {
   to: string;
   subject: string;
@@ -69,29 +86,38 @@ async function sendTransactionalMail(opts: {
   }
   const transporter = createTransporter();
   const from = smtpFromAddress();
-  if (smtpDebugEnabled()) {
-    console.log("[mail] sendMail →", opts.to, "subject:", String(opts.subject).slice(0, 60));
+  const maxAttempts = Math.min(Math.max(Number(process.env.SMTP_MAX_ATTEMPTS ?? "3"), 1), 5);
+  let lastDetail = "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (smtpDebugEnabled()) {
+      console.log("[mail] sendMail try", attempt, "→", opts.to, "subject:", String(opts.subject).slice(0, 60));
+    }
+    try {
+      await transporter.sendMail({
+        from,
+        to: opts.to,
+        subject: opts.subject,
+        text: opts.text,
+        html: opts.html,
+      });
+      return;
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: string; responseCode?: string | number };
+      const parts = [
+        err.message,
+        err.responseCode != null ? `code=${err.responseCode}` : "",
+        err.response ? `resp=${String(err.response).slice(0, 500)}` : "",
+      ].filter(Boolean);
+      lastDetail = parts.join(" | ") || String(e);
+      console.error("[mail] sendMail failed (attempt " + String(attempt) + "):", lastDetail);
+      logSmtpFailureHint(e);
+      if (attempt < maxAttempts) await sleepMs(500 * attempt);
+    }
   }
-  try {
-    await transporter.sendMail({
-      from,
-      to: opts.to,
-      subject: opts.subject,
-      text: opts.text,
-      html: opts.html,
-    });
-  } catch (e: unknown) {
-    const err = e as { message?: string; response?: string; responseCode?: string | number };
-    const parts = [
-      err.message,
-      err.responseCode != null ? `code=${err.responseCode}` : "",
-      err.response ? `resp=${String(err.response).slice(0, 500)}` : "",
-    ].filter(Boolean);
-    const detail = parts.join(" | ") || String(e);
-    console.error("[mail] sendMail failed:", detail);
-    logSmtpFailureHint(e);
-    throw new Error(detail);
-  }
+  logMailFailureLine(
+    `FAIL to=${opts.to} subject=${String(opts.subject).slice(0, 120)} err=${lastDetail}`,
+  );
+  throw new Error(lastDetail);
 }
 
 /** Расшифровка типичных ответов SMTP в лог (для администратора сервера). */
@@ -122,6 +148,21 @@ function escapeHtml(s: string): string {
 
 function escapeHtmlAttr(s: string): string {
   return escapeHtml(s).replace(/'/g, "&#39;");
+}
+
+export function formatRuMoscowDateTime(ms: number): string {
+  try {
+    return new Date(ms).toLocaleString("ru-RU", {
+      timeZone: "Europe/Moscow",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return new Date(ms).toISOString();
+  }
 }
 
 /** Единая вёрстка писем: тёмный хедер, карточка, футер. */
@@ -185,6 +226,31 @@ function ctaButton(href: string, label: string): string {
     </td>
   </tr>
 </table>`;
+}
+
+function emailExtraLinksText(statusUrl?: string, rulesUrl?: string): string {
+  const r = String(rulesUrl ?? "").trim();
+  const s = String(statusUrl ?? "").trim();
+  const lines: string[] = [];
+  if (s) lines.push("Статус заказа: " + s);
+  if (r) lines.push("Правила акции: " + r);
+  return lines.length ? "\n\n" + lines.join("\n") : "";
+}
+
+function emailExtraLinksHtml(statusUrl?: string, rulesUrl?: string): string {
+  const r = String(rulesUrl ?? "").trim();
+  const s = String(statusUrl ?? "").trim();
+  if (!r && !s) return "";
+  let out =
+    '<div style="margin:16px 0 0;padding:12px 14px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;font-size:13px;color:#475569;line-height:1.5;">';
+  if (s) {
+    out += `<div style="margin-bottom:6px;"><strong>Статус заказа:</strong> <a href="${escapeHtmlAttr(s)}" style="color:#2563eb;">открыть страницу</a></div>`;
+  }
+  if (r) {
+    out += `<div><strong>Правила акции:</strong> <a href="${escapeHtmlAttr(r)}" style="color:#2563eb;word-break:break-all;">${escapeHtml(r)}</a></div>`;
+  }
+  out += "</div>";
+  return out;
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
@@ -319,4 +385,186 @@ export async function sendRaffleLaunchedEmail(
   });
 
   await sendTransactionalMail({ to, subject, text, html });
+}
+
+export async function sendReserveExpiringSoonEmail(opts: {
+  to: string;
+  name: string;
+  raffleTitle: string;
+  orderPublicId: string;
+  minutesLeft: number;
+  amountRub: number;
+  ticketCount: number;
+  openRaffleUrl: string;
+  /** Крайний срок брони, строка по Москве (уже отформатирована) */
+  deadlineMoscow: string;
+  statusPageUrl?: string;
+  rulesUrl?: string;
+}): Promise<void> {
+  const greeting = opts.name.trim() ? `Здравствуйте, ${opts.name.trim()}!` : "Здравствуйте!";
+  const title = String(opts.raffleTitle || "Акция").trim();
+  const m = Math.max(1, Math.min(999, Math.floor(opts.minutesLeft)));
+  const rub = Number(opts.amountRub) || 0;
+  const cnt = Math.max(1, Math.floor(opts.ticketCount));
+  const dl = String(opts.deadlineMoscow || "").trim();
+  const subject =
+    m <= 3
+      ? `Осталось около ${m} мин. — завершите оплату по акции`
+      : `Скоро истечёт бронь номерков (${m} мин.)`;
+  const text = [
+    greeting,
+    "",
+    `По акции «${title}» истекает время брони заказа ${opts.orderPublicId} (к оплате ${rub} ₽, ${cnt} номерков).`,
+    `Осталось примерно ${m} мин. Крайний срок по Москве: ${dl}.`,
+    "",
+    "Перейдите в приложение и отправьте чек, пока номерки зарезервированы:",
+    opts.openRaffleUrl,
+    emailExtraLinksText(opts.statusPageUrl, opts.rulesUrl),
+    "",
+    "Отключить такие письма: Настройки → Почта → «Бронь и оплата».",
+  ].join("\n");
+
+  const inner =
+    `<p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>
+<p style="margin:0 0 16px;color:#64748b;font-size:14px;">До конца брони осталось примерно <strong>${m} мин.</strong> Завершите перевод и загрузите чек — иначе номерки снова станут доступны другим.</p>
+<p style="margin:0 0 16px;font-size:14px;color:#0f172a;">Крайний срок (московское время): <strong>${escapeHtml(dl)}</strong></p>
+<div style="margin:0 0 20px;padding:18px 20px;background:linear-gradient(135deg,#fff7ed 0%,#fffbeb 100%);border-radius:14px;border:1px solid #fed7aa;">
+  <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#ea580c;margin-bottom:6px;">Бронь</div>
+  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">${escapeHtml(title)}</div>
+  <div style="margin-top:10px;font-size:14px;color:#334155;">Заказ <strong>${escapeHtml(opts.orderPublicId)}</strong> · к оплате <strong>${rub} ₽</strong> · <strong>${cnt}</strong> номерков</div>
+</div>` +
+    ctaButton(opts.openRaffleUrl, "Перейти к оплате") +
+    emailExtraLinksHtml(opts.statusPageUrl, opts.rulesUrl) +
+    `<p style="margin:16px 0 0;font-size:13px;color:#64748b;">Отключить: <strong>Настройки</strong> → <strong>Почта</strong> → «Бронь и оплата».</p>`;
+
+  const html = emailLayout({
+    preheader: `Около ${m} мин. до конца брони — ${title}`,
+    headline: "Скоро истечёт бронь",
+    innerHtml: inner,
+    footerNote:
+      "Напоминание отправляется один раз за период брони. После продления брони письмо может прийти снова.",
+  });
+
+  await sendTransactionalMail({ to: opts.to, subject, text, html });
+}
+
+export async function sendReceiptRejectedReworkEmail(opts: {
+  to: string;
+  name: string;
+  raffleTitle: string;
+  orderPublicId: string;
+  amountRub: number;
+  ticketCount: number;
+  openRaffleUrl: string;
+  deadlineMoscow: string;
+  adminNote?: string;
+  statusPageUrl?: string;
+  rulesUrl?: string;
+}): Promise<void> {
+  const greeting = opts.name.trim() ? `Здравствуйте, ${opts.name.trim()}!` : "Здравствуйте!";
+  const title = String(opts.raffleTitle || "Акция").trim();
+  const rub = Number(opts.amountRub) || 0;
+  const cnt = Math.max(1, Math.floor(opts.ticketCount));
+  const dl = String(opts.deadlineMoscow || "").trim();
+  const note = String(opts.adminNote ?? "").trim();
+  const subject = `Замените чек по заказу ${opts.orderPublicId}`;
+  const text = [
+    greeting,
+    "",
+    `Чек по заказу ${opts.orderPublicId} в акции «${title}» не принят. Номерки пока закреплены за вами.`,
+    `Прикрепите другой чек до ${dl} (московское время).`,
+    note ? `\nКомментарий проверки: ${note}` : "",
+    "",
+    "Откройте страницу акции и загрузите чек снова:",
+    opts.openRaffleUrl,
+    emailExtraLinksText(opts.statusPageUrl, opts.rulesUrl),
+    "",
+    "Если не успеете, бронь снимется и номерки станут доступны другим.",
+    "",
+    "Отключить такие письма: Настройки → Почта → «Бронь и оплата».",
+  ].join("\n");
+
+  const noteBlock = note
+    ? `<p style="margin:0 0 16px;padding:12px 14px;background:#f1f5f9;border-radius:12px;font-size:14px;color:#0f172a;"><strong>Комментарий проверки:</strong> ${escapeHtml(note)}</p>`
+    : "";
+
+  const inner =
+    `<p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>
+<p style="margin:0 0 16px;color:#64748b;font-size:14px;">Пришлите <strong>другой чек</strong> — предыдущий не подошёл для проверки. Номерки временно остаются за вами.</p>
+${noteBlock}
+<p style="margin:0 0 16px;font-size:14px;color:#0f172a;">Сделайте это до <strong>${escapeHtml(dl)}</strong> (МСК).</p>
+<div style="margin:0 0 20px;padding:18px 20px;background:linear-gradient(135deg,#fef2f2 0%,#fff7ed 100%);border-radius:14px;border:1px solid #fecaca;">
+  <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#dc2626;margin-bottom:6px;">Нужен новый чек</div>
+  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">${escapeHtml(title)}</div>
+  <div style="margin-top:10px;font-size:14px;color:#334155;">Заказ <strong>${escapeHtml(opts.orderPublicId)}</strong> · <strong>${rub} ₽</strong> · <strong>${cnt}</strong> номерков</div>
+</div>` +
+    ctaButton(opts.openRaffleUrl, "Загрузить чек") +
+    emailExtraLinksHtml(opts.statusPageUrl, opts.rulesUrl) +
+    `<p style="margin:16px 0 0;font-size:13px;color:#64748b;">Вопросы — ответьте на это письмо или напишите в чат в приложении.</p>`;
+
+  const html = emailLayout({
+    preheader: `Замените чек по заказу ${opts.orderPublicId}`,
+    headline: "Нужен другой чек",
+    innerHtml: inner,
+    footerNote: "Письмо отправлено при отклонении чека администратором.",
+  });
+
+  await sendTransactionalMail({ to: opts.to, subject, text, html });
+}
+
+export async function sendOrderFullyReleasedEmail(opts: {
+  to: string;
+  name: string;
+  raffleTitle: string;
+  orderPublicId: string;
+  reason: string;
+  openHomeUrl: string;
+  statusPageUrl?: string;
+  rulesUrl?: string;
+  adminNote?: string;
+}): Promise<void> {
+  const greeting = opts.name.trim() ? `Здравствуйте, ${opts.name.trim()}!` : "Здравствуйте!";
+  const title = String(opts.raffleTitle || "Акция").trim();
+  const note = String(opts.adminNote ?? "").trim();
+  const subject = `Заказ ${opts.orderPublicId} отменён`;
+  const text = [
+    greeting,
+    "",
+    `Заказ ${opts.orderPublicId} по акции «${title}» больше не активен: ${opts.reason}.`,
+    note ? `Комментарий: ${note}` : "",
+    "",
+    "Номерки снова могут быть доступны другим участникам.",
+    "",
+    "Главная:",
+    opts.openHomeUrl,
+    emailExtraLinksText(opts.statusPageUrl, opts.rulesUrl),
+    "",
+    "Отключить такие письма: Настройки → Почта → «Бронь и оплата».",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const noteBlock = note
+    ? `<p style="margin:0 0 16px;padding:12px 14px;background:#f1f5f9;border-radius:12px;font-size:14px;color:#0f172a;"><strong>Комментарий:</strong> ${escapeHtml(note)}</p>`
+    : "";
+
+  const inner =
+    `<p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>
+<p style="margin:0 0 16px;color:#64748b;font-size:14px;">${escapeHtml(opts.reason)}</p>
+${noteBlock}
+<div style="margin:0 0 20px;padding:18px 20px;background:#f8fafc;border-radius:14px;border:1px solid #e2e8f0;">
+  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">${escapeHtml(title)}</div>
+  <div style="margin-top:10px;font-size:14px;color:#334155;">Заказ <strong>${escapeHtml(opts.orderPublicId)}</strong></div>
+</div>` +
+    ctaButton(opts.openHomeUrl, "На главную") +
+    emailExtraLinksHtml(opts.statusPageUrl, opts.rulesUrl);
+
+  const html = emailLayout({
+    preheader: `Заказ ${opts.orderPublicId} отменён`,
+    headline: "Заявка закрыта",
+    innerHtml: inner,
+    footerNote: "Письмо отправлено при отмене заявки администратором или по лимиту доработок.",
+  });
+
+  await sendTransactionalMail({ to: opts.to, subject, text, html });
 }

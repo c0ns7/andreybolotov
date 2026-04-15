@@ -146,6 +146,39 @@ function migrate() {
   if (!roCols.some((c) => c.name === "reserve_extended_once")) {
     db.exec(`ALTER TABLE raffle_orders ADD COLUMN reserve_extended_once INTEGER NOT NULL DEFAULT 0`);
   }
+  if (!roCols.some((c) => c.name === "reserve_reminder_sent_at")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN reserve_reminder_sent_at INTEGER`);
+  }
+  if (!roCols.some((c) => c.name === "receipt_reject_count")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_reject_count INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!roCols.some((c) => c.name === "last_reject_comment")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN last_reject_comment TEXT`);
+  }
+  if (!roCols.some((c) => c.name === "public_status_token")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN public_status_token TEXT`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS raffle_order_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      detail TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES raffle_orders(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_roe_order ON raffle_order_events(order_id);
+  `);
+
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ro_public_token ON raffle_orders(public_status_token)`);
+  } catch {
+    /* дубликаты токенов в старых данных */
+  }
+  db.prepare(
+    `UPDATE raffle_orders SET public_status_token = lower(hex(randomblob(16))) WHERE public_status_token IS NULL OR TRIM(public_status_token) = ''`,
+  ).run();
 
   const rafCols = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
   if (!rafCols.some((c) => c.name === "wholesale_enabled")) {
@@ -156,6 +189,9 @@ function migrate() {
   }
   if (!rafCols.some((c) => c.name === "hidden_from_public")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN hidden_from_public INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!rafCols.some((c) => c.name === "rules_url")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''`);
   }
 
   db.exec(`
@@ -218,6 +254,10 @@ function migrate() {
   if (!userCols2.some((c) => c.name === "chat_unread_email_last_at")) {
     db.exec(`ALTER TABLE users ADD COLUMN chat_unread_email_last_at INTEGER`);
   }
+  if (!userCols2.some((c) => c.name === "email_notify_raffle_orders")) {
+    db.exec(`ALTER TABLE users ADD COLUMN email_notify_raffle_orders INTEGER NOT NULL DEFAULT 1`);
+    db.exec(`UPDATE users SET email_notify_raffle_orders = COALESCE(email_notify_raffles, 1)`);
+  }
 
   const rafCols2 = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
   if (!rafCols2.some((c) => c.name === "launch_notify_sent_at")) {
@@ -238,6 +278,8 @@ export type UserRow = {
   blocked: number;
   email_notify_chat?: number;
   email_notify_raffles?: number;
+  /** Бронь, оплата, напоминания и доработка чека (не рассылка о новых акциях) */
+  email_notify_raffle_orders?: number;
   chat_unread_email_last_at?: number | null;
 };
 
@@ -522,7 +564,11 @@ export function updateUserProfile(
 
 export function updateUserEmailNotifyPrefs(
   userId: number,
-  prefs: { email_notify_chat?: boolean; email_notify_raffles?: boolean },
+  prefs: {
+    email_notify_chat?: boolean;
+    email_notify_raffles?: boolean;
+    email_notify_raffle_orders?: boolean;
+  },
 ): void {
   const parts: string[] = [];
   const vals: (number | string)[] = [];
@@ -533,6 +579,10 @@ export function updateUserEmailNotifyPrefs(
   if (prefs.email_notify_raffles !== undefined) {
     parts.push("email_notify_raffles = ?");
     vals.push(prefs.email_notify_raffles ? 1 : 0);
+  }
+  if (prefs.email_notify_raffle_orders !== undefined) {
+    parts.push("email_notify_raffle_orders = ?");
+    vals.push(prefs.email_notify_raffle_orders ? 1 : 0);
   }
   if (!parts.length) return;
   vals.push(userId);
@@ -624,6 +674,8 @@ export type RaffleRow = {
   collection_url: string;
   collection_recipient: string;
   qr_image_url: string;
+  /** Ссылка на краткие правила / оферту (необязательно) */
+  rules_url?: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -643,6 +695,7 @@ export type RaffleDto = {
   collection_url: string;
   collection_recipient: string;
   qr_image_url: string;
+  rules_url: string | null;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -652,6 +705,7 @@ export type RaffleDto = {
 export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): RaffleDto {
   const st = r.status === "closed" || r.status === "paused" ? r.status : "active";
   const oldP = Number(r.old_price_rub ?? 0);
+  const rulesRaw = String((r as RaffleRow).rules_url ?? "").trim();
   const dto: RaffleDto = {
     id: r.id,
     title: r.title,
@@ -662,6 +716,7 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     collection_url: r.collection_url,
     collection_recipient: r.collection_recipient,
     qr_image_url: r.qr_image_url,
+    rules_url: rulesRaw ? rulesRaw : null,
     status: st,
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
@@ -705,6 +760,7 @@ export function insertRaffle(data: {
   collection_url: string;
   collection_recipient: string;
   qr_image_url: string;
+  rules_url: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -715,9 +771,9 @@ export function insertRaffle(data: {
     .prepare(
       `INSERT INTO raffles (
         title, cover_image_url, price_rub, old_price_rub, ticket_count,
-        collection_url, collection_recipient, qr_image_url,
+        collection_url, collection_recipient, qr_image_url, rules_url,
         status, sort_order, wholesale_enabled, hidden_from_public, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
@@ -728,6 +784,7 @@ export function insertRaffle(data: {
       data.collection_url,
       data.collection_recipient,
       data.qr_image_url,
+      data.rules_url,
       data.status,
       data.sort_order,
       data.wholesale_enabled,
@@ -749,6 +806,7 @@ export function updateRaffle(
     collection_url: string;
     collection_recipient: string;
     qr_image_url: string;
+    rules_url: string;
     status: string;
     sort_order: number;
     wholesale_enabled: number;
@@ -758,7 +816,7 @@ export function updateRaffle(
   db.prepare(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
-      collection_url = ?, collection_recipient = ?, qr_image_url = ?,
+      collection_url = ?, collection_recipient = ?, qr_image_url = ?, rules_url = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
   ).run(
@@ -770,6 +828,7 @@ export function updateRaffle(
     data.collection_url,
     data.collection_recipient,
     data.qr_image_url,
+    data.rules_url,
     data.status,
     data.sort_order,
     data.wholesale_enabled,

@@ -137,6 +137,15 @@
   const input = document.getElementById("admin-reply-input");
   const btnAdminSend = document.getElementById("btn-admin-reply-send");
 
+  const CANNED_ADMIN_REPLIES = {
+    where_order:
+      "Здравствуйте! Номер заказа и актуальный этап (бронь, чек на проверке, подтверждение) можно посмотреть по персональной ссылке из SMS или письма — страница «Статус заказа». Там же отображается краткая история шагов.",
+    how_receipt:
+      "Чек нужно прикрепить на экране оплаты акции: после перевода откройте шаг с загрузкой файла (фото или PDF из банка) и отправьте на проверку. Убедитесь, что на чеке видны дата, сумма и получатель.",
+    wait_time:
+      "После отправки чека заявка попадает в очередь на проверку. Обычно это занимает до суток (точнее — как настроено на сайте). Если срок заметно вышел, напишите сюда с номером заказа — мы подскажем.",
+  };
+
   let selectedId = null;
   /** @type {{ id: number; phone: string; name: string; email: string; role: string } | null} */
   let selectedUserData = null;
@@ -958,6 +967,22 @@
           .finally(function () {
             setAdminComposerDisabled(false);
           });
+      });
+    }
+
+    const cannedWrap = document.getElementById("admin-reply-canned");
+    if (cannedWrap && input) {
+      cannedWrap.addEventListener("click", function (e) {
+        var btn = e.target && e.target.closest && e.target.closest("[data-canned]");
+        if (!btn) return;
+        var key = btn.getAttribute("data-canned");
+        var text = key ? CANNED_ADMIN_REPLIES[key] : "";
+        if (!text) return;
+        e.preventDefault();
+        var cur = String(input.value || "");
+        input.value = cur ? cur.replace(/\s+$/, "") + "\n\n" + text : text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus();
       });
     }
 

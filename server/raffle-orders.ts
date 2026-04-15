@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { db, getRaffleById, getUserById, getUserByPhone, isRaffleVisibleOnSite } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 
@@ -14,12 +15,115 @@ export type RaffleOrderRow = {
   status: string;
   reserved_until: number;
   reserve_extended_once: number;
+  /** epoch ms, когда отправили письмо «скоро конец брони» */
+  reserve_reminder_sent_at?: number | null;
   receipt_url: string | null;
   receipt_name: string | null;
   receipt_mime: string | null;
+  receipt_reject_count?: number;
+  last_reject_comment?: string | null;
+  public_status_token?: string | null;
   created_at: number;
   updated_at: number;
 };
+
+export function newPublicOrderToken(): string {
+  return randomBytes(16).toString("hex");
+}
+
+/** Сколько раз можно вернуть заявку в бронь после отклонения чека; дальше — только полная отмена. */
+export function raffleMaxRejectReworksFromEnv(): number {
+  const raw = String(process.env.RAFFLE_RECEIPT_REJECT_MAX ?? "3").trim();
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 3;
+  return Math.min(Math.floor(n), 20);
+}
+
+export function insertRaffleOrderEvent(orderId: number, kind: string, detail: string | null): void {
+  db.prepare(
+    `INSERT INTO raffle_order_events (order_id, kind, detail, created_at) VALUES (?, ?, ?, ?)`,
+  ).run(orderId, kind, detail, Date.now());
+}
+
+export type RaffleOrderTimelineItem = { kind: string; label: string; at: number; detail: string | null };
+
+const TIMELINE_LABELS: Record<string, string> = {
+  reserved: "Бронь создана",
+  receipt_submitted: "Чек отправлен на проверку",
+  reject_rework: "Чек не принят — нужна новая загрузка",
+  fully_released: "Заявка отменена, номерки свободны",
+  confirmed: "Оплата подтверждена",
+};
+
+export function listRaffleOrderTimeline(orderId: number): RaffleOrderTimelineItem[] {
+  const rows = db
+    .prepare(
+      `SELECT kind, detail, created_at FROM raffle_order_events WHERE order_id = ? ORDER BY created_at ASC`,
+    )
+    .all(orderId) as Array<{ kind: string; detail: string | null; created_at: number }>;
+  return rows.map((r) => ({
+    kind: r.kind,
+    label: TIMELINE_LABELS[r.kind] ?? r.kind,
+    at: r.created_at,
+    detail: r.detail ?? null,
+  }));
+}
+
+/** Порог «осталось не больше N минут»: 0 = выключено. */
+export function reserveReminderLeadMsFromEnv(): number {
+  const raw = String(process.env.RAFFLE_RESERVE_REMINDER_MINUTES ?? "5").trim();
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const capped = Math.min(Math.floor(n), 24 * 60);
+  return capped * 60 * 1000;
+}
+
+export type ReserveExpiryReminderRow = {
+  order_id: number;
+  user_id: number;
+  raffle_id: number;
+  reserved_until: number;
+  amount_rub: number;
+  ticket_count: number;
+};
+
+/** Активные брони, по которым ещё не слали напоминание и до конца ≤ leadMs. */
+export function listReservedOrdersForExpiryReminder(
+  now: number,
+  leadMs: number,
+): ReserveExpiryReminderRow[] {
+  if (leadMs <= 0) return [];
+  cleanupExpiredRaffleOrders();
+  const until = now + leadMs;
+  const rows = db
+    .prepare(
+      `SELECT id AS order_id, user_id, raffle_id, reserved_until, amount_rub, ticket_count
+       FROM raffle_orders
+       WHERE status = 'reserved'
+         AND reserved_until > ?
+         AND reserved_until <= ?
+         AND reserve_reminder_sent_at IS NULL`,
+    )
+    .all(now, until) as ReserveExpiryReminderRow[];
+  return rows;
+}
+
+export function markReserveReminderSent(orderId: number): void {
+  const now = Date.now();
+  db.prepare(
+    `UPDATE raffle_orders SET reserve_reminder_sent_at = ?, updated_at = ?
+     WHERE id = ? AND status = 'reserved'`,
+  ).run(now, now, orderId);
+}
+
+/** После отклонения чека: сколько минут даём на новый чек (минимум 15). */
+export function rejectReopenReserveMsFromEnv(): number {
+  const raw = String(process.env.RAFFLE_REJECT_REOPEN_MINUTES ?? "1440").trim();
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 24 * 60 * 60 * 1000;
+  const mins = Math.max(15, Math.min(Math.floor(n), 7 * 24 * 60));
+  return mins * 60 * 1000;
+}
 
 export type TicketCellKind =
   | "free"
@@ -187,12 +291,13 @@ export function createReservation(
       for (const n of uniq) {
         if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
       }
+      const pubTok = newPublicOrderToken();
       const info = db
         .prepare(
           `INSERT INTO raffle_orders (
             raffle_id, user_id, bank, amount_rub, ticket_count, status,
-            reserved_until, receipt_url, receipt_name, receipt_mime, created_at, updated_at
-          ) VALUES (?, ?, NULL, ?, ?, 'reserved', ?, NULL, NULL, NULL, ?, ?)`,
+            reserved_until, receipt_url, receipt_name, receipt_mime, public_status_token, created_at, updated_at
+          ) VALUES (?, ?, NULL, ?, ?, 'reserved', ?, NULL, NULL, NULL, ?, ?, ?)`,
         )
         .run(
           raffleId,
@@ -200,10 +305,12 @@ export function createReservation(
           amount,
           uniq.length,
           reservedUntil,
+          pubTok,
           now,
           now,
         );
       const orderId = Number(info.lastInsertRowid);
+      insertRaffleOrderEvent(orderId, "reserved", null);
       const ins = db.prepare(
         `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
          VALUES (?, ?, ?, ?, 'reserved', ?, ?)`,
@@ -239,6 +346,7 @@ export function getOrderByIdForUser(
   orderId: number,
   userId: number,
 ): RaffleOrderRow | undefined {
+  cleanupExpiredRaffleOrders();
   return db
     .prepare(`SELECT * FROM raffle_orders WHERE id = ? AND user_id = ?`)
     .get(orderId, userId) as RaffleOrderRow | undefined;
@@ -289,6 +397,7 @@ export function attachReceiptToOrder(
   db.prepare(
     `UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`,
   ).run(orderId);
+  insertRaffleOrderEvent(orderId, "receipt_submitted", null);
   return { ok: true };
 }
 
@@ -313,33 +422,147 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
   const now = Date.now();
   const raffleId = o.raffle_id;
-  db.prepare(`UPDATE raffle_orders SET status = 'confirmed', updated_at = ? WHERE id = ?`).run(
-    now,
-    orderId,
-  );
+  db.prepare(
+    `UPDATE raffle_orders SET status = 'confirmed', receipt_reject_count = 0, last_reject_comment = NULL, updated_at = ? WHERE id = ?`,
+  ).run(now, orderId);
   db.prepare(
     `UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`,
   ).run(orderId);
+  insertRaffleOrderEvent(orderId, "confirmed", null);
   recalculateWholesaleForRaffle(raffleId);
   return { ok: true };
 }
 
-export function rejectOrderByAdmin(orderId: number): { ok: true } | { ok: false; error: string } {
+/** Полностью снять бронь / отменить заявку: номерки освобождаются. */
+export function adminFullyReleaseRaffleOrder(
+  orderId: number,
+  eventDetail: string | null = null,
+): { ok: true } | { ok: false; error: string } {
   const o = getOrderById(orderId);
   if (!o) return { ok: false, error: "Не найдено" };
-  if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
+  if (o.status !== "reserved" && o.status !== "pending_review") {
+    return { ok: false, error: "Можно снять только активную бронь или заявку на проверке" };
+  }
   const now = Date.now();
   const raffleId = o.raffle_id;
   db.prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ?`).run(orderId);
-  db.prepare(`UPDATE raffle_orders SET status = 'rejected', updated_at = ? WHERE id = ?`).run(
-    now,
-    orderId,
-  );
+  db.prepare(
+    `UPDATE raffle_orders SET status = 'rejected', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL, updated_at = ? WHERE id = ?`,
+  ).run(now, orderId);
+  insertRaffleOrderEvent(orderId, "fully_released", eventDetail);
   recalculateWholesaleForRaffle(raffleId);
   return { ok: true };
 }
 
+export function rejectOrderByAdmin(
+  orderId: number,
+  opts?: { adminNote?: string },
+):
+  | { ok: true; mode: "rework" | "fully_released" }
+  | { ok: false; error: string } {
+  const o = getOrderById(orderId);
+  if (!o) return { ok: false, error: "Не найдено" };
+  if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
+  const note = String(opts?.adminNote ?? "").trim().slice(0, 500);
+  const count = Number((o as RaffleOrderRow).receipt_reject_count ?? 0);
+  const max = raffleMaxRejectReworksFromEnv();
+  if (count >= max) {
+    const detail = note || `Достигнут лимит доработок чека (${max})`;
+    const r = adminFullyReleaseRaffleOrder(orderId, detail);
+    if (!r.ok) return r;
+    if (note) {
+      db.prepare(`UPDATE raffle_orders SET last_reject_comment = ?, updated_at = ? WHERE id = ?`).run(
+        note,
+        Date.now(),
+        orderId,
+      );
+    }
+    return { ok: true, mode: "fully_released" };
+  }
+  const now = Date.now();
+  const raffleId = o.raffle_id;
+  const newUntil = now + rejectReopenReserveMsFromEnv();
+  db.prepare(
+    `UPDATE raffle_orders SET status = 'reserved', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL,
+     reserved_until = ?, reserve_extended_once = 0, reserve_reminder_sent_at = NULL,
+     receipt_reject_count = COALESCE(receipt_reject_count, 0) + 1, last_reject_comment = ?, updated_at = ? WHERE id = ?`,
+  ).run(newUntil, note || null, now, orderId);
+  db.prepare(
+    `UPDATE raffle_ticket_holds SET hold_status = 'reserved', expires_at = ? WHERE order_id = ?`,
+  ).run(newUntil, orderId);
+  insertRaffleOrderEvent(orderId, "reject_rework", note || null);
+  recalculateWholesaleForRaffle(raffleId);
+  return { ok: true, mode: "rework" };
+}
+
+export type AdminActiveOrderRow = RaffleOrderRow & {
+  raffle_title: string;
+  user_phone: string;
+  user_name: string;
+};
+
+export function listActiveOrdersForAdmin(): AdminActiveOrderRow[] {
+  cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  return db
+    .prepare(
+      `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       INNER JOIN users u ON u.id = o.user_id
+       WHERE o.status = 'reserved' AND o.reserved_until > ?
+       ORDER BY o.reserved_until ASC
+       LIMIT 300`,
+    )
+    .all(now) as AdminActiveOrderRow[];
+}
+
+export type PublicOrderStatusDto = {
+  found: boolean;
+  order_public_id: string;
+  status: string;
+  raffle_title: string;
+  rules_url: string | null;
+  amount_rub: number;
+  ticket_count: number;
+  reserved_until: number | null;
+  timeline: RaffleOrderTimelineItem[];
+  review_eta_hint: string;
+};
+
+export function receiptReviewEtaHintFromEnv(): string {
+  const raw = String(process.env.RAFFLE_RECEIPT_REVIEW_HOURS ?? "24").trim();
+  const n = Number(raw);
+  const h = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 168) : 24;
+  return `Обычно проверка занимает до ${h} ч.`;
+}
+
+export function getPublicOrderStatusByToken(rawToken: string): PublicOrderStatusDto | null {
+  const t = String(rawToken ?? "").trim().toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(t)) return null;
+  const o = db
+    .prepare(`SELECT * FROM raffle_orders WHERE public_status_token = ?`)
+    .get(t) as RaffleOrderRow | undefined;
+  if (!o) return null;
+  const raffle = getRaffleById(o.raffle_id);
+  const title = raffle ? raffle.title : "Акция";
+  const rulesRaw = raffle ? String(raffle.rules_url ?? "").trim() : "";
+  return {
+    found: true,
+    order_public_id: `A${o.id}`,
+    status: o.status,
+    raffle_title: title,
+    rules_url: rulesRaw ? rulesRaw : null,
+    amount_rub: o.amount_rub,
+    ticket_count: o.ticket_count,
+    reserved_until: o.status === "reserved" ? o.reserved_until : null,
+    timeline: listRaffleOrderTimeline(o.id),
+    review_eta_hint: receiptReviewEtaHintFromEnv(),
+  };
+}
+
 export function orderToDto(o: RaffleOrderRow) {
+  const tok = String((o as RaffleOrderRow).public_status_token ?? "").trim();
   return {
     id: o.id,
     raffle_id: o.raffle_id,
@@ -351,6 +574,10 @@ export function orderToDto(o: RaffleOrderRow) {
     reserve_extended_once: (o as RaffleOrderRow).reserve_extended_once ? 1 : 0,
     receipt_url: o.receipt_url,
     receipt_name: o.receipt_name,
+    receipt_reject_count: Number((o as RaffleOrderRow).receipt_reject_count ?? 0),
+    last_reject_comment: (o as RaffleOrderRow).last_reject_comment ?? null,
+    tracking_token: tok || null,
+    receipt_review_eta_hint: receiptReviewEtaHintFromEnv(),
     created_at: o.created_at,
   };
 }
@@ -374,7 +601,7 @@ export function extendReservedOrderOnce(
   const now = Date.now();
   const newUntil = o.reserved_until + RESERVE_EXTEND_MS;
   db.prepare(
-    `UPDATE raffle_orders SET reserved_until = ?, reserve_extended_once = 1, updated_at = ? WHERE id = ?`,
+    `UPDATE raffle_orders SET reserved_until = ?, reserve_extended_once = 1, reserve_reminder_sent_at = NULL, updated_at = ? WHERE id = ?`,
   ).run(newUntil, now, orderId);
   db.prepare(`UPDATE raffle_ticket_holds SET expires_at = ? WHERE order_id = ?`).run(newUntil, orderId);
   const updated = getOrderByIdForUser(orderId, userId);
@@ -394,6 +621,7 @@ export function getTicketNumbersForOrder(orderId: number): number[] {
 export function listReservedOrdersForUser(userId: number): Array<{
   order: ReturnType<typeof orderToDto>;
   numbers: number[];
+  timeline: RaffleOrderTimelineItem[];
   raffle: { id: number; title: string; price_rub: number };
 }> {
   cleanupExpiredRaffleOrders();
@@ -411,6 +639,7 @@ export function listReservedOrdersForUser(userId: number): Array<{
   return rows.map((row) => ({
     order: orderToDto(row),
     numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
     raffle: {
       id: row.raffle_id,
       title: row.raffle_title,
@@ -460,6 +689,7 @@ export function removeTicketFromReservedOrder(
 export function listConfirmedTicketGroupsForUser(userId: number): Array<{
   order: ReturnType<typeof orderToDto>;
   numbers: number[];
+  timeline: RaffleOrderTimelineItem[];
   raffle: { id: number; title: string; price_rub: number; status: string };
 }> {
   const rows = db
@@ -477,6 +707,7 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
   return rows.map((row) => ({
     order: orderToDto(row),
     numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
     raffle: {
       id: row.raffle_id,
       title: row.raffle_title,
@@ -489,6 +720,7 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
 export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
   order: ReturnType<typeof orderToDto>;
   numbers: number[];
+  timeline: RaffleOrderTimelineItem[];
   raffle: { id: number; title: string; price_rub: number; status: string };
 }> {
   const rows = db
@@ -506,6 +738,7 @@ export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
   return rows.map((row) => ({
     order: orderToDto(row),
     numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
     raffle: {
       id: row.raffle_id,
       title: row.raffle_title,
@@ -617,15 +850,17 @@ export function createOrAppendConfirmedTicketsForUser(
     if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
   }
   const amount = uniq.length * raffle.price_rub;
+  const pubTok = newPublicOrderToken();
   const info = db
     .prepare(
       `INSERT INTO raffle_orders (
         raffle_id, user_id, bank, amount_rub, ticket_count, status,
-        reserved_until, receipt_url, receipt_name, receipt_mime, created_at, updated_at
-      ) VALUES (?, ?, NULL, ?, ?, 'confirmed', 0, NULL, NULL, NULL, ?, ?)`,
+        reserved_until, receipt_url, receipt_name, receipt_mime, public_status_token, created_at, updated_at
+      ) VALUES (?, ?, NULL, ?, ?, 'confirmed', 0, NULL, NULL, NULL, ?, ?, ?)`,
     )
-    .run(raffleId, userId, amount, uniq.length, now, now);
+    .run(raffleId, userId, amount, uniq.length, pubTok, now, now);
   const orderId = Number(info.lastInsertRowid);
+  insertRaffleOrderEvent(orderId, "confirmed", null);
   for (const n of uniq) {
     insHold.run(raffleId, orderId, userId, n, now);
   }

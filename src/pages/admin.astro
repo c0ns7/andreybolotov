@@ -198,14 +198,21 @@ import "../styles/admin-raffles.css";
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.38-8.38A4 4 0 1 1 18 12.84l-8.38 8.38a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                   </svg>
                 </button>
-                <textarea
-                  id="admin-reply-input"
-                  class="admin-reply__textarea"
-                  rows="2"
-                  placeholder="Ответ от поддержки… Файл: кнопка скрепки, вставка из буфера или перетаскивание в область переписки."
-                  maxlength="4000"
-                  autocomplete="off"
-                ></textarea>
+                <div class="admin-reply__main">
+                  <div class="admin-reply-canned" id="admin-reply-canned" role="toolbar" aria-label="Готовые ответы">
+                    <button type="button" class="admin-reply-canned__btn" data-canned="where_order">Где заказ</button>
+                    <button type="button" class="admin-reply-canned__btn" data-canned="how_receipt">Как чек</button>
+                    <button type="button" class="admin-reply-canned__btn" data-canned="wait_time">Сроки</button>
+                  </div>
+                  <textarea
+                    id="admin-reply-input"
+                    class="admin-reply__textarea"
+                    rows="2"
+                    placeholder="Ответ от поддержки… Файл: кнопка скрепки, вставка из буфера или перетаскивание в область переписки."
+                    maxlength="4000"
+                    autocomplete="off"
+                  ></textarea>
+                </div>
                 <button type="submit" class="admin-reply__btn" id="btn-admin-reply-send" aria-label="Отправить">
                   <svg class="admin-reply__btn-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
@@ -263,7 +270,9 @@ import "../styles/admin-raffles.css";
             </span>
             <div class="admin-raffles-toolbar__text">
               <span class="admin-raffles-toolbar__label">Очередь оплат</span>
-              <p class="admin-raffles-toolbar__hint">Сверху — более ранние заявки по дате создания. Проверьте чек и подтвердите — номерки закрепятся за покупателем.</p>
+              <p class="admin-raffles-toolbar__hint">
+                Сверху — более ранние заявки по дате создания. Отклонение чека: необязательный комментарий уходит в письмо. «Снять бронь» — полная отмена без доработки чека. Ниже — активные брони без чека в очереди.
+              </p>
             </div>
           </div>
         </div>
@@ -432,6 +441,17 @@ import "../styles/admin-raffles.css";
               <div class="form-group">
                 <label for="raffle-collection-url">Ссылка на сбор (Сбербанк)</label>
                 <input id="raffle-collection-url" class="input" type="url" inputmode="url" placeholder="https://…" />
+              </div>
+              <div class="form-group">
+                <label for="raffle-rules-url">Ссылка на краткие правила акции</label>
+                <input
+                  id="raffle-rules-url"
+                  class="input"
+                  type="url"
+                  inputmode="url"
+                  placeholder="https://… (экран оплаты и письма)"
+                  maxlength="2000"
+                />
               </div>
               <div class="form-group">
                 <label for="raffle-recipient">Получатель / назначение сбора</label>
@@ -1383,6 +1403,33 @@ import "../styles/admin-raffles.css";
     padding: 12px;
     border-top: 1px solid var(--border);
     background: #fff;
+  }
+  .admin-reply__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .admin-reply-canned {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .admin-reply-canned__btn {
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: inherit;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #f9fafb;
+    color: #374151;
+    cursor: pointer;
+  }
+  .admin-reply-canned__btn:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
   }
   .admin-reply__attach {
     flex-shrink: 0;

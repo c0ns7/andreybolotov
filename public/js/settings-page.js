@@ -195,6 +195,7 @@
 
     var cbNotifyChat = document.getElementById("settings-notify-chat");
     var cbNotifyRaffles = document.getElementById("settings-notify-raffles");
+    var cbNotifyRaffleOrders = document.getElementById("settings-notify-raffle-orders");
     var sessNotify = loadSession();
     if (sessNotify && sessNotify.token) {
       apiJson("/api/auth/me", { headers: authHeaders(), cache: "no-store" })
@@ -202,11 +203,13 @@
           var u = (data && data.user) || {};
           if (cbNotifyChat) cbNotifyChat.checked = u.email_notify_chat !== false;
           if (cbNotifyRaffles) cbNotifyRaffles.checked = u.email_notify_raffles !== false;
+          if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.checked = u.email_notify_raffle_orders !== false;
         })
         .catch(function () {});
     } else {
       if (cbNotifyChat) cbNotifyChat.disabled = true;
       if (cbNotifyRaffles) cbNotifyRaffles.disabled = true;
+      if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.disabled = true;
     }
     if (cbNotifyChat && sessNotify && sessNotify.token) {
       cbNotifyChat.addEventListener("change", function () {
@@ -221,6 +224,14 @@
         var want = cbNotifyRaffles.checked;
         saveEmailNotify({ email_notify_raffles: want }).catch(function () {
           cbNotifyRaffles.checked = !want;
+        });
+      });
+    }
+    if (cbNotifyRaffleOrders && sessNotify && sessNotify.token) {
+      cbNotifyRaffleOrders.addEventListener("change", function () {
+        var want = cbNotifyRaffleOrders.checked;
+        saveEmailNotify({ email_notify_raffle_orders: want }).catch(function () {
+          cbNotifyRaffleOrders.checked = !want;
         });
       });
     }

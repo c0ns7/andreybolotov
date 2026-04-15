@@ -68,10 +68,13 @@ import {
   confirmOrderByAdmin,
   createReservation,
   getActiveOrderForUser,
+  getOrderById,
   getOrderByIdForUser,
   getTicketGridSlice,
   getTicketNumbersForOrder,
   listPendingPayments,
+  adminFullyReleaseRaffleOrder,
+  listActiveOrdersForAdmin,
   getAdminRaffleParticipantsBundle,
   recalculateWholesaleForRaffle,
   addTicketsToReservedOrder,
@@ -82,6 +85,7 @@ import {
   listReservedOrdersForUser,
   orderToDto,
   rejectOrderByAdmin,
+  getPublicOrderStatusByToken,
   removeTicketFromReservedOrder,
   setOrderBank,
   materializeRafflePreassignmentsForUser,
@@ -91,7 +95,14 @@ import {
   getRaffleOccupiedCount,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
-import { maybeSendRaffleLaunchEmails, notifyUserEmailStaffReply, warnIfNoSmtpOnce } from "./notify-email.js";
+import {
+  maybeSendRaffleLaunchEmails,
+  notifyUserEmailStaffReply,
+  notifyUserReceiptRejectedRework,
+  notifyUserOrderFullyReleased,
+  tickReserveExpiryEmailReminders,
+  warnIfNoSmtpOnce,
+} from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 const RAFFLE_VIEW_TTL_MS = 70_000;
@@ -382,6 +393,7 @@ type RaffleInput = {
   collection_url: string;
   collection_recipient: string;
   qr_image_url: string;
+  rules_url: string;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -433,6 +445,12 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   const wholesale_enabled = Boolean(body.wholesale_enabled);
   const hidden_from_public = Boolean(body.hidden_from_public);
 
+  let rules_url = String(body.rules_url ?? "").trim();
+  if (rules_url.length > 2000) return { ok: false, error: "Ссылка на правила слишком длинная" };
+  if (rules_url && !/^https?:\/\//i.test(rules_url)) {
+    return { ok: false, error: "Правила акции: укажите URL с http:// или https://" };
+  }
+
   return {
     ok: true,
     value: {
@@ -444,6 +462,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       collection_url,
       collection_recipient,
       qr_image_url,
+      rules_url,
       status,
       sort_order,
       wholesale_enabled,
@@ -451,6 +470,27 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     },
   };
 }
+
+app.get("/api/public/raffle-order-status", (c) => {
+  const ip = String(c.req.header("x-forwarded-for") ?? "")
+    .split(",")[0]
+    .trim();
+  const keyIp = ip || c.req.header("x-real-ip") || "local";
+  if (!rateLimitAllow(`get:pub-order:${keyIp}`, 45, 60_000)) return rateLimitExceeded(c);
+  c.header("Cache-Control", "no-store");
+  const t = String(c.req.query("t") ?? "").trim();
+  const dto = getPublicOrderStatusByToken(t);
+  if (!dto) return c.json({ found: false });
+  return c.json(dto);
+});
+
+app.get("/api/internal/cron/raffle-mail-tick", (c) => {
+  const want = process.env.CRON_SECRET?.trim();
+  const got = String(c.req.query("secret") ?? "").trim();
+  if (!want || got !== want) return c.json({ error: "Forbidden" }, 403);
+  tickReserveExpiryEmailReminders();
+  return c.json({ ok: true, at: Date.now() });
+});
 
 app.post("/api/auth/register", async (c) => {
   let body: { phone?: string; name?: string; email?: string; password?: string };
@@ -563,6 +603,7 @@ app.get("/api/auth/me", (c) => {
   const row = getUserById(user.id);
   const notifyChat = row ? Number(row.email_notify_chat ?? 1) !== 0 : true;
   const notifyRaffles = row ? Number(row.email_notify_raffles ?? 1) !== 0 : true;
+  const notifyRaffleOrders = row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true;
   return c.json({
     user: {
       phone: user.phone,
@@ -572,6 +613,7 @@ app.get("/api/auth/me", (c) => {
       blocked: user.blocked === 1,
       email_notify_chat: notifyChat,
       email_notify_raffles: notifyRaffles,
+      email_notify_raffle_orders: notifyRaffleOrders,
     },
   });
 });
@@ -681,18 +723,33 @@ app.post("/api/auth/change-password", async (c) => {
 app.patch("/api/auth/email-notifications", async (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
-  let body: { email_notify_chat?: unknown; email_notify_raffles?: unknown };
+  let body: {
+    email_notify_chat?: unknown;
+    email_notify_raffles?: unknown;
+    email_notify_raffle_orders?: unknown;
+  };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
-  const patch: { email_notify_chat?: boolean; email_notify_raffles?: boolean } = {};
+  const patch: {
+    email_notify_chat?: boolean;
+    email_notify_raffles?: boolean;
+    email_notify_raffle_orders?: boolean;
+  } = {};
   if (typeof body.email_notify_chat === "boolean") patch.email_notify_chat = body.email_notify_chat;
   if (typeof body.email_notify_raffles === "boolean") {
     patch.email_notify_raffles = body.email_notify_raffles;
   }
-  if (patch.email_notify_chat === undefined && patch.email_notify_raffles === undefined) {
+  if (typeof body.email_notify_raffle_orders === "boolean") {
+    patch.email_notify_raffle_orders = body.email_notify_raffle_orders;
+  }
+  if (
+    patch.email_notify_chat === undefined &&
+    patch.email_notify_raffles === undefined &&
+    patch.email_notify_raffle_orders === undefined
+  ) {
     return c.json({ error: "Нет полей для сохранения" }, 400);
   }
   updateUserEmailNotifyPrefs(u.id, patch);
@@ -701,6 +758,7 @@ app.patch("/api/auth/email-notifications", async (c) => {
     ok: true,
     email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
     email_notify_raffles: row ? Number(row.email_notify_raffles ?? 1) !== 0 : true,
+    email_notify_raffle_orders: row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true,
   });
 });
 
@@ -937,7 +995,7 @@ app.get("/api/raffles/cart", (c) => {
   if (!rateLimitAllow(`get:cart:${u.id}`, 60, 60_000)) return rateLimitExceeded(c);
   c.header("Cache-Control", "private, no-store");
   const items = listReservedOrdersForUser(u.id);
-  return c.json({ items });
+  return c.json({ items, server_time_ms: Date.now() });
 });
 
 app.get("/api/raffles/my-tickets", (c) => {
@@ -949,6 +1007,7 @@ app.get("/api/raffles/my-tickets", (c) => {
     reserved: listReservedOrdersForUser(u.id),
     pending_review: listPendingReviewTicketGroupsForUser(u.id),
     confirmed: listConfirmedTicketGroupsForUser(u.id),
+    server_time_ms: Date.now(),
   });
 });
 
@@ -970,14 +1029,16 @@ app.get("/api/raffles/:id/order", (c) => {
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
   const raffle = raffleVisibleOrActiveOrder(c, u, id);
   if (raffle instanceof Response) return raffle;
+  const serverTimeMs = Date.now();
   const order = getActiveOrderForUser(id, u.id);
   if (!order) {
-    return c.json({ order: null, numbers: [], raffle: raffleToDto(raffle) });
+    return c.json({ order: null, numbers: [], raffle: raffleToDto(raffle), server_time_ms: serverTimeMs });
   }
   return c.json({
     order: orderToDto(order),
     numbers: getTicketNumbersForOrder(order.id),
     raffle: raffleToDto(raffle),
+    server_time_ms: serverTimeMs,
   });
 });
 
@@ -1027,9 +1088,11 @@ app.post("/api/raffles/orders/:orderId/add-tickets", async (c) => {
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   broadcastRaffleTicketsUpdated(u.id);
+  const serverTimeMs = Date.now();
   return c.json({
     order: order ? orderToDto(order) : null,
     numbers: getTicketNumbersForOrder(orderId),
+    server_time_ms: serverTimeMs,
   });
 });
 
@@ -1049,10 +1112,12 @@ app.post("/api/raffles/orders/:orderId/random-tickets", async (c) => {
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   broadcastRaffleTicketsUpdated(u.id);
+  const serverTimeMs = Date.now();
   return c.json({
     order: order ? orderToDto(order) : null,
     numbers: getTicketNumbersForOrder(orderId),
     picked: r.picked,
+    server_time_ms: serverTimeMs,
   });
 });
 
@@ -1068,7 +1133,8 @@ app.delete("/api/raffles/orders/:orderId/tickets/:ticketNum", (c) => {
   const r = removeTicketFromReservedOrder(orderId, u.id, ticketNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
   broadcastRaffleTicketsUpdated(u.id);
-  return c.json({ order: r.order, numbers: r.numbers });
+  const serverTimeMs = Date.now();
+  return c.json({ order: r.order, numbers: r.numbers, server_time_ms: serverTimeMs });
 });
 
 app.get("/api/raffles/orders/:orderId", (c) => {
@@ -1081,10 +1147,12 @@ app.get("/api/raffles/orders/:orderId", (c) => {
   const raffle = getRaffleById(order.raffle_id);
   if (!raffle) return c.json({ error: "Не найдено" }, 404);
   c.header("Cache-Control", "private, no-store");
+  const serverTimeMs = Date.now();
   return c.json({
     order: orderToDto(order),
     numbers: getTicketNumbersForOrder(orderId),
     raffle: raffleToDto(raffle),
+    server_time_ms: serverTimeMs,
   });
 });
 
@@ -1110,7 +1178,13 @@ app.post("/api/raffles/:id/reserve", async (c) => {
   if (!order) return c.json({ error: "Ошибка создания заявки" }, 500);
   const nums = getTicketNumbersForOrder(r.order_id);
   broadcastRaffleTicketsUpdated(u.id);
-  return c.json({ order: orderToDto(order), numbers: nums, reserved_until: r.reserved_until });
+  const serverTimeMs = Date.now();
+  return c.json({
+    order: orderToDto(order),
+    numbers: nums,
+    reserved_until: r.reserved_until,
+    server_time_ms: serverTimeMs,
+  });
 });
 
 app.patch("/api/raffles/orders/:orderId/bank", async (c) => {
@@ -1130,7 +1204,7 @@ app.patch("/api/raffles/orders/:orderId/bank", async (c) => {
   if (!res.ok) return c.json({ error: res.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   if (!order) return c.json({ error: "Ошибка" }, 500);
-  return c.json({ order: orderToDto(order) });
+  return c.json({ order: orderToDto(order), server_time_ms: Date.now() });
 });
 
 app.post("/api/raffles/receipt-upload", async (c) => {
@@ -1158,7 +1232,7 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   const order = getOrderByIdForUser(orderId, u.id);
   if (!order) return c.json({ error: "Ошибка" }, 500);
   broadcastRaffleTicketsUpdated(u.id);
-  return c.json({ order: orderToDto(order) });
+  return c.json({ order: orderToDto(order), server_time_ms: Date.now() });
 });
 
 app.get("/api/admin/raffle-payments", (c) => {
@@ -1166,9 +1240,17 @@ app.get("/api/admin/raffle-payments", (c) => {
   if (auth instanceof Response) return auth;
   c.header("Cache-Control", "no-store");
   const rows = listPendingPayments();
+  const active = listActiveOrdersForAdmin();
   return c.json({
     server_time_ms: Date.now(),
     payments: rows.map((row) => ({
+      ...orderToDto(row),
+      raffle_title: row.raffle_title,
+      user_phone: row.user_phone,
+      user_name: row.user_name,
+      user_id: row.user_id,
+    })),
+    active_orders: active.map((row) => ({
       ...orderToDto(row),
       raffle_title: row.raffle_title,
       user_phone: row.user_phone,
@@ -1192,16 +1274,95 @@ app.post("/api/admin/raffle-payments/:orderId/confirm", (c) => {
   return c.json({ ok: true });
 });
 
-app.post("/api/admin/raffle-payments/:orderId/reject", (c) => {
+app.post("/api/admin/raffle-payments/:orderId/reject", async (c) => {
   const auth = requireAdmin(c);
   if (auth instanceof Response) return auth;
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
-  const owner = listPendingPayments().find((p) => Number(p.id) === orderId);
-  const res = rejectOrderByAdmin(orderId);
+  let adminNote = "";
+  try {
+    const body = (await c.req.json()) as { comment?: unknown };
+    adminNote = String(body?.comment ?? "").trim().slice(0, 500);
+  } catch {
+    adminNote = "";
+  }
+  const pendingRow = listPendingPayments().find((p) => Number(p.id) === orderId);
+  const res = rejectOrderByAdmin(orderId, { adminNote });
   if (!res.ok) return c.json({ error: res.error }, 400);
-  if (owner && Number.isFinite(Number(owner.user_id))) {
-    broadcastRaffleTicketsUpdated(Number(owner.user_id));
+  if (pendingRow && Number.isFinite(Number(pendingRow.user_id))) {
+    const uid = Number(pendingRow.user_id);
+    const updated = getOrderById(orderId);
+    const raffle = getRaffleById(pendingRow.raffle_id);
+    const tok = updated ? String((updated as { public_status_token?: string }).public_status_token ?? "").trim() : "";
+    const statusPageUrl = tok
+      ? `${publicAppOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
+      : "";
+    const rulesUrl = raffle ? String(raffle.rules_url ?? "").trim() : "";
+    if (updated && raffle) {
+      if (res.mode === "rework") {
+        notifyUserReceiptRejectedRework(uid, {
+          raffleTitle: raffle.title,
+          orderPublicId: `A${orderId}`,
+          amountRub: updated.amount_rub,
+          ticketCount: updated.ticket_count,
+          reservedUntilMs: updated.reserved_until,
+          openRaffleUrl: `${publicAppOrigin()}/home/raffle?id=${encodeURIComponent(String(raffle.id))}`,
+          adminNote,
+          statusPageUrl,
+          rulesUrl,
+        });
+      } else {
+        notifyUserOrderFullyReleased(uid, {
+          raffleTitle: raffle.title,
+          orderPublicId: `A${orderId}`,
+          reason: "Заявка отменена: исчерпан лимит повторных загрузок чека",
+          openHomeUrl: `${publicAppOrigin()}/home`,
+          statusPageUrl,
+          rulesUrl,
+          adminNote,
+        });
+      }
+    }
+    broadcastRaffleTicketsUpdated(uid);
+  }
+  return c.json({ ok: true, mode: res.mode });
+});
+
+app.post("/api/admin/raffle-orders/:orderId/release", async (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const orderId = Number(c.req.param("orderId"));
+  if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
+  let adminNote = "";
+  try {
+    const body = (await c.req.json()) as { comment?: unknown };
+    adminNote = String(body?.comment ?? "").trim().slice(0, 500);
+  } catch {
+    adminNote = "";
+  }
+  const before = getOrderById(orderId);
+  const res = adminFullyReleaseRaffleOrder(orderId, adminNote || null);
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  if (before && Number.isFinite(Number(before.user_id))) {
+    const uid = Number(before.user_id);
+    const raffle = getRaffleById(before.raffle_id);
+    const tok = String((before as { public_status_token?: string }).public_status_token ?? "").trim();
+    const statusPageUrl = tok
+      ? `${publicAppOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
+      : "";
+    const rulesUrl = raffle ? String(raffle.rules_url ?? "").trim() : "";
+    if (raffle) {
+      notifyUserOrderFullyReleased(uid, {
+        raffleTitle: raffle.title,
+        orderPublicId: `A${orderId}`,
+        reason: "Бронь снята администратором",
+        openHomeUrl: `${publicAppOrigin()}/home`,
+        statusPageUrl,
+        rulesUrl,
+        adminNote,
+      });
+    }
+    broadcastRaffleTicketsUpdated(uid);
   }
   return c.json({ ok: true });
 });
@@ -1277,6 +1438,7 @@ app.post("/api/admin/raffles", async (c) => {
     collection_url: v.collection_url,
     collection_recipient: v.collection_recipient,
     qr_image_url: v.qr_image_url,
+    rules_url: v.rules_url,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
@@ -1315,6 +1477,7 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     collection_url: v.collection_url,
     collection_recipient: v.collection_recipient,
     qr_image_url: v.qr_image_url,
+    rules_url: v.rules_url,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
@@ -1563,4 +1726,10 @@ server.listen(PORT, () => {
   warnIfNoSmtpOnce();
   console.log(`HTTP + WebSocket ws://127.0.0.1:${PORT}/ws`);
   console.log(`SQLite: ./data/app.db`);
+  if (String(process.env.DISABLE_RAFFLE_MAIL_INTERVAL ?? "").trim() !== "1") {
+    tickReserveExpiryEmailReminders();
+    setInterval(tickReserveExpiryEmailReminders, 60_000);
+  } else {
+    console.log("[mail] INTERVAL отключён — используйте CRON → GET /api/internal/cron/raffle-mail-tick?secret=…");
+  }
 });

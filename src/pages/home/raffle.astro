@@ -89,6 +89,23 @@ import AppDockModals from "../../components/AppDockModals.astro";
         </div>
       </div>
     </header>
+    <nav id="raffle-page-funnel" class="raffle-funnel" aria-label="Этапы покупки">
+      <ol class="raffle-funnel__list">
+        <li class="raffle-funnel__step is-current" data-funnel-step="numbers">
+          <span class="raffle-funnel__dot" aria-hidden="true">1</span>
+          <span class="raffle-funnel__label">Выбрали номера</span>
+        </li>
+        <li class="raffle-funnel__step" data-funnel-step="cart">
+          <span class="raffle-funnel__dot" aria-hidden="true">2</span>
+          <span class="raffle-funnel__label">Корзина</span>
+        </li>
+        <li class="raffle-funnel__step" data-funnel-step="pay">
+          <span class="raffle-funnel__dot" aria-hidden="true">3</span>
+          <span class="raffle-funnel__label">Оплата</span>
+        </li>
+      </ol>
+      <p id="raffle-page-funnel-live" class="visually-hidden" aria-live="polite"></p>
+    </nav>
     <div class="raffle-legend-island-wrap">
       <div id="raffle-page-legend" class="raffle-legend raffle-legend--island" aria-label="Обозначения на сетке">
         <span class="raffle-legend__item">

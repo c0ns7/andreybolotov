@@ -1847,6 +1847,48 @@
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.18);
 }
 
+.admin-payment-btn--release {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.admin-payment-btn--release:hover {
+  background: #fef3c7;
+  border-color: #fbbf24;
+}
+
+.admin-payments-section {
+  margin-bottom: 28px;
+}
+
+.admin-payments-section__title {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-payments-section__empty-note {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.admin-payment-card__stripe--amber {
+  background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+}
+
+.admin-payment-card__fact--warn .admin-payment-card__icon-wrap {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-payment-card__fact--note {
+  align-items: flex-start;
+}
+
 @media (max-width: 480px) {
   .admin-payment-card__sum-block {
     width: 100%;

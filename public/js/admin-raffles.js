@@ -332,6 +332,8 @@
     }
     document.getElementById("raffle-tickets").value = edit ? String(edit.ticket_count) : "0";
     document.getElementById("raffle-collection-url").value = edit ? edit.collection_url || "" : "";
+    var rulesEl = document.getElementById("raffle-rules-url");
+    if (rulesEl) rulesEl.value = edit ? edit.rules_url || "" : "";
     document.getElementById("raffle-recipient").value = edit ? edit.collection_recipient || "" : "";
     document.getElementById("raffle-qr-url").value = edit ? edit.qr_image_url || "" : "";
     document.getElementById("raffle-status").value = edit ? edit.status : "active";
@@ -885,6 +887,10 @@
       })(),
       ticket_count: Number(document.getElementById("raffle-tickets").value),
       collection_url: document.getElementById("raffle-collection-url").value.trim(),
+      rules_url: (function () {
+        var el = document.getElementById("raffle-rules-url");
+        return el ? String(el.value || "").trim() : "";
+      })(),
       collection_recipient: document.getElementById("raffle-recipient").value.trim(),
       qr_image_url: qrUrl,
       status: document.getElementById("raffle-status").value,

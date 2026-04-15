@@ -27,6 +27,8 @@
       '<svg class="admin-payment-ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
     chat:
       '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+    unlock:
+      '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>',
   };
 
   function loadSession() {
@@ -91,6 +93,36 @@
     );
   }
 
+  function bindChatHandlers(container, token) {
+    container.querySelectorAll("[data-chat-user]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var uid = Number(btn.getAttribute("data-chat-user"));
+        if (!Number.isFinite(uid)) return;
+        if (typeof window.abAdminOpenSupportChat === "function") {
+          window.abAdminOpenSupportChat(uid);
+        }
+      });
+    });
+    container.querySelectorAll("[data-confirm-order]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = Number(btn.getAttribute("data-confirm-order"));
+        confirmOrReject(token, id, "confirm");
+      });
+    });
+    container.querySelectorAll("[data-reject-order]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = Number(btn.getAttribute("data-reject-order"));
+        confirmOrReject(token, id, "reject");
+      });
+    });
+    container.querySelectorAll("[data-release-order]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = Number(btn.getAttribute("data-release-order"));
+        releaseOrder(token, id);
+      });
+    });
+  }
+
   function loadList() {
     const listEl = document.getElementById("admin-payments-list");
     if (!listEl) return;
@@ -117,47 +149,44 @@
       .then(function (x) {
         if (!x.ok) throw new Error(x.data.error || "Ошибка");
         const payments = x.data.payments || [];
+        const active = x.data.active_orders || [];
         const skewHtml = renderServerSkewNote(x.data.server_time_ms);
-        if (!payments.length) {
+        let html = skewHtml;
+
+        if (!payments.length && !active.length) {
           listEl.innerHTML =
-            skewHtml +
+            html +
             '<div class="admin-payments-empty">' +
             '<div class="admin-payments-empty__illu">' +
             ICO.inbox +
             "</div>" +
             "<p class=\"admin-payments-empty__title\">Очередь пуста</p>" +
-            "<p class=\"admin-payments-empty__hint\">Новые заявки с чеками появятся здесь автоматически.</p>" +
+            "<p class=\"admin-payments-empty__hint\">Нет активных броней и заявок с чеками.</p>" +
             "</div>";
           return;
         }
-        listEl.innerHTML =
-          skewHtml +
-          payments
-            .map(function (p) {
-              return renderCard(p);
-            })
-            .join("");
-        listEl.querySelectorAll("[data-confirm-order]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            const id = Number(btn.getAttribute("data-confirm-order"));
-            confirmOrReject(s.token, id, "confirm");
-          });
-        });
-        listEl.querySelectorAll("[data-reject-order]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            const id = Number(btn.getAttribute("data-reject-order"));
-            confirmOrReject(s.token, id, "reject");
-          });
-        });
-        listEl.querySelectorAll("[data-chat-user]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            var uid = Number(btn.getAttribute("data-chat-user"));
-            if (!Number.isFinite(uid)) return;
-            if (typeof window.abAdminOpenSupportChat === "function") {
-              window.abAdminOpenSupportChat(uid);
-            }
-          });
-        });
+
+        if (active.length) {
+          html +=
+            '<div class="admin-payments-section">' +
+            '<h3 class="admin-payments-section__title">Активная бронь (чека ещё нет в очереди)</h3>' +
+            active.map(renderActiveCard).join("") +
+            "</div>";
+        }
+
+        if (payments.length) {
+          html +=
+            '<div class="admin-payments-section">' +
+            '<h3 class="admin-payments-section__title">Очередь на проверку чека</h3>' +
+            payments.map(renderPaymentCard).join("") +
+            "</div>";
+        } else {
+          html +=
+            '<div class="admin-payments-section"><p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p></div>';
+        }
+
+        listEl.innerHTML = html;
+        bindChatHandlers(listEl, s.token);
       })
       .catch(function (e) {
         listEl.innerHTML =
@@ -172,7 +201,124 @@
       });
   }
 
-  function renderCard(p) {
+  function renderActiveCard(p) {
+    const id = String(p.id);
+    var uid = p.user_id != null ? Number(p.user_id) : NaN;
+    var chatBtn =
+      Number.isFinite(uid) && uid > 0
+        ? '<button type="button" class="admin-payment-btn admin-payment-btn--chat" data-chat-user="' +
+          String(uid) +
+          '">' +
+          ICO.chat +
+          "<span>Написать в чат</span></button>"
+        : "";
+    const bankLabel =
+      p.bank === "sber" ? "Сбербанк" : p.bank === "other" ? "Другой банк" : "—";
+    return (
+      '<article class="admin-payment-card admin-payment-card--active" data-order-id="' +
+      id +
+      '">' +
+      '<div class="admin-payment-card__stripe admin-payment-card__stripe--amber" aria-hidden="true"></div>' +
+      '<div class="admin-payment-card__body">' +
+      '<header class="admin-payment-card__header">' +
+      '<div class="admin-payment-card__raffle">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--violet">' +
+      ICO.raffle +
+      "</span>" +
+      '<div class="admin-payment-card__raffle-text">' +
+      '<span class="admin-payment-card__eyebrow">Бронь</span>' +
+      '<h3 class="admin-payment-card__title">' +
+      esc(String(p.raffle_title || "Без названия")) +
+      "</h3>" +
+      "</div></div>" +
+      '<div class="admin-payment-card__sum-block">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--green">' +
+      ICO.rub +
+      "</span>" +
+      '<div><span class="admin-payment-card__eyebrow">Сумма</span>' +
+      '<p class="admin-payment-card__sum">' +
+      esc(String(p.amount_rub ?? 0)) +
+      " <span class=\"admin-payment-card__currency\">₽</span></p></div></div></header>" +
+      '<ul class="admin-payment-card__facts">' +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--teal">' +
+      ICO.time +
+      "</span>" +
+      "<span><strong>Создано</strong> · " +
+      esc(formatOrderCreatedLocal(p.created_at)) +
+      " <span class=\"admin-payment-card__tz-hint\">(ваш часовой пояс)</span></span></li>" +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--teal">' +
+      ICO.time +
+      "</span>" +
+      "<span><strong>Бронь до</strong> · " +
+      esc(formatOrderCreatedLocal(p.reserved_until)) +
+      "</span></li>" +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
+      ICO.user +
+      "</span>" +
+      "<span>" +
+      esc(String(p.user_name || "—")) +
+      " · " +
+      esc(String(p.user_phone || "")) +
+      "</span></li>" +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+      ICO.tickets +
+      "</span>" +
+      "<span><strong>" +
+      String(p.ticket_count ?? 0) +
+      "</strong> номерков</span></li>" +
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--slate">' +
+      ICO.bank +
+      "</span>" +
+      "<span>" +
+      esc(bankLabel) +
+      "</span></li>" +
+      rejectMetaFacts(p) +
+      "</ul>" +
+      '<div class="admin-payment-card__actions">' +
+      chatBtn +
+      '<button type="button" class="admin-payment-btn admin-payment-btn--release" data-release-order="' +
+      id +
+      '">' +
+      ICO.unlock +
+      "<span>Снять бронь полностью</span></button>" +
+      "</div></div></article>"
+    );
+  }
+
+  function rejectMetaFacts(p) {
+    var n = Number(p.receipt_reject_count || 0);
+    var note = p.last_reject_comment != null ? String(p.last_reject_comment).trim() : "";
+    if (!n && !note) return "";
+    var lines = "";
+    if (n > 0) {
+      lines +=
+        '<li class="admin-payment-card__fact admin-payment-card__fact--warn">' +
+        '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+        ICO.x +
+        "</span>" +
+        "<span><strong>Отклонений чека</strong> · " +
+        esc(String(n)) +
+        "</span></li>";
+    }
+    if (note) {
+      lines +=
+        '<li class="admin-payment-card__fact admin-payment-card__fact--note">' +
+        '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--slate">' +
+        ICO.receipt +
+        "</span>" +
+        "<span><strong>Последний комментарий</strong> · " +
+        esc(note) +
+        "</span></li>";
+    }
+    return lines;
+  }
+
+  function renderPaymentCard(p) {
     const receipt = p.receipt_url
       ? '<a href="' +
         esc(String(p.receipt_url)) +
@@ -207,7 +353,7 @@
       ICO.raffle +
       "</span>" +
       '<div class="admin-payment-card__raffle-text">' +
-      '<span class="admin-payment-card__eyebrow">Акция</span>' +
+      '<span class="admin-payment-card__eyebrow">На проверке</span>' +
       '<h3 class="admin-payment-card__title">' +
       esc(String(p.raffle_title || "Без названия")) +
       "</h3>" +
@@ -253,7 +399,9 @@
       "</span></li>" +
       '<li class="admin-payment-card__fact admin-payment-card__fact--receipt">' +
       receipt +
-      "</li></ul>" +
+      "</li>" +
+      rejectMetaFacts(p) +
+      "</ul>" +
       '<div class="admin-payment-card__actions">' +
       chatBtn +
       '<button type="button" class="admin-payment-btn admin-payment-btn--confirm" data-confirm-order="' +
@@ -265,7 +413,12 @@
       id +
       '">' +
       ICO.x +
-      "<span>Отклонить</span></button>" +
+      "<span>Отклонить чек</span></button>" +
+      '<button type="button" class="admin-payment-btn admin-payment-btn--release" data-release-order="' +
+      id +
+      '">' +
+      ICO.unlock +
+      "<span>Снять бронь полностью</span></button>" +
       "</div></div></article>"
     );
   }
@@ -274,8 +427,16 @@
     const msg =
       kind === "confirm"
         ? "Подтвердить оплату и закрепить номерки за пользователем?"
-        : "Отклонить заявку и освободить номерки?";
+        : "Чек не принят: заявка вернётся в бронь (или будет полностью отменена, если исчерпан лимит доработок). Продолжить?";
     if (!window.confirm(msg)) return;
+    var comment = "";
+    if (kind === "reject") {
+      comment =
+        window.prompt(
+          "Комментарий для пользователя (необязательно). Попадёт в письмо и в историю заказа:",
+          "",
+        ) || "";
+    }
     const path =
       kind === "confirm"
         ? "/api/admin/raffle-payments/" + String(orderId) + "/confirm"
@@ -284,6 +445,37 @@
       const res = await fetch(path, {
         method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: String(comment).trim() }),
+      });
+      const data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) throw new Error(data.error || "Ошибка");
+      if (kind === "reject" && data.mode === "fully_released") {
+        window.alert(
+          "Лимит доработок исчерпан: заявка отменена полностью, номерки возвращены в продажу.",
+        );
+      }
+      await loadList();
+    } catch (e) {
+      window.alert(String(e.message || "Ошибка"));
+    }
+  }
+
+  async function releaseOrder(token, orderId) {
+    if (
+      !window.confirm(
+        "Снять бронь полностью? Номерки вернутся в продажу, заявка будет отменена. Пользователь получит письмо (если настроен SMTP).",
+      )
+    )
+      return;
+    const comment =
+      window.prompt("Комментарий пользователю (необязательно, будет в письме):", "") || "";
+    try {
+      const res = await fetch("/api/admin/raffle-orders/" + String(orderId) + "/release", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: String(comment).trim() }),
       });
       const data = await res.json().catch(function () {
         return {};

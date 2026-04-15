@@ -150,6 +150,7 @@ import InstallAppModal from "./InstallAppModal.astro";
       </div>
     </div>
     <div class="cart-sheet__footer">
+      <p id="modal-cart-summary" class="cart-sheet__summary" aria-live="polite" hidden></p>
       <p id="modal-cart-multi-hint" class="cart-sheet__hint" hidden></p>
       <p id="modal-cart-tip-home" class="cart-sheet__footer-tip">💡 Несколько билетов повышают шансы</p>
       <p id="modal-cart-tip-raffle" class="cart-sheet__footer-tip" hidden>Один билетик — может, ещё парочку? 🎲</p>
@@ -186,7 +187,26 @@ import InstallAppModal from "./InstallAppModal.astro";
       </div>
     </div>
     <h3 id="reserve-success-title" class="reserve-success-modal__title">Забронировано</h3>
-    <p class="reserve-success-modal__sub">Осталось перевести оплату по реквизитам</p>
+    <p class="reserve-success-modal__sub">
+      Номерки временно закреплены за вами. Дальше — перевод и загрузка чека. Этапы ниже подскажут, где вы сейчас.
+    </p>
+    <p id="reserve-success-deadline" class="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
+    <nav id="reserve-success-steps" class="payment-flow-steps" aria-label="Этапы оплаты">
+      <ol class="payment-flow-steps__list">
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">1</span>
+          <span class="payment-flow-steps__label">Бронь</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">2</span>
+          <span class="payment-flow-steps__label">Перевод</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">3</span>
+          <span class="payment-flow-steps__label">Чек</span>
+        </li>
+      </ol>
+    </nav>
     <section class="reserve-success-modal__card">
       <div class="reserve-success-modal__row reserve-success-modal__row--head">
         <span class="reserve-success-modal__label">Заказ</span>
@@ -198,10 +218,10 @@ import InstallAppModal from "./InstallAppModal.astro";
       <div id="reserve-success-numbers" class="reserve-success-modal__numbers"></div>
       <div class="reserve-success-modal__row reserve-success-modal__row--total">
         <span class="reserve-success-modal__label">К оплате</span>
-        <span id="reserve-success-amount" class="reserve-success-modal__amount">0 ₽</span>
+        <span id="reserve-success-amount" class="reserve-success-modal__amount" aria-live="polite">0 ₽</span>
       </div>
     </section>
-    <button type="button" class="reserve-flow-btn reserve-flow-btn--dark" id="reserve-success-go-pay">Перейти к оплате</button>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--dark" id="reserve-success-go-pay">Шаг 2: реквизиты и оплата</button>
   </div>
 </div>
 
@@ -232,6 +252,24 @@ import InstallAppModal from "./InstallAppModal.astro";
       </button>
     </header>
 
+    <nav id="reserve-payment-steps" class="payment-flow-steps payment-flow-steps--compact" aria-label="Этапы оплаты">
+      <ol class="payment-flow-steps__list">
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">1</span>
+          <span class="payment-flow-steps__label">Бронь</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">2</span>
+          <span class="payment-flow-steps__label">Перевод</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">3</span>
+          <span class="payment-flow-steps__label">Чек</span>
+        </li>
+      </ol>
+    </nav>
+    <p id="reserve-payment-phase-hint" class="reserve-payment-modal__phase-hint" role="status"></p>
+
     <div class="reserve-payment-modal__progress-track">
       <div id="reserve-payment-progress" class="reserve-payment-modal__progress-fill"></div>
     </div>
@@ -240,19 +278,23 @@ import InstallAppModal from "./InstallAppModal.astro";
       <div class="reserve-payment-modal__timer" id="reserve-payment-timer">15:00</div>
       <div class="reserve-payment-modal__amount-wrap">
         <span class="reserve-payment-modal__amount-label">К ПЕРЕВОДУ</span>
-        <strong id="reserve-payment-amount" class="reserve-payment-modal__amount">0 ₽</strong>
+        <strong id="reserve-payment-amount" class="reserve-payment-modal__amount" aria-live="polite">0 ₽</strong>
       </div>
     </div>
+    <p id="reserve-payment-deadline" class="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
+    <p id="reserve-payment-rules-wrap" class="reserve-payment-modal__rules" hidden>
+      <a id="reserve-payment-rules-link" class="reserve-payment-modal__rules-link" href="#" target="_blank" rel="noopener noreferrer">Краткие правила акции</a>
+    </p>
 
     <div id="reserve-payment-step-requisites">
       <section class="reserve-payment-modal__info">
-        <h4>Инструкция:</h4>
+        <h4>Что сделать сейчас</h4>
         <ol>
-          <li>Нажмите <strong>«Перейти к оплате»</strong> ниже</li>
-          <li>Оплатите: <strong id="reserve-payment-amount-inline">0 ₽</strong></li>
-          <li>⚠ Укажите сообщение <strong>«Оплата услуг»</strong></li>
-          <li>Сделайте скриншот перевода</li>
-          <li>Нажмите кнопку <strong>«Я перевёл»</strong> в самом низу</li>
+          <li>Нажмите <strong>«Перейти к оплате»</strong> — откроется сбор (Сбер) или оплатите по QR, если он есть у акции.</li>
+          <li>Переведите ровно <strong id="reserve-payment-amount-inline">0 ₽</strong> — сумма должна совпадать с заказом.</li>
+          <li>В комментарии к переводу укажите <strong>«Оплата услуг»</strong> (как в назначении ниже).</li>
+          <li>Сохраните подтверждение: скрин или PDF из банка.</li>
+          <li>Вернитесь сюда и нажмите <strong>«Я перевёл»</strong> — откроется загрузка чека (шаг 3).</li>
         </ol>
       </section>
       <section class="reserve-payment-modal__collect">
@@ -270,26 +312,53 @@ import InstallAppModal from "./InstallAppModal.astro";
         </div>
         <a id="reserve-payment-link" class="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
       </section>
-      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл</button>
+      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл — загрузить чек</button>
+      <button type="button" class="raffle-pay-support" id="reserve-payment-support">Проблема с оплатой</button>
     </div>
 
     <div id="reserve-payment-step-confirm" hidden>
       <section class="reserve-payment-modal__info reserve-payment-modal__info--confirm">
-        <h4>✅ Что должно быть на чеке:</h4>
+        <h4>Проверьте чек перед отправкой</h4>
         <ul>
-          <li>Дата перевода</li>
-          <li>Сумма: <strong id="reserve-payment-amount-check">0 ₽</strong></li>
-          <li>Последние 4 цифры карты получателя</li>
+          <li>Видна <strong>дата и время</strong> операции</li>
+          <li>Сумма совпадает с заказом: <strong id="reserve-payment-amount-check">0 ₽</strong></li>
+          <li>Понятно, <strong>кому</strong> ушёл перевод (или последние цифры карты получателя)</li>
         </ul>
+        <p class="reserve-payment-modal__info-note">
+          После отправки статус сменится на «на проверке». Обычно это занимает немного времени.
+        </p>
       </section>
       <label class="reserve-payment-modal__upload" for="reserve-payment-file">
         <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden />
         <span class="reserve-payment-modal__upload-title">Загрузить чек</span>
         <span id="reserve-payment-file-name" class="reserve-payment-modal__upload-sub">Фото или PDF перевода</span>
       </label>
-      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить на проверку</button>
+      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить чек на проверку</button>
       <button type="button" class="reserve-payment-modal__back-link" id="reserve-payment-back-link">Ой, я ещё не оплатил (вернуться к реквизитам)</button>
     </div>
+  </div>
+</div>
+
+<div
+  id="modal-action-error"
+  class="modal-overlay modal-overlay--reserve-flow"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="action-error-title"
+>
+  <div class="modal reserve-flow-modal reserve-expired-modal">
+    <div class="reserve-expired-modal__hero" aria-hidden="true">
+      <div class="reserve-expired-modal__icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </div>
+    </div>
+    <h3 id="action-error-title" class="reserve-expired-modal__title">Не удалось выполнить действие</h3>
+    <p id="action-error-text" class="reserve-expired-modal__sub">Проверьте соединение и попробуйте снова.</p>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="action-error-retry">Повторить</button>
   </div>
 </div>
 
@@ -310,14 +379,33 @@ import InstallAppModal from "./InstallAppModal.astro";
         </svg>
       </div>
     </div>
-    <h3 id="wait-receipt-title" class="wait-receipt-modal__title">Ожидание чека</h3>
+    <h3 id="wait-receipt-title" class="wait-receipt-modal__title">Нужен чек</h3>
+    <nav id="wait-receipt-steps" class="payment-flow-steps payment-flow-steps--compact" aria-label="Этапы оплаты">
+      <ol class="payment-flow-steps__list">
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">1</span>
+          <span class="payment-flow-steps__label">Бронь</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">2</span>
+          <span class="payment-flow-steps__label">Перевод</span>
+        </li>
+        <li class="payment-flow-steps__step">
+          <span class="payment-flow-steps__num" aria-hidden="true">3</span>
+          <span class="payment-flow-steps__label">Чек</span>
+        </li>
+      </ol>
+    </nav>
     <p class="wait-receipt-modal__sub">
-      Вы подтвердили перевод, но не загрузили чек.<br />
-      Загрузите чек, иначе ваша бронь сгорит.
+      Вы отметили перевод, но чек ещё не прикреплён. Без чека заявку сложно подтвердить, а время брони ограничено — приложите файл ниже.
     </p>
     <p id="wait-receipt-amount" class="wait-receipt-modal__amount">0 ₽</p>
-    <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Загрузить чек</button>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Прикрепить чек (шаг 3)</button>
     <p id="wait-receipt-left" class="wait-receipt-modal__left">Бронь держится 00:00</p>
+    <p id="wait-receipt-deadline" class="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
+    <p id="wait-receipt-rules-wrap" class="wait-receipt-modal__rules" hidden>
+      <a id="wait-receipt-rules-link" class="reserve-payment-modal__rules-link" href="#" target="_blank" rel="noopener noreferrer">Краткие правила акции</a>
+    </p>
   </div>
 </div>
 
@@ -358,6 +446,10 @@ import InstallAppModal from "./InstallAppModal.astro";
       <div class="tickets-sheet__header-text">
         <h2 id="modal-tickets-title" class="tickets-sheet__title">Мои билеты</h2>
         <p id="modal-tickets-subtitle" class="tickets-sheet__subtitle" hidden></p>
+        <p class="tickets-sheet__hint">
+          <strong>Как читать список:</strong> «Забронированные» — оплатите и загрузите чек до времени в карточке (указано по Москве). «На проверке» — чек у администратора; при необходимости замены чека заявка снова попадёт в «Забронированные» с новым сроком.
+          «Утверждённые» — номерки ваши.
+        </p>
       </div>
       <button type="button" class="tickets-sheet__close" id="modal-tickets-close" aria-label="Закрыть">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

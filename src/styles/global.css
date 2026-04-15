@@ -2340,6 +2340,78 @@ html:not(.raffle-grid-page) #tab-search {
   color: var(--text-muted);
 }
 
+.tickets-pending-hint {
+  margin: -4px 0 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.tickets-timeline {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-elevated, #f8fafc) 92%, transparent);
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.tickets-timeline__title {
+  margin: 0 0 8px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.tickets-timeline__list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.tickets-timeline__item {
+  margin-bottom: 8px;
+}
+
+.tickets-timeline__item:last-child {
+  margin-bottom: 0;
+}
+
+.tickets-timeline__label {
+  display: block;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tickets-timeline__time {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.tickets-timeline__detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.tickets-group__track {
+  margin: -4px 0 10px;
+  font-size: 0.78rem;
+}
+
+.tickets-group__track-link {
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .tickets-reserved-head {
   display: flex;
   align-items: flex-start;
@@ -3218,6 +3290,140 @@ a.raffle-pay__btn {
 }
 .reserve-flow-btn--disabled { opacity: 0.55; pointer-events: none; }
 
+/* Пошаговая оплата (бронь → перевод → чек) */
+.payment-flow-steps {
+  margin: 0 0 14px;
+  padding: 10px 10px 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+}
+.payment-flow-steps--compact {
+  margin-bottom: 10px;
+  padding: 8px 8px 10px;
+}
+.payment-flow-steps__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 4px;
+}
+.payment-flow-steps__step {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+}
+.payment-flow-steps__num {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+  background: rgba(51, 65, 85, 0.95);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+.payment-flow-steps__step.is-done .payment-flow-steps__num {
+  background: linear-gradient(145deg, #10b981 0%, #059669 100%);
+  color: #ecfdf5;
+  border-color: rgba(16, 185, 129, 0.65);
+}
+.payment-flow-steps__step.is-current .payment-flow-steps__num {
+  background: linear-gradient(145deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  border-color: rgba(147, 197, 253, 0.85);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
+}
+.payment-flow-steps__step.is-upcoming .payment-flow-steps__num {
+  opacity: 0.92;
+}
+.payment-flow-steps__label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+.payment-flow-steps__step.is-done .payment-flow-steps__label {
+  color: #86efac;
+}
+.payment-flow-steps__step.is-current .payment-flow-steps__label {
+  color: #e2e8f0;
+}
+.payment-flow-steps__step.is-upcoming .payment-flow-steps__label {
+  color: #64748b;
+}
+
+.reserve-payment-modal__phase-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 64, 175, 0.22);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.reserve-payment-modal__info-note {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 0.82rem;
+  color: #a7f3d0;
+  line-height: 1.4;
+}
+
+.reserve-payment-modal__rules,
+.wait-receipt-modal__rules {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.reserve-payment-modal__rules-link {
+  font-weight: 700;
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wait-receipt-modal__rules .reserve-payment-modal__rules-link {
+  color: #2563eb;
+}
+
+.tickets-sheet__hint {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(241, 245, 249, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #475569;
+}
+.tickets-sheet__hint strong {
+  font-weight: 800;
+  color: #334155;
+}
+
 .reserve-success-modal__hero { position: relative; display: flex; justify-content: center; margin: 4px 0 10px; }
 .reserve-success-modal__pulse {
   position: absolute;
@@ -3266,7 +3472,15 @@ a.raffle-pay__btn {
 .reserve-payment-modal__progress-fill {
   height: 100%; width: 100%; background: linear-gradient(90deg, #34d399, #10b981); transition: width 0.4s linear;
 }
-.reserve-payment-modal__timer-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.reserve-payment-modal__timer-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.reserve-flow-modal__deadline {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #94a3b8;
+  text-align: center;
+}
+.reserve-success-modal .reserve-flow-modal__deadline { margin-top: -4px; margin-bottom: 14px; }
 .reserve-payment-modal__timer { min-width: 78px; padding: 8px 12px; border-radius: 11px; background: #fff7ed; color: #ea580c; font-weight: 800; border: 1px solid #fed7aa; }
 .reserve-payment-modal__amount-wrap { text-align: right; }
 .reserve-payment-modal__amount-label { display: block; font-size: 0.66rem; letter-spacing: 0.08em; color: #94a3b8; }
@@ -3390,6 +3604,131 @@ a.raffle-pay__btn {
   color: #94a3b8;
   line-height: 1.34;
   font-size: 0.95rem;
+}
+
+.cart-sheet__summary {
+  margin: 0 0 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.raffle-funnel {
+  margin: 10px 12px 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+}
+.raffle-funnel__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 6px;
+}
+.raffle-funnel__step {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+}
+.raffle-funnel__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+.raffle-funnel__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.raffle-funnel__step.is-current {
+  color: #1d4ed8;
+}
+.raffle-funnel__step.is-current .raffle-funnel__dot {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+.raffle-funnel__step.is-done {
+  color: #166534;
+}
+.raffle-funnel__step.is-done .raffle-funnel__dot {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+}
+
+.raffle-pay-rules {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.raffle-pay-rules__link {
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.raffle-pay-support {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px dashed #93c5fd;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feed-skeleton {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.feed-skeleton__card {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  padding: 14px;
+}
+.feed-skeleton__line {
+  height: 12px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 180% 100%;
+  animation: feedSkeleton 1.1s linear infinite;
+  margin-bottom: 10px;
+}
+.feed-skeleton__line--lg {
+  height: 18px;
+  width: 72%;
+}
+.feed-skeleton__line--sm {
+  width: 45%;
+  margin-bottom: 0;
+}
+@keyframes feedSkeleton {
+  0% { background-position: 180% 0; }
+  100% { background-position: -180% 0; }
 }
 
 @keyframes waitCheckBlink {
