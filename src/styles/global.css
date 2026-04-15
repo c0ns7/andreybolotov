@@ -4354,6 +4354,37 @@ a.raffle-pay__btn {
   margin-bottom: 10px;
 }
 
+.raffle-range-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.raffle-range-toolbar .raffle-range-tabs {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.raffle-range-eye {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.raffle-range-eye--active {
+  border-color: #93c5fd;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
 .raffle-range-tab {
   border: 1px solid #e5e7eb;
   background: #fff;

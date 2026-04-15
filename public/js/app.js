@@ -951,7 +951,7 @@
 
   const RAFFLE_MAX_SELECT = 10;
 
-  /** @type {{ elPrefix: string, raffle: Record<string, unknown> | null, rangeFrom: number, rangeTo: number, selected: Set<number>, order: Record<string, unknown> | null, orderNumbers: number[], timerId: ReturnType<typeof setInterval> | null, sberMethod: "collection" | "qr" | null, currentPayStep: string | null }} */
+  /** @type {{ elPrefix: string, raffle: Record<string, unknown> | null, rangeFrom: number, rangeTo: number, selected: Set<number>, order: Record<string, unknown> | null, orderNumbers: number[], timerId: ReturnType<typeof setInterval> | null, sberMethod: "collection" | "qr" | null, currentPayStep: string | null, onlyFreeView: boolean, lastCells: Array<{n:number,kind:string}> }} */
   var raffleDetailState = {
     elPrefix: "raffle-page",
     raffle: null,
@@ -963,6 +963,8 @@
     timerId: null,
     sberMethod: null,
     currentPayStep: null,
+    onlyFreeView: false,
+    lastCells: [],
   };
 
   function clearRaffleDetailTimer() {
@@ -2828,6 +2830,7 @@
     });
     if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
     var cells = data.cells || [];
+    raffleDetailState.lastCells = cells;
     renderRaffleGrid(cells);
   }
 
@@ -2865,9 +2868,15 @@
   function renderRaffleGrid(cells) {
     var grid = raffleDetailEl("grid");
     if (!grid) return;
+    var drawCells =
+      IS_RAFFLE_PURCHASE_PAGE && raffleDetailState.onlyFreeView
+        ? (cells || []).filter(function (c) {
+            return String(c && c.kind) === "free";
+          })
+        : cells || [];
     var html = "";
-    for (var i = 0; i < cells.length; i++) {
-      var cell = cells[i];
+    for (var i = 0; i < drawCells.length; i++) {
+      var cell = drawCells[i];
       var n = cell.n;
       var kind = String(cell.kind || "free");
       /* Чужие занятые — серая точка без номера. Свои бронь / ожидание / подтверждено — оранжевые с номером. */
@@ -3177,6 +3186,13 @@
       btn.classList.remove("raffle-cell--flash");
       void btn.offsetWidth;
       btn.classList.add("raffle-cell--flash");
+    });
+
+    document.getElementById("raffle-page-only-free")?.addEventListener("click", function () {
+      raffleDetailState.onlyFreeView = !raffleDetailState.onlyFreeView;
+      this.setAttribute("aria-pressed", raffleDetailState.onlyFreeView ? "true" : "false");
+      this.classList.toggle("raffle-range-eye--active", raffleDetailState.onlyFreeView);
+      renderRaffleGrid(raffleDetailState.lastCells || []);
     });
 
     document.getElementById("raffle-page-reserve")?.addEventListener("click", async function () {

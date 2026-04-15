@@ -47,7 +47,22 @@ import AppDockModals from "../../components/AppDockModals.astro";
         <div class="raffle-purchase-hero-spacer" id="raffle-page-topbar-spacer" hidden aria-hidden="true"></div>
       </div>
       <div class="raffle-purchase-hero__controls">
-        <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
+        <div class="raffle-range-toolbar">
+          <button
+            type="button"
+            class="raffle-range-eye"
+            id="raffle-page-only-free"
+            aria-pressed="false"
+            title="Показывать только свободные"
+            aria-label="Показывать только свободные"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
+        </div>
         <div id="raffle-page-legend" class="raffle-legend" aria-label="Обозначения на сетке">
           <span class="raffle-legend__item">
             <span class="raffle-legend__swatch raffle-legend__swatch--free"></span>
