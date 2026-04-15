@@ -3273,7 +3273,10 @@
     loadRaffleTicketSlice().catch(function () {});
     scheduleRaffleSelectionSync();
     showToast("Номер " + String(n) + " добавлен в корзину", "success");
-    scheduleRaffleFastInputLookup();
+    var inp = document.getElementById("raffle-fast-number");
+    if (inp) inp.value = "";
+    raffleFastLookupState = { n: NaN, kind: null };
+    renderRaffleFastInputState();
   }
 
   function pickRandomFreeFromCurrentRange() {
