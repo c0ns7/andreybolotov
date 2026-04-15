@@ -5509,6 +5509,23 @@ html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
   font-size: 0.9rem;
 }
 
+@media (max-width: 767px) {
+  html.raffle-purchase-page .raffle-ticket-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px 0;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: 1 / 1;
+    font-size: 0.88rem;
+  }
+}
+
 html.raffle-purchase-page .raffle-cell--free {
   border-radius: 12px;
   font-size: 0.82rem;
