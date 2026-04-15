@@ -44,16 +44,24 @@ import AppDockModals from "../../components/AppDockModals.astro";
             </button>
           </div>
         </div>
-        <div id="raffle-page-topbar-grid-tools" class="raffle-purchase-hero-tools">
-          <span id="raffle-page-tab-free" class="raffle-purchase-hero-count">— из —</span>
-          <button type="button" class="raffle-purchase-refresh raffle-purchase-refresh--hero" id="raffle-page-refresh" aria-label="Обновить список">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M21 12a9 9 0 1 1-3-6.7"></path>
-              <path d="M21 3v7h-7"></path>
-            </svg>
-          </button>
-        </div>
         <div class="raffle-purchase-hero-spacer" id="raffle-page-topbar-spacer" hidden aria-hidden="true"></div>
+      </div>
+      <div class="raffle-purchase-hero__controls">
+        <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
+        <div id="raffle-page-legend" class="raffle-legend" aria-label="Обозначения на сетке">
+          <span class="raffle-legend__item">
+            <span class="raffle-legend__swatch raffle-legend__swatch--free"></span>
+            Свободно
+          </span>
+          <span class="raffle-legend__item">
+            <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
+            Ваш выбор
+          </span>
+          <span class="raffle-legend__item">
+            <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
+            Забронировано
+          </span>
+        </div>
       </div>
     </header>
 
@@ -63,40 +71,7 @@ import AppDockModals from "../../components/AppDockModals.astro";
       <div id="raffle-page-root" class="raffle-purchase-root raffle-purchase-panel" data-raffle-ui="raffle-page">
         <div id="raffle-page-flow">
           <div id="raffle-page-step-grid">
-            <div id="raffle-page-legend" class="raffle-legend" aria-label="Обозначения на сетке">
-              <span class="raffle-legend__item">
-                <span class="raffle-legend__swatch raffle-legend__swatch--free"></span>
-                Свободно
-              </span>
-              <span class="raffle-legend__item">
-                <span class="raffle-legend__swatch raffle-legend__swatch--sel"></span>
-                Ваш выбор
-              </span>
-              <span class="raffle-legend__item">
-                <span class="raffle-legend__swatch raffle-legend__swatch--taken"></span>
-                Забронировано
-              </span>
-            </div>
-            <div id="raffle-page-tabs" class="raffle-range-tabs" role="tablist" aria-label="Диапазон номерков"></div>
             <div id="raffle-page-grid" class="raffle-ticket-grid"></div>
-            <div class="raffle-detail__cart-block">
-              <p class="raffle-detail__cart-hint">
-                <span class="raffle-detail__cart-hint-icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
-                    <path d="M20 3v4"></path>
-                    <path d="M22 5h-4"></path>
-                    <path d="M4 17v2"></path>
-                    <path d="M5 18H3"></path>
-                  </svg>
-                </span>
-                Чем больше номерков, тем больше шансов!
-              </p>
-              <div class="raffle-detail__bar">
-                <span id="raffle-page-selection" class="raffle-detail__selection">Выбрано: 0 / 10</span>
-                <button type="button" class="btn btn--primary raffle-reserve-btn--empty" id="raffle-page-reserve">Выберите номера</button>
-              </div>
-            </div>
           </div>
 
           <div id="raffle-page-step-bank" class="raffle-detail__step" hidden>

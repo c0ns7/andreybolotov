@@ -76,19 +76,49 @@ import {
   appendRandomTicketsToReservedOrder,
   getTicketCellKind,
   listConfirmedTicketGroupsForUser,
+  listPendingReviewTicketGroupsForUser,
   listReservedOrdersForUser,
   orderToDto,
   rejectOrderByAdmin,
   removeTicketFromReservedOrder,
   setOrderBank,
-  extendReservedOrderOnce,
   materializeRafflePreassignmentsForUser,
   adminBulkAssignPhoneLinesToRaffle,
+  getRaffleOccupiedCount,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import { maybeSendRaffleLaunchEmails, notifyUserEmailStaffReply, warnIfNoSmtpOnce } from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
+const RAFFLE_VIEW_TTL_MS = 70_000;
+const raffleViewersByRaffle = new Map<number, Map<number, number>>();
+
+function cleanupRaffleViewers(nowTs: number): void {
+  for (const [raffleId, users] of raffleViewersByRaffle) {
+    for (const [userId, ts] of users) {
+      if (nowTs - ts > RAFFLE_VIEW_TTL_MS) users.delete(userId);
+    }
+    if (users.size === 0) raffleViewersByRaffle.delete(raffleId);
+  }
+}
+
+function touchRaffleViewer(raffleId: number, userId: number): void {
+  const now = Date.now();
+  cleanupRaffleViewers(now);
+  let users = raffleViewersByRaffle.get(raffleId);
+  if (!users) {
+    users = new Map<number, number>();
+    raffleViewersByRaffle.set(raffleId, users);
+  }
+  users.set(userId, now);
+}
+
+function getRaffleViewerCount(raffleId: number): number {
+  const now = Date.now();
+  cleanupRaffleViewers(now);
+  const users = raffleViewersByRaffle.get(raffleId);
+  return users ? users.size : 0;
+}
 
 function publicAppOrigin(): string {
   const u = process.env.APP_PUBLIC_URL?.trim() || process.env.SITE_URL?.trim();
@@ -868,8 +898,32 @@ app.get("/api/raffles", (c) => {
   c.header("Cache-Control", "private, no-store");
   const rows = listRafflesPublic();
   return c.json({
-    raffles: rows.map((r) => raffleToDto(r)),
+    raffles: rows.map((r) => {
+      const dto = raffleToDto(r);
+      const occupied = Math.min(Math.max(0, getRaffleOccupiedCount(r.id)), Number(dto.ticket_count) || 0);
+      const myOrder = getActiveOrderForUser(r.id, auth.id);
+      const myOrderDto = myOrder ? orderToDto(myOrder) : null;
+      return {
+        ...dto,
+        occupied_count: occupied,
+        free_count: Math.max(0, Number(dto.ticket_count) - occupied),
+        viewers_count: getRaffleViewerCount(r.id),
+        my_order_status: myOrderDto?.status ?? null,
+        my_order_id: myOrderDto?.id ?? null,
+      };
+    }),
   });
+});
+
+app.post("/api/raffles/:id/viewing", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id) || id < 1) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = raffleVisibleOrActiveOrder(c, u, id);
+  if (raffle instanceof Response) return raffle;
+  touchRaffleViewer(id, u.id);
+  return c.json({ ok: true });
 });
 
 /** Статические сегменты до «:id», иначе «cart» и «my-tickets» попадают в :id */
@@ -889,6 +943,7 @@ app.get("/api/raffles/my-tickets", (c) => {
   c.header("Cache-Control", "private, no-store");
   return c.json({
     reserved: listReservedOrdersForUser(u.id),
+    pending_review: listPendingReviewTicketGroupsForUser(u.id),
     confirmed: listConfirmedTicketGroupsForUser(u.id),
   });
 });
@@ -1027,13 +1082,7 @@ app.get("/api/raffles/orders/:orderId", (c) => {
 });
 
 app.post("/api/raffles/orders/:orderId/extend-reservation", (c) => {
-  const u = requireUser(c);
-  if (u instanceof Response) return u;
-  const orderId = Number(c.req.param("orderId"));
-  if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
-  const r = extendReservedOrderOnce(orderId, u.id);
-  if (!r.ok) return c.json({ error: r.error }, 400);
-  return c.json({ order: r.order });
+  return c.json({ error: "Продление брони недоступно" }, 400);
 });
 
 app.post("/api/raffles/:id/reserve", async (c) => {

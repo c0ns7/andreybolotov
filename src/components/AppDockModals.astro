@@ -51,18 +51,6 @@ import InstallAppModal from "./InstallAppModal.astro";
         </div>
       </div>
 
-      <div class="profile-modal__stats">
-        <div class="profile-modal__stat">
-          <p class="profile-modal__stat-label">Ваши Билеты</p>
-          <p id="profile-stat-tickets" class="profile-modal__stat-num">0</p>
-        </div>
-        <div class="profile-modal__stat-divider" aria-hidden="true"></div>
-        <div class="profile-modal__stat">
-          <p class="profile-modal__stat-label">Статус</p>
-          <p id="profile-stat-status" class="profile-modal__stat-status">Активен</p>
-        </div>
-      </div>
-
       <p id="profile-admin-wrap" class="profile-modal__admin" hidden>
         <a href="/admin" class="btn-admin-link" id="link-admin">Панель администратора</a>
       </p>
@@ -181,6 +169,182 @@ import InstallAppModal from "./InstallAppModal.astro";
 </div>
 
 <div
+  id="modal-reserve-success"
+  class="modal-overlay modal-overlay--reserve-flow"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="reserve-success-title"
+>
+  <div class="modal reserve-flow-modal reserve-success-modal">
+    <div class="reserve-success-modal__hero" aria-hidden="true">
+      <div class="reserve-success-modal__pulse"></div>
+      <div class="reserve-success-modal__icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"></path>
+        </svg>
+      </div>
+    </div>
+    <h3 id="reserve-success-title" class="reserve-success-modal__title">Забронировано</h3>
+    <p class="reserve-success-modal__sub">Осталось перевести оплату по реквизитам</p>
+    <section class="reserve-success-modal__card">
+      <div class="reserve-success-modal__row reserve-success-modal__row--head">
+        <span class="reserve-success-modal__label">Заказ</span>
+        <span id="reserve-success-order-id" class="reserve-success-modal__order-id">—</span>
+      </div>
+      <div class="reserve-success-modal__row">
+        <span id="reserve-success-picked-label" class="reserve-success-modal__label">Выбрано (0)</span>
+      </div>
+      <div id="reserve-success-numbers" class="reserve-success-modal__numbers"></div>
+      <div class="reserve-success-modal__row reserve-success-modal__row--total">
+        <span class="reserve-success-modal__label">К оплате</span>
+        <span id="reserve-success-amount" class="reserve-success-modal__amount">0 ₽</span>
+      </div>
+    </section>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--dark" id="reserve-success-go-pay">Перейти к оплате</button>
+  </div>
+</div>
+
+<div
+  id="modal-reserve-payment"
+  class="modal-overlay modal-overlay--reserve-flow"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="reserve-payment-title"
+>
+  <div class="modal reserve-flow-modal reserve-payment-modal">
+    <header class="reserve-payment-modal__head">
+      <button type="button" class="reserve-payment-modal__back" id="reserve-payment-back" aria-label="Назад" hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"></path>
+        </svg>
+      </button>
+      <div class="reserve-payment-modal__title-wrap">
+        <h3 id="reserve-payment-title" class="reserve-payment-modal__title">Реквизиты для перевода</h3>
+        <p id="reserve-payment-order-id" class="reserve-payment-modal__order-id">—</p>
+      </div>
+      <button type="button" class="reserve-payment-modal__close" id="reserve-payment-close" aria-label="Закрыть">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </header>
+
+    <div class="reserve-payment-modal__progress-track">
+      <div id="reserve-payment-progress" class="reserve-payment-modal__progress-fill"></div>
+    </div>
+
+    <div class="reserve-payment-modal__timer-row">
+      <div class="reserve-payment-modal__timer" id="reserve-payment-timer">15:00</div>
+      <div class="reserve-payment-modal__amount-wrap">
+        <span class="reserve-payment-modal__amount-label">К ПЕРЕВОДУ</span>
+        <strong id="reserve-payment-amount" class="reserve-payment-modal__amount">0 ₽</strong>
+      </div>
+    </div>
+
+    <div id="reserve-payment-step-requisites">
+      <section class="reserve-payment-modal__info">
+        <h4>Инструкция:</h4>
+        <ol>
+          <li>Нажмите <strong>«Перейти к оплате»</strong> ниже</li>
+          <li>Оплатите: <strong id="reserve-payment-amount-inline">0 ₽</strong></li>
+          <li>⚠ Укажите сообщение <strong>«Оплата услуг»</strong></li>
+          <li>Сделайте скриншот перевода</li>
+          <li>Нажмите кнопку <strong>«Я перевёл»</strong> в самом низу</li>
+        </ol>
+      </section>
+      <section class="reserve-payment-modal__collect">
+        <div class="reserve-payment-modal__collect-head">
+          <span>СБОР СРЕДСТВ</span>
+          <span>СБЕР</span>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
+          <span>ПОЛУЧАТЕЛЬ</span>
+          <strong id="reserve-payment-recipient">—</strong>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
+          <span>НАЗНАЧЕНИЕ</span>
+          <strong>Оплата услуг</strong>
+        </div>
+        <a id="reserve-payment-link" class="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
+      </section>
+      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл</button>
+    </div>
+
+    <div id="reserve-payment-step-confirm" hidden>
+      <section class="reserve-payment-modal__info reserve-payment-modal__info--confirm">
+        <h4>✅ Что должно быть на чеке:</h4>
+        <ul>
+          <li>Дата перевода</li>
+          <li>Сумма: <strong id="reserve-payment-amount-check">0 ₽</strong></li>
+          <li>Последние 4 цифры карты получателя</li>
+        </ul>
+      </section>
+      <label class="reserve-payment-modal__upload" for="reserve-payment-file">
+        <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden />
+        <span class="reserve-payment-modal__upload-title">Загрузить чек</span>
+        <span id="reserve-payment-file-name" class="reserve-payment-modal__upload-sub">Фото или PDF перевода</span>
+      </label>
+      <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить на проверку</button>
+      <button type="button" class="reserve-payment-modal__back-link" id="reserve-payment-back-link">Ой, я ещё не оплатил (вернуться к реквизитам)</button>
+    </div>
+  </div>
+</div>
+
+<div
+  id="modal-wait-receipt"
+  class="modal-overlay modal-overlay--reserve-flow"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="wait-receipt-title"
+>
+  <div class="modal reserve-flow-modal wait-receipt-modal">
+    <div class="wait-receipt-modal__hero" aria-hidden="true">
+      <div class="wait-receipt-modal__icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M12 6v6l4 2"></path>
+        </svg>
+      </div>
+    </div>
+    <h3 id="wait-receipt-title" class="wait-receipt-modal__title">Ожидание чека</h3>
+    <p class="wait-receipt-modal__sub">
+      Вы подтвердили перевод, но не загрузили чек.<br />
+      Загрузите чек, иначе ваша бронь сгорит.
+    </p>
+    <p id="wait-receipt-amount" class="wait-receipt-modal__amount">0 ₽</p>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Загрузить чек</button>
+    <p id="wait-receipt-left" class="wait-receipt-modal__left">Бронь держится 00:00</p>
+  </div>
+</div>
+
+<div
+  id="modal-reserve-expired"
+  class="modal-overlay modal-overlay--reserve-flow"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="reserve-expired-title"
+>
+  <div class="modal reserve-flow-modal reserve-expired-modal">
+    <div class="reserve-expired-modal__hero" aria-hidden="true">
+      <div class="reserve-expired-modal__icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </div>
+    </div>
+    <h3 id="reserve-expired-title" class="reserve-expired-modal__title">Время вышло</h3>
+    <p class="reserve-expired-modal__sub">Бронь не была оплачена. Номерки вернулись в продажу.</p>
+    <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-expired-close">Закрыть</button>
+  </div>
+</div>
+
+<div
   id="modal-tickets"
   class="modal-overlay modal-overlay--tickets"
   aria-hidden="true"
@@ -199,42 +363,6 @@ import InstallAppModal from "./InstallAppModal.astro";
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12"></path>
         </svg>
-      </button>
-    </div>
-    <div class="tickets-sheet__tabs" role="tablist" aria-label="Раздел билетов">
-      <button
-        type="button"
-        role="tab"
-        id="modal-tickets-tab-reserved"
-        class="tickets-sheet__tab tickets-sheet__tab--active"
-        data-tickets-tab="reserved"
-        aria-selected="true"
-      >
-        <span class="tickets-sheet__tab-icon" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M12 6v6l4 2"></path>
-          </svg>
-        </span>
-        <span class="tickets-sheet__tab-label">В брони</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        id="modal-tickets-tab-confirmed"
-        class="tickets-sheet__tab"
-        data-tickets-tab="confirmed"
-        aria-selected="false"
-      >
-        <span class="tickets-sheet__tab-icon" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>
-            <path d="M13 5v2"></path>
-            <path d="M13 17v2"></path>
-            <path d="M13 11v2"></path>
-          </svg>
-        </span>
-        <span class="tickets-sheet__tab-label">Купленные</span>
       </button>
     </div>
     <div class="tickets-sheet__body custom-scrollbar" id="modal-tickets-body"></div>
@@ -298,6 +426,11 @@ import InstallAppModal from "./InstallAppModal.astro";
         <button type="button" class="btn btn--primary ticket-search-sheet__cta ticket-search-sheet__cta--blue" id="ticket-search-random-apply">
           Добавить 5 случайных билетов
         </button>
+      </div>
+      <div id="ticket-search-picked" class="ticket-search-picked" hidden>
+        <p class="ticket-search-picked__title">ВЫБРАНО:</p>
+        <div id="ticket-search-picked-chips" class="ticket-search-picked__chips"></div>
+        <button type="button" class="ticket-search-picked__go-cart" id="ticket-search-go-cart">Перейти в корзину</button>
       </div>
     </div>
   </div>

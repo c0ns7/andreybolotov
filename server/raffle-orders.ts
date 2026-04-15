@@ -486,6 +486,35 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
   }));
 }
 
+export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
+  order: ReturnType<typeof orderToDto>;
+  numbers: number[];
+  raffle: { id: number; title: string; price_rub: number; status: string };
+}> {
+  const rows = db
+    .prepare(
+      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.status = 'pending_review'
+         AND COALESCE(r.hidden_from_public, 0) = 0
+       ORDER BY o.id DESC`,
+    )
+    .all(userId) as Array<
+    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
+  >;
+  return rows.map((row) => ({
+    order: orderToDto(row),
+    numbers: getTicketNumbersForOrder(row.id),
+    raffle: {
+      id: row.raffle_id,
+      title: row.raffle_title,
+      price_rub: row.raffle_price,
+      status: String(row.raffle_status || "active"),
+    },
+  }));
+}
+
 /** Пересчёт номеров оптовиков: каждые 10 подтверждённых номерков в акции дают следующий глобальный № по времени подтверждения заказов. */
 export function recalculateWholesaleForRaffle(raffleId: number): void {
   const raffle = getRaffleById(raffleId);
@@ -971,4 +1000,21 @@ export function appendRandomTicketsToReservedOrder(
   const add = addTicketsToReservedOrder(orderId, userId, picked);
   if (!add.ok) return add;
   return { ok: true, picked };
+}
+
+/** Сколько номерков уже занято по акции (бронь/проверка/подтверждено + предназначения по телефону). */
+export function getRaffleOccupiedCount(raffleId: number): number {
+  cleanupExpiredRaffleOrders();
+  const holds = db
+    .prepare(
+      `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
+    )
+    .get(raffleId) as { c: number } | undefined;
+  const pre = db
+    .prepare(`SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`)
+    .get(raffleId) as { c: number } | undefined;
+  return Math.max(0, Number((holds && holds.c) || 0) + Number((pre && pre.c) || 0));
 }
