@@ -534,55 +534,84 @@ import "../styles/admin-raffles.css";
         </div>
         <div class="modal__body admin-raffle-modal__body">
           <div class="admin-raffle-participants">
-            <div class="admin-raffle-bulk-assign">
-              <label class="admin-raffle-bulk-assign__label" for="raffle-bulk-phones">
-                Быстрое назначение номерков по списку телефонов
+            <div class="admin-raffle-participants-tabs" role="tablist" aria-label="Разделы участников">
+              <button type="button" class="admin-raffle-participants-tab is-active" id="raffle-participants-tab-list" data-tab="participants" role="tab" aria-selected="true" aria-controls="raffle-participants-panel-list">
+                Участники
+              </button>
+              <button type="button" class="admin-raffle-participants-tab" id="raffle-participants-tab-assign" data-tab="assign" role="tab" aria-selected="false" aria-controls="raffle-participants-panel-assign">
+                Выдача номерков
+              </button>
+            </div>
+            <section id="raffle-participants-panel-list" class="admin-raffle-participants-panel" data-panel="participants" role="tabpanel" aria-labelledby="raffle-participants-tab-list">
+              <label class="form-group admin-raffle-participants__search" for="raffle-participants-search">
+                <span class="admin-raffle-participants__search-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  Поиск по номерку
+                </span>
+                <input id="raffle-participants-search" class="input admin-raffle-participants__search-input" type="search" inputmode="numeric" placeholder="Например: 42" autocomplete="off" />
               </label>
-              <p class="admin-raffle-bulk-assign__hint">
-                По одному номеру на строку. Желаемый номерок у первой строки — «Первый номерок», у следующих строк — по порядку; если
-                номер занят, берётся следующий свободный. Одному телефону — один номер за загрузку; повторы в списке и те, у кого уже
-                есть номерок в акции, пропускаются.
-              </p>
-              <textarea
-                id="raffle-bulk-phones"
-                class="input admin-raffle-bulk-assign__textarea"
-                rows="5"
-                placeholder="89144617846&#10;89143687442&#10;…"
-                autocomplete="off"
-              ></textarea>
-              <div class="admin-raffle-bulk-assign__row">
-                <label class="admin-raffle-bulk-assign__start">
-                  <span class="admin-raffle-bulk-assign__start-label">Первый номерок</span>
-                  <input
-                    id="raffle-bulk-start"
-                    class="input admin-raffle-bulk-assign__start-input"
-                    type="number"
-                    min="1"
-                    value="1"
-                    inputmode="numeric"
-                  />
-                </label>
-                <button type="button" class="btn btn--primary admin-raffle-bulk-assign__btn" id="raffle-bulk-submit">
-                  Назначить
-                </button>
+              <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers" hidden>
+                <h3 class="admin-raffle-wholesalers__title">Оптовики</h3>
+                <div id="raffle-wholesalers-list" class="admin-raffle-wholesalers__list"></div>
               </div>
-              <p id="raffle-bulk-result" class="admin-raffle-bulk-assign__result" role="status" hidden></p>
+              <div id="raffle-participants-list" class="admin-raffle-participants__list"></div>
+            </section>
+            <section id="raffle-participants-panel-assign" class="admin-raffle-participants-panel" data-panel="assign" role="tabpanel" aria-labelledby="raffle-participants-tab-assign" hidden>
+              <div class="admin-raffle-single-assign">
+                <h3 class="admin-raffle-single-assign__title">Выдать номерок по телефону</h3>
+                <p class="admin-raffle-single-assign__hint">Введите телефон и номерок. Перед выдачей система проверит, свободен ли номерок.</p>
+                <div class="admin-raffle-single-assign__grid">
+                  <label class="form-group">
+                    <span>Телефон</span>
+                    <input id="raffle-single-phone" class="input" type="tel" inputmode="tel" placeholder="79141234567" autocomplete="off" />
+                  </label>
+                  <label class="form-group">
+                    <span>Номерок</span>
+                    <input id="raffle-single-ticket" class="input" type="number" min="1" inputmode="numeric" placeholder="Например: 2444" autocomplete="off" />
+                  </label>
+                </div>
+                <p id="raffle-single-check" class="admin-raffle-single-assign__check" role="status">Введите номерок для проверки.</p>
+                <button type="button" class="btn btn--primary admin-raffle-single-assign__btn" id="raffle-single-submit" disabled>Выдать номерок</button>
+              </div>
+              <div class="admin-raffle-bulk-assign">
+                <label class="admin-raffle-bulk-assign__label" for="raffle-bulk-phones">
+                  Быстрое назначение номерков по списку телефонов
+                </label>
+                <p class="admin-raffle-bulk-assign__hint">
+                  По одному номеру на строку. Желаемый номерок у первой строки — «Первый номерок», у следующих строк — по порядку; если
+                  номер занят, берётся следующий свободный. Одному телефону — один номер за загрузку; повторы в списке и те, у кого уже
+                  есть номерок в акции, пропускаются.
+                </p>
+                <textarea
+                  id="raffle-bulk-phones"
+                  class="input admin-raffle-bulk-assign__textarea"
+                  rows="5"
+                  placeholder="89144617846&#10;89143687442&#10;…"
+                  autocomplete="off"
+                ></textarea>
+                <div class="admin-raffle-bulk-assign__row">
+                  <label class="admin-raffle-bulk-assign__start">
+                    <span class="admin-raffle-bulk-assign__start-label">Первый номерок</span>
+                    <input
+                      id="raffle-bulk-start"
+                      class="input admin-raffle-bulk-assign__start-input"
+                      type="number"
+                      min="1"
+                      value="1"
+                      inputmode="numeric"
+                    />
+                  </label>
+                  <button type="button" class="btn btn--primary admin-raffle-bulk-assign__btn" id="raffle-bulk-submit">
+                    Назначить
+                  </button>
+                </div>
+                <p id="raffle-bulk-result" class="admin-raffle-bulk-assign__result" role="status" hidden></p>
+              </div>
+            </section>
             </div>
-            <label class="form-group admin-raffle-participants__search" for="raffle-participants-search">
-              <span class="admin-raffle-participants__search-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                Поиск по номерку
-              </span>
-              <input id="raffle-participants-search" class="input admin-raffle-participants__search-input" type="search" inputmode="numeric" placeholder="Например: 42" autocomplete="off" />
-            </label>
-            <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers" hidden>
-              <h3 class="admin-raffle-wholesalers__title">Оптовики</h3>
-              <div id="raffle-wholesalers-list" class="admin-raffle-wholesalers__list"></div>
-            </div>
-            <div id="raffle-participants-list" class="admin-raffle-participants__list"></div>
           </div>
         </div>
       </div>

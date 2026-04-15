@@ -804,6 +804,36 @@ export function adminBulkAssignPhoneLinesToRaffle(
   return { ok: true, assigned: valid.length, skipped };
 }
 
+export function adminAssignPhoneToExactTicket(
+  raffleId: number,
+  rawPhone: string,
+  ticketNumber: number,
+): { ok: true } | { ok: false; error: string } {
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const phone = normalizePhone(String(rawPhone || ""));
+  if (!phone || !isValidRuMobile(phone)) {
+    return { ok: false, error: "Некорректный мобильный номер РФ" };
+  }
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+    return { ok: false, error: "Некорректный номерок" };
+  }
+  if (isRaffleTicketBlocked(raffleId, n)) {
+    return { ok: false, error: "Номерок уже занят" };
+  }
+  const user = getUserByPhone(phone);
+  if (user) {
+    createOrAppendConfirmedTicketsForUser(raffleId, user.id, [n]);
+  } else {
+    db.prepare(
+      `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
+    ).run(raffleId, n, phone, Date.now());
+  }
+  recalculateWholesaleForRaffle(raffleId);
+  return { ok: true };
+}
+
 export function getAdminRaffleParticipantsBundle(raffleId: number): {
   wholesale_enabled: boolean;
   participants: AdminRaffleParticipantView[];

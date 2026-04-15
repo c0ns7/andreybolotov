@@ -86,6 +86,8 @@ import {
   setOrderBank,
   materializeRafflePreassignmentsForUser,
   adminBulkAssignPhoneLinesToRaffle,
+  adminAssignPhoneToExactTicket,
+  isRaffleTicketBlocked,
   getRaffleOccupiedCount,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
@@ -1363,6 +1365,22 @@ app.get("/api/admin/raffles/:id/participants", (c) => {
   });
 });
 
+app.get("/api/admin/raffles/:id/tickets/:ticketNumber/availability", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  const ticketNumber = Number(c.req.param("ticketNumber"));
+  const n = Math.floor(ticketNumber);
+  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+    return c.json({ error: "Некорректный номерок" }, 400);
+  }
+  const is_free = !isRaffleTicketBlocked(id, n);
+  return c.json({ ticket_number: n, is_free });
+});
+
 app.post("/api/admin/raffles/:id/bulk-assign-phones", async (c) => {
   const auth = requireAdmin(c);
   if (auth instanceof Response) return auth;
@@ -1385,6 +1403,28 @@ app.post("/api/admin/raffles/:id/bulk-assign-phones", async (c) => {
   const r = adminBulkAssignPhoneLinesToRaffle(id, lines, startNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
   return c.json({ assigned: r.assigned, skipped: r.skipped });
+});
+
+app.post("/api/admin/raffles/:id/assign-phone-ticket", async (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  let body: { phone?: unknown; ticket_number?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const phone = normalizePhone(String(body.phone ?? ""));
+  if (!phone || !isValidRuMobile(phone)) {
+    return c.json({ error: "Некорректный мобильный номер РФ" }, 400);
+  }
+  const ticket_number = Number(body.ticket_number);
+  if (!Number.isFinite(ticket_number)) return c.json({ error: "Некорректный номерок" }, 400);
+  const res = adminAssignPhoneToExactTicket(id, phone, ticket_number);
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ ok: true });
 });
 
 app.patch("/api/admin/users/:userId", async (c) => {

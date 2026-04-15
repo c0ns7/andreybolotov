@@ -10,7 +10,11 @@
   /** @type {Array<{wholesale_number:number,user_phone:string}>} */
   let wholesalersCache = [];
   let participantsRaffleId = null;
+  let participantsActiveTab = "participants";
   const revealedPhones = new Set();
+  let raffleSingleCheckTimer = null;
+  let raffleSingleCheckReqId = 0;
+  let raffleSingleTicketIsFree = false;
 
   function loadSession() {
     try {
@@ -83,6 +87,12 @@
   const modalParticipants = document.getElementById("modal-raffle-participants");
   const participantsSearch = document.getElementById("raffle-participants-search");
   const participantsList = document.getElementById("raffle-participants-list");
+  const participantsTabs = Array.from(document.querySelectorAll(".admin-raffle-participants-tab"));
+  const participantsPanels = Array.from(document.querySelectorAll(".admin-raffle-participants-panel"));
+  const raffleSinglePhone = document.getElementById("raffle-single-phone");
+  const raffleSingleTicket = document.getElementById("raffle-single-ticket");
+  const raffleSingleCheck = document.getElementById("raffle-single-check");
+  const raffleSingleSubmit = document.getElementById("raffle-single-submit");
   const modalBuyer = document.getElementById("modal-raffle-buyer");
   const raffleBuyerReveal = document.getElementById("raffle-buyer-reveal");
 
@@ -452,6 +462,102 @@
       .join("");
   }
 
+  function normalizePhoneInput(raw) {
+    const digits = String(raw || "").replace(/[^\d]/g, "");
+    if (!digits) return "";
+    if (digits.length === 11) return digits;
+    if (digits.length === 10) return "7" + digits;
+    return digits;
+  }
+
+  function setParticipantsTab(tab) {
+    participantsActiveTab = tab === "assign" ? "assign" : "participants";
+    participantsTabs.forEach(function (btn) {
+      const isActive = btn.getAttribute("data-tab") === participantsActiveTab;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    participantsPanels.forEach(function (panel) {
+      const isActive = panel.getAttribute("data-panel") === participantsActiveTab;
+      panel.hidden = !isActive;
+    });
+  }
+
+  function setSingleAssignStatus(message, state) {
+    if (!raffleSingleCheck) return;
+    raffleSingleCheck.textContent = message;
+    raffleSingleCheck.classList.remove("is-free", "is-busy", "is-error");
+    if (state) raffleSingleCheck.classList.add(state);
+  }
+
+  function updateSingleAssignSubmitState() {
+    if (!raffleSingleSubmit) return;
+    const phone = normalizePhoneInput(raffleSinglePhone && raffleSinglePhone.value);
+    raffleSingleSubmit.disabled = !participantsRaffleId || phone.length < 11 || !raffleSingleTicketIsFree;
+  }
+
+  async function runSingleTicketAvailabilityCheck() {
+    if (!participantsRaffleId || !raffleSingleTicket) return;
+    const raw = String(raffleSingleTicket.value || "").trim();
+    if (!raw) {
+      raffleSingleTicketIsFree = false;
+      setSingleAssignStatus("Введите номерок для проверки.", "");
+      updateSingleAssignSubmitState();
+      return;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1) {
+      raffleSingleTicketIsFree = false;
+      setSingleAssignStatus("Номерок должен быть больше 0.", "is-error");
+      updateSingleAssignSubmitState();
+      return;
+    }
+    const reqId = ++raffleSingleCheckReqId;
+    setSingleAssignStatus("Проверяем номерок...", "");
+    try {
+      const data = await apiJson(
+        "/api/admin/raffles/" + participantsRaffleId + "/tickets/" + Math.floor(n) + "/availability",
+        {
+          headers: authHeaders(),
+          cache: "no-store",
+        },
+      );
+      if (reqId !== raffleSingleCheckReqId) return;
+      raffleSingleTicketIsFree = !!data.is_free;
+      if (raffleSingleTicketIsFree) {
+        setSingleAssignStatus("Номерок свободен, можно выдавать.", "is-free");
+      } else {
+        setSingleAssignStatus("Номерок уже занят.", "is-busy");
+      }
+      updateSingleAssignSubmitState();
+    } catch (err) {
+      if (reqId !== raffleSingleCheckReqId) return;
+      raffleSingleTicketIsFree = false;
+      setSingleAssignStatus((err && err.message) || "Не удалось проверить номерок.", "is-error");
+      updateSingleAssignSubmitState();
+    }
+  }
+
+  function scheduleSingleTicketAvailabilityCheck() {
+    if (raffleSingleCheckTimer) clearTimeout(raffleSingleCheckTimer);
+    raffleSingleCheckTimer = setTimeout(function () {
+      runSingleTicketAvailabilityCheck();
+    }, 320);
+  }
+
+  function resetSingleAssignForm() {
+    if (raffleSingleCheckTimer) {
+      clearTimeout(raffleSingleCheckTimer);
+      raffleSingleCheckTimer = null;
+    }
+    raffleSingleCheckReqId += 1;
+    raffleSingleTicketIsFree = false;
+    if (raffleSinglePhone) raffleSinglePhone.value = "";
+    if (raffleSingleTicket) raffleSingleTicket.value = "";
+    setSingleAssignStatus("Введите номерок для проверки.", "");
+    updateSingleAssignSubmitState();
+  }
+
   async function openParticipants(raffleId) {
     if (!modalParticipants || !participantsList) return;
     participantsRaffleId = raffleId;
@@ -469,6 +575,8 @@
       bulkRes.textContent = "";
       bulkRes.className = "admin-raffle-bulk-assign__result";
     }
+    setParticipantsTab("participants");
+    resetSingleAssignForm();
     participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
     modalParticipants.classList.add("is-open");
     modalParticipants.setAttribute("aria-hidden", "false");
@@ -499,6 +607,7 @@
     modalParticipants.classList.remove("is-open");
     modalParticipants.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
+    resetSingleAssignForm();
     participantsRaffleId = null;
   }
 
@@ -581,6 +690,69 @@
     ?.addEventListener("click", closeParticipants);
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
   participantsSearch?.addEventListener("input", renderParticipantsList);
+  participantsTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      setParticipantsTab(tab.getAttribute("data-tab"));
+    });
+  });
+  raffleSinglePhone?.addEventListener("input", updateSingleAssignSubmitState);
+  raffleSingleTicket?.addEventListener("input", function () {
+    raffleSingleTicketIsFree = false;
+    updateSingleAssignSubmitState();
+    scheduleSingleTicketAvailabilityCheck();
+  });
+  raffleSingleSubmit?.addEventListener("click", function () {
+    if (!participantsRaffleId) return;
+    const phone = normalizePhoneInput(raffleSinglePhone && raffleSinglePhone.value);
+    const ticketNumber = Math.floor(Number(raffleSingleTicket && raffleSingleTicket.value));
+    if (!phone || phone.length < 11) {
+      setSingleAssignStatus("Укажите корректный телефон (11 цифр).", "is-error");
+      updateSingleAssignSubmitState();
+      return;
+    }
+    if (!Number.isFinite(ticketNumber) || ticketNumber < 1) {
+      setSingleAssignStatus("Укажите корректный номерок.", "is-error");
+      updateSingleAssignSubmitState();
+      return;
+    }
+    raffleSingleSubmit.disabled = true;
+    setSingleAssignStatus("Выдаём номерок...", "");
+    (async function () {
+      try {
+        await apiJson("/api/admin/raffles/" + participantsRaffleId + "/assign-phone-ticket", {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: phone,
+            ticket_number: ticketNumber,
+          }),
+        });
+        setSingleAssignStatus("Номерок успешно выдан.", "is-free");
+        const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
+          headers: authHeaders(),
+          cache: "no-store",
+        });
+        if (participantsRaffleId) {
+          participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
+          wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
+          var whWrap = document.getElementById("raffle-wholesalers-wrap");
+          if (whWrap) whWrap.hidden = !bundle.wholesale_enabled;
+          renderWholesalersList();
+          renderParticipantsList();
+        }
+        raffleSingleTicketIsFree = false;
+        if (raffleSingleTicket) raffleSingleTicket.value = "";
+        updateSingleAssignSubmitState();
+      } catch (err) {
+        raffleSingleTicketIsFree = false;
+        setSingleAssignStatus((err && err.message) || "Не удалось выдать номерок.", "is-error");
+        updateSingleAssignSubmitState();
+      } finally {
+        if (raffleSingleSubmit) raffleSingleSubmit.disabled = false;
+        updateSingleAssignSubmitState();
+      }
+    })();
+  });
 
   /** Делегирование: кнопка внутри модалки, клик по тексту/краю — всё попадает в обработчик. */
   document.addEventListener(
