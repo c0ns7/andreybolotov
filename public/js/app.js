@@ -668,6 +668,33 @@
     }
   }
 
+  async function handleRafflesFeedRealtimeUpdate() {
+    if (IS_HOME_APP) {
+      loadRafflesFeed().catch(function () {});
+    }
+    if (IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE) {
+      var r = raffleDetailState.raffle;
+      var rid = Number(r && r.id);
+      if (!Number.isFinite(rid) || rid < 1) return;
+      try {
+        var res = await fetch("/api/raffles/" + String(rid), {
+          cache: "no-store",
+          headers: authHeaders(),
+        });
+        var data = await res.json().catch(function () {
+          return {};
+        });
+        if (!res.ok || !data.raffle || String(data.raffle.status || "") !== "active") {
+          location.replace("/home");
+          return;
+        }
+        raffleDetailState.raffle = data.raffle;
+      } catch (_) {
+        // keep current page state; next realtime/poll will retry
+      }
+    }
+  }
+
   function connectLiveWs() {
     disconnectLiveWs();
     const s = loadSession();
@@ -689,6 +716,10 @@
       }
       if (d.type === "raffle_tickets_updated") {
         handleRaffleTicketsRealtimeUpdate();
+        return;
+      }
+      if (d.type === "raffles_feed_updated") {
+        handleRafflesFeedRealtimeUpdate();
       }
     };
     ws.onclose = function () {
@@ -2362,8 +2393,8 @@
         "</div>";
     } else if (st === "paused") {
       badgeBlock =
-        '<div class="raffle-card__badge-wrap">' +
-        '<div class="raffle-card__badge">' +
+        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--paused">' +
+        '<div class="raffle-card__badge raffle-card__badge--pause">' +
         '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
         '<circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>' +
         " Техническая пауза" +
@@ -2372,8 +2403,13 @@
         "</div>";
     } else if (st === "closed") {
       badgeBlock =
-        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--flat">' +
-        '<div class="raffle-card__badge" style="margin-bottom:0">Продажи закрыты</div>' +
+        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--closed">' +
+        '<div class="raffle-card__badge raffle-card__badge--pause">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' +
+        " Продажи закрыты" +
+        "</div>" +
+        '<div class="raffle-card__sub">Следите за новостями</div>' +
         "</div>";
     }
     var cover = "";
@@ -2384,7 +2420,8 @@
         '" alt="" width="480" height="160" loading="lazy" />';
     }
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
-    var ctaLabel = st === "active" ? "Участвовать" : "Подробнее";
+    var ctaLabel = st === "active" || st === "paused" || st === "closed" ? "Участвовать" : "Подробнее";
+    var ctaDisabledAttr = st === "paused" || st === "closed" ? ' disabled aria-disabled="true"' : "";
     var viewers = Math.max(0, Number(r.viewers_count) || 0);
     var total = Math.max(0, Number(r.ticket_count) || 0);
     var occupied = Math.max(0, Math.min(total, Number(r.occupied_count) || 0));
@@ -2401,20 +2438,26 @@
     var startPct = Number.isFinite(prevFreePct) ? prevFreePct : freePct;
     var pr = Number(r.price_rub ?? 0);
     var priceInner = escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
+    var viewersBlock =
+      st === "paused" || st === "closed"
+        ? ""
+        : '<div class="raffle-card__viewers" aria-label="Смотрят акцию сейчас">' +
+          '<span class="raffle-card__viewers-dot" aria-hidden="true"></span>' +
+          "<span>Смотрят: " +
+          escapeHtml(String(viewers)) +
+          " чел.</span></div>";
     return (
       '<article class="raffle-card' +
       (st === "active" ? " raffle-card--active" : "") +
       '" data-raffle-open="1" data-raffle-idx="' +
       idx +
+      '" data-status="' +
+      escapeHtml(st) +
       '">' +
       '<div class="raffle-card__media">' +
       cover +
       '<div class="raffle-card__grad"></div>' +
-      '<div class="raffle-card__viewers" aria-label="Смотрят акцию сейчас">' +
-      '<span class="raffle-card__viewers-dot" aria-hidden="true"></span>' +
-      "<span>Смотрят: " +
-      escapeHtml(String(viewers)) +
-      " чел.</span></div>" +
+      viewersBlock +
       badgeBlock +
       '<h3 class="raffle-card__title">' +
       escapeHtml(String(r.title || "")) +
@@ -2450,7 +2493,9 @@
       ctaClass +
       '" data-raffle-open="1" data-raffle-idx="' +
       idx +
-      '">' +
+      '"' +
+      ctaDisabledAttr +
+      ">" +
       ctaLabel +
       "</button></div>" +
       "</div></article>"
@@ -2496,8 +2541,8 @@
           var rst = String(r.status || "active");
           if (rst === "active") {
             location.href = "/home/raffle?id=" + encodeURIComponent(String(r.id));
-          } else {
-            openRaffleUnavailableModal(r);
+          } else if (rst === "paused" || rst === "closed") {
+            return;
           }
         }
       });

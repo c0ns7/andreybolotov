@@ -106,6 +106,27 @@ export function broadcastRaffleTicketsUpdated(userId: number) {
   }
 }
 
+/** Уведомление всем клиентам: лента акций/статусы изменились */
+export function broadcastRafflesFeedUpdated() {
+  const payload = JSON.stringify({ type: "raffles_feed_updated" });
+  for (const ws of adminSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 /** Пользователь печатает → всем админам (видно в выбранном диалоге) */
 export function broadcastTypingUserToAdmins(userId: number, active: boolean) {
   const id = uid(userId);

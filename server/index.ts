@@ -52,6 +52,7 @@ import {
 import {
   attachWebSocket,
   broadcastChatMessage,
+  broadcastRafflesFeedUpdated,
   broadcastRaffleTicketsUpdated,
   broadcastThreadReadByStaff,
   broadcastTypingStaffToUser,
@@ -1282,6 +1283,7 @@ app.post("/api/admin/raffles", async (c) => {
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles POST] notify:", e instanceof Error ? e.message : e),
   );
+  broadcastRafflesFeedUpdated();
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
@@ -1320,6 +1322,7 @@ app.patch("/api/admin/raffles/:id", async (c) => {
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles PATCH] notify:", e instanceof Error ? e.message : e),
   );
+  broadcastRafflesFeedUpdated();
   const row = getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
 });
@@ -1332,6 +1335,7 @@ app.delete("/api/admin/raffles/:id", (c) => {
   const existing = getRaffleById(id);
   if (!existing) return c.json({ error: "Акция не найдена" }, 404);
   deleteRaffle(id);
+  broadcastRafflesFeedUpdated();
   return c.json({ ok: true });
 });
 
