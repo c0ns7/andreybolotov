@@ -20,6 +20,8 @@ export type RaffleOrderRow = {
   receipt_url: string | null;
   receipt_name: string | null;
   receipt_mime: string | null;
+  receipt_sha256?: string | null;
+  receipt_same_as_previous?: number;
   receipt_reject_count?: number;
   last_reject_comment?: string | null;
   public_status_token?: string | null;
@@ -380,20 +382,33 @@ export function setOrderBank(
 export function attachReceiptToOrder(
   orderId: number,
   userId: number,
-  receipt: { url: string; name: string; mime: string },
+  receipt: { url: string; name: string; mime: string; sha256?: string },
 ): { ok: true } | { ok: false; error: string } {
   cleanupExpiredRaffleOrders();
   if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(receipt.url)) {
     return { ok: false, error: "Некорректная ссылка на чек" };
   }
+  const sha = String(receipt.sha256 || "")
+    .trim()
+    .toLowerCase();
+  if (sha && !/^[a-f0-9]{64}$/.test(sha)) {
+    return { ok: false, error: "Некорректный отпечаток файла" };
+  }
   const o = getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Чек можно прикрепить только к активной брони" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
+  const prevSha = String((o as RaffleOrderRow).receipt_sha256 || "")
+    .trim()
+    .toLowerCase();
+  const isSameAsPrevious = sha && prevSha && sha === prevSha ? 1 : 0;
   const now = Date.now();
   db.prepare(
-    `UPDATE raffle_orders SET receipt_url = ?, receipt_name = ?, receipt_mime = ?, status = 'pending_review', updated_at = ? WHERE id = ?`,
-  ).run(receipt.url, receipt.name, receipt.mime, now, orderId);
+    `UPDATE raffle_orders
+     SET receipt_url = ?, receipt_name = ?, receipt_mime = ?, receipt_sha256 = ?, receipt_same_as_previous = ?,
+         status = 'pending_review', updated_at = ?
+     WHERE id = ?`,
+  ).run(receipt.url, receipt.name, receipt.mime, sha || null, isSameAsPrevious, now, orderId);
   db.prepare(
     `UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`,
   ).run(orderId);
@@ -574,6 +589,7 @@ export function orderToDto(o: RaffleOrderRow) {
     reserve_extended_once: (o as RaffleOrderRow).reserve_extended_once ? 1 : 0,
     receipt_url: o.receipt_url,
     receipt_name: o.receipt_name,
+    receipt_same_as_previous: Number((o as RaffleOrderRow).receipt_same_as_previous ?? 0),
     receipt_reject_count: Number((o as RaffleOrderRow).receipt_reject_count ?? 0),
     last_reject_comment: (o as RaffleOrderRow).last_reject_comment ?? null,
     tracking_token: tok || null,

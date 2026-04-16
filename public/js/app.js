@@ -4576,6 +4576,7 @@
           url: uploadData.url,
           name: uploadData.name,
           mime: uploadData.mime,
+          sha256: uploadData.sha256,
         }),
       });
       if (res.status === 401) throw new Error("SESSION_EXPIRED");
@@ -4729,6 +4730,7 @@
           url: uploadData.url,
           name: uploadData.name,
           mime: uploadData.mime,
+          sha256: uploadData.sha256,
         }),
       });
       if (res.status === 401) throw new Error("SESSION_EXPIRED");

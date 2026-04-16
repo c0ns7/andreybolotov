@@ -123,6 +123,27 @@
     });
   }
 
+  function removeOrderCardFromView(orderId) {
+    var id = Number(orderId);
+    if (!Number.isFinite(id)) return;
+    var card = document.querySelector('.admin-payment-card[data-order-id="' + String(id) + '"]');
+    if (!card) return;
+    var section = card.closest(".admin-payments-section");
+    card.remove();
+    if (section) {
+      var cardsLeft = section.querySelectorAll(".admin-payment-card").length;
+      if (cardsLeft === 0) {
+        var empty = section.querySelector(".admin-payments-section__empty-note");
+        if (!empty) {
+          var p = document.createElement("p");
+          p.className = "admin-payments-section__empty-note";
+          p.textContent = "В этом разделе заявок больше нет.";
+          section.appendChild(p);
+        }
+      }
+    }
+  }
+
   function loadList() {
     const listEl = document.getElementById("admin-payments-list");
     if (!listEl) return;
@@ -341,6 +362,13 @@
           ICO.chat +
           "<span>Написать в чат</span></button>"
         : "";
+    var sameReceiptFact = Number(p.receipt_same_as_previous || 0)
+      ? '<li class="admin-payment-card__fact admin-payment-card__fact--warn">' +
+        '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+        ICO.receipt +
+        "</span>" +
+        "<span><strong>Внимание</strong> · загружен тот же файл чека, что и в прошлый раз</span></li>"
+      : "";
     return (
       '<article class="admin-payment-card" data-order-id="' +
       id +
@@ -400,6 +428,7 @@
       '<li class="admin-payment-card__fact admin-payment-card__fact--receipt">' +
       receipt +
       "</li>" +
+      sameReceiptFact +
       rejectMetaFacts(p) +
       "</ul>" +
       '<div class="admin-payment-card__actions">' +
@@ -456,7 +485,7 @@
           "Лимит доработок исчерпан: заявка отменена полностью, номерки возвращены в продажу.",
         );
       }
-      await loadList();
+      removeOrderCardFromView(orderId);
     } catch (e) {
       window.alert(String(e.message || "Ошибка"));
     }
@@ -481,7 +510,7 @@
         return {};
       });
       if (!res.ok) throw new Error(data.error || "Ошибка");
-      await loadList();
+      removeOrderCardFromView(orderId);
     } catch (e) {
       window.alert(String(e.message || "Ошибка"));
     }

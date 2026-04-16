@@ -266,10 +266,11 @@ async function handleReceiptFileUpload(c: Context): Promise<Response> {
   const fileName = `${randomUUID()}${ext}`;
   await writeUploadToDirs(receiptUploadsDirs, fileName, buffer);
   const url = `/uploads/receipts/${fileName}`;
+  const sha256 = createHash("sha256").update(buffer).digest("hex");
   const origName = String(blob.name || "чек")
     .replace(/[<>\"]/g, "")
     .slice(0, 255);
-  return c.json({ url, name: origName || "чек", mime });
+  return c.json({ url, name: origName || "чек", mime, sha256 });
 }
 
 const app = new Hono();
@@ -1251,7 +1252,7 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   if (u instanceof Response) return u;
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
-  let body: { url?: string; name?: string; mime?: string };
+  let body: { url?: string; name?: string; mime?: string; sha256?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -1260,7 +1261,8 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   const url = String(body.url ?? "").trim();
   const name = String(body.name ?? "чек").slice(0, 255);
   const mime = String(body.mime ?? "application/octet-stream").slice(0, 120);
-  const res = attachReceiptToOrder(orderId, u.id, { url, name, mime });
+  const sha256 = String(body.sha256 ?? "").trim().toLowerCase();
+  const res = attachReceiptToOrder(orderId, u.id, { url, name, mime, sha256 });
   if (!res.ok) return c.json({ error: res.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   if (!order) return c.json({ error: "Ошибка" }, 500);

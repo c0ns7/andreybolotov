@@ -158,6 +158,12 @@ function migrate() {
   if (!roCols.some((c) => c.name === "public_status_token")) {
     db.exec(`ALTER TABLE raffle_orders ADD COLUMN public_status_token TEXT`);
   }
+  if (!roCols.some((c) => c.name === "receipt_sha256")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_sha256 TEXT`);
+  }
+  if (!roCols.some((c) => c.name === "receipt_same_as_previous")) {
+    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_same_as_previous INTEGER NOT NULL DEFAULT 0`);
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS raffle_order_events (
