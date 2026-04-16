@@ -297,7 +297,28 @@ import InstallAppModal from "./InstallAppModal.astro";
           <li>Вернитесь сюда и нажмите <strong>«Я перевёл»</strong> — откроется загрузка чека (шаг 3).</li>
         </ol>
       </section>
-      <section class="reserve-payment-modal__collect">
+      <div id="reserve-payment-methods" class="reserve-payment-modal__methods" role="tablist" aria-label="Способ оплаты">
+        <button
+          type="button"
+          id="reserve-payment-method-collection"
+          class="reserve-payment-modal__method-btn is-active"
+          role="tab"
+          aria-selected="true"
+        >
+          Сбор в Сбер
+        </button>
+        <button
+          type="button"
+          id="reserve-payment-method-qr"
+          class="reserve-payment-modal__method-btn"
+          role="tab"
+          aria-selected="false"
+        >
+          QR любого банка
+        </button>
+      </div>
+
+      <section id="reserve-payment-collect" class="reserve-payment-modal__collect">
         <div class="reserve-payment-modal__collect-head">
           <span>СБОР СРЕДСТВ</span>
           <span>СБЕР</span>
@@ -311,6 +332,22 @@ import InstallAppModal from "./InstallAppModal.astro";
           <strong>Оплата услуг</strong>
         </div>
         <a id="reserve-payment-link" class="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
+      </section>
+      <section id="reserve-payment-qr" class="reserve-payment-modal__collect reserve-payment-modal__collect--qr" hidden>
+        <div class="reserve-payment-modal__collect-head">
+          <span>ОПЛАТА ПО QR</span>
+          <span>ЛЮБОЙ БАНК</span>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
+          <span>НАЗНАЧЕНИЕ</span>
+          <strong>Оплата услуг</strong>
+        </div>
+        <div class="reserve-payment-modal__qr-wrap">
+          <img id="reserve-payment-qr-image" src="" alt="QR-код для оплаты" loading="lazy" />
+        </div>
+        <p class="reserve-payment-modal__qr-hint">
+          Откройте приложение банка, выберите оплату по QR и укажите назначение <strong>«Оплата услуг»</strong>.
+        </p>
       </section>
       <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл — загрузить чек</button>
       <button type="button" class="raffle-pay-support" id="reserve-payment-support">Проблема с оплатой</button>

@@ -1059,6 +1059,8 @@
     reservedUntil: 0,
     collectionUrl: "",
     collectionRecipient: "",
+    qrImageUrl: "",
+    paymentMethod: "collection",
   };
   /** Кэш корзины и «Мои билеты» — подгружается после входа, обновляется при мутациях */
   var raffleDataCache = {
@@ -1679,6 +1681,18 @@
     var payAmountCheck = document.getElementById("reserve-payment-amount-check");
     var payRecipient = document.getElementById("reserve-payment-recipient");
     var payLink = document.getElementById("reserve-payment-link");
+    var payQrImg = document.getElementById("reserve-payment-qr-image");
+    var methodTabs = document.getElementById("reserve-payment-methods");
+    var methodCollectionBtn = document.getElementById("reserve-payment-method-collection");
+    var methodQrBtn = document.getElementById("reserve-payment-method-qr");
+    var collectBlock = document.getElementById("reserve-payment-collect");
+    var qrBlock = document.getElementById("reserve-payment-qr");
+    var hasCollection = Boolean(String(reserveFlowState.collectionUrl || "").trim());
+    var hasQr = Boolean(String(reserveFlowState.qrImageUrl || "").trim());
+    var chosenMethod = reserveFlowState.paymentMethod === "qr" ? "qr" : "collection";
+    if (chosenMethod === "qr" && !hasQr) chosenMethod = hasCollection ? "collection" : "qr";
+    if (chosenMethod === "collection" && !hasCollection) chosenMethod = hasQr ? "qr" : "collection";
+    reserveFlowState.paymentMethod = chosenMethod;
     if (payOrderId) payOrderId.textContent = orderCode;
     if (payAmount) payAmount.textContent = amountText;
     if (payAmountInline) payAmountInline.textContent = amountText;
@@ -1690,6 +1704,24 @@
       payLink.setAttribute("aria-disabled", href ? "false" : "true");
       payLink.classList.toggle("reserve-flow-btn--disabled", !href);
     }
+    if (payQrImg) {
+      var qrSrc = String(reserveFlowState.qrImageUrl || "").trim();
+      if (qrSrc) payQrImg.setAttribute("src", qrSrc);
+      else payQrImg.removeAttribute("src");
+    }
+    if (methodTabs) methodTabs.hidden = !(hasCollection && hasQr);
+    if (methodCollectionBtn) {
+      methodCollectionBtn.hidden = !hasCollection;
+      methodCollectionBtn.classList.toggle("is-active", chosenMethod === "collection");
+      methodCollectionBtn.setAttribute("aria-selected", chosenMethod === "collection" ? "true" : "false");
+    }
+    if (methodQrBtn) {
+      methodQrBtn.hidden = !hasQr;
+      methodQrBtn.classList.toggle("is-active", chosenMethod === "qr");
+      methodQrBtn.setAttribute("aria-selected", chosenMethod === "qr" ? "true" : "false");
+    }
+    if (collectBlock) collectBlock.hidden = chosenMethod !== "collection";
+    if (qrBlock) qrBlock.hidden = chosenMethod !== "qr";
     switchReservePaymentStep("requisites");
     paintReserveDeadlineLine(Number(reserveFlowState.reservedUntil || 0));
     var rf = getCachedRaffleById(reserveFlowState.raffleId);
@@ -1774,6 +1806,8 @@
     reserveFlowState.reservedUntil = Number(order.reserved_until || 0);
     reserveFlowState.collectionUrl = String((raffle && raffle.collection_url) || "").trim();
     reserveFlowState.collectionRecipient = String((raffle && raffle.collection_recipient) || "").trim();
+    reserveFlowState.qrImageUrl = String((raffle && raffle.qr_image_url) || "").trim();
+    reserveFlowState.paymentMethod = "collection";
     renderReserveFlowModals();
     paintPaymentFlowSteps("reserve-success-steps", "success");
     emitUxEvent("raffle_reserved", { order_id: reserveFlowState.orderId, tickets: reserveFlowState.numbers.length });
@@ -1810,6 +1844,8 @@
       reserveFlowState.reservedUntil = Number((o && o.reserved_until) || 0);
       reserveFlowState.collectionUrl = String((rf && rf.collection_url) || "").trim();
       reserveFlowState.collectionRecipient = String((rf && rf.collection_recipient) || "").trim();
+      reserveFlowState.qrImageUrl = String((rf && rf.qr_image_url) || "").trim();
+      reserveFlowState.paymentMethod = reserveFlowState.paymentMethod === "qr" ? "qr" : "collection";
       renderReserveFlowModals();
       var amountEl = document.getElementById("wait-receipt-amount");
       var leftEl = document.getElementById("wait-receipt-left");
@@ -4510,6 +4546,14 @@
       e.preventDefault();
       showToast("Реквизиты пока не настроены", "warning");
     }
+  });
+  document.getElementById("reserve-payment-method-collection")?.addEventListener("click", function () {
+    reserveFlowState.paymentMethod = "collection";
+    renderReserveFlowModals();
+  });
+  document.getElementById("reserve-payment-method-qr")?.addEventListener("click", function () {
+    reserveFlowState.paymentMethod = "qr";
+    renderReserveFlowModals();
   });
   document.getElementById("reserve-payment-back")?.addEventListener("click", function () {
     switchReservePaymentStep("requisites");

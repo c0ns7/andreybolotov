@@ -3513,6 +3513,28 @@ a.raffle-pay__btn {
 .reserve-payment-modal__info h4 { margin: 0 0 8px; font-size: 1rem; }
 .reserve-payment-modal__info ol,
 .reserve-payment-modal__info ul { margin: 0; padding-left: 18px; line-height: 1.45; font-size: 0.9rem; }
+.reserve-payment-modal__methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.reserve-payment-modal__method-btn {
+  min-height: 40px;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5e1;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.reserve-payment-modal__method-btn.is-active {
+  border-color: rgba(96, 165, 250, 0.9);
+  background: rgba(30, 64, 175, 0.35);
+  color: #dbeafe;
+}
 .reserve-payment-modal__collect {
   background: linear-gradient(160deg, #111827 0%, #020617 100%);
   color: #e5e7eb;
@@ -3529,6 +3551,29 @@ a.raffle-pay__btn {
 }
 .reserve-payment-modal__collect-item span { display: block; color: #9ca3af; font-size: 0.7rem; letter-spacing: 0.08em; margin-bottom: 3px; }
 .reserve-payment-modal__collect-item strong { color: #f8fafc; }
+.reserve-payment-modal__collect--qr {
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+.reserve-payment-modal__qr-wrap {
+  margin-top: 6px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  text-align: center;
+  padding: 8px;
+}
+.reserve-payment-modal__qr-wrap img {
+  display: block;
+  width: min(210px, 100%);
+  margin: 0 auto;
+  height: auto;
+}
+.reserve-payment-modal__qr-hint {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
 .reserve-payment-modal__upload {
   display: block; border: 1px dashed rgba(96, 165, 250, 0.7); border-radius: 14px; padding: 14px; background: rgba(30, 64, 175, 0.18); margin-bottom: 12px; cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
