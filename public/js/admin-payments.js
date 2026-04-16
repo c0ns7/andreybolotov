@@ -93,6 +93,43 @@
     );
   }
 
+  var reservedUntilCountdownTimerId = null;
+
+  function formatTimeLeftMs(leftMs) {
+    var n = Number(leftMs);
+    if (!Number.isFinite(n)) return "—";
+    if (n <= 0) return "0:00";
+    var sec = Math.floor(n / 1000);
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    if (m < 60) return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return String(h) + ":" + String(m).padStart(2, "0");
+  }
+
+  function initReservedUntilCountdown(serverTimeMs) {
+    if (reservedUntilCountdownTimerId) clearInterval(reservedUntilCountdownTimerId);
+    var skewMs = Number(serverTimeMs) - Date.now();
+
+    function paint() {
+      var nowPlusSkew = Date.now() + skewMs;
+      document
+        .querySelectorAll(".admin-payment-card__countdown[data-expire-ts]")
+        .forEach(function (el) {
+          var expireTs = Number(el.getAttribute("data-expire-ts"));
+          if (!Number.isFinite(expireTs)) return;
+          var leftMs = expireTs - nowPlusSkew;
+          var expired = leftMs <= 0;
+          el.textContent = expired ? "Истекло" : "Осталось " + formatTimeLeftMs(leftMs);
+          el.classList.toggle("admin-payment-card__countdown--expired", expired);
+        });
+    }
+
+    paint();
+    reservedUntilCountdownTimerId = setInterval(paint, 1000);
+  }
+
   function bindChatHandlers(container, token) {
     container.querySelectorAll("[data-chat-user]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -171,7 +208,8 @@
         if (!x.ok) throw new Error(x.data.error || "Ошибка");
         const payments = x.data.payments || [];
         const active = x.data.active_orders || [];
-        const skewHtml = renderServerSkewNote(x.data.server_time_ms);
+        const serverTimeMs = x.data.server_time_ms;
+        const skewHtml = renderServerSkewNote(serverTimeMs);
         let html = skewHtml;
 
         if (!payments.length && !active.length) {
@@ -208,6 +246,7 @@
 
         listEl.innerHTML = html;
         bindChatHandlers(listEl, s.token);
+        initReservedUntilCountdown(serverTimeMs);
       })
       .catch(function (e) {
         listEl.innerHTML =
@@ -274,7 +313,9 @@
       "</span>" +
       "<span><strong>Бронь до</strong> · " +
       esc(formatOrderCreatedLocal(p.reserved_until)) +
-      "</span></li>" +
+      ' · <span class="admin-payment-card__countdown" data-expire-ts="' +
+      String(p.reserved_until) +
+      '"></span></span></li>' +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
       ICO.user +

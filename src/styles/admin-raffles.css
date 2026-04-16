@@ -1766,6 +1766,18 @@
   color: #0f172a;
 }
 
+.admin-payment-card__countdown {
+  font-weight: 900;
+  color: #ea580c;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin-payment-card__countdown--expired {
+  color: #ef4444;
+}
+
 .admin-payment-card__tz-hint {
   font-size: 0.78rem;
   font-weight: 600;
