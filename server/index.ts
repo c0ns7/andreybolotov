@@ -391,8 +391,16 @@ type RaffleInput = {
   old_price_rub: number;
   ticket_count: number;
   collection_url: string;
+  tbank_collection_url: string;
   collection_recipient: string;
+  sber_collection_recipient: string;
+  tbank_collection_recipient: string;
   qr_image_url: string;
+  qr_recipient: string;
+  qr_payment_purpose: string;
+  sber_enabled: boolean;
+  tbank_enabled: boolean;
+  qr_enabled: boolean;
   rules_url: string;
   status: "active" | "closed" | "paused";
   sort_order: number;
@@ -407,8 +415,24 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
 
   const cover_image_url = String(body.cover_image_url ?? "").trim();
   const collection_url = String(body.collection_url ?? "").trim();
+  const tbank_collection_url = String(body.tbank_collection_url ?? "").trim();
   const collection_recipient = String(body.collection_recipient ?? "").trim();
+  const sber_collection_recipient = String(
+    body.sber_collection_recipient ?? body.collection_recipient ?? "",
+  ).trim();
+  const tbank_collection_recipient = String(
+    body.tbank_collection_recipient ?? body.collection_recipient ?? "",
+  ).trim();
   const qr_image_url = String(body.qr_image_url ?? "").trim();
+  const qr_recipient = String(body.qr_recipient ?? body.collection_recipient ?? "").trim();
+  const qr_payment_purpose = String(body.qr_payment_purpose ?? "Оплата услуг")
+    .trim()
+    .slice(0, 200);
+  const sber_enabled =
+    body.sber_enabled === undefined ? Boolean(collection_url) : Boolean(body.sber_enabled);
+  const tbank_enabled =
+    body.tbank_enabled === undefined ? Boolean(tbank_collection_url) : Boolean(body.tbank_enabled);
+  const qr_enabled = body.qr_enabled === undefined ? Boolean(qr_image_url) : Boolean(body.qr_enabled);
 
   const price_rub = Math.floor(Number(body.price_rub));
   const old_price_raw = body.old_price_rub;
@@ -435,8 +459,9 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     return { ok: false, error: "Некорректный порядок сортировки" };
   }
 
-  const hasCollectionPayment = Boolean(collection_url);
-  const hasQrPayment = Boolean(qr_image_url);
+  const hasCollectionPayment =
+    (sber_enabled && Boolean(collection_url)) || (tbank_enabled && Boolean(tbank_collection_url));
+  const hasQrPayment = qr_enabled && Boolean(qr_image_url);
   const hasAnyPayment = hasCollectionPayment || hasQrPayment;
   const status = hasAnyPayment
     ? normalizeRaffleStatus(String(body.status ?? "active"))
@@ -460,8 +485,16 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       old_price_rub,
       ticket_count,
       collection_url,
+      tbank_collection_url,
       collection_recipient,
+      sber_collection_recipient,
+      tbank_collection_recipient,
       qr_image_url,
+      qr_recipient,
+      qr_payment_purpose: qr_payment_purpose || "Оплата услуг",
+      sber_enabled,
+      tbank_enabled,
+      qr_enabled,
       rules_url,
       status,
       sort_order,
@@ -1436,8 +1469,16 @@ app.post("/api/admin/raffles", async (c) => {
     old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
+    tbank_collection_url: v.tbank_collection_url,
     collection_recipient: v.collection_recipient,
+    sber_collection_recipient: v.sber_collection_recipient,
+    tbank_collection_recipient: v.tbank_collection_recipient,
     qr_image_url: v.qr_image_url,
+    qr_recipient: v.qr_recipient,
+    qr_payment_purpose: v.qr_payment_purpose,
+    sber_enabled: v.sber_enabled ? 1 : 0,
+    tbank_enabled: v.tbank_enabled ? 1 : 0,
+    qr_enabled: v.qr_enabled ? 1 : 0,
     rules_url: v.rules_url,
     status: v.status,
     sort_order: v.sort_order,
@@ -1475,8 +1516,16 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
+    tbank_collection_url: v.tbank_collection_url,
     collection_recipient: v.collection_recipient,
+    sber_collection_recipient: v.sber_collection_recipient,
+    tbank_collection_recipient: v.tbank_collection_recipient,
     qr_image_url: v.qr_image_url,
+    qr_recipient: v.qr_recipient,
+    qr_payment_purpose: v.qr_payment_purpose,
+    sber_enabled: v.sber_enabled ? 1 : 0,
+    tbank_enabled: v.tbank_enabled ? 1 : 0,
+    qr_enabled: v.qr_enabled ? 1 : 0,
     rules_url: v.rules_url,
     status: v.status,
     sort_order: v.sort_order,

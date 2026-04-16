@@ -305,7 +305,18 @@ import InstallAppModal from "./InstallAppModal.astro";
           role="tab"
           aria-selected="true"
         >
-          Сбор в Сбер
+          <span class="reserve-payment-modal__method-title">Сбер</span>
+          <span class="reserve-payment-modal__method-sub">Быстрый сбор</span>
+        </button>
+        <button
+          type="button"
+          id="reserve-payment-method-tbank"
+          class="reserve-payment-modal__method-btn"
+          role="tab"
+          aria-selected="false"
+        >
+          <span class="reserve-payment-modal__method-title">Тинькофф</span>
+          <span class="reserve-payment-modal__method-sub">Сбор по ссылке</span>
         </button>
         <button
           type="button"
@@ -314,14 +325,16 @@ import InstallAppModal from "./InstallAppModal.astro";
           role="tab"
           aria-selected="false"
         >
-          QR любого банка
+          <span class="reserve-payment-modal__method-title">QR-код</span>
+          <span class="reserve-payment-modal__method-sub">Любой банк</span>
         </button>
       </div>
+      <p class="reserve-payment-modal__methods-tip">Выберите удобный способ оплаты. После перевода прикрепите чек на шаге 3.</p>
 
       <section id="reserve-payment-collect" class="reserve-payment-modal__collect">
         <div class="reserve-payment-modal__collect-head">
           <span>СБОР СРЕДСТВ</span>
-          <span>СБЕР</span>
+          <span id="reserve-payment-collect-bank">СБЕР</span>
         </div>
         <div class="reserve-payment-modal__collect-item">
           <span>ПОЛУЧАТЕЛЬ</span>
@@ -329,9 +342,24 @@ import InstallAppModal from "./InstallAppModal.astro";
         </div>
         <div class="reserve-payment-modal__collect-item">
           <span>НАЗНАЧЕНИЕ</span>
-          <strong>Оплата услуг</strong>
+          <strong id="reserve-payment-purpose">Оплата услуг</strong>
         </div>
         <a id="reserve-payment-link" class="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
+      </section>
+      <section id="reserve-payment-collect-tbank" class="reserve-payment-modal__collect" hidden>
+        <div class="reserve-payment-modal__collect-head">
+          <span>СБОР СРЕДСТВ</span>
+          <span>ТИНЬКОФФ</span>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
+          <span>ПОЛУЧАТЕЛЬ</span>
+          <strong id="reserve-payment-recipient-tbank">—</strong>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
+          <span>НАЗНАЧЕНИЕ</span>
+          <strong id="reserve-payment-purpose-tbank">Оплата услуг</strong>
+        </div>
+        <a id="reserve-payment-link-tbank" class="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
       </section>
       <section id="reserve-payment-qr" class="reserve-payment-modal__collect reserve-payment-modal__collect--qr" hidden>
         <div class="reserve-payment-modal__collect-head">
@@ -339,14 +367,18 @@ import InstallAppModal from "./InstallAppModal.astro";
           <span>ЛЮБОЙ БАНК</span>
         </div>
         <div class="reserve-payment-modal__collect-item">
+          <span>ПОЛУЧАТЕЛЬ</span>
+          <strong id="reserve-payment-qr-recipient">—</strong>
+        </div>
+        <div class="reserve-payment-modal__collect-item">
           <span>НАЗНАЧЕНИЕ</span>
-          <strong>Оплата услуг</strong>
+          <strong id="reserve-payment-qr-purpose">Оплата услуг</strong>
         </div>
         <div class="reserve-payment-modal__qr-wrap">
           <img id="reserve-payment-qr-image" src="" alt="QR-код для оплаты" loading="lazy" />
         </div>
         <p class="reserve-payment-modal__qr-hint">
-          Откройте приложение банка, выберите оплату по QR и укажите назначение <strong>«Оплата услуг»</strong>.
+          Откройте приложение банка, выберите оплату по QR и укажите назначение <strong id="reserve-payment-qr-purpose-hint">«Оплата услуг»</strong>.
         </p>
       </section>
       <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл — загрузить чек</button>

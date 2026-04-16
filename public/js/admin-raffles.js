@@ -95,6 +95,34 @@
   const raffleSingleSubmit = document.getElementById("raffle-single-submit");
   const modalBuyer = document.getElementById("modal-raffle-buyer");
   const raffleBuyerReveal = document.getElementById("raffle-buyer-reveal");
+  const payTabs = Array.from(document.querySelectorAll(".admin-pay-tab"));
+  const payPanels = Array.from(document.querySelectorAll(".admin-pay-panel"));
+
+  function setPayTab(tab) {
+    var current = tab === "tbank" || tab === "qr" ? tab : "sber";
+    payTabs.forEach(function (btn) {
+      var active = btn.getAttribute("data-pay-tab") === current;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    payPanels.forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-pay-panel") !== current;
+    });
+  }
+
+  function syncPayMethodSettingsState() {
+    var pairs = [
+      ["raffle-sber-enabled", "raffle-sber-settings"],
+      ["raffle-tbank-enabled", "raffle-tbank-settings"],
+      ["raffle-qr-enabled", "raffle-qr-settings"],
+    ];
+    pairs.forEach(function (pair) {
+      var toggle = document.getElementById(pair[0]);
+      var settings = document.getElementById(pair[1]);
+      if (!toggle || !settings) return;
+      settings.classList.toggle("admin-pay-settings--disabled", !toggle.checked);
+    });
+  }
 
   function openBuyerModal(ctx) {
     var title = document.getElementById("modal-raffle-buyer-title");
@@ -332,9 +360,45 @@
     }
     document.getElementById("raffle-tickets").value = edit ? String(edit.ticket_count) : "0";
     document.getElementById("raffle-collection-url").value = edit ? edit.collection_url || "" : "";
+    var tbankUrlEl = document.getElementById("raffle-tbank-collection-url");
+    if (tbankUrlEl) tbankUrlEl.value = edit ? edit.tbank_collection_url || "" : "";
     var rulesEl = document.getElementById("raffle-rules-url");
     if (rulesEl) rulesEl.value = edit ? edit.rules_url || "" : "";
-    document.getElementById("raffle-recipient").value = edit ? edit.collection_recipient || "" : "";
+    var sberRecEl = document.getElementById("raffle-recipient-sber");
+    if (sberRecEl)
+      sberRecEl.value = edit
+        ? edit.sber_collection_recipient || edit.collection_recipient || ""
+        : "";
+    var tbankRecEl = document.getElementById("raffle-recipient-tbank");
+    if (tbankRecEl)
+      tbankRecEl.value = edit
+        ? edit.tbank_collection_recipient || edit.collection_recipient || ""
+        : "";
+    var qrRecEl = document.getElementById("raffle-qr-recipient");
+    if (qrRecEl) qrRecEl.value = edit ? edit.qr_recipient || edit.collection_recipient || "" : "";
+    var qrPurposeEl = document.getElementById("raffle-qr-purpose");
+    if (qrPurposeEl) qrPurposeEl.value = edit ? edit.qr_payment_purpose || "Оплата услуг" : "Оплата услуг";
+    var sberEnabledEl = document.getElementById("raffle-sber-enabled");
+    if (sberEnabledEl)
+      sberEnabledEl.checked = edit
+        ? edit.sber_enabled != null
+          ? !!edit.sber_enabled
+          : !!(edit.collection_url && String(edit.collection_url).trim())
+        : true;
+    var tbankEnabledEl = document.getElementById("raffle-tbank-enabled");
+    if (tbankEnabledEl)
+      tbankEnabledEl.checked = edit
+        ? edit.tbank_enabled != null
+          ? !!edit.tbank_enabled
+          : !!(edit.tbank_collection_url && String(edit.tbank_collection_url).trim())
+        : false;
+    var qrEnabledEl = document.getElementById("raffle-qr-enabled");
+    if (qrEnabledEl)
+      qrEnabledEl.checked = edit
+        ? edit.qr_enabled != null
+          ? !!edit.qr_enabled
+          : !!(edit.qr_image_url && String(edit.qr_image_url).trim())
+        : true;
     document.getElementById("raffle-qr-url").value = edit ? edit.qr_image_url || "" : "";
     document.getElementById("raffle-status").value = edit ? edit.status : "active";
     document.getElementById("raffle-sort").value = edit
@@ -352,6 +416,8 @@
     var qf = document.getElementById("raffle-qr-file");
     if (cf) cf.value = "";
     if (qf) qf.value = "";
+    setPayTab("sber");
+    syncPayMethodSettingsState();
     setFormLoading(false);
     modalForm.classList.add("is-open");
     modalForm.setAttribute("aria-hidden", "false");
@@ -697,6 +763,14 @@
       setParticipantsTab(tab.getAttribute("data-tab"));
     });
   });
+  payTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      setPayTab(tab.getAttribute("data-pay-tab"));
+    });
+  });
+  document.getElementById("raffle-sber-enabled")?.addEventListener("change", syncPayMethodSettingsState);
+  document.getElementById("raffle-tbank-enabled")?.addEventListener("change", syncPayMethodSettingsState);
+  document.getElementById("raffle-qr-enabled")?.addEventListener("change", syncPayMethodSettingsState);
   raffleSinglePhone?.addEventListener("input", updateSingleAssignSubmitState);
   raffleSingleTicket?.addEventListener("input", function () {
     raffleSingleTicketIsFree = false;
@@ -887,12 +961,48 @@
       })(),
       ticket_count: Number(document.getElementById("raffle-tickets").value),
       collection_url: document.getElementById("raffle-collection-url").value.trim(),
+      tbank_collection_url: (function () {
+        var el = document.getElementById("raffle-tbank-collection-url");
+        return el ? String(el.value || "").trim() : "";
+      })(),
       rules_url: (function () {
         var el = document.getElementById("raffle-rules-url");
         return el ? String(el.value || "").trim() : "";
       })(),
-      collection_recipient: document.getElementById("raffle-recipient").value.trim(),
+      collection_recipient: (function () {
+        var el = document.getElementById("raffle-recipient-sber");
+        return el ? String(el.value || "").trim() : "";
+      })(),
+      sber_collection_recipient: (function () {
+        var el = document.getElementById("raffle-recipient-sber");
+        return el ? String(el.value || "").trim() : "";
+      })(),
+      tbank_collection_recipient: (function () {
+        var el = document.getElementById("raffle-recipient-tbank");
+        return el ? String(el.value || "").trim() : "";
+      })(),
       qr_image_url: qrUrl,
+      qr_recipient: (function () {
+        var el = document.getElementById("raffle-qr-recipient");
+        return el ? String(el.value || "").trim() : "";
+      })(),
+      qr_payment_purpose: (function () {
+        var el = document.getElementById("raffle-qr-purpose");
+        var txt = el ? String(el.value || "").trim() : "";
+        return txt || "Оплата услуг";
+      })(),
+      sber_enabled: (function () {
+        var el = document.getElementById("raffle-sber-enabled");
+        return el ? !!el.checked : false;
+      })(),
+      tbank_enabled: (function () {
+        var el = document.getElementById("raffle-tbank-enabled");
+        return el ? !!el.checked : false;
+      })(),
+      qr_enabled: (function () {
+        var el = document.getElementById("raffle-qr-enabled");
+        return el ? !!el.checked : false;
+      })(),
       status: document.getElementById("raffle-status").value,
       sort_order: Number(document.getElementById("raffle-sort").value) || 0,
       wholesale_enabled: (function () {

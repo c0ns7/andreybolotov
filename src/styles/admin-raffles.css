@@ -594,6 +594,46 @@
   color: var(--text-muted);
   line-height: 1.45;
 }
+.admin-pay-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.admin-pay-tab {
+  min-height: 38px;
+  border: 1px solid #dbe2eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.admin-pay-tab.is-active {
+  background: #eaf2ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+.admin-pay-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.admin-pay-panel [hidden] {
+  display: none !important;
+}
+.admin-pay-settings--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+@media (max-width: 520px) {
+  .admin-pay-tabs {
+    grid-template-columns: 1fr;
+  }
+}
 
 .admin-raffle-field-hint {
   margin: 6px 0 0;

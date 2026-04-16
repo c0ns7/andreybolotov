@@ -437,11 +437,78 @@ import "../styles/admin-raffles.css";
                 </span>
                 Оплата для пользователей
               </h3>
-              <p class="admin-raffle-section__lead">Два варианта: сбор в Сбербанке и QR на оплату ИП Болотов Н. А.</p>
-              <div class="form-group">
-                <label for="raffle-collection-url">Ссылка на сбор (Сбербанк)</label>
-                <input id="raffle-collection-url" class="input" type="url" inputmode="url" placeholder="https://…" />
+              <p class="admin-raffle-section__lead">Переключайтесь по вкладкам. Включите тумблер — и настройки метода станут доступны.</p>
+              <div class="admin-pay-tabs" role="tablist" aria-label="Методы оплаты">
+                <button type="button" class="admin-pay-tab is-active" id="admin-pay-tab-sber" data-pay-tab="sber" role="tab" aria-selected="true">Сбер</button>
+                <button type="button" class="admin-pay-tab" id="admin-pay-tab-tbank" data-pay-tab="tbank" role="tab" aria-selected="false">Тинькофф</button>
+                <button type="button" class="admin-pay-tab" id="admin-pay-tab-qr" data-pay-tab="qr" role="tab" aria-selected="false">QR</button>
               </div>
+              <section class="admin-pay-panel" id="admin-pay-panel-sber" data-pay-panel="sber" role="tabpanel" aria-labelledby="admin-pay-tab-sber">
+                <div class="form-group admin-raffle-toggle-row">
+                  <label class="admin-toggle" for="raffle-sber-enabled">
+                    <input id="raffle-sber-enabled" class="admin-toggle__input" type="checkbox" role="switch" />
+                    <span class="admin-toggle__track" aria-hidden="true"></span>
+                    <span class="admin-toggle__label">Сбор Сбербанк включен</span>
+                  </label>
+                </div>
+                <div id="raffle-sber-settings">
+                  <div class="form-group">
+                    <label for="raffle-collection-url">Сбер — ссылка</label>
+                    <input id="raffle-collection-url" class="input" type="url" inputmode="url" placeholder="https://…" />
+                  </div>
+                  <div class="form-group">
+                    <label for="raffle-recipient-sber">Сбер — получатель</label>
+                    <textarea id="raffle-recipient-sber" class="input" rows="2" maxlength="2000" placeholder="Кому перевод и на какую цель"></textarea>
+                  </div>
+                </div>
+              </section>
+              <section class="admin-pay-panel" id="admin-pay-panel-tbank" data-pay-panel="tbank" role="tabpanel" aria-labelledby="admin-pay-tab-tbank" hidden>
+                <div class="form-group admin-raffle-toggle-row">
+                  <label class="admin-toggle" for="raffle-tbank-enabled">
+                    <input id="raffle-tbank-enabled" class="admin-toggle__input" type="checkbox" role="switch" />
+                    <span class="admin-toggle__track" aria-hidden="true"></span>
+                    <span class="admin-toggle__label">Сбор Тинькофф включен</span>
+                  </label>
+                </div>
+                <div id="raffle-tbank-settings">
+                  <div class="form-group">
+                    <label for="raffle-tbank-collection-url">Тинькофф — ссылка</label>
+                    <input id="raffle-tbank-collection-url" class="input" type="url" inputmode="url" placeholder="https://…" />
+                  </div>
+                  <div class="form-group">
+                    <label for="raffle-recipient-tbank">Тинькофф — получатель</label>
+                    <textarea id="raffle-recipient-tbank" class="input" rows="2" maxlength="2000" placeholder="Кому перевод и на какую цель"></textarea>
+                  </div>
+                </div>
+              </section>
+              <section class="admin-pay-panel" id="admin-pay-panel-qr" data-pay-panel="qr" role="tabpanel" aria-labelledby="admin-pay-tab-qr" hidden>
+                <div class="form-group admin-raffle-toggle-row">
+                  <label class="admin-toggle" for="raffle-qr-enabled">
+                    <input id="raffle-qr-enabled" class="admin-toggle__input" type="checkbox" role="switch" />
+                    <span class="admin-toggle__track" aria-hidden="true"></span>
+                    <span class="admin-toggle__label">QR-оплата включена</span>
+                  </label>
+                </div>
+                <div id="raffle-qr-settings">
+                  <div class="form-group">
+                    <label for="raffle-qr-url">QR-код — ссылка на изображение</label>
+                    <input id="raffle-qr-url" class="input" type="url" inputmode="url" placeholder="https://…" />
+                  </div>
+                  <div class="form-group">
+                    <label for="raffle-qr-file">QR-код — файл</label>
+                    <input id="raffle-qr-file" class="input input--file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+                    <p class="admin-raffle-field-hint">Загрузка заменит URL.</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="raffle-qr-recipient">QR — получатель</label>
+                    <textarea id="raffle-qr-recipient" class="input" rows="2" maxlength="2000" placeholder="Получатель платежа по QR"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="raffle-qr-purpose">QR — назначение платежа</label>
+                    <input id="raffle-qr-purpose" class="input" type="text" maxlength="200" placeholder="Оплата услуг" autocomplete="off" />
+                  </div>
+                </div>
+              </section>
               <div class="form-group">
                 <label for="raffle-rules-url">Ссылка на краткие правила акции</label>
                 <input
@@ -452,19 +519,6 @@ import "../styles/admin-raffles.css";
                   placeholder="https://… (экран оплаты и письма)"
                   maxlength="2000"
                 />
-              </div>
-              <div class="form-group">
-                <label for="raffle-recipient">Получатель / назначение сбора</label>
-                <textarea id="raffle-recipient" class="input" rows="3" maxlength="2000" placeholder="Кому перевод и на какую цель"></textarea>
-              </div>
-              <div class="form-group">
-                <label for="raffle-qr-url">QR-код — ссылка на изображение</label>
-                <input id="raffle-qr-url" class="input" type="url" inputmode="url" placeholder="https://…" />
-              </div>
-              <div class="form-group">
-                <label for="raffle-qr-file">QR-код — файл</label>
-                <input id="raffle-qr-file" class="input input--file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
-                <p class="admin-raffle-field-hint">Загрузка заменит URL.</p>
               </div>
             </section>
             <section class="admin-raffle-section" aria-labelledby="raffle-sec-pub">

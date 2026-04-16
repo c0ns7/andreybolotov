@@ -193,6 +193,39 @@ function migrate() {
   if (!rafCols.some((c) => c.name === "rules_url")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''`);
   }
+  if (!rafCols.some((c) => c.name === "tbank_collection_url")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_collection_url TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!rafCols.some((c) => c.name === "sber_collection_recipient")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN sber_collection_recipient TEXT NOT NULL DEFAULT ''`);
+    db.exec(
+      `UPDATE raffles SET sber_collection_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(sber_collection_recipient, '')) = ''`,
+    );
+  }
+  if (!rafCols.some((c) => c.name === "tbank_collection_recipient")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_collection_recipient TEXT NOT NULL DEFAULT ''`);
+    db.exec(
+      `UPDATE raffles SET tbank_collection_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(tbank_collection_recipient, '')) = ''`,
+    );
+  }
+  if (!rafCols.some((c) => c.name === "qr_recipient")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN qr_recipient TEXT NOT NULL DEFAULT ''`);
+    db.exec(
+      `UPDATE raffles SET qr_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(qr_recipient, '')) = ''`,
+    );
+  }
+  if (!rafCols.some((c) => c.name === "qr_payment_purpose")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN qr_payment_purpose TEXT NOT NULL DEFAULT 'Оплата услуг'`);
+  }
+  if (!rafCols.some((c) => c.name === "sber_enabled")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN sber_enabled INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!rafCols.some((c) => c.name === "tbank_enabled")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_enabled INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!rafCols.some((c) => c.name === "qr_enabled")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN qr_enabled INTEGER NOT NULL DEFAULT 1`);
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS site_settings (
@@ -672,8 +705,16 @@ export type RaffleRow = {
   old_price_rub?: number;
   ticket_count: number;
   collection_url: string;
+  tbank_collection_url?: string;
   collection_recipient: string;
+  sber_collection_recipient?: string;
+  tbank_collection_recipient?: string;
   qr_image_url: string;
+  qr_recipient?: string;
+  qr_payment_purpose?: string;
+  sber_enabled?: number;
+  tbank_enabled?: number;
+  qr_enabled?: number;
   /** Ссылка на краткие правила / оферту (необязательно) */
   rules_url?: string;
   status: string;
@@ -693,8 +734,16 @@ export type RaffleDto = {
   old_price_rub: number | null;
   ticket_count: number;
   collection_url: string;
+  tbank_collection_url: string;
   collection_recipient: string;
+  sber_collection_recipient: string;
+  tbank_collection_recipient: string;
   qr_image_url: string;
+  qr_recipient: string;
+  qr_payment_purpose: string;
+  sber_enabled: boolean;
+  tbank_enabled: boolean;
+  qr_enabled: boolean;
   rules_url: string | null;
   status: "active" | "closed" | "paused";
   sort_order: number;
@@ -714,8 +763,20 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     old_price_rub: oldP > 0 ? oldP : null,
     ticket_count: r.ticket_count,
     collection_url: r.collection_url,
+    tbank_collection_url: String((r as RaffleRow).tbank_collection_url ?? ""),
     collection_recipient: r.collection_recipient,
+    sber_collection_recipient: String(
+      (r as RaffleRow).sber_collection_recipient ?? r.collection_recipient ?? "",
+    ),
+    tbank_collection_recipient: String(
+      (r as RaffleRow).tbank_collection_recipient ?? r.collection_recipient ?? "",
+    ),
     qr_image_url: r.qr_image_url,
+    qr_recipient: String((r as RaffleRow).qr_recipient ?? r.collection_recipient ?? ""),
+    qr_payment_purpose: String((r as RaffleRow).qr_payment_purpose ?? "Оплата услуг"),
+    sber_enabled: Boolean(Number((r as RaffleRow).sber_enabled ?? 1)),
+    tbank_enabled: Boolean(Number((r as RaffleRow).tbank_enabled ?? 0)),
+    qr_enabled: Boolean(Number((r as RaffleRow).qr_enabled ?? 1)),
     rules_url: rulesRaw ? rulesRaw : null,
     status: st,
     sort_order: r.sort_order,
@@ -758,8 +819,16 @@ export function insertRaffle(data: {
   old_price_rub: number;
   ticket_count: number;
   collection_url: string;
+  tbank_collection_url: string;
   collection_recipient: string;
+  sber_collection_recipient: string;
+  tbank_collection_recipient: string;
   qr_image_url: string;
+  qr_recipient: string;
+  qr_payment_purpose: string;
+  sber_enabled: number;
+  tbank_enabled: number;
+  qr_enabled: number;
   rules_url: string;
   status: string;
   sort_order: number;
@@ -771,9 +840,10 @@ export function insertRaffle(data: {
     .prepare(
       `INSERT INTO raffles (
         title, cover_image_url, price_rub, old_price_rub, ticket_count,
-        collection_url, collection_recipient, qr_image_url, rules_url,
+        collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
+        sber_enabled, tbank_enabled, qr_enabled, rules_url,
         status, sort_order, wholesale_enabled, hidden_from_public, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
@@ -782,8 +852,16 @@ export function insertRaffle(data: {
       data.old_price_rub,
       data.ticket_count,
       data.collection_url,
+      data.tbank_collection_url,
       data.collection_recipient,
+      data.sber_collection_recipient,
+      data.tbank_collection_recipient,
       data.qr_image_url,
+      data.qr_recipient,
+      data.qr_payment_purpose,
+      data.sber_enabled,
+      data.tbank_enabled,
+      data.qr_enabled,
       data.rules_url,
       data.status,
       data.sort_order,
@@ -804,8 +882,16 @@ export function updateRaffle(
     old_price_rub: number;
     ticket_count: number;
     collection_url: string;
+    tbank_collection_url: string;
     collection_recipient: string;
+    sber_collection_recipient: string;
+    tbank_collection_recipient: string;
     qr_image_url: string;
+    qr_recipient: string;
+    qr_payment_purpose: string;
+    sber_enabled: number;
+    tbank_enabled: number;
+    qr_enabled: number;
     rules_url: string;
     status: string;
     sort_order: number;
@@ -816,7 +902,8 @@ export function updateRaffle(
   db.prepare(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
-      collection_url = ?, collection_recipient = ?, qr_image_url = ?, rules_url = ?,
+      collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?,
+      sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
   ).run(
@@ -826,9 +913,17 @@ export function updateRaffle(
     data.old_price_rub,
     data.ticket_count,
     data.collection_url,
+    data.tbank_collection_url,
     data.collection_recipient,
+    data.sber_collection_recipient,
+    data.tbank_collection_recipient,
     data.qr_image_url,
+    data.qr_recipient,
+    data.qr_payment_purpose,
     data.rules_url,
+    data.sber_enabled,
+    data.tbank_enabled,
+    data.qr_enabled,
     data.status,
     data.sort_order,
     data.wholesale_enabled,

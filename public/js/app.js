@@ -1058,8 +1058,15 @@
     amountRub: 0,
     reservedUntil: 0,
     collectionUrl: "",
-    collectionRecipient: "",
+    tbankCollectionUrl: "",
+    sberCollectionRecipient: "",
+    tbankCollectionRecipient: "",
     qrImageUrl: "",
+    qrRecipient: "",
+    qrPaymentPurpose: "Оплата услуг",
+    sberEnabled: true,
+    tbankEnabled: false,
+    qrEnabled: true,
     paymentMethod: "collection",
   };
   /** Кэш корзины и «Мои билеты» — подгружается после входа, обновляется при мутациях */
@@ -1680,40 +1687,82 @@
     var payAmountInline = document.getElementById("reserve-payment-amount-inline");
     var payAmountCheck = document.getElementById("reserve-payment-amount-check");
     var payRecipient = document.getElementById("reserve-payment-recipient");
+    var payRecipientTbank = document.getElementById("reserve-payment-recipient-tbank");
+    var payQrRecipient = document.getElementById("reserve-payment-qr-recipient");
     var payLink = document.getElementById("reserve-payment-link");
+    var payLinkTbank = document.getElementById("reserve-payment-link-tbank");
     var payQrImg = document.getElementById("reserve-payment-qr-image");
+    var payPurpose = document.getElementById("reserve-payment-purpose");
+    var payPurposeTbank = document.getElementById("reserve-payment-purpose-tbank");
+    var payQrPurpose = document.getElementById("reserve-payment-qr-purpose");
+    var payQrPurposeHint = document.getElementById("reserve-payment-qr-purpose-hint");
     var methodTabs = document.getElementById("reserve-payment-methods");
     var methodCollectionBtn = document.getElementById("reserve-payment-method-collection");
+    var methodTbankBtn = document.getElementById("reserve-payment-method-tbank");
     var methodQrBtn = document.getElementById("reserve-payment-method-qr");
     var collectBlock = document.getElementById("reserve-payment-collect");
+    var collectTbankBlock = document.getElementById("reserve-payment-collect-tbank");
     var qrBlock = document.getElementById("reserve-payment-qr");
-    var hasCollection = Boolean(String(reserveFlowState.collectionUrl || "").trim());
-    var hasQr = Boolean(String(reserveFlowState.qrImageUrl || "").trim());
-    var chosenMethod = reserveFlowState.paymentMethod === "qr" ? "qr" : "collection";
-    if (chosenMethod === "qr" && !hasQr) chosenMethod = hasCollection ? "collection" : "qr";
-    if (chosenMethod === "collection" && !hasCollection) chosenMethod = hasQr ? "qr" : "collection";
+    var methodsAvailable = 0;
+    var hasCollection =
+      Boolean(reserveFlowState.sberEnabled) && Boolean(String(reserveFlowState.collectionUrl || "").trim());
+    var hasTbankCollection =
+      Boolean(reserveFlowState.tbankEnabled) &&
+      Boolean(String(reserveFlowState.tbankCollectionUrl || "").trim());
+    var hasQr = Boolean(reserveFlowState.qrEnabled) && Boolean(String(reserveFlowState.qrImageUrl || "").trim());
+    if (hasCollection) methodsAvailable += 1;
+    if (hasTbankCollection) methodsAvailable += 1;
+    if (hasQr) methodsAvailable += 1;
+    var chosenMethod = String(reserveFlowState.paymentMethod || "collection");
+    if (chosenMethod === "collection" && !hasCollection) {
+      chosenMethod = hasTbankCollection ? "tbank_collection" : hasQr ? "qr" : "collection";
+    } else if (chosenMethod === "tbank_collection" && !hasTbankCollection) {
+      chosenMethod = hasCollection ? "collection" : hasQr ? "qr" : "tbank_collection";
+    } else if (chosenMethod === "qr" && !hasQr) {
+      chosenMethod = hasCollection ? "collection" : hasTbankCollection ? "tbank_collection" : "qr";
+    }
     reserveFlowState.paymentMethod = chosenMethod;
     if (payOrderId) payOrderId.textContent = orderCode;
     if (payAmount) payAmount.textContent = amountText;
     if (payAmountInline) payAmountInline.textContent = amountText;
     if (payAmountCheck) payAmountCheck.textContent = amountText;
-    if (payRecipient) payRecipient.textContent = reserveFlowState.collectionRecipient || "Реквизиты уточняются";
+    var purposeText = String(reserveFlowState.qrPaymentPurpose || "Оплата услуг").trim() || "Оплата услуг";
+    if (payPurpose) payPurpose.textContent = purposeText;
+    if (payPurposeTbank) payPurposeTbank.textContent = purposeText;
+    if (payQrPurpose) payQrPurpose.textContent = purposeText;
+    if (payQrPurposeHint) payQrPurposeHint.textContent = "«" + purposeText + "»";
+    if (payRecipient)
+      payRecipient.textContent = reserveFlowState.sberCollectionRecipient || "Реквизиты уточняются";
+    if (payRecipientTbank)
+      payRecipientTbank.textContent = reserveFlowState.tbankCollectionRecipient || "Реквизиты уточняются";
+    if (payQrRecipient) payQrRecipient.textContent = reserveFlowState.qrRecipient || "Реквизиты уточняются";
     if (payLink) {
       var href = String(reserveFlowState.collectionUrl || "").trim();
       payLink.href = href || "#";
       payLink.setAttribute("aria-disabled", href ? "false" : "true");
       payLink.classList.toggle("reserve-flow-btn--disabled", !href);
     }
+    if (payLinkTbank) {
+      var tbankHref = String(reserveFlowState.tbankCollectionUrl || "").trim();
+      payLinkTbank.href = tbankHref || "#";
+      payLinkTbank.setAttribute("aria-disabled", tbankHref ? "false" : "true");
+      payLinkTbank.classList.toggle("reserve-flow-btn--disabled", !tbankHref);
+    }
     if (payQrImg) {
       var qrSrc = String(reserveFlowState.qrImageUrl || "").trim();
       if (qrSrc) payQrImg.setAttribute("src", qrSrc);
       else payQrImg.removeAttribute("src");
     }
-    if (methodTabs) methodTabs.hidden = !(hasCollection && hasQr);
+    if (methodTabs) methodTabs.hidden = methodsAvailable < 2;
     if (methodCollectionBtn) {
       methodCollectionBtn.hidden = !hasCollection;
       methodCollectionBtn.classList.toggle("is-active", chosenMethod === "collection");
       methodCollectionBtn.setAttribute("aria-selected", chosenMethod === "collection" ? "true" : "false");
+    }
+    if (methodTbankBtn) {
+      methodTbankBtn.hidden = !hasTbankCollection;
+      methodTbankBtn.classList.toggle("is-active", chosenMethod === "tbank_collection");
+      methodTbankBtn.setAttribute("aria-selected", chosenMethod === "tbank_collection" ? "true" : "false");
     }
     if (methodQrBtn) {
       methodQrBtn.hidden = !hasQr;
@@ -1721,6 +1770,7 @@
       methodQrBtn.setAttribute("aria-selected", chosenMethod === "qr" ? "true" : "false");
     }
     if (collectBlock) collectBlock.hidden = chosenMethod !== "collection";
+    if (collectTbankBlock) collectTbankBlock.hidden = chosenMethod !== "tbank_collection";
     if (qrBlock) qrBlock.hidden = chosenMethod !== "qr";
     switchReservePaymentStep("requisites");
     paintReserveDeadlineLine(Number(reserveFlowState.reservedUntil || 0));
@@ -1805,8 +1855,34 @@
     reserveFlowState.amountRub = Number(order.amount_rub || 0);
     reserveFlowState.reservedUntil = Number(order.reserved_until || 0);
     reserveFlowState.collectionUrl = String((raffle && raffle.collection_url) || "").trim();
-    reserveFlowState.collectionRecipient = String((raffle && raffle.collection_recipient) || "").trim();
+    reserveFlowState.tbankCollectionUrl = String((raffle && raffle.tbank_collection_url) || "").trim();
+    reserveFlowState.sberCollectionRecipient = String(
+      (raffle && (raffle.sber_collection_recipient || raffle.collection_recipient)) || "",
+    ).trim();
+    reserveFlowState.tbankCollectionRecipient = String(
+      (raffle && (raffle.tbank_collection_recipient || raffle.collection_recipient)) || "",
+    ).trim();
     reserveFlowState.qrImageUrl = String((raffle && raffle.qr_image_url) || "").trim();
+    reserveFlowState.qrRecipient = String(
+      (raffle && (raffle.qr_recipient || raffle.collection_recipient)) || "",
+    ).trim();
+    reserveFlowState.qrPaymentPurpose = String(
+      (raffle && raffle.qr_payment_purpose) || "Оплата услуг",
+    )
+      .trim()
+      .slice(0, 200);
+    reserveFlowState.sberEnabled =
+      raffle && raffle.sber_enabled != null
+        ? !!raffle.sber_enabled
+        : Boolean(String((raffle && raffle.collection_url) || "").trim());
+    reserveFlowState.tbankEnabled =
+      raffle && raffle.tbank_enabled != null
+        ? !!raffle.tbank_enabled
+        : Boolean(String((raffle && raffle.tbank_collection_url) || "").trim());
+    reserveFlowState.qrEnabled =
+      raffle && raffle.qr_enabled != null
+        ? !!raffle.qr_enabled
+        : Boolean(String((raffle && raffle.qr_image_url) || "").trim());
     reserveFlowState.paymentMethod = "collection";
     renderReserveFlowModals();
     paintPaymentFlowSteps("reserve-success-steps", "success");
@@ -1843,9 +1919,36 @@
       reserveFlowState.amountRub = Number((o && o.amount_rub) || 0);
       reserveFlowState.reservedUntil = Number((o && o.reserved_until) || 0);
       reserveFlowState.collectionUrl = String((rf && rf.collection_url) || "").trim();
-      reserveFlowState.collectionRecipient = String((rf && rf.collection_recipient) || "").trim();
+      reserveFlowState.tbankCollectionUrl = String((rf && rf.tbank_collection_url) || "").trim();
+      reserveFlowState.sberCollectionRecipient = String(
+        (rf && (rf.sber_collection_recipient || rf.collection_recipient)) || "",
+      ).trim();
+      reserveFlowState.tbankCollectionRecipient = String(
+        (rf && (rf.tbank_collection_recipient || rf.collection_recipient)) || "",
+      ).trim();
       reserveFlowState.qrImageUrl = String((rf && rf.qr_image_url) || "").trim();
-      reserveFlowState.paymentMethod = reserveFlowState.paymentMethod === "qr" ? "qr" : "collection";
+      reserveFlowState.qrRecipient = String(
+        (rf && (rf.qr_recipient || rf.collection_recipient)) || "",
+      ).trim();
+      reserveFlowState.qrPaymentPurpose = String((rf && rf.qr_payment_purpose) || "Оплата услуг")
+        .trim()
+        .slice(0, 200);
+      reserveFlowState.sberEnabled =
+        rf && rf.sber_enabled != null
+          ? !!rf.sber_enabled
+          : Boolean(String((rf && rf.collection_url) || "").trim());
+      reserveFlowState.tbankEnabled =
+        rf && rf.tbank_enabled != null
+          ? !!rf.tbank_enabled
+          : Boolean(String((rf && rf.tbank_collection_url) || "").trim());
+      reserveFlowState.qrEnabled =
+        rf && rf.qr_enabled != null
+          ? !!rf.qr_enabled
+          : Boolean(String((rf && rf.qr_image_url) || "").trim());
+      reserveFlowState.paymentMethod =
+        reserveFlowState.paymentMethod === "qr" || reserveFlowState.paymentMethod === "tbank_collection"
+          ? reserveFlowState.paymentMethod
+          : "collection";
       renderReserveFlowModals();
       var amountEl = document.getElementById("wait-receipt-amount");
       var leftEl = document.getElementById("wait-receipt-left");
@@ -3308,8 +3411,16 @@
   }
 
   function getRafflePaymentAvailability(r) {
-    var hasCollection = Boolean(String((r && r.collection_url) || "").trim());
-    var hasQr = Boolean(String((r && r.qr_image_url) || "").trim());
+    var sberEnabled =
+      r && r.sber_enabled != null
+        ? Boolean(r.sber_enabled)
+        : Boolean(String((r && r.collection_url) || "").trim());
+    var qrEnabled =
+      r && r.qr_enabled != null
+        ? Boolean(r.qr_enabled)
+        : Boolean(String((r && r.qr_image_url) || "").trim());
+    var hasCollection = sberEnabled && Boolean(String((r && r.collection_url) || "").trim());
+    var hasQr = qrEnabled && Boolean(String((r && r.qr_image_url) || "").trim());
     return {
       hasCollection: hasCollection,
       hasQr: hasQr,
@@ -4547,8 +4658,18 @@
       showToast("Реквизиты пока не настроены", "warning");
     }
   });
+  document.getElementById("reserve-payment-link-tbank")?.addEventListener("click", function (e) {
+    if (this.getAttribute("aria-disabled") === "true") {
+      e.preventDefault();
+      showToast("Реквизиты пока не настроены", "warning");
+    }
+  });
   document.getElementById("reserve-payment-method-collection")?.addEventListener("click", function () {
     reserveFlowState.paymentMethod = "collection";
+    renderReserveFlowModals();
+  });
+  document.getElementById("reserve-payment-method-tbank")?.addEventListener("click", function () {
+    reserveFlowState.paymentMethod = "tbank_collection";
     renderReserveFlowModals();
   });
   document.getElementById("reserve-payment-method-qr")?.addEventListener("click", function () {
