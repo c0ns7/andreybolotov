@@ -4608,10 +4608,15 @@
   });
 
   document.getElementById("wait-receipt-upload")?.addEventListener("click", function () {
-    if (modalWaitReceipt) closeModal(modalWaitReceipt);
-    if (modalReservePayment) openModal(modalReservePayment);
+    /* Сначала шаг «чек» в скрытой модалке оплаты — иначе openModal успевает сфокусировать элементы шага 2.
+       Закрытие «нужен чек» и открытие оплаты разводим по кадрам: на части WebKit тап теряется при смене оверлея в том же таске. */
     switchReservePaymentStep("confirm");
-    startReservePaymentTimer(reserveFlowState.reservedUntil);
+    if (modalWaitReceipt) closeModal(modalWaitReceipt);
+    var until = reserveFlowState.reservedUntil;
+    requestAnimationFrame(function () {
+      if (modalReservePayment) openModal(modalReservePayment);
+      startReservePaymentTimer(until);
+    });
   });
   document.getElementById("reserve-expired-close")?.addEventListener("click", function () {
     if (modalReserveExpired) closeModal(modalReserveExpired);
@@ -5297,9 +5302,18 @@
     overlay.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     setTimeout(function () {
-      var firstAction = overlay.querySelector(
-        "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+      var focusables = overlay.querySelectorAll(
+        "button:not([disabled]):not([hidden]), a[href]:not([hidden]), input:not([disabled]):not([hidden]), textarea:not([disabled]):not([hidden]), select:not([disabled]):not([hidden])",
       );
+      var firstAction = null;
+      for (var fi = 0; fi < focusables.length; fi++) {
+        var el = focusables[fi];
+        if (el.closest("[hidden]")) continue;
+        var rects = typeof el.getClientRects === "function" ? el.getClientRects() : null;
+        if (!rects || rects.length === 0) continue;
+        firstAction = el;
+        break;
+      }
       if (firstAction && typeof firstAction.focus === "function") firstAction.focus();
     }, 20);
   }
