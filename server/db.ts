@@ -177,6 +177,28 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_roe_order ON raffle_order_events(order_id);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS used_receipts (
+      sha256 TEXT PRIMARY KEY,
+      first_order_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_used_receipts_created_at ON used_receipts(created_at);
+  `);
+
+  // Backfill: если таблица использованных чеков только что создана,
+  // заполним ее sha256, которые уже встречались в существующих заявках.
+  db.exec(`
+    INSERT OR IGNORE INTO used_receipts (sha256, first_order_id, created_at)
+    SELECT
+      receipt_sha256 AS sha256,
+      MIN(id) AS first_order_id,
+      MIN(created_at) AS created_at
+    FROM raffle_orders
+    WHERE receipt_sha256 IS NOT NULL AND TRIM(receipt_sha256) != ''
+    GROUP BY receipt_sha256;
+  `);
+
   try {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ro_public_token ON raffle_orders(public_status_token)`);
   } catch {

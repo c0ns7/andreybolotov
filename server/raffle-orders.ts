@@ -391,6 +391,7 @@ export function attachReceiptToOrder(
   const sha = String(receipt.sha256 || "")
     .trim()
     .toLowerCase();
+  if (!sha) return { ok: false, error: "Не передан отпечаток файла (sha256)" };
   if (sha && !/^[a-f0-9]{64}$/.test(sha)) {
     return { ok: false, error: "Некорректный отпечаток файла" };
   }
@@ -401,8 +402,26 @@ export function attachReceiptToOrder(
   const prevSha = String((o as RaffleOrderRow).receipt_sha256 || "")
     .trim()
     .toLowerCase();
-  const isSameAsPrevious = sha && prevSha && sha === prevSha ? 1 : 0;
+  if (sha && prevSha && sha === prevSha) {
+    return { ok: false, error: "Этот чек уже прикреплён к данной заявке" };
+  }
+
   const now = Date.now();
+
+  if (sha) {
+    // Защита от повторного использования чека (даже другим человеком на другой заявке).
+    // Храним использованные отпечатки отдельно, чтобы если заявка ушла на доработку,
+    // то заменяемый чек не давал обойти защиту.
+    const ins = db.prepare(
+      `INSERT OR IGNORE INTO used_receipts (sha256, first_order_id, created_at) VALUES (?, ?, ?)`,
+    );
+    const info = ins.run(sha, orderId, now);
+    if (!info || Number(info.changes) === 0) {
+      return { ok: false, error: "Этот чек уже использован ранее" };
+    }
+  }
+
+  const isSameAsPrevious = 0;
   db.prepare(
     `UPDATE raffle_orders
      SET receipt_url = ?, receipt_name = ?, receipt_mime = ?, receipt_sha256 = ?, receipt_same_as_previous = ?,
