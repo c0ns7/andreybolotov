@@ -3234,13 +3234,34 @@ a.raffle-pay__btn {
 
 .modal-overlay--reserve-flow {
   z-index: 130;
-  padding: 14px;
+  padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
   background:
     radial-gradient(120% 120% at 10% 0%, rgba(59, 130, 246, 0.2) 0%, transparent 55%),
     radial-gradient(120% 120% at 100% 0%, rgba(16, 185, 129, 0.16) 0%, transparent 58%),
     rgba(2, 6, 23, 0.62);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  /* Бронь/оплата/чек: контент без .modal__body — иначе overflow:hidden у .modal обрезает и ломает скролл на iOS */
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@supports (justify-content: safe center) {
+  .modal-overlay--reserve-flow {
+    justify-content: safe center;
+  }
+}
+
+.modal-overlay--reserve-flow > .modal {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .reserve-flow-modal {
