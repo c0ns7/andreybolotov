@@ -3,7 +3,7 @@ import { db, getRaffleById, getUserById, getUserByPhone, isRaffleVisibleOnSite }
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
-export const RAFFLE_MAX_SELECT = 10;
+export const RAFFLE_MAX_SELECT = 25;
 
 export type RaffleOrderRow = {
   id: number;
@@ -901,15 +901,15 @@ export function createOrAppendConfirmedTicketsForUser(
   }
 }
 
-/** Перенос предназначенных по телефону номерков в реальные подтверждённые заявки после регистрации/входа. */
-export function materializeRafflePreassignmentsForUser(userId: number): void {
+/** Перенос предназначенных по телефону номерков в реальные подтверждённые заявки после регистрации/входа. Возвращает id акций, где что-то изменилось. */
+export function materializeRafflePreassignmentsForUser(userId: number): number[] {
   const u = getUserById(userId);
-  if (!u) return;
+  if (!u) return [];
   const phone = u.phone;
   const rows = db
     .prepare(`SELECT raffle_id, ticket_number FROM raffle_phone_preassignments WHERE phone = ?`)
     .all(phone) as Array<{ raffle_id: number; ticket_number: number }>;
-  if (!rows.length) return;
+  if (!rows.length) return [];
 
   const byRaffle = new Map<number, number[]>();
   for (const r of rows) {
@@ -929,6 +929,7 @@ export function materializeRafflePreassignmentsForUser(userId: number): void {
     }
   });
   tx();
+  return [...byRaffle.keys()];
 }
 
 export type BulkAssignSkip = {
@@ -1188,6 +1189,22 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
   }
 
   return { wholesale_enabled, participants, wholesalers };
+}
+
+/** Номера оптовика пользователя по акциям (для экрана «Мои билеты»). */
+export function listWholesaleSlotsForUser(userId: number): Array<{ raffle_id: number; wholesale_numbers: number[] }> {
+  const rows = db
+    .prepare(
+      `SELECT raffle_id, wholesale_number FROM raffle_wholesale_assignments WHERE user_id = ? ORDER BY raffle_id ASC, wholesale_number ASC`,
+    )
+    .all(userId) as Array<{ raffle_id: number; wholesale_number: number }>;
+  const map = new Map<number, number[]>();
+  for (const r of rows) {
+    const arr = map.get(r.raffle_id) ?? [];
+    arr.push(r.wholesale_number);
+    map.set(r.raffle_id, arr);
+  }
+  return [...map.entries()].map(([raffle_id, wholesale_numbers]) => ({ raffle_id, wholesale_numbers }));
 }
 
 export function addTicketsToReservedOrder(

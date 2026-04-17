@@ -53,6 +53,7 @@ import {
   attachWebSocket,
   broadcastChatMessage,
   broadcastRafflesFeedUpdated,
+  broadcastRaffleGridUpdated,
   broadcastRaffleTicketsUpdated,
   broadcastThreadReadByStaff,
   broadcastTypingStaffToUser,
@@ -93,6 +94,7 @@ import {
   adminAssignPhoneToExactTicket,
   isRaffleTicketBlocked,
   getRaffleOccupiedCount,
+  listWholesaleSlotsForUser,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import {
@@ -105,6 +107,12 @@ import {
 } from "./notify-email.js";
 
 const PORT = Number(process.env.PORT) || 3000;
+
+function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
+  const r = Math.floor(Number(raffleId));
+  if (Number.isFinite(r) && r > 0) broadcastRaffleGridUpdated(r);
+}
+
 const RAFFLE_VIEW_TTL_MS = 70_000;
 const raffleViewersByRaffle = new Map<number, Map<number, number>>();
 
@@ -557,7 +565,8 @@ app.post("/api/auth/register", async (c) => {
   const passwordHash = bcrypt.hashSync(password, 10);
   const userId = insertUser(phone, name, email, passwordHash);
   try {
-    materializeRafflePreassignmentsForUser(userId);
+    const affected = materializeRafflePreassignmentsForUser(userId);
+    for (const rid of affected) notifyRaffleGridMutated(rid);
   } catch (e) {
     console.error("[register] materialize preassign:", e instanceof Error ? e.message : e);
   }
@@ -606,7 +615,8 @@ app.post("/api/auth/login", async (c) => {
   const token = randomUUID();
   createSession(token, user.id);
   try {
-    materializeRafflePreassignmentsForUser(user.id);
+    const affected = materializeRafflePreassignmentsForUser(user.id);
+    for (const rid of affected) notifyRaffleGridMutated(rid);
   } catch (e) {
     console.error("[login] materialize preassign:", e instanceof Error ? e.message : e);
   }
@@ -630,7 +640,8 @@ app.get("/api/auth/me", (c) => {
   const user = getUserBySessionToken(token);
   if (!user) return c.json({ error: "Не авторизован" }, 401);
   try {
-    materializeRafflePreassignmentsForUser(user.id);
+    const affected = materializeRafflePreassignmentsForUser(user.id);
+    for (const rid of affected) notifyRaffleGridMutated(rid);
   } catch (e) {
     console.error("[me] materialize preassign:", e instanceof Error ? e.message : e);
   }
@@ -1041,6 +1052,7 @@ app.get("/api/raffles/my-tickets", (c) => {
     reserved: listReservedOrdersForUser(u.id),
     pending_review: listPendingReviewTicketGroupsForUser(u.id),
     confirmed: listConfirmedTicketGroupsForUser(u.id),
+    wholesale_slots: listWholesaleSlotsForUser(u.id),
     server_time_ms: Date.now(),
   });
 });
@@ -1122,6 +1134,7 @@ app.post("/api/raffles/orders/:orderId/add-tickets", async (c) => {
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   broadcastRaffleTicketsUpdated(u.id);
+  if (order) notifyRaffleGridMutated(order.raffle_id);
   const serverTimeMs = Date.now();
   return c.json({
     order: order ? orderToDto(order) : null,
@@ -1146,6 +1159,7 @@ app.post("/api/raffles/orders/:orderId/random-tickets", async (c) => {
   if (!r.ok) return c.json({ error: r.error }, 400);
   const order = getOrderByIdForUser(orderId, u.id);
   broadcastRaffleTicketsUpdated(u.id);
+  if (order) notifyRaffleGridMutated(order.raffle_id);
   const serverTimeMs = Date.now();
   return c.json({
     order: order ? orderToDto(order) : null,
@@ -1164,9 +1178,11 @@ app.delete("/api/raffles/orders/:orderId/tickets/:ticketNum", (c) => {
   if (!Number.isFinite(orderId) || !Number.isFinite(ticketNum)) {
     return c.json({ error: "Некорректный id" }, 400);
   }
+  const orderBefore = getOrderByIdForUser(orderId, u.id);
   const r = removeTicketFromReservedOrder(orderId, u.id, ticketNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
   broadcastRaffleTicketsUpdated(u.id);
+  if (orderBefore) notifyRaffleGridMutated(orderBefore.raffle_id);
   const serverTimeMs = Date.now();
   return c.json({ order: r.order, numbers: r.numbers, server_time_ms: serverTimeMs });
 });
@@ -1212,6 +1228,7 @@ app.post("/api/raffles/:id/reserve", async (c) => {
   if (!order) return c.json({ error: "Ошибка создания заявки" }, 500);
   const nums = getTicketNumbersForOrder(r.order_id);
   broadcastRaffleTicketsUpdated(u.id);
+  notifyRaffleGridMutated(id);
   const serverTimeMs = Date.now();
   return c.json({
     order: orderToDto(order),
@@ -1267,6 +1284,7 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   const order = getOrderByIdForUser(orderId, u.id);
   if (!order) return c.json({ error: "Ошибка" }, 500);
   broadcastRaffleTicketsUpdated(u.id);
+  notifyRaffleGridMutated(order.raffle_id);
   return c.json({ order: orderToDto(order), server_time_ms: Date.now() });
 });
 
@@ -1306,6 +1324,7 @@ app.post("/api/admin/raffle-payments/:orderId/confirm", (c) => {
   if (owner && Number.isFinite(Number(owner.user_id))) {
     broadcastRaffleTicketsUpdated(Number(owner.user_id));
   }
+  notifyRaffleGridMutated(owner?.raffle_id);
   return c.json({ ok: true });
 });
 
@@ -1360,6 +1379,7 @@ app.post("/api/admin/raffle-payments/:orderId/reject", async (c) => {
     }
     broadcastRaffleTicketsUpdated(uid);
   }
+  notifyRaffleGridMutated(pendingRow?.raffle_id);
   return c.json({ ok: true, mode: res.mode });
 });
 
@@ -1399,6 +1419,7 @@ app.post("/api/admin/raffle-orders/:orderId/release", async (c) => {
     }
     broadcastRaffleTicketsUpdated(uid);
   }
+  notifyRaffleGridMutated(before?.raffle_id);
   return c.json({ ok: true });
 });
 
@@ -1616,6 +1637,7 @@ app.post("/api/admin/raffles/:id/bulk-assign-phones", async (c) => {
   const lines = text.split(/\r?\n/);
   const r = adminBulkAssignPhoneLinesToRaffle(id, lines, startNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
+  if (r.assigned > 0) notifyRaffleGridMutated(id);
   return c.json({ assigned: r.assigned, skipped: r.skipped });
 });
 
@@ -1638,6 +1660,7 @@ app.post("/api/admin/raffles/:id/assign-phone-ticket", async (c) => {
   if (!Number.isFinite(ticket_number)) return c.json({ error: "Некорректный номерок" }, 400);
   const res = adminAssignPhoneToExactTicket(id, phone, ticket_number);
   if (!res.ok) return c.json({ error: res.error }, 400);
+  notifyRaffleGridMutated(id);
   return c.json({ ok: true });
 });
 

@@ -11,6 +11,7 @@
   let wholesalersCache = [];
   let participantsRaffleId = null;
   let participantsActiveTab = "participants";
+  let participantsWholesaleEnabled = false;
   const revealedPhones = new Set();
   let raffleSingleCheckTimer = null;
   let raffleSingleCheckReqId = 0;
@@ -87,8 +88,17 @@
   const modalParticipants = document.getElementById("modal-raffle-participants");
   const participantsSearch = document.getElementById("raffle-participants-search");
   const participantsList = document.getElementById("raffle-participants-list");
-  const participantsTabs = Array.from(document.querySelectorAll(".admin-raffle-participants-tab"));
-  const participantsPanels = Array.from(document.querySelectorAll(".admin-raffle-participants-panel"));
+
+  function participantTabButtons() {
+    return modalParticipants
+      ? Array.from(modalParticipants.querySelectorAll(".admin-raffle-participants-tab"))
+      : [];
+  }
+  function participantPanels() {
+    return modalParticipants
+      ? Array.from(modalParticipants.querySelectorAll(".admin-raffle-participants-panel"))
+      : [];
+  }
   const raffleSinglePhone = document.getElementById("raffle-single-phone");
   const raffleSingleTicket = document.getElementById("raffle-single-ticket");
   const raffleSingleCheck = document.getElementById("raffle-single-check");
@@ -506,8 +516,13 @@
 
   function renderWholesalersList() {
     const el = document.getElementById("raffle-wholesalers-list");
-    const wrap = document.getElementById("raffle-wholesalers-wrap");
     if (!el) return;
+    if (!participantsWholesaleEnabled) {
+      el.innerHTML =
+        '<p class="admin-raffle-participants__empty" style="margin:0">' +
+        "Оптовики для этой акции отключены. Включите опцию при редактировании акции.</p>";
+      return;
+    }
     if (!wholesalersCache.length) {
       el.innerHTML =
         '<p class="admin-raffle-participants__empty" style="margin:0;border-style:dashed">' +
@@ -539,15 +554,18 @@
   }
 
   function setParticipantsTab(tab) {
-    participantsActiveTab = tab === "assign" ? "assign" : "participants";
-    participantsTabs.forEach(function (btn) {
+    if (tab === "assign") participantsActiveTab = "assign";
+    else if (tab === "wholesalers") participantsActiveTab = "wholesalers";
+    else participantsActiveTab = "participants";
+    participantTabButtons().forEach(function (btn) {
       const isActive = btn.getAttribute("data-tab") === participantsActiveTab;
       btn.classList.toggle("is-active", isActive);
       btn.setAttribute("aria-selected", isActive ? "true" : "false");
     });
-    participantsPanels.forEach(function (panel) {
+    participantPanels().forEach(function (panel) {
       const isActive = panel.getAttribute("data-panel") === participantsActiveTab;
       panel.hidden = !isActive;
+      panel.setAttribute("aria-hidden", isActive ? "false" : "true");
     });
   }
 
@@ -631,6 +649,7 @@
     participantsRaffleId = raffleId;
     participantsCache = [];
     wholesalersCache = [];
+    participantsWholesaleEnabled = false;
     revealedPhones.clear();
     if (participantsSearch) participantsSearch.value = "";
     var bulkTa = document.getElementById("raffle-bulk-phones");
@@ -657,8 +676,7 @@
       if (participantsRaffleId !== raffleId) return;
       participantsCache = Array.isArray(data.participants) ? data.participants : [];
       wholesalersCache = Array.isArray(data.wholesalers) ? data.wholesalers : [];
-      var whWrap = document.getElementById("raffle-wholesalers-wrap");
-      if (whWrap) whWrap.hidden = !data.wholesale_enabled;
+      participantsWholesaleEnabled = !!data.wholesale_enabled;
       renderWholesalersList();
       renderParticipantsList();
     } catch (e) {
@@ -758,10 +776,11 @@
     ?.addEventListener("click", closeParticipants);
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
   participantsSearch?.addEventListener("input", renderParticipantsList);
-  participantsTabs.forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      setParticipantsTab(tab.getAttribute("data-tab"));
-    });
+  modalParticipants?.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest && e.target.closest(".admin-raffle-participants-tab");
+    if (!btn || !modalParticipants.contains(btn)) return;
+    var t = btn.getAttribute("data-tab");
+    if (t) setParticipantsTab(t);
   });
   payTabs.forEach(function (tab) {
     tab.addEventListener("click", function () {
@@ -811,8 +830,7 @@
         if (participantsRaffleId) {
           participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
           wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
-          var whWrap = document.getElementById("raffle-wholesalers-wrap");
-          if (whWrap) whWrap.hidden = !bundle.wholesale_enabled;
+          participantsWholesaleEnabled = !!bundle.wholesale_enabled;
           renderWholesalersList();
           renderParticipantsList();
         }
@@ -882,8 +900,7 @@
           if (participantsRaffleId) {
             participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
             wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
-            var whWrap = document.getElementById("raffle-wholesalers-wrap");
-            if (whWrap) whWrap.hidden = !bundle.wholesale_enabled;
+            participantsWholesaleEnabled = !!bundle.wholesale_enabled;
             renderWholesalersList();
             renderParticipantsList();
           }

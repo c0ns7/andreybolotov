@@ -106,6 +106,22 @@ export function broadcastRaffleTicketsUpdated(userId: number) {
   }
 }
 
+/** Всем пользователям: занятость номерков в акции изменилась (корзина / сетка на клиенте). */
+export function broadcastRaffleGridUpdated(raffleId: number) {
+  const rid = Math.floor(Number(raffleId));
+  if (!Number.isFinite(rid) || rid < 1) return;
+  const payload = JSON.stringify({ type: "raffle_grid_updated", raffle_id: rid });
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 /** Уведомление всем клиентам: лента акций/статусы изменились */
 export function broadcastRafflesFeedUpdated() {
   const payload = JSON.stringify({ type: "raffles_feed_updated" });

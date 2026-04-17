@@ -2340,6 +2340,22 @@ html:not(.raffle-grid-page) #tab-search {
   color: var(--text-muted);
 }
 
+.tickets-group__wholesale {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: linear-gradient(180deg, #fffbeb 0%, color-mix(in srgb, var(--surface-elevated, #f8fafc) 88%, #fef3c7) 100%);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, #fcd34d 30%);
+}
+
+.tickets-group__wholesale strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .tickets-pending-hint {
   margin: -4px 0 12px;
   font-size: 0.8rem;

@@ -64,6 +64,9 @@
   let liveWsReconnectTimer = null;
   let raffleTicketsRealtimeInFlight = false;
   let raffleTicketsRealtimeQueued = false;
+  let raffleGridRealtimeInFlight = false;
+  let raffleGridRealtimeQueued = false;
+  let raffleGridRealtimeLastRid = 0;
   /** @type {number | null} */
   let chatMessagesPollTimer = null;
   /** @type {number | null} */
@@ -670,6 +673,88 @@
     }
   }
 
+  async function pruneRaffleLocalSelectionAgainstServer() {
+    if (!IS_RAFFLE_PURCHASE_PAGE || !raffleDetailState.raffle || !raffleDetailState.raffle.id) return 0;
+    var rid = Number(raffleDetailState.raffle.id);
+    if (!Number.isFinite(rid) || rid < 1) return 0;
+    var sel = Array.from(raffleDetailState.selected || []);
+    if (!sel.length) return 0;
+    var s = loadSession();
+    if (!s || !s.token) return 0;
+    var removed = 0;
+    var tasks = sel.map(function (n) {
+      return fetch("/api/raffles/" + String(rid) + "/ticket-lookup?n=" + String(n), {
+        cache: "no-store",
+        headers: authHeaders(),
+      })
+        .then(function (res) {
+          return res.json().then(function (d) {
+            return { n: n, kind: d && d.kind, ok: res.ok };
+          });
+        })
+        .catch(function () {
+          return { n: n, kind: null, ok: false };
+        });
+    });
+    var look = await Promise.all(tasks);
+    for (var i = 0; i < look.length; i++) {
+      var L = look[i];
+      if (!L || !L.ok || !L.kind) continue;
+      if (L.kind === "taken" && raffleDetailState.selected.has(L.n)) {
+        raffleDetailState.selected.delete(L.n);
+        removed++;
+      }
+    }
+    if (removed) persistRaffleDraftSelection();
+    return removed;
+  }
+
+  async function handleRaffleGridRealtimeUpdate(raffleIdRemote) {
+    var ridRemote = Number(raffleIdRemote);
+    if (!Number.isFinite(ridRemote) || ridRemote < 1) return;
+    if (raffleGridRealtimeInFlight) {
+      raffleGridRealtimeQueued = true;
+      raffleGridRealtimeLastRid = ridRemote;
+      return;
+    }
+    raffleGridRealtimeInFlight = true;
+    raffleGridRealtimeQueued = false;
+    raffleGridRealtimeLastRid = ridRemote;
+    try {
+      await fetchCartFromApi().catch(function () {});
+      if (modalCart && modalCart.classList.contains("is-open")) {
+        renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+      }
+
+      if (
+        (IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE) &&
+        raffleDetailState.raffle &&
+        Number(raffleDetailState.raffle.id) === ridRemote
+      ) {
+        var removedSel = 0;
+        if (IS_RAFFLE_PURCHASE_PAGE) {
+          removedSel = await pruneRaffleLocalSelectionAgainstServer();
+          if (removedSel > 0) {
+            showToast("Часть номерков уже занята — снята с выбора", "warning");
+            scheduleRaffleSelectionSync();
+          }
+        }
+        await loadRaffleTicketSlice().catch(function () {});
+        renderRaffleGrid(raffleDetailState.lastCells || []);
+        updateRaffleSelectionLabel();
+      }
+    } catch (_) {
+      /* ignore */
+    } finally {
+      raffleGridRealtimeInFlight = false;
+      if (raffleGridRealtimeQueued) {
+        raffleGridRealtimeQueued = false;
+        var nextRid = raffleGridRealtimeLastRid || ridRemote;
+        handleRaffleGridRealtimeUpdate(nextRid);
+      }
+    }
+  }
+
   async function handleRafflesFeedRealtimeUpdate() {
     if (IS_HOME_APP) {
       loadRafflesFeed().catch(function () {});
@@ -718,6 +803,10 @@
       }
       if (d.type === "raffle_tickets_updated") {
         handleRaffleTicketsRealtimeUpdate();
+        return;
+      }
+      if (d.type === "raffle_grid_updated") {
+        handleRaffleGridRealtimeUpdate(d.raffle_id);
         return;
       }
       if (d.type === "raffles_feed_updated") {
@@ -1034,7 +1123,7 @@
     refreshInstallPromptVisibility();
   });
 
-  var ticketsModalDataCache = { reserved: [], pending_review: [], confirmed: [] };
+  var ticketsModalDataCache = { reserved: [], pending_review: [], confirmed: [], wholesale_slots: [] };
   var lastCartChromeTotal = -1;
   var ticketSearchLookupTimer = null;
   var ticketSearchLastLookup = { n: NaN, kind: null };
@@ -1072,7 +1161,7 @@
   /** Кэш корзины и «Мои билеты» — подгружается после входа, обновляется при мутациях */
   var raffleDataCache = {
     cart: /** @type {{ items: unknown[] } | null} */ (null),
-    tickets: /** @type {{ reserved: unknown[]; pending_review?: unknown[]; confirmed: unknown[] } | null} */ (null),
+    tickets: /** @type {{ reserved: unknown[]; pending_review?: unknown[]; confirmed: unknown[]; wholesale_slots?: unknown[] } | null} */ (null),
   };
   var lastCartCheckoutAt = 0;
   var lastCartRemoveAt = 0;
@@ -1114,7 +1203,7 @@
   }
   var raffleCardPrevFreePct = Object.create(null);
 
-  const RAFFLE_MAX_SELECT = 10;
+  const RAFFLE_MAX_SELECT = 25;
 
   /** Разница «серверное сейчас − локальное Date.now()» по последнему ответу API (неверные часы на устройстве ломали таймер брони). */
   var raffleServerTimeSkewMs = 0;
@@ -2218,17 +2307,46 @@
     return html;
   }
 
-  function buildTicketsConfirmedHtml(confirmed) {
+  function wholesaleNumbersForRaffleFromSlots(raffleId, wholesaleSlots) {
+    if (!Number.isFinite(raffleId) || raffleId < 1 || !Array.isArray(wholesaleSlots)) return [];
+    for (var si = 0; si < wholesaleSlots.length; si++) {
+      var row = wholesaleSlots[si];
+      if (!row || Number(row.raffle_id) !== raffleId) continue;
+      var nums = row.wholesale_numbers;
+      return Array.isArray(nums) ? nums : [];
+    }
+    return [];
+  }
+
+  function buildTicketsConfirmedHtml(confirmed, wholesaleSlots) {
     var html = "";
     var i;
     var j;
+    var shownWholesaleForRaffle = Object.create(null);
     for (i = 0; i < confirmed.length; i++) {
       var cv = confirmed[i];
       var ctitle = escapeHtml(String((cv.raffle && cv.raffle.title) || ""));
       var cnums = cv.numbers || [];
+      var rid = cv.raffle && cv.raffle.id != null ? Number(cv.raffle.id) : NaN;
+      var wholesaleNums =
+        Number.isFinite(rid) && !shownWholesaleForRaffle[rid]
+          ? wholesaleNumbersForRaffleFromSlots(rid, wholesaleSlots)
+          : [];
+      if (Number.isFinite(rid) && wholesaleNums.length) shownWholesaleForRaffle[rid] = true;
       html += '<section class="tickets-group">';
       html += '<h3 class="tickets-group__title">' + ctitle + "</h3>";
       html += '<p class="tickets-group__meta">Оплачено, участие подтверждено</p>';
+      if (wholesaleNums.length) {
+        var whStr = wholesaleNums
+          .map(function (wn) {
+            return "№ " + escapeHtml(String(wn));
+          })
+          .join(", ");
+        html +=
+          '<p class="tickets-group__wholesale">Номера оптовика в этой акции: <strong>' +
+          whStr +
+          "</strong> (каждые 10 подтверждённых номерков дают один такой номер)</p>";
+      }
       html += buildTrackingStatusLink(cv.order);
       html += buildTicketsTimelineHtml(cv.timeline);
       html += '<div class="tickets-chips">';
@@ -2322,7 +2440,7 @@
     }
     if (confirmed.length) {
       html += '<section class="tickets-section"><h3 class="tickets-section__title">Утвержденные</h3>';
-      html += buildTicketsConfirmedHtml(confirmed);
+      html += buildTicketsConfirmedHtml(confirmed, ticketsModalDataCache.wholesale_slots || []);
       html += "</section>";
     }
     body.innerHTML = html;
@@ -2334,11 +2452,13 @@
       reserved: data && data.reserved ? data.reserved : [],
       pending_review: data && data.pending_review ? data.pending_review : [],
       confirmed: data && data.confirmed ? data.confirmed : [],
+      wholesale_slots: data && data.wholesale_slots ? data.wholesale_slots : [],
     };
     raffleDataCache.tickets = {
       reserved: ticketsModalDataCache.reserved,
       pending_review: ticketsModalDataCache.pending_review,
       confirmed: ticketsModalDataCache.confirmed,
+      wholesale_slots: ticketsModalDataCache.wholesale_slots,
     };
     paintTicketsModalBody();
   }
@@ -2484,6 +2604,7 @@
       reserved: data.reserved || [],
       pending_review: data.pending_review || [],
       confirmed: data.confirmed || [],
+      wholesale_slots: data.wholesale_slots || [],
     };
     raffleDataCache.tickets = payload;
     syncTicketsNavBadge();
@@ -2539,6 +2660,7 @@
           reserved: [],
           pending_review: [],
           confirmed: [],
+          wholesale_slots: [],
         },
       );
     } catch (e) {
@@ -2552,7 +2674,7 @@
           openTicketsModal().catch(function () {});
         });
       }
-      renderTicketsModalBody({ reserved: [], pending_review: [], confirmed: [] });
+      renderTicketsModalBody({ reserved: [], pending_review: [], confirmed: [], wholesale_slots: [] });
     }
     openModal(modalTickets);
     setBottomNavActive();

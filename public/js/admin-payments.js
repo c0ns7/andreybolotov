@@ -130,6 +130,36 @@
     reservedUntilCountdownTimerId = setInterval(paint, 1000);
   }
 
+  function setPaymentsTab(tab, root) {
+    var t = tab === "pending" ? "pending" : "reserved";
+    root.querySelectorAll("[data-payments-tab]").forEach(function (btn) {
+      var on = btn.getAttribute("data-payments-tab") === t;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    root.querySelectorAll("[data-payments-panel]").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-payments-panel") !== t;
+    });
+  }
+
+  function bindPaymentsTabs(root) {
+    root.querySelectorAll("[data-payments-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var tab = btn.getAttribute("data-payments-tab");
+        if (tab) setPaymentsTab(tab, root);
+      });
+    });
+  }
+
+  function updatePaymentTabBadges(root) {
+    var nRes = root.querySelectorAll('[data-payments-panel="reserved"] .admin-payment-card').length;
+    var nPen = root.querySelectorAll('[data-payments-panel="pending"] .admin-payment-card').length;
+    var elR = root.querySelector('[data-payments-count="reserved"]');
+    var elP = root.querySelector('[data-payments-count="pending"]');
+    if (elR) elR.textContent = String(nRes);
+    if (elP) elP.textContent = String(nPen);
+  }
+
   function bindChatHandlers(container, token) {
     container.querySelectorAll("[data-chat-user]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -165,8 +195,10 @@
     if (!Number.isFinite(id)) return;
     var card = document.querySelector('.admin-payment-card[data-order-id="' + String(id) + '"]');
     if (!card) return;
-    var section = card.closest(".admin-payments-section");
+    var section = card.closest("[data-payments-section]");
     card.remove();
+    var mainEl = document.getElementById("admin-payments-main");
+    if (mainEl) updatePaymentTabBadges(mainEl);
     if (section) {
       var cardsLeft = section.querySelectorAll(".admin-payment-card").length;
       if (cardsLeft === 0) {
@@ -174,22 +206,39 @@
         if (!empty) {
           var p = document.createElement("p");
           p.className = "admin-payments-section__empty-note";
-          p.textContent = "В этом разделе заявок больше нет.";
+          var kind = section.getAttribute("data-payments-section");
+          p.textContent =
+            kind === "pending"
+              ? "Заявок с прикреплённым чеком в очереди сейчас нет."
+              : "Нет активных броней без чека.";
           section.appendChild(p);
         }
       }
     }
   }
 
+  function bindPaymentsReloadButton(container) {
+    if (!container) return;
+    var btn = container.querySelector("[data-admin-payments-reload]");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      loadList();
+    });
+  }
+
   function loadList() {
     const listEl = document.getElementById("admin-payments-list");
+    const tabsSlot = document.getElementById("admin-payments-tabs-slot");
+    const mainEl = document.getElementById("admin-payments-main");
     if (!listEl) return;
     const s = loadSession();
     if (!s || !s.token) {
+      if (tabsSlot) tabsSlot.innerHTML = "";
       listEl.innerHTML =
         '<div class="admin-payments-empty admin-payments-empty--soft"><p>Нет сессии</p></div>';
       return;
     }
+    if (tabsSlot) tabsSlot.innerHTML = "";
     listEl.innerHTML =
       '<div class="admin-payments-skeleton" aria-busy="true">' +
       '<div class="admin-payments-skeleton__line"></div>' +
@@ -210,45 +259,86 @@
         const active = x.data.active_orders || [];
         const serverTimeMs = x.data.server_time_ms;
         const skewHtml = renderServerSkewNote(serverTimeMs);
-        let html = skewHtml;
 
         if (!payments.length && !active.length) {
+          if (tabsSlot) tabsSlot.innerHTML = "";
           listEl.innerHTML =
-            html +
+            skewHtml +
             '<div class="admin-payments-empty">' +
             '<div class="admin-payments-empty__illu">' +
             ICO.inbox +
             "</div>" +
             "<p class=\"admin-payments-empty__title\">Очередь пуста</p>" +
             "<p class=\"admin-payments-empty__hint\">Нет активных броней и заявок с чеками.</p>" +
+            '<div class="admin-payments-empty__actions">' +
+            '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
+            "</div>" +
             "</div>";
+          bindPaymentsReloadButton(listEl);
           return;
         }
 
+        var nRes = active.length;
+        var nPen = payments.length;
+        var initialTab = nRes > 0 ? "reserved" : "pending";
+        var tabsHtml = "";
+        tabsHtml += '<div class="admin-payments-tabs" role="tablist" aria-label="Тип заявок">';
+        tabsHtml +=
+          '<button type="button" class="admin-payments-tab' +
+          (initialTab === "reserved" ? " is-active" : "") +
+          '" data-payments-tab="reserved" role="tab" aria-selected="' +
+          (initialTab === "reserved" ? "true" : "false") +
+          '">Бронь без чека <span class="admin-payments-tab__badge" data-payments-count="reserved">' +
+          String(nRes) +
+          "</span></button>";
+        tabsHtml +=
+          '<button type="button" class="admin-payments-tab' +
+          (initialTab === "pending" ? " is-active" : "") +
+          '" data-payments-tab="pending" role="tab" aria-selected="' +
+          (initialTab === "pending" ? "true" : "false") +
+          '">На подтверждение <span class="admin-payments-tab__badge" data-payments-count="pending">' +
+          String(nPen) +
+          "</span></button>";
+        tabsHtml += "</div>";
+
+        var panelsHtml = "";
+        panelsHtml += '<div class="admin-payments-panels">';
+        panelsHtml +=
+          '<div class="admin-payments-tabpanel" data-payments-panel="reserved" role="tabpanel"' +
+          (initialTab !== "reserved" ? " hidden" : "") +
+          ">";
+        panelsHtml +=
+          '<div class="admin-payments-section admin-payments-cards-grid" data-payments-section="reserved">';
         if (active.length) {
-          html +=
-            '<div class="admin-payments-section">' +
-            '<h3 class="admin-payments-section__title">Активная бронь (чека ещё нет в очереди)</h3>' +
-            active.map(renderActiveCard).join("") +
-            "</div>";
-        }
-
-        if (payments.length) {
-          html +=
-            '<div class="admin-payments-section">' +
-            '<h3 class="admin-payments-section__title">Очередь на проверку чека</h3>' +
-            payments.map(renderPaymentCard).join("") +
-            "</div>";
+          panelsHtml += active.map(renderActiveCard).join("");
         } else {
-          html +=
-            '<div class="admin-payments-section"><p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p></div>';
+          panelsHtml += '<p class="admin-payments-section__empty-note">Нет активных броней без чека.</p>';
         }
+        panelsHtml += "</div></div>";
+        panelsHtml +=
+          '<div class="admin-payments-tabpanel" data-payments-panel="pending" role="tabpanel"' +
+          (initialTab !== "pending" ? " hidden" : "") +
+          ">";
+        panelsHtml +=
+          '<div class="admin-payments-section admin-payments-cards-grid" data-payments-section="pending">';
+        if (payments.length) {
+          panelsHtml += payments.map(renderPaymentCard).join("");
+        } else {
+          panelsHtml +=
+            '<p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p>';
+        }
+        panelsHtml += "</div></div></div>";
 
-        listEl.innerHTML = html;
+        if (tabsSlot) tabsSlot.innerHTML = skewHtml + tabsHtml;
+        listEl.innerHTML = panelsHtml;
+        var rootForTabs = mainEl || listEl;
+        bindPaymentsTabs(rootForTabs);
         bindChatHandlers(listEl, s.token);
         initReservedUntilCountdown(serverTimeMs);
       })
       .catch(function (e) {
+        var ts = document.getElementById("admin-payments-tabs-slot");
+        if (ts) ts.innerHTML = "";
         listEl.innerHTML =
           '<div class="admin-payments-empty admin-payments-empty--error">' +
           '<div class="admin-payments-empty__illu admin-payments-empty__illu--warn">' +
@@ -257,7 +347,12 @@
           "<p class=\"admin-payments-empty__title\">Не удалось загрузить</p>" +
           "<p class=\"admin-payments-empty__hint\">" +
           esc(String(e.message || "Ошибка")) +
-          "</p></div>";
+          "</p>" +
+          '<div class="admin-payments-empty__actions">' +
+          '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
+          "</div>" +
+          "</div>";
+        bindPaymentsReloadButton(listEl);
       });
   }
 

@@ -271,12 +271,15 @@ import "../styles/admin-raffles.css";
             <div class="admin-raffles-toolbar__text">
               <span class="admin-raffles-toolbar__label">Очередь оплат</span>
               <p class="admin-raffles-toolbar__hint">
-                Сверху — более ранние заявки по дате создания. Отклонение чека: необязательный комментарий уходит в письмо. «Снять бронь» — полная отмена без доработки чека. Ниже — активные брони без чека в очереди.
+                Переключайте вкладки: бронь без чека и заявки с чеком на подтверждение. Сверху в списке — более ранние заявки. Отклонение чека: комментарий уходит в письмо. «Снять бронь» — полная отмена.
               </p>
             </div>
           </div>
         </div>
-        <div id="admin-payments-list" class="admin-payments-list"></div>
+        <div id="admin-payments-main" class="admin-payments-main">
+          <div id="admin-payments-tabs-slot" class="admin-payments-tabs-slot" aria-live="polite"></div>
+          <div id="admin-payments-list" class="admin-payments-list"></div>
+        </div>
       </div>
 
       <div id="admin-users-app" class="admin-users-app" hidden>
@@ -612,11 +615,21 @@ import "../styles/admin-raffles.css";
               <button type="button" class="admin-raffle-participants-tab is-active" id="raffle-participants-tab-list" data-tab="participants" role="tab" aria-selected="true" aria-controls="raffle-participants-panel-list">
                 Участники
               </button>
+              <button type="button" class="admin-raffle-participants-tab" id="raffle-participants-tab-wholesalers" data-tab="wholesalers" role="tab" aria-selected="false" aria-controls="raffle-participants-panel-wholesalers">
+                Оптовики
+              </button>
               <button type="button" class="admin-raffle-participants-tab" id="raffle-participants-tab-assign" data-tab="assign" role="tab" aria-selected="false" aria-controls="raffle-participants-panel-assign">
                 Выдача номерков
               </button>
             </div>
-            <section id="raffle-participants-panel-list" class="admin-raffle-participants-panel" data-panel="participants" role="tabpanel" aria-labelledby="raffle-participants-tab-list">
+            <section
+              id="raffle-participants-panel-list"
+              class="admin-raffle-participants-panel"
+              data-panel="participants"
+              role="tabpanel"
+              aria-labelledby="raffle-participants-tab-list"
+              aria-hidden="false"
+            >
               <label class="form-group admin-raffle-participants__search" for="raffle-participants-search">
                 <span class="admin-raffle-participants__search-label">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -627,13 +640,15 @@ import "../styles/admin-raffles.css";
                 </span>
                 <input id="raffle-participants-search" class="input admin-raffle-participants__search-input" type="search" inputmode="numeric" placeholder="Например: 42" autocomplete="off" />
               </label>
-              <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers" hidden>
-                <h3 class="admin-raffle-wholesalers__title">Оптовики</h3>
-                <div id="raffle-wholesalers-list" class="admin-raffle-wholesalers__list"></div>
-              </div>
               <div id="raffle-participants-list" class="admin-raffle-participants__list"></div>
             </section>
-            <section id="raffle-participants-panel-assign" class="admin-raffle-participants-panel" data-panel="assign" role="tabpanel" aria-labelledby="raffle-participants-tab-assign" hidden>
+            <section id="raffle-participants-panel-wholesalers" class="admin-raffle-participants-panel" data-panel="wholesalers" role="tabpanel" aria-labelledby="raffle-participants-tab-wholesalers" aria-hidden="true" hidden>
+              <div id="raffle-wholesalers-wrap" class="admin-raffle-wholesalers admin-raffle-wholesalers--tab">
+                <p class="admin-raffle-wholesalers__lead">Номер оптовика выдаётся за каждые 10 подтверждённых номерков (глобальная очередь по времени подтверждения).</p>
+                <div id="raffle-wholesalers-list" class="admin-raffle-wholesalers__list"></div>
+              </div>
+            </section>
+            <section id="raffle-participants-panel-assign" class="admin-raffle-participants-panel" data-panel="assign" role="tabpanel" aria-labelledby="raffle-participants-tab-assign" aria-hidden="true" hidden>
               <div class="admin-raffle-single-assign">
                 <h3 class="admin-raffle-single-assign__title">Выдать номерок по телефону</h3>
                 <p class="admin-raffle-single-assign__hint">Введите телефон и номерок. Перед выдачей система проверит, свободен ли номерок.</p>
