@@ -915,15 +915,18 @@ export function adminUserTicketsForPrimaryRaffle(userId: number): {
   reserved: ReturnType<typeof listReservedOrdersForUser>;
   pending_review: ReturnType<typeof listPendingReviewTicketGroupsForUser>;
   confirmed: ReturnType<typeof listConfirmedTicketGroupsForUser>;
+  wholesale_numbers: number[];
 } {
   cleanupExpiredRaffleOrders();
   const now = Date.now();
   const pub = listRafflesPublic();
   const raffle = getLatestVisibleActiveRaffle() ?? pub[0];
   if (!raffle) {
-    return { raffle: null, reserved: [], pending_review: [], confirmed: [] };
+    return { raffle: null, reserved: [], pending_review: [], confirmed: [], wholesale_numbers: [] };
   }
   const rid = raffle.id;
+  const wholesaleSlots = listWholesaleSlotsForUser(userId);
+  const wholesale_numbers = wholesaleSlots.find((s) => s.raffle_id === rid)?.wholesale_numbers ?? [];
 
   const reservedRows = db
     .prepare(
@@ -1003,6 +1006,7 @@ export function adminUserTicketsForPrimaryRaffle(userId: number): {
     reserved,
     pending_review,
     confirmed,
+    wholesale_numbers,
   };
 }
 

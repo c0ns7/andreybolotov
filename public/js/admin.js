@@ -175,30 +175,12 @@
     return out;
   }
 
-  function userTicketsChipsHtml(nums, variant) {
-    if (!nums || !nums.length) return "";
-    var base = "admin-user-tickets__chip";
-    if (variant === "pending") base += " admin-user-tickets__chip--pending";
-    else if (variant === "review") base += " admin-user-tickets__chip--review";
-    else if (variant === "ok") base += " admin-user-tickets__chip--ok";
-    return nums
-      .map(function (n) {
-        return '<span class="' + base + '">№ ' + esc(String(n)) + "</span>";
-      })
-      .join("");
-  }
-
-  function userTicketsSectionHtml(label, nums, variant) {
-    if (!nums || !nums.length) return "";
-    return (
-      '<div class="admin-user-tickets__section">' +
-      '<p class="admin-user-tickets__label">' +
-      esc(label) +
-      "</p>" +
-      '<div class="admin-user-tickets__chips">' +
-      userTicketsChipsHtml(nums, variant) +
-      "</div></div>"
-    );
+  function userTicketVariantForNumber(n, data) {
+    var conf = collectTicketNumbers(data.confirmed || []);
+    if (conf.indexOf(n) !== -1) return "ok";
+    var pend = collectTicketNumbers(data.pending_review || []);
+    if (pend.indexOf(n) !== -1) return "review";
+    return "pending";
   }
 
   function renderUserTicketsModal(data) {
@@ -210,21 +192,46 @@
         '<p class="admin-user-tickets__empty">В системе пока нет акций.</p>';
       return;
     }
-    modalUserTicketsRaffle.textContent =
-      "Акция: " +
-      String(raffle.title) +
-      " · статус: " +
-      String(raffle.status || "—") +
-      " (последняя активная, видимая на сайте)";
+    modalUserTicketsRaffle.textContent = "Акция: " + String(raffle.title);
 
+    var wholesale = Array.isArray(data.wholesale_numbers) ? data.wholesale_numbers : [];
     var reserved = collectTicketNumbers(data.reserved || []);
     var pending = collectTicketNumbers(data.pending_review || []);
     var confirmed = collectTicketNumbers(data.confirmed || []);
+    var uniq = new Set();
+    var i;
+    for (i = 0; i < reserved.length; i++) uniq.add(reserved[i]);
+    for (i = 0; i < pending.length; i++) uniq.add(pending[i]);
+    for (i = 0; i < confirmed.length; i++) uniq.add(confirmed[i]);
+    var sortedNums = Array.from(uniq).sort(function (a, b) {
+      return a - b;
+    });
 
     var html = "";
-    html += userTicketsSectionHtml("Забронированные (ожидают оплаты)", reserved, "pending");
-    html += userTicketsSectionHtml("На проверке", pending, "review");
-    html += userTicketsSectionHtml("Утверждённые", confirmed, "ok");
+    if (wholesale.length) {
+      html +=
+        '<p class="admin-user-tickets__wholesale">№ оптовика: ' +
+        wholesale
+          .map(function (w) {
+            return "№ " + esc(String(w));
+          })
+          .join(", ") +
+        "</p>";
+    }
+    if (sortedNums.length) {
+      html += '<div class="admin-user-tickets__section"><div class="admin-user-tickets__chips">';
+      for (i = 0; i < sortedNums.length; i++) {
+        var n = sortedNums[i];
+        var v = userTicketVariantForNumber(n, data);
+        html +=
+          '<span class="admin-user-tickets__chip admin-user-tickets__chip--' +
+          (v === "ok" ? "ok" : v === "review" ? "review" : "pending") +
+          '">№ ' +
+          esc(String(n)) +
+          "</span>";
+      }
+      html += "</div></div>";
+    }
 
     if (!html) {
       html =
