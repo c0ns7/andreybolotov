@@ -1144,20 +1144,16 @@ html.js-intro-done #welcome-splash {
   pointer-events: auto;
   position: absolute;
   left: 50%;
-  bottom: calc(100% - 8px);
+  bottom: calc(100% - 2px);
   transform: translate(-50%, 10px);
   width: 44px;
   height: 44px;
-  border: 0;
-  border-radius: 16px 16px 22px 22px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px 16px 0 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow:
-    0 10px 24px rgba(37, 99, 235, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: #ffffffeb;
   cursor: pointer;
   opacity: 0;
   transition: transform 0.2s ease, opacity 0.2s ease, filter 0.15s ease;
@@ -7419,10 +7415,8 @@ html.theme-dark .bottom-nav-btn--active .bottom-nav-btn__icon {
 }
 
 html.theme-dark .bottom-nav-scrolltop {
-  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow:
-    0 10px 24px rgba(30, 64, 175, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: rgba(30, 30, 36, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 html.theme-dark .tickets-sheet__hint-dismiss {

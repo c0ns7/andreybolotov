@@ -1183,14 +1183,17 @@ import "../styles/admin-raffles.css";
     transform: translateY(-2px);
     box-shadow: 0 12px 28px rgba(37, 99, 235, 0.4);
   }
+  /* Высота панели от окна: иначе при height:auto строка grid растягивается по длинному сайдбару и правая колонка уезжает вниз */
   .admin-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    /* Мобильный столбец: список по высоте контента, переписка забирает оставшееся */
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, min(38dvh, 300px)) minmax(0, 1fr);
     gap: 16px;
     flex: 1;
-    min-height: 0;
+    min-height: min(240px, calc(100dvh - 140px));
+    height: calc(100dvh - 240px);
+    max-height: calc(100dvh - 120px);
+    box-sizing: border-box;
   }
   @media (min-width: 700px) {
     .admin-layout {
@@ -1200,11 +1203,6 @@ import "../styles/admin-raffles.css";
     }
   }
 
-  @media (max-width: 699px) {
-    .admin-user-list {
-      max-height: min(42dvh, 320px);
-    }
-  }
   .admin-thread__head {
     flex-shrink: 0;
     display: flex;
@@ -1348,6 +1346,8 @@ import "../styles/admin-raffles.css";
     overflow: hidden;
     min-width: 0;
     min-height: 0;
+    max-height: 100%;
+    align-self: stretch;
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
@@ -1517,7 +1517,9 @@ import "../styles/admin-raffles.css";
     border: 1px solid rgba(226, 232, 240, 0.95);
     border-radius: 16px;
     min-height: 0;
+    max-height: 100%;
     min-width: 0;
+    align-self: stretch;
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 24px rgba(15, 23, 42, 0.05);
@@ -1593,8 +1595,6 @@ import "../styles/admin-raffles.css";
   .admin-messages {
     flex: 1;
     min-height: 0;
-    /* Явный потолок: иначе без сработавшей flex-цепочки блок растёт по контенту и скролла нет */
-    max-height: min(65dvh, calc(100dvh - 240px));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
