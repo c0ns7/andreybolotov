@@ -1289,6 +1289,7 @@
       clearInterval(raffleDetailState.timerId);
       raffleDetailState.timerId = null;
     }
+    clearReservationReminder();
   }
 
   function resetRaffleDetailSelection() {
@@ -1651,11 +1652,19 @@
     }
   }
 
+  function clearReservationReminder() {
+    if (reservationReminderTimerId) {
+      clearTimeout(reservationReminderTimerId);
+      reservationReminderTimerId = null;
+    }
+  }
+
   function stopReservePaymentTimer() {
     if (reservePaymentTimerId) {
       clearInterval(reservePaymentTimerId);
       reservePaymentTimerId = null;
     }
+    clearReservationReminder();
   }
 
   function stopWaitReceiptModalTimer() {
@@ -1682,10 +1691,7 @@
   }
 
   function scheduleReservationReminder(untilTs) {
-    if (reservationReminderTimerId) {
-      clearTimeout(reservationReminderTimerId);
-      reservationReminderTimerId = null;
-    }
+    clearReservationReminder();
     var remindBeforeMs = 5 * 60 * 1000;
     var delay = getRaffleReservationLeftMs(untilTs) - remindBeforeMs;
     if (!Number.isFinite(delay) || delay < 1000) return;
@@ -4929,6 +4935,7 @@
       applyRaffleServerTimeSkewFromPayload(data);
       closeReservePaymentModal();
       if (modalWaitReceipt) closeModal(modalWaitReceipt);
+      clearRaffleDetailTimer();
       raffleDetailState.order = null;
       raffleDetailState.orderNumbers = [];
       resetRaffleDetailSelection();

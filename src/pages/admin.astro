@@ -179,7 +179,21 @@ import "../styles/admin-raffles.css";
                   <h2 id="admin-thread-name" class="admin-thread__name"></h2>
                   <p id="admin-thread-meta" class="admin-thread__meta"></p>
                 </div>
-                <button type="button" class="admin-thread__edit" id="btn-admin-edit-user">Редактировать</button>
+                <div class="admin-thread__actions">
+                  <button
+                    type="button"
+                    class="admin-thread__icon-btn"
+                    id="btn-admin-edit-user"
+                    title="Редактировать данные"
+                    aria-label="Редактировать данные пользователя"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                  <button type="button" class="admin-thread__tickets-btn" id="btn-admin-user-tickets">Билеты</button>
+                </div>
               </div>
               <div id="admin-chat-dropzone" class="admin-thread__body">
               <div id="admin-messages" class="admin-messages custom-scrollbar"></div>
@@ -818,6 +832,30 @@ import "../styles/admin-raffles.css";
         </div>
       </div>
     </div>
+
+    <div
+      id="modal-admin-user-tickets"
+      class="modal-overlay"
+      aria-hidden="true"
+      role="dialog"
+      aria-labelledby="admin-user-tickets-title"
+    >
+      <div class="modal admin-edit-modal admin-user-tickets-modal">
+        <div class="modal__top">
+          <span></span>
+          <h2 id="admin-user-tickets-title" class="modal__top-title">Номерки</h2>
+          <button type="button" class="modal__close" id="modal-admin-user-tickets-close" aria-label="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="modal__body">
+          <p id="admin-user-tickets-raffle" class="admin-user-tickets__subtitle"></p>
+          <div id="admin-user-tickets-content" class="admin-user-tickets__content custom-scrollbar"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </AdminBase>
 
@@ -839,6 +877,16 @@ import "../styles/admin-raffles.css";
   .admin-page {
     padding: 20px 0 32px;
     min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+
+  #admin-root:not([hidden]) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   /* [hidden] + display в классе (например .admin-gate { display: flex }) — без !important плашка остаётся видимой */
@@ -888,6 +936,7 @@ import "../styles/admin-raffles.css";
   }
 
   .admin-head {
+    flex-shrink: 0;
     margin-bottom: 24px;
   }
 
@@ -1137,15 +1186,27 @@ import "../styles/admin-raffles.css";
   .admin-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    /* Мобильный столбец: список по высоте контента, переписка забирает оставшееся */
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 16px;
+    flex: 1;
+    min-height: 0;
   }
   @media (min-width: 700px) {
     .admin-layout {
       grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
       align-items: stretch;
     }
   }
+
+  @media (max-width: 699px) {
+    .admin-user-list {
+      max-height: min(42dvh, 320px);
+    }
+  }
   .admin-thread__head {
+    flex-shrink: 0;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -1158,16 +1219,47 @@ import "../styles/admin-raffles.css";
     min-width: 0;
     flex: 1;
   }
-  .admin-thread__edit {
+  .admin-thread__actions {
     flex-shrink: 0;
-    padding: 9px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .admin-thread__icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font: inherit;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .admin-thread__icon-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #2563eb;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  }
+  .admin-thread__tickets-btn {
+    padding: 9px 14px;
     font-size: 0.85rem;
     font-weight: 600;
     font-family: inherit;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     background: #fff;
-    color: #2563eb;
+    color: #0f172a;
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
     transition:
@@ -1175,10 +1267,76 @@ import "../styles/admin-raffles.css";
       border-color 0.15s ease,
       box-shadow 0.15s ease;
   }
-  .admin-thread__edit:hover {
+  .admin-thread__tickets-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  }
+  .admin-user-tickets-modal {
+    max-width: 440px;
+  }
+  .admin-user-tickets__subtitle {
+    margin: 0 0 12px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .admin-user-tickets__content {
+    max-height: min(52dvh, 420px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .admin-user-tickets__empty {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #64748b;
+    line-height: 1.45;
+  }
+  .admin-user-tickets__section {
+    margin-bottom: 16px;
+  }
+  .admin-user-tickets__section:last-child {
+    margin-bottom: 0;
+  }
+  .admin-user-tickets__label {
+    margin: 0 0 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+  }
+  .admin-user-tickets__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .admin-user-tickets__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+  }
+  .admin-user-tickets__chip--pending {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+  .admin-user-tickets__chip--review {
     background: #eff6ff;
     border-color: #bfdbfe;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+    color: #1e40af;
+  }
+  .admin-user-tickets__chip--ok {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
   }
   .admin-edit-modal {
     max-width: 420px;
@@ -1189,9 +1347,13 @@ import "../styles/admin-raffles.css";
     border-radius: 16px;
     overflow: hidden;
     min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
   }
   .admin-sidebar__title {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1220,6 +1382,7 @@ import "../styles/admin-raffles.css";
   }
 
   .admin-tabs {
+    flex-shrink: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -1275,9 +1438,13 @@ import "../styles/admin-raffles.css";
     color: #2563eb;
   }
   .admin-user-list {
-    max-height: 60dvh;
+    flex: 1;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
   }
   .admin-user-item {
     box-sizing: border-box;
@@ -1349,14 +1516,16 @@ import "../styles/admin-raffles.css";
     background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
     border: 1px solid rgba(226, 232, 240, 0.95);
     border-radius: 16px;
-    min-height: 320px;
+    min-height: 0;
     min-width: 0;
     display: flex;
     flex-direction: column;
     box-shadow: 0 4px 24px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
   }
   .admin-empty {
     flex: 1;
+    min-height: 200px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1396,7 +1565,7 @@ import "../styles/admin-raffles.css";
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 400px;
+    min-height: 0;
     min-width: 0;
   }
   .admin-thread__body {
@@ -1423,8 +1592,12 @@ import "../styles/admin-raffles.css";
   }
   .admin-messages {
     flex: 1;
+    min-height: 0;
+    /* Явный потолок: иначе без сработавшей flex-цепочки блок растёт по контенту и скролла нет */
+    max-height: min(65dvh, calc(100dvh - 240px));
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 12px 16px;
     display: flex;
     flex-direction: column;
@@ -1432,6 +1605,7 @@ import "../styles/admin-raffles.css";
     background: #f5f5f7;
     min-width: 0;
     -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
   }
   .admin-typing-indicator {
     flex-shrink: 0;
@@ -1484,6 +1658,7 @@ import "../styles/admin-raffles.css";
     margin-bottom: 4px;
   }
   .admin-reply {
+    flex-shrink: 0;
     display: flex;
     align-items: flex-end;
     gap: 8px;
@@ -1718,6 +1893,12 @@ import "../styles/admin-raffles.css";
 
   .admin-app {
     animation: adminSectionIn 0.4s ease-out;
+  }
+  .admin-app:not([hidden]) {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .admin-raffles-app,

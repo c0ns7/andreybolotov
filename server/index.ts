@@ -96,6 +96,7 @@ import {
   isRaffleTicketBlocked,
   getRaffleOccupiedCount,
   listWholesaleSlotsForUser,
+  adminUserTicketsForPrimaryRaffle,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import {
@@ -971,6 +972,18 @@ app.get("/api/admin/users/:userId/messages", (c) => {
     messages: rows.map((r) => messageToDto(r)),
     user_typing: getUserTypingForThread(userId),
   });
+});
+
+/** Номерки пользователя по первой акции в списке (как «текущая» на сайте) */
+app.get("/api/admin/users/:userId/latest-raffle-tickets", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const userId = Number(c.req.param("userId"));
+  if (!Number.isFinite(userId)) return c.json({ error: "Некорректный id" }, 400);
+  if (!getUserById(userId)) return c.json({ error: "Пользователь не найден" }, 404);
+  c.header("Cache-Control", "no-store");
+  const payload = adminUserTicketsForPrimaryRaffle(userId);
+  return c.json(payload);
 });
 
 app.get("/api/admin/users/:userId/typing", (c) => {

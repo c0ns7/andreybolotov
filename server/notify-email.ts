@@ -130,6 +130,10 @@ export function tickReserveExpiryEmailReminders(): void {
   const rows = listReservedOrdersForExpiryReminder(now, lead);
   if (rows.length === 0) return;
   for (const r of rows) {
+    const fresh = getOrderById(r.order_id);
+    if (!fresh || String(fresh.status) !== "reserved") {
+      continue;
+    }
     const u = getUserById(r.user_id);
     if (!u || u.blocked === 1) continue;
     if (Number(u.email_notify_raffle_orders ?? 1) === 0) continue;
@@ -139,7 +143,7 @@ export function tickReserveExpiryEmailReminders(): void {
     if (!raffle) continue;
     const openRaffleUrl = `${appOrigin()}/home/raffle?id=${encodeURIComponent(String(raffle.id))}`;
     const minutesLeft = Math.ceil((r.reserved_until - now) / 60_000);
-    const ord = getOrderById(r.order_id);
+    const ord = fresh;
     const tok = ord ? String((ord as { public_status_token?: string }).public_status_token ?? "").trim() : "";
     const statusPageUrl = tok
       ? `${appOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
@@ -158,7 +162,12 @@ export function tickReserveExpiryEmailReminders(): void {
       statusPageUrl,
       rulesUrl: rulesUrl || undefined,
     })
-      .then(() => markReserveReminderSent(r.order_id))
+      .then(() => {
+        const again = getOrderById(r.order_id);
+        if (again && String(again.status) === "reserved") {
+          markReserveReminderSent(r.order_id);
+        }
+      })
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[notify] reserve expiry reminder order", r.order_id, msg);

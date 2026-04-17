@@ -153,6 +153,106 @@
   let threadLoadUserId = null;
 
   const modalEditUser = document.getElementById("modal-edit-user");
+  const modalUserTickets = document.getElementById("modal-admin-user-tickets");
+  const modalUserTicketsRaffle = document.getElementById("admin-user-tickets-raffle");
+  const modalUserTicketsContent = document.getElementById("admin-user-tickets-content");
+
+  function closeUserTicketsModal() {
+    if (!modalUserTickets) return;
+    modalUserTickets.classList.remove("is-open");
+    modalUserTickets.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  function collectTicketNumbers(groups) {
+    var out = [];
+    var i;
+    var j;
+    for (i = 0; i < (groups || []).length; i++) {
+      var nums = (groups[i] && groups[i].numbers) || [];
+      for (j = 0; j < nums.length; j++) out.push(nums[j]);
+    }
+    return out;
+  }
+
+  function userTicketsChipsHtml(nums, variant) {
+    if (!nums || !nums.length) return "";
+    var base = "admin-user-tickets__chip";
+    if (variant === "pending") base += " admin-user-tickets__chip--pending";
+    else if (variant === "review") base += " admin-user-tickets__chip--review";
+    else if (variant === "ok") base += " admin-user-tickets__chip--ok";
+    return nums
+      .map(function (n) {
+        return '<span class="' + base + '">№ ' + esc(String(n)) + "</span>";
+      })
+      .join("");
+  }
+
+  function userTicketsSectionHtml(label, nums, variant) {
+    if (!nums || !nums.length) return "";
+    return (
+      '<div class="admin-user-tickets__section">' +
+      '<p class="admin-user-tickets__label">' +
+      esc(label) +
+      "</p>" +
+      '<div class="admin-user-tickets__chips">' +
+      userTicketsChipsHtml(nums, variant) +
+      "</div></div>"
+    );
+  }
+
+  function renderUserTicketsModal(data) {
+    if (!modalUserTicketsRaffle || !modalUserTicketsContent) return;
+    var raffle = data && data.raffle;
+    if (!raffle) {
+      modalUserTicketsRaffle.textContent = "";
+      modalUserTicketsContent.innerHTML =
+        '<p class="admin-user-tickets__empty">В системе пока нет акций.</p>';
+      return;
+    }
+    modalUserTicketsRaffle.textContent =
+      "Акция: " + String(raffle.title) + " · статус: " + String(raffle.status || "—");
+
+    var reserved = collectTicketNumbers(data.reserved || []);
+    var pending = collectTicketNumbers(data.pending_review || []);
+    var confirmed = collectTicketNumbers(data.confirmed || []);
+
+    var html = "";
+    html += userTicketsSectionHtml("Забронированные (ожидают оплаты)", reserved, "pending");
+    html += userTicketsSectionHtml("На проверке", pending, "review");
+    html += userTicketsSectionHtml("Утверждённые", confirmed, "ok");
+
+    if (!html) {
+      html =
+        '<p class="admin-user-tickets__empty">У пользователя нет номерков в этой акции.</p>';
+    }
+    modalUserTicketsContent.innerHTML = html;
+  }
+
+  function openUserTicketsModal() {
+    if (!modalUserTickets || selectedId == null) return;
+    modalUserTickets.classList.add("is-open");
+    modalUserTickets.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    if (modalUserTicketsContent) {
+      modalUserTicketsContent.innerHTML = '<p class="admin-user-tickets__empty">Загрузка…</p>';
+    }
+    if (modalUserTicketsRaffle) modalUserTicketsRaffle.textContent = "";
+    apiJson("/api/admin/users/" + selectedId + "/latest-raffle-tickets", {
+      headers: authHeaders(),
+      cache: "no-store",
+    })
+      .then(function (data) {
+        renderUserTicketsModal(data);
+      })
+      .catch(function (err) {
+        if (modalUserTicketsContent) {
+          modalUserTicketsContent.innerHTML =
+            '<p class="admin-user-tickets__empty">' + esc(err.message || "Ошибка загрузки") + "</p>";
+        }
+        if (modalUserTicketsRaffle) modalUserTicketsRaffle.textContent = "";
+      });
+  }
 
   function showGate(msg) {
     if (adminLoading) adminLoading.hidden = true;
@@ -990,6 +1090,21 @@
     if (btnEdit) {
       btnEdit.addEventListener("click", function () {
         openEditModal();
+      });
+    }
+
+    const btnUserTickets = document.getElementById("btn-admin-user-tickets");
+    if (btnUserTickets) {
+      btnUserTickets.addEventListener("click", function () {
+        openUserTicketsModal();
+      });
+    }
+
+    const btnCloseUserTickets = document.getElementById("modal-admin-user-tickets-close");
+    if (btnCloseUserTickets) btnCloseUserTickets.addEventListener("click", closeUserTicketsModal);
+    if (modalUserTickets) {
+      modalUserTickets.addEventListener("click", function (e) {
+        if (e.target === modalUserTickets) closeUserTicketsModal();
       });
     }
 

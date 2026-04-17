@@ -1,5 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { db, getRaffleById, getUserById, getUserByPhone, isRaffleVisibleOnSite } from "./db.js";
+import {
+  db,
+  getRaffleById,
+  getUserById,
+  getUserByPhone,
+  isRaffleVisibleOnSite,
+  listRafflesAll,
+} from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
@@ -896,6 +903,106 @@ export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
       status: String(row.raffle_status || "active"),
     },
   }));
+}
+
+/**
+ * Админ: билеты пользователя по «текущей» акции — первая в списке как в админке/на главной
+ * (sort_order ASC, id DESC), в т.ч. если акция скрыта с сайта.
+ */
+export function adminUserTicketsForPrimaryRaffle(userId: number): {
+  raffle: { id: number; title: string; status: string } | null;
+  reserved: ReturnType<typeof listReservedOrdersForUser>;
+  pending_review: ReturnType<typeof listPendingReviewTicketGroupsForUser>;
+  confirmed: ReturnType<typeof listConfirmedTicketGroupsForUser>;
+} {
+  cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const raffles = listRafflesAll();
+  const raffle = raffles[0];
+  if (!raffle) {
+    return { raffle: null, reserved: [], pending_review: [], confirmed: [] };
+  }
+  const rid = raffle.id;
+
+  const reservedRows = db
+    .prepare(
+      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
+       ORDER BY o.id DESC`,
+    )
+    .all(userId, rid, now) as Array<RaffleOrderRow & { raffle_title: string; raffle_price: number }>;
+
+  const reserved = reservedRows.map((row) => ({
+    order: orderToDto(row),
+    numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
+    raffle: {
+      id: row.raffle_id,
+      title: row.raffle_title,
+      price_rub: row.raffle_price,
+    },
+  }));
+
+  const pendingRows = db
+    .prepare(
+      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'pending_review'
+       ORDER BY o.id DESC`,
+    )
+    .all(userId, rid) as Array<
+    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
+  >;
+
+  const pending_review = pendingRows.map((row) => ({
+    order: orderToDto(row),
+    numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
+    raffle: {
+      id: row.raffle_id,
+      title: row.raffle_title,
+      price_rub: row.raffle_price,
+      status: String(row.raffle_status || "active"),
+    },
+  }));
+
+  const confirmedRows = db
+    .prepare(
+      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'confirmed'
+       ORDER BY o.id DESC`,
+    )
+    .all(userId, rid) as Array<
+    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
+  >;
+
+  const confirmed = confirmedRows.map((row) => ({
+    order: orderToDto(row),
+    numbers: getTicketNumbersForOrder(row.id),
+    timeline: listRaffleOrderTimeline(row.id),
+    raffle: {
+      id: row.raffle_id,
+      title: row.raffle_title,
+      price_rub: row.raffle_price,
+      status: String(row.raffle_status || "active"),
+    },
+  }));
+
+  return {
+    raffle: {
+      id: raffle.id,
+      title: raffle.title,
+      status: String(raffle.status || "active"),
+    },
+    reserved,
+    pending_review,
+    confirmed,
+  };
 }
 
 /** Пересчёт номеров оптовиков: каждые 10 подтверждённых номерков в акции дают следующий глобальный № по времени подтверждения заказов. */
