@@ -1149,6 +1149,47 @@
   outline-offset: 2px;
 }
 
+.admin-raffle-participant-card__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.admin-raffle-participant-card__detach {
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.admin-raffle-participant-card__detach:hover {
+  background: #fee2e2;
+}
+
+.admin-raffle-buyer-modal__actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.admin-raffle-btn--chat {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+}
+.admin-raffle-btn--chat:hover:not(:disabled) {
+  background: #e0e7ff;
+}
+
 .admin-raffle-buyer-modal__lead {
   margin: 0 0 14px;
   font-size: 0.82rem;

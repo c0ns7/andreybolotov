@@ -55,6 +55,7 @@ const TIMELINE_LABELS: Record<string, string> = {
   reject_rework: "Чек не принят — нужна новая загрузка",
   fully_released: "Заявка отменена, номерки свободны",
   confirmed: "Оплата подтверждена",
+  admin_ticket_removed: "Номерок снят администратором",
 };
 
 export function listRaffleOrderTimeline(orderId: number): RaffleOrderTimelineItem[] {
@@ -247,12 +248,33 @@ export function getTicketGridSlice(
   return { cells, free_count };
 }
 
+function listNumbersWithExpiredReserveHold(raffleId: number, ticketNumbers: number[], nowMs: number): number[] {
+  const out: number[] = [];
+  const stmt = db.prepare(
+    `SELECT 1 AS x FROM raffle_ticket_holds h
+     INNER JOIN raffle_orders o ON o.id = h.order_id
+     WHERE h.raffle_id = ? AND h.ticket_number = ?
+       AND o.status = 'reserved' AND o.reserved_until < ?`,
+  );
+  for (const n of ticketNumbers) {
+    if (stmt.get(raffleId, n, nowMs)) out.push(n);
+  }
+  return out;
+}
+
 export function createReservation(
   raffleId: number,
   userId: number,
   numbers: number[],
-): { ok: true; order_id: number; reserved_until: number } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
+):
+  | {
+      ok: true;
+      order_id: number;
+      reserved_until: number;
+      skipped_still_occupied: number[];
+      released_after_cleanup: number[];
+    }
+  | { ok: false; error: string } {
   const raffle = getRaffleById(raffleId);
   if (!raffle || raffle.status !== "active") {
     return { ok: false, error: "Акция недоступна" };
@@ -284,13 +306,33 @@ export function createReservation(
       return { ok: false, error: "Некорректный номер" };
     }
   }
+
   const now = Date.now();
+  const hadExpiredReserveHold = listNumbersWithExpiredReserveHold(raffleId, uniq, now);
+  cleanupExpiredRaffleOrders();
+
+  const skipped_still_occupied = uniq.filter((n) => isRaffleTicketBlocked(raffleId, n));
+  const released_after_cleanup = hadExpiredReserveHold.filter((n) => !isRaffleTicketBlocked(raffleId, n));
+  const toReserve = uniq.filter((n) => !isRaffleTicketBlocked(raffleId, n));
+
+  if (toReserve.length === 0) {
+    const sample = skipped_still_occupied.slice(0, 8).join(", ");
+    const tail = skipped_still_occupied.length > 8 ? "…" : "";
+    return {
+      ok: false,
+      error:
+        skipped_still_occupied.length > 0
+          ? `Выбранные номерки уже заняты: ${sample}${tail}. Обновите сетку и выберите свободные.`
+          : "Не удалось забронировать номерки. Попробуйте снова.",
+    };
+  }
+
   const reservedUntil = now + RAFFLE_RESERVE_MS;
-  const amount = uniq.length * raffle.price_rub;
+  const amount = toReserve.length * raffle.price_rub;
 
   try {
     const tx = db.transaction(() => {
-      for (const n of uniq) {
+      for (const n of toReserve) {
         if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
       }
       const pubTok = newPublicOrderToken();
@@ -305,7 +347,7 @@ export function createReservation(
           raffleId,
           userId,
           amount,
-          uniq.length,
+          toReserve.length,
           reservedUntil,
           pubTok,
           now,
@@ -317,16 +359,22 @@ export function createReservation(
         `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
          VALUES (?, ?, ?, ?, 'reserved', ?, ?)`,
       );
-      for (const n of uniq) {
+      for (const n of toReserve) {
         ins.run(raffleId, orderId, userId, n, reservedUntil, now);
       }
       return orderId;
     });
     const orderId = tx();
-    return { ok: true, order_id: orderId, reserved_until: reservedUntil };
+    return {
+      ok: true,
+      order_id: orderId,
+      reserved_until: reservedUntil,
+      skipped_still_occupied,
+      released_after_cleanup,
+    };
   } catch (e) {
     if (e instanceof Error && e.message === "OCCUPIED") {
-      return { ok: false, error: "Один или несколько номерков уже заняты" };
+      return { ok: false, error: "Один или несколько номерков уже заняты — обновите страницу и попробуйте снова." };
     }
     throw e;
   }
@@ -719,6 +767,73 @@ export function removeTicketFromReservedOrder(
     order: updated ? orderToDto(updated) : null,
     numbers: nums,
   };
+}
+
+/**
+ * Админ: снять номерок с участника по номеру (предназначение до регистрации, бронь, на проверке, подтверждённый).
+ * Номер снова становится свободным; при пустом заказе запись заказа удаляется.
+ */
+export function adminDetachParticipantTicket(
+  raffleId: number,
+  ticketNumber: number,
+):
+  | { ok: true; affected_user_id: number | null }
+  | { ok: false; error: string } {
+  cleanupExpiredRaffleOrders();
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+    return { ok: false, error: "Некорректный номерок" };
+  }
+
+  const pre = db
+    .prepare(`DELETE FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`)
+    .run(raffleId, n);
+  if (pre.changes > 0) {
+    return { ok: true, affected_user_id: null };
+  }
+
+  const row = db
+    .prepare(
+      `SELECT h.order_id AS order_id, o.user_id AS user_id
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')`,
+    )
+    .get(raffleId, n) as { order_id: number; user_id: number } | undefined;
+
+  if (!row) return { ok: false, error: "Номерок не занят или уже снят" };
+
+  const orderId = row.order_id;
+  const affectedUserId = row.user_id;
+  const now = Date.now();
+
+  try {
+    const tx = db.transaction(() => {
+      const del = db
+        .prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ? AND ticket_number = ?`)
+        .run(orderId, n);
+      if (del.changes === 0) throw new Error("HOLD_MISSING");
+
+      const nums = getTicketNumbersForOrder(orderId);
+      if (nums.length === 0) {
+        db.prepare(`DELETE FROM raffle_orders WHERE id = ?`).run(orderId);
+      } else {
+        const amount = nums.length * raffle.price_rub;
+        db.prepare(
+          `UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`,
+        ).run(amount, nums.length, now, orderId);
+        insertRaffleOrderEvent(orderId, "admin_ticket_removed", "№ " + String(n));
+      }
+    });
+    tx();
+  } catch {
+    return { ok: false, error: "Не удалось снять номерок" };
+  }
+
+  recalculateWholesaleForRaffle(raffleId);
+  return { ok: true, affected_user_id: affectedUserId };
 }
 
 export function listConfirmedTicketGroupsForUser(userId: number): Array<{

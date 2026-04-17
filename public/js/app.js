@@ -5123,6 +5123,29 @@
         closeCartModal();
         setCartCheckoutLoading(false);
         openReserveSuccessFlow(ord, raffleDetailState.orderNumbers, raffle);
+        var released = data && Array.isArray(data.released_after_cleanup) ? data.released_after_cleanup : [];
+        var skipped = data && Array.isArray(data.skipped_still_occupied) ? data.skipped_still_occupied : [];
+        if (released.length || skipped.length) {
+          var fmt = function (arr) {
+            return arr
+              .map(function (x) {
+                return "№" + String(x);
+              })
+              .join(", ");
+          };
+          var parts = [];
+          if (released.length) {
+            parts.push(
+              released.length === 1
+                ? "Номерок " + fmt(released) + ": у прежнего участника истекла бронь — освободился и включён в вашу."
+                : "Номерки " + fmt(released) + ": у прежних участников истекла бронь — освободились и включены в вашу.",
+            );
+          }
+          if (skipped.length) {
+            parts.push("Не вошли в бронь (уже заняты): " + fmt(skipped) + ".");
+          }
+          showToast(parts.join(" "), released.length && !skipped.length ? "success" : skipped.length ? "warning" : "neutral");
+        }
         emitUxEvent("raffle_checkout_reserved_success", {
           order_id: Number(ord.id) || 0,
           tickets: (raffleDetailState.orderNumbers || []).length,

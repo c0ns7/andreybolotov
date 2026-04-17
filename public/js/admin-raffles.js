@@ -139,12 +139,26 @@
     var nameEl = document.getElementById("raffle-buyer-name");
     var phoneEl = document.getElementById("raffle-buyer-phone");
     var emailEl = document.getElementById("raffle-buyer-email");
+    var chatBtn = document.getElementById("raffle-buyer-chat");
     if (title) title.textContent = "Номерок № " + String(ctx.ticket_number);
     if (nameEl) nameEl.textContent = ctx.user_name || "—";
     if (phoneEl) phoneEl.textContent = ctx.user_phone || "—";
     if (emailEl) emailEl.textContent = ctx.user_email || "—";
     if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
+    var chatUid = Number(ctx.user_id);
+    if (chatBtn) {
+      if (Number.isFinite(chatUid) && chatUid > 0) {
+        chatBtn.hidden = false;
+        chatBtn.dataset.userId = String(chatUid);
+      } else {
+        chatBtn.hidden = true;
+        delete chatBtn.dataset.userId;
+      }
+    }
     if (modalBuyer) {
+      modalBuyer.dataset.detachTicket = String(ctx.ticket_number != null ? ctx.ticket_number : "");
+      if (Number.isFinite(chatUid) && chatUid > 0) modalBuyer.dataset.chatUserId = String(chatUid);
+      else delete modalBuyer.dataset.chatUserId;
       modalBuyer.classList.add("is-open");
       modalBuyer.setAttribute("aria-hidden", "false");
     }
@@ -152,9 +166,49 @@
 
   function closeBuyerModal() {
     if (!modalBuyer) return;
+    delete modalBuyer.dataset.detachTicket;
+    delete modalBuyer.dataset.chatUserId;
     modalBuyer.classList.remove("is-open");
     modalBuyer.setAttribute("aria-hidden", "true");
     if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
+    var chatBtn = document.getElementById("raffle-buyer-chat");
+    if (chatBtn) {
+      chatBtn.hidden = true;
+      delete chatBtn.dataset.userId;
+    }
+  }
+
+  async function refreshParticipantsBundle() {
+    if (!participantsRaffleId) return;
+    const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (participantsRaffleId) {
+      participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
+      wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
+      participantsWholesaleEnabled = !!bundle.wholesale_enabled;
+      renderWholesalersList();
+      renderParticipantsList();
+    }
+  }
+
+  async function adminDetachParticipantTicketByNumber(ticketNum, opts) {
+    var closeBuyer = opts && opts.closeBuyer;
+    if (!participantsRaffleId) return;
+    var n = Math.floor(Number(ticketNum));
+    if (!Number.isFinite(n) || n < 1) return;
+    if (!confirm("Снять номерок № " + String(n) + "? Он снова станет свободным для продажи.")) return;
+    try {
+      await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participant-tickets/" + String(n), {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (closeBuyer) closeBuyerModal();
+      await refreshParticipantsBundle();
+    } catch (err) {
+      alert((err && err.message) || "Не удалось снять номерок");
+    }
   }
 
   function setStatusBadge(status) {
@@ -462,10 +516,18 @@
         const revealed = revealedPhones.has(key);
         const wholesaleCls = x.is_wholesale ? " admin-raffle-participant-card--wholesale" : "";
         const preCls = x.order_status === "preassigned" ? " admin-raffle-participant-card--preassigned" : "";
-        var isBought = x.order_status === "confirmed";
-        var ticketBlock = isBought
+        var uid = Number(x.user_id);
+        var openBuyerDetail =
+          Number.isFinite(uid) &&
+          uid > 0 &&
+          (x.order_status === "confirmed" ||
+            x.order_status === "reserved" ||
+            x.order_status === "pending_review");
+        var ticketBlock = openBuyerDetail
           ? '<button type="button" class="admin-raffle-participant-card__ticket admin-raffle-participant-card__ticket--bought" data-ticket="' +
             esc(String(x.ticket_number)) +
+            '" data-user-id="' +
+            esc(String(uid)) +
             '" data-name="' +
             esc(String(x.user_name != null ? x.user_name : "")) +
             '" data-email="' +
@@ -491,6 +553,7 @@
           ticketBlock +
           statusLine +
           "</div>" +
+          '<div class="admin-raffle-participant-card__right">' +
           '<button type="button" class="admin-raffle-participant-card__phone' +
           (revealed ? "" : " is-masked") +
           '" data-key="' +
@@ -500,6 +563,10 @@
           '">' +
           esc(String(x.user_phone || "-")) +
           "</button>" +
+          '<button type="button" class="admin-raffle-participant-card__detach" data-admin-detach-ticket="1" data-ticket="' +
+          esc(String(x.ticket_number)) +
+          '" title="Снять номерок">Снять</button>' +
+          "</div>" +
           "</article>"
         );
       })
@@ -914,15 +981,41 @@
     true,
   );
   participantsList?.addEventListener("click", function (e) {
-    var btn = e.target && e.target.closest && e.target.closest(".admin-raffle-participant-card__ticket--bought");
+    var detach = e.target && e.target.closest && e.target.closest("[data-admin-detach-ticket]");
+    if (detach) {
+      e.preventDefault();
+      e.stopPropagation();
+      var tn = Number(detach.getAttribute("data-ticket"));
+      adminDetachParticipantTicketByNumber(tn, { closeBuyer: false });
+      return;
+    }
+    var btn =
+      e.target && e.target.closest && e.target.closest(".admin-raffle-participant-card__ticket.admin-raffle-participant-card__ticket--bought");
     if (!btn) return;
     e.preventDefault();
     openBuyerModal({
       ticket_number: Number(btn.getAttribute("data-ticket")) || 0,
+      user_id: Number(btn.getAttribute("data-user-id")) || 0,
       user_name: btn.getAttribute("data-name") || "",
       user_email: btn.getAttribute("data-email") || "",
       user_phone: btn.getAttribute("data-phone") || "",
     });
+  });
+  document.getElementById("raffle-buyer-chat")?.addEventListener("click", function () {
+    var id = Number(this.getAttribute("data-user-id"));
+    if (!Number.isFinite(id) || id < 1) return;
+    if (typeof window.abAdminOpenSupportChat !== "function") {
+      alert("Чат недоступен. Обновите страницу админки.");
+      return;
+    }
+    closeBuyerModal();
+    if (modalParticipants) closeParticipants();
+    window.abAdminOpenSupportChat(id);
+  });
+  document.getElementById("raffle-buyer-detach")?.addEventListener("click", function () {
+    if (!modalBuyer || !modalBuyer.dataset.detachTicket) return;
+    var tn = Number(modalBuyer.dataset.detachTicket);
+    adminDetachParticipantTicketByNumber(tn, { closeBuyer: true });
   });
   modalBuyer?.addEventListener("click", function (e) {
     if (e.target === modalBuyer) closeBuyerModal();

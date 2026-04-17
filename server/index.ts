@@ -92,6 +92,7 @@ import {
   materializeRafflePreassignmentsForUser,
   adminBulkAssignPhoneLinesToRaffle,
   adminAssignPhoneToExactTicket,
+  adminDetachParticipantTicket,
   isRaffleTicketBlocked,
   getRaffleOccupiedCount,
   listWholesaleSlotsForUser,
@@ -1235,6 +1236,8 @@ app.post("/api/raffles/:id/reserve", async (c) => {
     numbers: nums,
     reserved_until: r.reserved_until,
     server_time_ms: serverTimeMs,
+    skipped_still_occupied: r.skipped_still_occupied,
+    released_after_cleanup: r.released_after_cleanup,
   });
 });
 
@@ -1661,6 +1664,22 @@ app.post("/api/admin/raffles/:id/assign-phone-ticket", async (c) => {
   const res = adminAssignPhoneToExactTicket(id, phone, ticket_number);
   if (!res.ok) return c.json({ error: res.error }, 400);
   notifyRaffleGridMutated(id);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/admin/raffles/:id/participant-tickets/:ticketNumber", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  const ticketNumber = Number(c.req.param("ticketNumber"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  if (!Number.isFinite(ticketNumber)) return c.json({ error: "Некорректный номерок" }, 400);
+  const raffle = getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  const r = adminDetachParticipantTicket(id, ticketNumber);
+  if (!r.ok) return c.json({ error: r.error }, 400);
+  notifyRaffleGridMutated(id);
+  if (r.affected_user_id != null) broadcastRaffleTicketsUpdated(r.affected_user_id);
   return c.json({ ok: true });
 });
 
