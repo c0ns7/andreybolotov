@@ -515,10 +515,11 @@ import InstallAppModal from "./InstallAppModal.astro";
       <div class="tickets-sheet__header-text">
         <h2 id="modal-tickets-title" class="tickets-sheet__title">Мои билеты</h2>
         <p id="modal-tickets-subtitle" class="tickets-sheet__subtitle" hidden></p>
-        <p class="tickets-sheet__hint">
+        <p id="modal-tickets-guide" class="tickets-sheet__hint">
           <strong>Как читать список:</strong> «Забронированные» — оплатите и загрузите чек до времени в карточке (указано по Москве). «На проверке» — чек у администратора; при необходимости замены чека заявка снова попадёт в «Забронированные» с новым сроком.
           «Утверждённые» — номерки ваши.
         </p>
+        <button type="button" class="tickets-sheet__hint-dismiss" id="modal-tickets-guide-dismiss">Понятно</button>
       </div>
       <button type="button" class="tickets-sheet__close" id="modal-tickets-close" aria-label="Закрыть">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

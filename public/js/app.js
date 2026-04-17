@@ -51,6 +51,7 @@
 
   /** true только после успешного /api/auth/me или сразу после входа/регистрации */
   let authVerified = false;
+  let authCheckInFlight = false;
 
   /** Доступ к сайту закрыт (сессия есть, выход недоступен) */
   let accountBlocked = false;
@@ -1437,6 +1438,24 @@
   }
 
   var ticketsLookupTimers = Object.create(null);
+  var TICKETS_GUIDE_DISMISS_KEY = "ab_tickets_guide_dismissed_v1";
+  var HOME_RELOAD_ONCE_KEY = "ab_home_reload_once_v1";
+
+  function markNeedHomeReloadOnce() {
+    try {
+      sessionStorage.setItem(HOME_RELOAD_ONCE_KEY, "1");
+    } catch (_) {}
+  }
+
+  function consumeNeedHomeReloadOnce() {
+    try {
+      if (sessionStorage.getItem(HOME_RELOAD_ONCE_KEY) !== "1") return false;
+      sessionStorage.removeItem(HOME_RELOAD_ONCE_KEY);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   function closeTicketsModal() {
     if (modalTickets) closeModal(modalTickets);
@@ -2301,53 +2320,33 @@
           "</span>";
       }
       html += "</div>";
-      html += '<p class="tickets-reserved-foot">Оплатите бронь, чтобы не потерять номерки</p>';
+      html +=
+        '<div class="tickets-actions-row">' +
+        '<button type="button" class="btn btn--secondary btn--sm btn--tickets-sm" data-tickets-attach="1" data-order-id="' +
+        String(oid) +
+        '" data-raffle-id="' +
+        String(Number((rv.raffle && rv.raffle.id) || ro.raffle_id || 0) || 0) +
+        '" data-amount-rub="' +
+        String(Number(ro.amount_rub || 0) || 0) +
+        '" data-reserved-until="' +
+        String(Number(ro.reserved_until || 0) || 0) +
+        '">Прикрепить чек</button>' +
+        "</div>";
       html += "</section>";
     }
     return html;
   }
 
-  function wholesaleNumbersForRaffleFromSlots(raffleId, wholesaleSlots) {
-    if (!Number.isFinite(raffleId) || raffleId < 1 || !Array.isArray(wholesaleSlots)) return [];
-    for (var si = 0; si < wholesaleSlots.length; si++) {
-      var row = wholesaleSlots[si];
-      if (!row || Number(row.raffle_id) !== raffleId) continue;
-      var nums = row.wholesale_numbers;
-      return Array.isArray(nums) ? nums : [];
-    }
-    return [];
-  }
-
-  function buildTicketsConfirmedHtml(confirmed, wholesaleSlots) {
+  function buildTicketsConfirmedHtml(confirmed) {
     var html = "";
     var i;
     var j;
-    var shownWholesaleForRaffle = Object.create(null);
     for (i = 0; i < confirmed.length; i++) {
       var cv = confirmed[i];
       var ctitle = escapeHtml(String((cv.raffle && cv.raffle.title) || ""));
       var cnums = cv.numbers || [];
-      var rid = cv.raffle && cv.raffle.id != null ? Number(cv.raffle.id) : NaN;
-      var wholesaleNums =
-        Number.isFinite(rid) && !shownWholesaleForRaffle[rid]
-          ? wholesaleNumbersForRaffleFromSlots(rid, wholesaleSlots)
-          : [];
-      if (Number.isFinite(rid) && wholesaleNums.length) shownWholesaleForRaffle[rid] = true;
       html += '<section class="tickets-group">';
       html += '<h3 class="tickets-group__title">' + ctitle + "</h3>";
-      html += '<p class="tickets-group__meta">Оплачено, участие подтверждено</p>';
-      if (wholesaleNums.length) {
-        var whStr = wholesaleNums
-          .map(function (wn) {
-            return "№ " + escapeHtml(String(wn));
-          })
-          .join(", ");
-        html +=
-          '<p class="tickets-group__wholesale">Номера оптовика в этой акции: <strong>' +
-          whStr +
-          "</strong> (каждые 10 подтверждённых номерков дают один такой номер)</p>";
-      }
-      html += buildTrackingStatusLink(cv.order);
       html += buildTicketsTimelineHtml(cv.timeline);
       html += '<div class="tickets-chips">';
       for (j = 0; j < cnums.length; j++) {
@@ -2357,6 +2356,46 @@
       html += "</div></section>";
     }
     return html;
+  }
+
+  function buildTicketsWholesaleSectionHtml(wholesaleSlots, reserved, pending, confirmed) {
+    if (!Array.isArray(wholesaleSlots) || !wholesaleSlots.length) return "";
+    var titlesByRaffleId = Object.create(null);
+    var groups = [reserved || [], pending || [], confirmed || []];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var arr = groups[gi];
+      for (var ai = 0; ai < arr.length; ai++) {
+        var row = arr[ai] || {};
+        var rr = row.raffle || {};
+        var rid = Number(rr.id);
+        if (!Number.isFinite(rid) || rid < 1) continue;
+        if (!titlesByRaffleId[rid]) {
+          titlesByRaffleId[rid] = String(rr.title || "").trim();
+        }
+      }
+    }
+
+    var html = "";
+    var hasAny = false;
+    for (var si = 0; si < wholesaleSlots.length; si++) {
+      var slot = wholesaleSlots[si] || {};
+      var rid2 = Number(slot.raffle_id);
+      var nums = Array.isArray(slot.wholesale_numbers) ? slot.wholesale_numbers : [];
+      if (!Number.isFinite(rid2) || rid2 < 1 || !nums.length) continue;
+      hasAny = true;
+      var whStr = nums
+        .map(function (wn) {
+          return "№ " + escapeHtml(String(wn));
+        })
+        .join(", ");
+      var ttl = titlesByRaffleId[rid2] ? escapeHtml(titlesByRaffleId[rid2]) : "Акция #" + String(rid2);
+      html += '<section class="tickets-group">';
+      html += '<h3 class="tickets-group__title">' + ttl + "</h3>";
+      html += '<p class="tickets-group__wholesale">Номера оптовика: <strong>' + whStr + "</strong></p>";
+      html += "</section>";
+    }
+    if (!hasAny) return "";
+    return '<section class="tickets-section"><h3 class="tickets-section__title">Оптовики</h3>' + html + "</section>";
   }
 
   function buildTicketsPendingHtml(pending) {
@@ -2374,12 +2413,9 @@
       var poid = Number(porder.id);
       var porderCode = poid > 0 ? "A" + String(poid) : "—";
       html += '<h3 class="tickets-group__title">' + ptitle + "</h3>";
-      html += '<p class="tickets-group__meta">Чек отправлен — заявка на проверке</p>';
       html += '<p class="tickets-group__meta">Заказ: <strong>' + escapeHtml(porderCode) + "</strong></p>";
       html += buildTrackingStatusLink(porder);
       html += buildTicketsTimelineHtml(pv.timeline);
-      html +=
-        '<p class="tickets-pending-hint">Обычно это занимает немного времени. Если решение долго не приходит, откройте <strong>чат поддержки</strong> и укажите номер заказа — так быстрее, чем без контекста.</p>';
       html += '<p class="tickets-reserved-status">' + clockSvg + "на проверке (" + String(pnums.length) + ")</p>";
       html += '<div class="tickets-chips tickets-chips--pending">';
       for (j = 0; j < pnums.length; j++) {
@@ -2440,9 +2476,15 @@
     }
     if (confirmed.length) {
       html += '<section class="tickets-section"><h3 class="tickets-section__title">Утвержденные</h3>';
-      html += buildTicketsConfirmedHtml(confirmed, ticketsModalDataCache.wholesale_slots || []);
+      html += buildTicketsConfirmedHtml(confirmed);
       html += "</section>";
     }
+    html += buildTicketsWholesaleSectionHtml(
+      ticketsModalDataCache.wholesale_slots || [],
+      reserved,
+      pending,
+      confirmed,
+    );
     body.innerHTML = html;
     updateTicketsModalSubtitle();
   }
@@ -2461,6 +2503,30 @@
       wholesale_slots: ticketsModalDataCache.wholesale_slots,
     };
     paintTicketsModalBody();
+  }
+
+  function isTicketsGuideDismissed() {
+    try {
+      return localStorage.getItem(TICKETS_GUIDE_DISMISS_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function dismissTicketsGuideForever() {
+    try {
+      localStorage.setItem(TICKETS_GUIDE_DISMISS_KEY, "1");
+    } catch (_) {}
+    syncTicketsGuideVisibility();
+  }
+
+  function syncTicketsGuideVisibility() {
+    var hint = document.getElementById("modal-tickets-guide");
+    var btn = document.getElementById("modal-tickets-guide-dismiss");
+    if (!hint && !btn) return;
+    var hidden = isTicketsGuideDismissed();
+    if (hint) hint.hidden = hidden;
+    if (btn) btn.hidden = hidden;
   }
 
   function setTicketLookupSuffix(suffix, kind, n) {
@@ -3071,7 +3137,7 @@
     var pr = Number(r.price_rub ?? 0);
     var priceInner = escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
     var viewersBlock =
-      st === "paused" || st === "closed"
+      st === "paused" || st === "closed" || viewers <= 0
         ? ""
         : '<div class="raffle-card__viewers" aria-label="Смотрят акцию сейчас">' +
           '<span class="raffle-card__viewers-dot" aria-hidden="true"></span>' +
@@ -3270,7 +3336,7 @@
       if (!found) return;
       var viewersCount = Math.max(0, Number(found.viewers_count) || 0);
       viewersTextEl.textContent = "Онлайн: " + String(viewersCount);
-      viewersEl.hidden = false;
+      viewersEl.hidden = viewersCount <= 0;
       if (raffleDetailState.raffle && Number(raffleDetailState.raffle.id) === rid) {
         raffleDetailState.raffle.viewers_count = viewersCount;
       }
@@ -4526,7 +4592,7 @@
       if (viewersEl && viewersTextEl) {
         var viewersCount = Math.max(0, Number(r.viewers_count) || 0);
         viewersTextEl.textContent = "Онлайн: " + String(viewersCount);
-        viewersEl.hidden = false;
+        viewersEl.hidden = viewersCount <= 0;
       }
       startRafflePageViewersAutoRefresh(Number(r.id));
       buildRaffleRangeTabs(r.ticket_count);
@@ -4865,6 +4931,14 @@
       if (modalWaitReceipt) closeModal(modalWaitReceipt);
       raffleDetailState.order = null;
       raffleDetailState.orderNumbers = [];
+      resetRaffleDetailSelection();
+      persistRaffleDraftSelection();
+      updateRaffleSelectionLabel();
+      raffleDataCache.cart = { items: [] };
+      applyCartBadgeFromItems([]);
+      if (modalCart && modalCart.classList.contains("is-open")) {
+        renderCartModalBody([]);
+      }
       fetchCartFromApi().catch(function () {});
       fetchTicketsFromApi().catch(function () {});
       loadRaffleTicketSlice().catch(function () {});
@@ -5080,6 +5154,9 @@
   document.getElementById("modal-tickets-close")?.addEventListener("click", function () {
     closeTicketsModal();
   });
+  document.getElementById("modal-tickets-guide-dismiss")?.addEventListener("click", function () {
+    dismissTicketsGuideForever();
+  });
   modalTickets?.addEventListener("click", function (e) {
     if (e.target === modalTickets) closeTicketsModal();
   });
@@ -5125,6 +5202,31 @@
     }, 320);
   });
   modalTickets?.addEventListener("click", function (e) {
+    var attach = e.target.closest("[data-tickets-attach]");
+    if (attach) {
+      e.preventDefault();
+      var attachOrderId = Number(attach.getAttribute("data-order-id"));
+      var attachRaffleId = Number(attach.getAttribute("data-raffle-id"));
+      var attachAmount = Number(attach.getAttribute("data-amount-rub"));
+      var attachUntil = Number(attach.getAttribute("data-reserved-until"));
+      if (!Number.isFinite(attachOrderId) || attachOrderId < 1) return;
+      if (Number.isFinite(attachUntil) && attachUntil > 0 && getRaffleReservationLeftMs(attachUntil) <= 0) {
+        showToast("Срок брони уже истёк", "warning");
+        ticketsModalAfterMutation().catch(function () {});
+        return;
+      }
+      reserveFlowState.orderId = attachOrderId;
+      reserveFlowState.raffleId = Number.isFinite(attachRaffleId) ? attachRaffleId : 0;
+      reserveFlowState.amountRub = Number.isFinite(attachAmount) ? attachAmount : 0;
+      reserveFlowState.reservedUntil = Number.isFinite(attachUntil) ? attachUntil : 0;
+      reserveFlowState.numbers = [];
+      renderReserveFlowModals();
+      switchReservePaymentStep("confirm");
+      if (modalTickets) closeModal(modalTickets);
+      if (modalReservePayment) openModal(modalReservePayment);
+      startReservePaymentTimer(reserveFlowState.reservedUntil);
+      return;
+    }
     var rm = e.target.closest("[data-tickets-remove]");
     if (rm) {
       e.preventDefault();
@@ -5861,7 +5963,7 @@
     /** На /home и страницах акции лента только после успешной проверки сессии */
     const showAuthedUi =
       IS_HOME_APP || IS_RAFFLE_PURCHASE_PAGE || IS_RAFFLE_PAY_PAGE || IS_HOME_SETTINGS_PAGE
-        ? !!(session && session.token && session.phone && authVerified)
+        ? !!(session && session.token && session.phone && (authVerified || authCheckInFlight))
         : IS_GUEST_LANDING
           ? false
           : authed;
@@ -5914,6 +6016,8 @@
   async function verifySessionOnLoad() {
     const s = loadSession();
     if (!s || !s.token) return;
+    authCheckInFlight = true;
+    updateScreens();
     try {
       const data = await apiJson("/api/auth/me", {
         headers: { Authorization: "Bearer " + s.token },
@@ -5928,15 +6032,17 @@
         role: data.user.role || "user",
         blocked: accountBlocked,
       });
-      updateScreens();
     } catch (err) {
       if (err && err.status === 401) {
+        invalidateSession("Сессия истекла. Войдите снова.");
         return;
       }
       authVerified = false;
       accountBlocked = false;
-      updateScreens();
       showToast("Не удалось проверить сессию. Попробуйте войти снова.", "warning");
+    } finally {
+      authCheckInFlight = false;
+      updateScreens();
     }
   }
 
@@ -6142,7 +6248,11 @@
         closeAllModals();
         showToast("Добро пожаловать, " + data.user.name.split(" ")[0] + "!", "success");
         updateScreens();
-        if (IS_GUEST_LANDING) location.replace("/home");
+        if (IS_GUEST_LANDING) {
+          markNeedHomeReloadOnce();
+          location.replace("/home");
+          return;
+        }
         formRegister.reset();
         phoneReg.value = "";
       })
@@ -6180,7 +6290,11 @@
         closeAllModals();
         showToast("С возвращением!", "success");
         updateScreens();
-        if (IS_GUEST_LANDING) location.replace("/home");
+        if (IS_GUEST_LANDING) {
+          markNeedHomeReloadOnce();
+          location.replace("/home");
+          return;
+        }
         formLogin.reset();
         phoneLogin.value = "";
       })
@@ -6371,6 +6485,28 @@
       });
   });
 
+  var tabScrollTopEl = document.getElementById("tab-scroll-top");
+  function syncRaffleScrollTopButton() {
+    if (!tabScrollTopEl) return;
+    if (!IS_RAFFLE_PURCHASE_PAGE) {
+      tabScrollTopEl.hidden = true;
+      tabScrollTopEl.classList.remove("is-visible");
+      return;
+    }
+    var y = Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0);
+    var show = y > 320;
+    tabScrollTopEl.hidden = !show;
+    tabScrollTopEl.classList.toggle("is-visible", show);
+  }
+  if (tabScrollTopEl) {
+    tabScrollTopEl.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    window.addEventListener("scroll", syncRaffleScrollTopButton, { passive: true });
+    window.addEventListener("resize", syncRaffleScrollTopButton, { passive: true });
+    syncRaffleScrollTopButton();
+  }
+
   var tabSearchEl = document.getElementById("tab-search");
   if (tabSearchEl) {
     tabSearchEl.addEventListener("click", function () {
@@ -6470,6 +6606,12 @@
 
   reconcileCookiePair();
   initWelcomeSplash();
+  syncTicketsGuideVisibility();
+  if (IS_HOME_APP && consumeNeedHomeReloadOnce()) {
+    location.replace("/home");
+    location.reload();
+    return;
+  }
   updateScreens();
   verifySessionOnLoad().then(function () {
     if (
