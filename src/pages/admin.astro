@@ -636,9 +636,16 @@ import "../styles/admin-raffles.css";
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                   </svg>
-                  Поиск по номерку
+                  Поиск: номерок или телефон
                 </span>
-                <input id="raffle-participants-search" class="input admin-raffle-participants__search-input" type="search" inputmode="numeric" placeholder="Например: 42" autocomplete="off" />
+                <input
+                  id="raffle-participants-search"
+                  class="input admin-raffle-participants__search-input"
+                  type="search"
+                  inputmode="numeric"
+                  placeholder="До 6 цифр — номерок; от 7 — телефон"
+                  autocomplete="off"
+                />
               </label>
               <div id="raffle-participants-list" class="admin-raffle-participants__list"></div>
             </section>

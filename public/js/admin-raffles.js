@@ -498,13 +498,20 @@
 
   function renderParticipantsList() {
     if (!participantsList) return;
-    const query = String((participantsSearch && participantsSearch.value) || "")
+    /** Только цифры из поля: >6 — считаем телефоном, иначе — номерком. */
+    const digits = String((participantsSearch && participantsSearch.value) || "")
       .trim()
       .replace(/[^\d]/g, "");
     const filtered = participantsCache.filter(function (x) {
-      const n = String(Number(x.ticket_number) || 0);
+      if (!digits) return true;
+      const ticketStr = String(Math.floor(Number(x.ticket_number)) || 0);
       const phoneDigits = String(x.user_phone || "").replace(/[^\d]/g, "");
-      return !query || n.indexOf(query) !== -1 || phoneDigits.indexOf(query) !== -1;
+      if (digits.length > 6) {
+        if (!phoneDigits) return false;
+        return phoneDigits.indexOf(digits) !== -1;
+      }
+      if (!ticketStr || ticketStr === "0") return false;
+      return ticketStr === digits || ticketStr.indexOf(digits) === 0;
     });
     if (!filtered.length) {
       participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Ничего не найдено.</p>';
