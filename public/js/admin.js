@@ -211,7 +211,11 @@
       return;
     }
     modalUserTicketsRaffle.textContent =
-      "Акция: " + String(raffle.title) + " · статус: " + String(raffle.status || "—");
+      "Акция: " +
+      String(raffle.title) +
+      " · статус: " +
+      String(raffle.status || "—") +
+      " (последняя активная, видимая на сайте)";
 
     var reserved = collectTicketNumbers(data.reserved || []);
     var pending = collectTicketNumbers(data.pending_review || []);

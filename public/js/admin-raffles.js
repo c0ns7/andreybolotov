@@ -5,6 +5,8 @@
 
   /** @type {Array<Record<string, unknown>>} */
   let rafflesCache = [];
+  /** @type {'active' | 'hidden'} */
+  let rafflesListTab = "active";
   /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,user_email?:string}>} */
   let participantsCache = [];
   /** @type {Array<{wholesale_number:number,user_phone:string}>} */
@@ -65,6 +67,12 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  const PARTICIPANT_ICO_TRASH =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    "<polyline points=\"3 6 5 6 21 6\"></polyline>" +
+    '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+    "</svg>";
 
   const BTN_ICO = {
     users:
@@ -221,97 +229,81 @@
     return '<span class="admin-raffle-badge admin-raffle-badge--paused">Пауза</span>';
   }
 
-  function renderList() {
-    if (!listEl) return;
-    if (!rafflesCache.length) {
-      listEl.innerHTML =
-        '<div class="admin-raffles-empty" role="status">' +
-        '<svg class="admin-raffles-empty__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
-        '<path d="M20 12v10H4V12"></path><path d="M22 7H2v5h20z"></path><path d="M12 22V7"></path>' +
-        '<path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>' +
-        "</svg>" +
-        '<p class="admin-raffles-empty__title">Пока пусто</p>' +
-        '<p class="admin-raffles-empty__text">Создайте первую акцию — она появится на главной странице сайта.</p>' +
-        "</div>";
-      return;
-    }
-    listEl.innerHTML = rafflesCache
-      .map(function (r) {
-        const cover =
-          r.cover_image_url && String(r.cover_image_url).trim()
-            ? '<img class="admin-raffle-card__cover" src="' +
-              esc(String(r.cover_image_url)) +
-              '" alt="" loading="lazy" />'
-            : "";
-        return (
-          '<article class="admin-raffle-card" data-id="' +
-          r.id +
-          '" role="listitem">' +
-          '<div class="admin-raffle-card__cover-wrap">' +
-          (cover || "") +
-          "</div>" +
-          '<div class="admin-raffle-card__body">' +
-          '<div class="admin-raffle-card__badges">' +
-          setStatusBadge(r.status) +
-          (r.hidden_from_public
-            ? '<span class="admin-raffle-badge admin-raffle-badge--hidden">Скрыта</span>'
-            : "") +
-          "</div>" +
-          '<h3 class="admin-raffle-card__title">' +
-          esc(String(r.title)) +
-          "</h3>" +
-          '<p class="admin-raffle-card__meta">' +
-          esc(String(r.price_rub)) +
-          " ₽ за билет · " +
-          esc(String(r.ticket_count)) +
-          " номерков" +
-          (r.wholesale_enabled ? " · оптовики вкл." : "") +
-          "</p>" +
-          '<div class="admin-raffle-card__actions">' +
-          '<div class="admin-raffle-card__row">' +
-          '<button type="button" class="admin-raffle-btn admin-raffle-btn--participants admin-raffle-participants-btn" data-id="' +
-          r.id +
-          '">' +
-          BTN_ICO.users +
-          "<span>Участники</span></button>" +
-          '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-raffle-edit" data-id="' +
-          r.id +
-          '">' +
-          BTN_ICO.edit +
-          "<span>Изменить</span></button>" +
-          '<button type="button" class="admin-raffle-btn admin-raffle-btn--danger admin-raffle-delete" data-id="' +
-          r.id +
-          '">' +
-          BTN_ICO.trash +
-          "<span>Удалить</span></button>" +
-          "</div>" +
-          '<div class="admin-raffle-card__row">' +
-          '<button type="button" class="admin-raffle-btn admin-raffle-pause" data-id="' +
-          r.id +
-          '"' +
-          (r.status === "paused" ? " disabled" : "") +
-          ">" +
-          BTN_ICO.pause +
-          "<span>Тех. пауза</span></button>" +
-          '<button type="button" class="admin-raffle-btn admin-raffle-close" data-id="' +
-          r.id +
-          '"' +
-          (r.status === "closed" ? " disabled" : "") +
-          ">" +
-          BTN_ICO.lock +
-          "<span>Закрыть продажи</span></button>" +
-          '<button type="button" class="admin-raffle-btn admin-raffle-active" data-id="' +
-          r.id +
-          '"' +
-          (r.status === "active" ? " disabled" : "") +
-          ">" +
-          BTN_ICO.play +
-          "<span>В активные</span></button>" +
-          "</div></div></div></article>"
-        );
-      })
-      .join("");
+  function raffleCardHtml(r) {
+    const cover =
+      r.cover_image_url && String(r.cover_image_url).trim()
+        ? '<img class="admin-raffle-card__cover" src="' +
+          esc(String(r.cover_image_url)) +
+          '" alt="" loading="lazy" />'
+        : "";
+    return (
+      '<article class="admin-raffle-card" data-id="' +
+      r.id +
+      '" role="listitem">' +
+      '<div class="admin-raffle-card__cover-wrap">' +
+      (cover || "") +
+      "</div>" +
+      '<div class="admin-raffle-card__body">' +
+      '<div class="admin-raffle-card__badges">' +
+      setStatusBadge(r.status) +
+      (r.hidden_from_public ? '<span class="admin-raffle-badge admin-raffle-badge--hidden">Скрыта</span>' : "") +
+      "</div>" +
+      '<h3 class="admin-raffle-card__title">' +
+      esc(String(r.title)) +
+      "</h3>" +
+      '<p class="admin-raffle-card__meta">' +
+      esc(String(r.price_rub)) +
+      " ₽ за билет · " +
+      esc(String(r.ticket_count)) +
+      " номерков" +
+      (r.wholesale_enabled ? " · оптовики вкл." : "") +
+      "</p>" +
+      '<div class="admin-raffle-card__actions">' +
+      '<div class="admin-raffle-card__row">' +
+      '<button type="button" class="admin-raffle-btn admin-raffle-btn--participants admin-raffle-participants-btn" data-id="' +
+      r.id +
+      '">' +
+      BTN_ICO.users +
+      "<span>Участники</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-raffle-edit" data-id="' +
+      r.id +
+      '">' +
+      BTN_ICO.edit +
+      "<span>Изменить</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-btn--danger admin-raffle-delete" data-id="' +
+      r.id +
+      '">' +
+      BTN_ICO.trash +
+      "<span>Удалить</span></button>" +
+      "</div>" +
+      '<div class="admin-raffle-card__row">' +
+      '<button type="button" class="admin-raffle-btn admin-raffle-pause" data-id="' +
+      r.id +
+      '"' +
+      (r.status === "paused" ? " disabled" : "") +
+      ">" +
+      BTN_ICO.pause +
+      "<span>Тех. пауза</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-close" data-id="' +
+      r.id +
+      '"' +
+      (r.status === "closed" ? " disabled" : "") +
+      ">" +
+      BTN_ICO.lock +
+      "<span>Закрыть продажи</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-active" data-id="' +
+      r.id +
+      '"' +
+      (r.status === "active" ? " disabled" : "") +
+      ">" +
+      BTN_ICO.play +
+      "<span>В активные</span></button>" +
+      "</div></div></div></article>"
+    );
+  }
 
+  function bindRaffleListButtons() {
+    if (!listEl) return;
     listEl.querySelectorAll(".admin-raffle-edit").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const id = Number(btn.getAttribute("data-id"));
@@ -344,6 +336,58 @@
         removeRaffle(Number(btn.getAttribute("data-id")));
       });
     });
+  }
+
+  function renderList() {
+    if (!listEl) return;
+    if (!rafflesCache.length) {
+      listEl.innerHTML =
+        '<div class="admin-raffles-empty" role="status">' +
+        '<svg class="admin-raffles-empty__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+        '<path d="M20 12v10H4V12"></path><path d="M22 7H2v5h20z"></path><path d="M12 22V7"></path>' +
+        '<path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>' +
+        "</svg>" +
+        '<p class="admin-raffles-empty__title">Пока пусто</p>' +
+        '<p class="admin-raffles-empty__text">Создайте первую акцию — она появится на главной странице сайта.</p>' +
+        "</div>";
+      return;
+    }
+
+    var hiddenRows = rafflesCache.filter(function (r) {
+      return !!r.hidden_from_public;
+    });
+    var activeSelling = rafflesCache.filter(function (r) {
+      return !r.hidden_from_public && r.status === "active";
+    });
+    var pausedOnSite = rafflesCache.filter(function (r) {
+      return !r.hidden_from_public && r.status !== "active";
+    });
+
+    var html = "";
+    if (rafflesListTab === "hidden") {
+      if (!hiddenRows.length) {
+        listEl.innerHTML =
+          '<div class="admin-raffles-empty" role="status">' +
+          '<p class="admin-raffles-empty__title">Нет скрытых акций</p>' +
+          '<p class="admin-raffles-empty__text">Включите «Скрыть с сайта» в карточке акции или переключите вкладку.</p>' +
+          "</div>";
+        return;
+      }
+      html = hiddenRows.map(raffleCardHtml).join("");
+    } else {
+      if (!activeSelling.length && !pausedOnSite.length) {
+        listEl.innerHTML =
+          '<div class="admin-raffles-empty" role="status">' +
+          '<p class="admin-raffles-empty__title">Нет акций на сайте</p>' +
+          '<p class="admin-raffles-empty__text">Все акции скрыты или ещё не созданы. Откройте вкладку «Скрытые».</p>' +
+          "</div>";
+        return;
+      }
+      html = activeSelling.concat(pausedOnSite).map(raffleCardHtml).join("");
+    }
+
+    listEl.innerHTML = html;
+    bindRaffleListButtons();
   }
 
   async function loadRaffles() {
@@ -547,20 +591,20 @@
           : '<div class="admin-raffle-participant-card__ticket">№ ' +
             esc(String(x.ticket_number)) +
             "</div>";
-        var statusLine =
+        var statusInline =
           x.order_status === "preassigned"
-            ? '<div class="admin-raffle-participant-card__status">До регистрации</div>'
+            ? '<span class="admin-raffle-participant-card__pre">до регистрации</span>'
             : "";
         return (
           '<article class="admin-raffle-participant-card' +
           wholesaleCls +
           preCls +
           '">' +
-          '<div class="admin-raffle-participant-card__ticket-wrap">' +
+          '<div class="admin-raffle-participant-card__line">' +
+          '<div class="admin-raffle-participant-card__left">' +
           ticketBlock +
-          statusLine +
+          statusInline +
           "</div>" +
-          '<div class="admin-raffle-participant-card__right">' +
           '<button type="button" class="admin-raffle-participant-card__phone' +
           (revealed ? "" : " is-masked") +
           '" data-key="' +
@@ -572,7 +616,9 @@
           "</button>" +
           '<button type="button" class="admin-raffle-participant-card__detach" data-admin-detach-ticket="1" data-ticket="' +
           esc(String(x.ticket_number)) +
-          '" title="Снять номерок">Снять</button>' +
+          '" title="Снять номерок" aria-label="Снять номерок">' +
+          PARTICIPANT_ICO_TRASH +
+          "</button>" +
           "</div>" +
           "</article>"
         );
@@ -839,6 +885,20 @@
     });
     syncSessionFromServer();
   };
+
+  document.querySelectorAll("[data-raffles-tab]").forEach(function (tabBtn) {
+    tabBtn.addEventListener("click", function () {
+      var t = tabBtn.getAttribute("data-raffles-tab");
+      if (t !== "active" && t !== "hidden") return;
+      rafflesListTab = t;
+      document.querySelectorAll("[data-raffles-tab]").forEach(function (b) {
+        var on = b.getAttribute("data-raffles-tab") === t;
+        b.classList.toggle("admin-raffles-tab--active", on);
+        b.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      renderList();
+    });
+  });
 
   document.getElementById("btn-raffle-new")?.addEventListener("click", function () {
     openForm(null);

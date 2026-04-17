@@ -5,7 +5,8 @@ import {
   getUserById,
   getUserByPhone,
   isRaffleVisibleOnSite,
-  listRafflesAll,
+  getLatestVisibleActiveRaffle,
+  listRafflesPublic,
 } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 
@@ -906,8 +907,8 @@ export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
 }
 
 /**
- * Админ: билеты пользователя по «текущей» акции — первая в списке как в админке/на главной
- * (sort_order ASC, id DESC), в т.ч. если акция скрыта с сайта.
+ * Админ: билеты пользователя по «текущей» акции — последняя по id среди активных и видимых на сайте
+ * (новая акция, а не первая по полю «Порядок»).
  */
 export function adminUserTicketsForPrimaryRaffle(userId: number): {
   raffle: { id: number; title: string; status: string } | null;
@@ -917,8 +918,8 @@ export function adminUserTicketsForPrimaryRaffle(userId: number): {
 } {
   cleanupExpiredRaffleOrders();
   const now = Date.now();
-  const raffles = listRafflesAll();
-  const raffle = raffles[0];
+  const pub = listRafflesPublic();
+  const raffle = getLatestVisibleActiveRaffle() ?? pub[0];
   if (!raffle) {
     return { raffle: null, reserved: [], pending_review: [], confirmed: [] };
   }

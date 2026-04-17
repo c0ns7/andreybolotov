@@ -255,7 +255,9 @@ import "../styles/admin-raffles.css";
             </span>
             <div class="admin-raffles-toolbar__text">
               <span class="admin-raffles-toolbar__label">Акции на сайте</span>
-              <p class="admin-raffles-toolbar__hint">Карточки на главной сортируются по полю «Порядок»: меньшее число — выше в списке.</p>
+              <p class="admin-raffles-toolbar__hint">
+                Вкладка «Активные» — в продаже на сайте. «Скрытые» — не показываются на главной. Порядок карточек на сайте — поле «Порядок» (меньше — выше).
+              </p>
             </div>
           </div>
           <button type="button" class="btn btn--primary admin-raffles-toolbar__btn" id="btn-raffle-new">
@@ -266,6 +268,28 @@ import "../styles/admin-raffles.css";
               </svg>
             </span>
             Новая акция
+          </button>
+        </div>
+        <div class="admin-raffles-tabs" role="tablist" aria-label="Фильтр акций">
+          <button
+            type="button"
+            class="admin-raffles-tab admin-raffles-tab--active"
+            id="admin-raffles-tab-active"
+            role="tab"
+            aria-selected="true"
+            data-raffles-tab="active"
+          >
+            Активные
+          </button>
+          <button
+            type="button"
+            class="admin-raffles-tab"
+            id="admin-raffles-tab-hidden"
+            role="tab"
+            aria-selected="false"
+            data-raffles-tab="hidden"
+          >
+            Скрытые
           </button>
         </div>
         <div class="admin-raffles-panel">

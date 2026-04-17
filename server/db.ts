@@ -836,6 +836,18 @@ export function listRafflesPublic(): RaffleRow[] {
     .all() as RaffleRow[];
 }
 
+/** Активные и видимые на сайте: с наибольшим id — «текущая» новая акция (не первая по sort_order). */
+export function getLatestVisibleActiveRaffle(): RaffleRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM raffles
+       WHERE COALESCE(hidden_from_public, 0) = 0 AND status = 'active'
+       ORDER BY id DESC
+       LIMIT 1`,
+    )
+    .get() as RaffleRow | undefined;
+}
+
 export function getRaffleById(id: number): RaffleRow | undefined {
   return db.prepare(`SELECT * FROM raffles WHERE id = ?`).get(id) as RaffleRow | undefined;
 }
