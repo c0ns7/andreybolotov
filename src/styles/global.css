@@ -156,6 +156,10 @@ body {
   padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
 
+html.has-cart-action-strip .app-shell--with-tabbar {
+  padding-bottom: calc(156px + env(safe-area-inset-bottom, 0px));
+}
+
 /* Админка: не ограничивать колонкой приложения (520px) */
 .app-shell--admin {
   max-width: 1200px;
@@ -1196,21 +1200,141 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
 
-.bottom-nav__inner--4 {
-  gap: 2px;
+.bottom-nav__inner--3 {
+  gap: 4px;
+  padding: 8px 8px;
+}
+
+.bottom-nav__inner--3 .bottom-nav-btn {
+  min-width: 0;
   padding: 8px 4px;
 }
 
-.bottom-nav__inner--4 .bottom-nav-btn {
-  min-width: 0;
-  padding: 8px 2px;
-}
-
-.bottom-nav__inner--4 .bottom-nav-btn__label {
+.bottom-nav__inner--3 .bottom-nav-btn__label {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bottom-nav-btn--dock-search {
+  display: none;
+}
+
+html.raffle-purchase-page .bottom-nav-btn--dock-search {
+  display: flex;
+}
+
+/* Плашка «Забронировать / корзина» над нижней навигацией */
+.cart-action-strip {
+  position: fixed;
+  left: 50%;
+  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, calc(100% + 24px));
+  z-index: 45;
+  width: calc(100% - 32px);
+  max-width: 488px;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.26s ease;
+}
+
+.cart-action-strip.cart-action-strip--visible {
+  transform: translate(-50%, -20px);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cart-action-strip__btn {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 13px;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  background: linear-gradient(145deg, #1d4ed8 0%, #2563eb 52%, #1e40af 100%);
+  color: #fff;
+  box-shadow:
+    0 10px 28px rgba(37, 99, 235, 0.38),
+    0 2px 0 rgba(255, 255, 255, 0.12) inset;
+  transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+.cart-action-strip__text-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.cart-action-strip__chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+}
+
+.cart-action-strip__chevron svg {
+  display: block;
+}
+
+.cart-action-strip__btn:active {
+  transform: scale(0.98);
+}
+
+.cart-action-strip__title {
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  max-width: 100%;
+}
+
+.cart-action-strip__sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.92;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+.cart-action-strip--home-pending-pay .cart-action-strip__title {
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+}
+
+.cart-action-strip--pulse .cart-action-strip__btn {
+  animation: cart-action-strip-pulse 0.55s ease;
+}
+
+@keyframes cart-action-strip-pulse {
+  0% {
+    filter: brightness(1);
+  }
+  35% {
+    filter: brightness(1.12);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+html.bottom-nav-hidden-by-fast-input .cart-action-strip {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translate(-50%, calc(100% + 32px)) !important;
 }
 
 .bottom-nav-btn {
@@ -1725,6 +1849,34 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   background: #e5e7eb;
 }
 
+.cart-sheet__flow.payment-flow-steps {
+  margin: 0 18px 4px;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.cart-sheet__flow .payment-flow-steps__num {
+  width: 26px;
+  height: 26px;
+  font-size: 0.72rem;
+  background: #fff;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.cart-sheet__flow .payment-flow-steps__label {
+  font-size: 0.58rem;
+  color: #64748b;
+}
+
+.cart-sheet__flow .payment-flow-steps__step.is-current .payment-flow-steps__label {
+  color: #0f172a;
+}
+
+.cart-sheet__flow .payment-flow-steps__step.is-done .payment-flow-steps__label {
+  color: #047857;
+}
+
 .cart-sheet__head {
   flex-shrink: 0;
   display: flex;
@@ -1898,6 +2050,22 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   line-height: 1.35;
   color: #9ca3af;
   text-align: center;
+}
+
+.cart-sheet__footer-tip--luck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cart-sheet__footer-tip-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ca8a04;
 }
 
 .cart-sheet__hint {
@@ -5601,7 +5769,7 @@ html.raffle-purchase-page:not(.raffle-grid-page) body {
   box-sizing: border-box;
 }
 
-/* Только оплата: /home/raffle/pay */
+/* Редирект /home/raffle/pay → /home (оплата в модалке) */
 .raffle-purchase-layout--pay-screen {
   padding-top: max(8px, env(safe-area-inset-top));
 }
@@ -6895,58 +7063,6 @@ html.raffle-purchase-page .raffle-range-tab {
   font-size: 0.76rem;
 }
 
-html.raffle-purchase-page #raffle-page-step-grid .raffle-detail__cart-block {
-  position: sticky;
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-  z-index: 5;
-  margin: 12px -6px 0;
-  padding: 12px 14px 14px;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-radius: 18px;
-  border: 1px solid rgba(15, 23, 42, 0.07);
-  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.1);
-}
-
-html.raffle-purchase-page #raffle-page-step-grid .raffle-detail__cart-hint {
-  font-size: 0.82rem;
-  justify-content: center;
-  text-align: center;
-}
-
-html.raffle-purchase-page #raffle-page-step-grid .raffle-detail__bar {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
-html.raffle-purchase-page #raffle-page-step-grid .raffle-detail__selection {
-  text-align: center;
-  font-size: 0.78rem;
-}
-
-html.raffle-purchase-page #raffle-page-reserve {
-  width: 100%;
-  border-radius: 14px;
-  padding: 13px 16px;
-  font-weight: 800;
-  font-size: 0.94rem;
-  letter-spacing: 0.01em;
-}
-
-html.raffle-purchase-page #raffle-page-reserve:not(.raffle-reserve-btn--empty)::after {
-  content: "\203A";
-  margin-left: 6px;
-  font-size: 1.1em;
-  font-weight: 400;
-  opacity: 0.92;
-}
-
-html.raffle-purchase-page #raffle-page-reserve.raffle-reserve-btn--empty {
-  opacity: 0.72;
-}
-
 html.raffle-purchase-page .raffle-cell--taken {
   background: transparent;
   border: none;
@@ -6974,15 +7090,6 @@ html.raffle-grid-page #raffle-page-legend.raffle-legend--island {
   max-width: calc(100% - 24px);
   margin-left: auto;
   margin-right: auto;
-}
-
-html.raffle-purchase-page .raffle-detail__cart-block {
-  margin-top: 10px;
-  padding-top: 4px;
-}
-
-html.raffle-purchase-page .raffle-detail__bar {
-  margin-top: 0;
 }
 
 html.raffle-purchase-page .raffle-detail__step {
@@ -7536,6 +7643,12 @@ html.theme-dark .bottom-nav__inner {
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
 }
 
+html.theme-dark .cart-action-strip__btn {
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
 html.theme-dark .bottom-nav-btn {
   color: #a1a1aa;
 }
@@ -7823,6 +7936,19 @@ html.theme-dark .cart-sheet__close:hover {
   background: var(--surface-elevated);
 }
 
+html.theme-dark .cart-sheet__flow.payment-flow-steps {
+  background: color-mix(in srgb, var(--surface-muted) 90%, var(--bg));
+  border-color: var(--border);
+}
+
+html.theme-dark .cart-sheet__flow .payment-flow-steps__label {
+  color: var(--text-muted);
+}
+
+html.theme-dark .cart-sheet__flow .payment-flow-steps__step.is-current .payment-flow-steps__label {
+  color: var(--text);
+}
+
 html.theme-dark .cart-sheet__section-label {
   color: var(--text-muted);
 }
@@ -7867,6 +7993,10 @@ html.theme-dark .cart-sheet__buyer-avatar {
 html.theme-dark .cart-sheet__footer-tip,
 html.theme-dark .cart-sheet__hint {
   color: #b4b4c0;
+}
+
+html.theme-dark .cart-sheet__footer-tip-icon {
+  color: #facc15;
 }
 
 html.theme-dark .cart-sheet__cta:disabled,
