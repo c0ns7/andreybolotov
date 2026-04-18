@@ -359,6 +359,31 @@
       .replace(/>/g, "&gt;");
   }
 
+  /** После escape: переносы строк и одна строка `https://max.ru/join/...` → кнопка (только этот хост/путь). */
+  function formatChatBodyWithMaxJoinLineAsButton(escapedBody) {
+    var raw = String(escapedBody || "");
+    if (!raw) return "";
+    var lines = raw.split(/\n/g);
+    var out = [];
+    var maxJoinRe = /^https:\/\/max\.ru\/join\/[A-Za-z0-9_-]+$/;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (maxJoinRe.test(line)) {
+        var href = line.replace(/"/g, "&quot;");
+        out.push(
+          '<a class="chat-max-join-btn" href="' +
+            href +
+            '" target="_blank" rel="noopener noreferrer">Присоединиться к чату в MAX</a>',
+        );
+      } else if (line) {
+        out.push(line);
+      } else {
+        out.push("");
+      }
+    }
+    return out.join("<br/>");
+  }
+
   function chatAttachmentHtml(m) {
     if (!m.attachment_url) return "";
     var url = String(m.attachment_url).replace(/"/g, "&quot;");
@@ -388,7 +413,9 @@
     const bClass = out ? "chat-bubble chat-bubble--out" : "chat-bubble chat-bubble--in";
     const att = chatAttachmentHtml(m);
     const bodyRaw = String(m.body || "").trim();
-    const textBlock = bodyRaw ? '<div class="chat-bubble__text">' + escapeChatHtml(m.body) + "</div>" : "";
+    const textBlock = bodyRaw
+      ? '<div class="chat-bubble__text">' + formatChatBodyWithMaxJoinLineAsButton(escapeChatHtml(m.body)) + "</div>"
+      : "";
     const time = formatChatTime(m.created_at);
     const meta = out
       ? '<div class="chat-bubble__meta--out"><span class="chat-bubble__time">' + time + "</span>" + ticksHtml(m) + "</div>"
@@ -1176,6 +1203,7 @@
   };
   var lastCartCheckoutAt = 0;
   var lastCartRemoveAt = 0;
+  var lastCartClearAllAt = 0;
   var lastActionErrorRetry = null;
   var reservationReminderTimerId = null;
 
@@ -2851,6 +2879,122 @@
     return raffleDataCache.cart;
   }
 
+  function patchRaffleLastCellsReservedToFree(ticketNums) {
+    if (!IS_RAFFLE_PURCHASE_PAGE || !ticketNums || !ticketNums.length) return;
+    var cells = raffleDetailState.lastCells;
+    if (!Array.isArray(cells) || !cells.length) return;
+    var removeSet = new Set();
+    for (var pi = 0; pi < ticketNums.length; pi++) {
+      var pv = Number(ticketNums[pi]);
+      if (Number.isFinite(pv) && pv > 0) removeSet.add(pv);
+    }
+    if (!removeSet.size) return;
+    var changed = false;
+    for (var pj = 0; pj < cells.length; pj++) {
+      var c = cells[pj];
+      if (!c || !removeSet.has(Number(c.n))) continue;
+      if (String(c.kind) === "self_reserved") {
+        cells[pj] = { n: c.n, kind: "free" };
+        changed = true;
+      }
+    }
+    if (changed) renderRaffleGrid(cells);
+  }
+
+  function optimisticRemoveOneReservedTicketFromCart(orderId, ticket) {
+    var cart = raffleDataCache.cart;
+    if (!cart || !Array.isArray(cart.items)) return false;
+    var oid = Number(orderId);
+    var t = Number(ticket);
+    var idx = -1;
+    var it = null;
+    for (var i = 0; i < cart.items.length; i++) {
+      var x = cart.items[i];
+      if (x && x.order && Number(x.order.id) === oid) {
+        idx = i;
+        it = x;
+        break;
+      }
+    }
+    if (idx < 0 || !it) return false;
+    var nums = (it.numbers || []).filter(function (n) {
+      return Number(n) !== t;
+    });
+    var price = Number((it.raffle && it.raffle.price_rub) || 0);
+    if (!nums.length) {
+      cart.items.splice(idx, 1);
+    } else {
+      var newOrder = Object.assign({}, it.order, {
+        amount_rub: nums.length * price,
+        ticket_count: nums.length,
+      });
+      cart.items[idx] = Object.assign({}, it, { numbers: nums.slice(), order: newOrder });
+    }
+    applyCartBadgeFromItems(cart.items);
+    return true;
+  }
+
+  function optimisticSyncLocalRaffleOrderAfterTicketRemoved(orderId, removedTicket) {
+    if (!IS_RAFFLE_PURCHASE_PAGE || !raffleDetailState.order) return;
+    if (Number(raffleDetailState.order.id) !== Number(orderId)) return;
+    var t = Number(removedTicket);
+    var nums = (raffleDetailState.orderNumbers || []).filter(function (n) {
+      return Number(n) !== t;
+    });
+    raffleDetailState.orderNumbers = nums;
+    if (!nums.length) {
+      raffleDetailState.order = null;
+    } else {
+      var price = Number((raffleDetailState.raffle && raffleDetailState.raffle.price_rub) || 0);
+      raffleDetailState.order = Object.assign({}, raffleDetailState.order, {
+        amount_rub: nums.length * price,
+        ticket_count: nums.length,
+      });
+    }
+  }
+
+  function optimisticClearEntireCartUi() {
+    var rid = Number((raffleDetailState.raffle && raffleDetailState.raffle.id) || 0);
+    var ticketNumsForGrid = [];
+    var cart = raffleDataCache.cart;
+    if (cart && Array.isArray(cart.items)) {
+      for (var i = 0; i < cart.items.length; i++) {
+        var it = cart.items[i];
+        var nums = it && it.numbers ? it.numbers : [];
+        var itemRid = Number((it && it.raffle && it.raffle.id) || 0);
+        if (rid > 0 && itemRid === rid) {
+          for (var j = 0; j < nums.length; j++) ticketNumsForGrid.push(Number(nums[j]));
+        }
+      }
+    }
+    var draftNums = [];
+    if (IS_RAFFLE_PURCHASE_PAGE && raffleDetailState.selected && raffleDetailState.selected.size) {
+      draftNums = Array.from(raffleDetailState.selected);
+    }
+    raffleDataCache.cart = { items: [] };
+    if (IS_RAFFLE_PURCHASE_PAGE) {
+      if (raffleSelectionSyncTimer) {
+        clearTimeout(raffleSelectionSyncTimer);
+        raffleSelectionSyncTimer = null;
+      }
+      raffleDetailState.selected.clear();
+      persistRaffleDraftSelection();
+      raffleDetailState.order = null;
+      raffleDetailState.orderNumbers = [];
+    }
+    applyCartBadgeFromItems([]);
+    patchRaffleLastCellsReservedToFree(ticketNumsForGrid);
+    if (IS_RAFFLE_PURCHASE_PAGE && draftNums.length) {
+      for (var k = 0; k < draftNums.length; k++) {
+        syncVisibleGridCellSelectionState(draftNums[k]);
+      }
+    }
+    if (modalCart && modalCart.classList.contains("is-open")) {
+      renderCartModalBody(raffleDataCache.cart.items);
+    }
+    updateRaffleSelectionLabel();
+  }
+
   async function fetchTicketsFromApi() {
     var s = loadSession();
     if (!s || !s.token || !authVerified) {
@@ -2970,6 +3114,7 @@
     var hintEl = document.getElementById("modal-cart-multi-hint");
     var summaryEl = document.getElementById("modal-cart-summary");
     var checkoutLabel = document.getElementById("modal-cart-checkout-label");
+    var clearAllBtn = document.getElementById("modal-cart-clear-all");
     if (!numbersRoot) return;
     var onRaffle = IS_RAFFLE_PURCHASE_PAGE;
     var chipRemoveSvg =
@@ -3027,6 +3172,7 @@
     }
 
     if ((!items || !items.length) && !draftNums.length) {
+      if (clearAllBtn) clearAllBtn.hidden = true;
       if (onRaffle) {
         numbersRoot.innerHTML =
           '<div class="cart-modal__chips-row">' +
@@ -3097,6 +3243,7 @@
       }
     }
     numbersRoot.innerHTML = html;
+    if (clearAllBtn) clearAllBtn.hidden = totalNums < 1;
     if (btnCheckout) {
       btnCheckout.disabled = totalNums < 1;
       btnCheckout.removeAttribute("data-checkout-draft");
@@ -3125,7 +3272,7 @@
         "К оплате: " + formatRubleAmount(totalAmount) + " ₽, номерков: " + String(totalNums);
     }
     if (hintEl) {
-      if (items.length > 1) {
+      if (items && items.length > 1) {
         hintEl.hidden = false;
         hintEl.textContent =
           "Несколько заявок — кнопка откроет первую. Остальные оплатите по очереди из корзины.";
@@ -5147,8 +5294,57 @@
     if (e.target === modalActionError) closeModal(modalActionError);
   });
 
-  document.getElementById("modal-cart-close")?.addEventListener("click", function () {
-    closeCartModal();
+  document.getElementById("modal-cart-clear-all")?.addEventListener("click", function () {
+    var nowCl = Date.now();
+    if (nowCl - lastCartClearAllAt < 550) return;
+    lastCartClearAllAt = nowCl;
+    var hadAny =
+      (raffleDataCache.cart && raffleDataCache.cart.items && raffleDataCache.cart.items.length) ||
+      (IS_RAFFLE_PURCHASE_PAGE && raffleDetailState.selected && raffleDetailState.selected.size);
+    if (!hadAny) return;
+    optimisticClearEntireCartUi();
+    fetch("/api/raffles/cart/clear", { method: "POST", headers: authHeaders() })
+      .then(function (res) {
+        return res.json().then(function (d) {
+          return { ok: res.ok, d: d };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+        fetchTicketsFromApi()
+          .then(function (data) {
+            if (modalTickets && modalTickets.classList.contains("is-open")) {
+              renderTicketsModalBody(data);
+            }
+          })
+          .catch(function () {});
+        fetchCartFromApi()
+          .then(function () {
+            if (modalCart && modalCart.classList.contains("is-open")) {
+              renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+            }
+          })
+          .catch(function () {});
+      })
+      .catch(function (err) {
+        showToast(String(err.message || "Ошибка"), "error");
+        fetchCartFromApi()
+          .then(function () {
+            if (modalCart && modalCart.classList.contains("is-open")) {
+              renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+            }
+            if (IS_RAFFLE_PURCHASE_PAGE) loadRaffleTicketSlice().catch(function () {});
+            updateRaffleSelectionLabel();
+          })
+          .catch(function () {});
+        if (modalTickets && modalTickets.classList.contains("is-open")) {
+          fetchTicketsFromApi()
+            .then(function (data) {
+              renderTicketsModalBody(data);
+            })
+            .catch(function () {});
+        }
+      });
   });
   modalCart?.addEventListener("click", function (e) {
     if (e.target === modalCart) {
@@ -5183,14 +5379,20 @@
         renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
       }
       if (IS_RAFFLE_PURCHASE_PAGE) {
-        loadRaffleTicketSlice().catch(function () {});
+        syncVisibleGridCellSelectionState(ticketD);
       }
       return;
     }
     var orderId = Number(rm.getAttribute("data-order-id"));
     var ticket = Number(rm.getAttribute("data-ticket"));
     if (!Number.isFinite(orderId) || !Number.isFinite(ticket)) return;
-    rm.disabled = true;
+    optimisticRemoveOneReservedTicketFromCart(orderId, ticket);
+    optimisticSyncLocalRaffleOrderAfterTicketRemoved(orderId, ticket);
+    patchRaffleLastCellsReservedToFree([ticket]);
+    if (modalCart && modalCart.classList.contains("is-open")) {
+      renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+    }
+    updateRaffleSelectionLabel();
     fetch("/api/raffles/orders/" + String(orderId) + "/tickets/" + String(ticket), {
       method: "DELETE",
       headers: authHeaders(),
@@ -5201,24 +5403,40 @@
         });
       })
       .then(function (x) {
-        if (!x.ok) throw new Error(x.d.error || "Ошибка");
-        return Promise.all([fetchCartFromApi(), fetchTicketsFromApi().catch(function () {})]);
-      })
-      .then(function () {
-        if (modalCart && modalCart.classList.contains("is-open")) {
-          renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
-        }
-        if (modalTickets && modalTickets.classList.contains("is-open")) {
-          renderTicketsModalBody(
-            raffleDataCache.tickets || { reserved: [], pending_review: [], confirmed: [] },
-          );
-        }
+        if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+        fetchTicketsFromApi()
+          .then(function (data) {
+            if (modalTickets && modalTickets.classList.contains("is-open")) {
+              renderTicketsModalBody(data);
+            }
+          })
+          .catch(function () {});
+        fetchCartFromApi()
+          .then(function () {
+            if (modalCart && modalCart.classList.contains("is-open")) {
+              renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+            }
+          })
+          .catch(function () {});
       })
       .catch(function (err) {
         showToast(String(err.message || "Ошибка"), "error");
-      })
-      .finally(function () {
-        if (rm) rm.disabled = false;
+        fetchCartFromApi()
+          .then(function () {
+            if (modalCart && modalCart.classList.contains("is-open")) {
+              renderCartModalBody(raffleDataCache.cart ? raffleDataCache.cart.items : []);
+            }
+            if (IS_RAFFLE_PURCHASE_PAGE) loadRaffleTicketSlice().catch(function () {});
+            updateRaffleSelectionLabel();
+          })
+          .catch(function () {});
+        if (modalTickets && modalTickets.classList.contains("is-open")) {
+          fetchTicketsFromApi()
+            .then(function (data) {
+              renderTicketsModalBody(data);
+            })
+            .catch(function () {});
+        }
       });
   });
   document.getElementById("modal-cart-checkout")?.addEventListener("click", function () {

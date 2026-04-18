@@ -2870,7 +2870,8 @@ html.bottom-nav-hidden-by-fast-input .cart-action-strip {
 /* Корзина и «Мои билеты»: высота по контенту, ограничение сверху — шторка не забирает весь экран */
 .modal-overlay--cart .modal.modal--cart.cart-sheet {
   height: auto;
-  min-height: 0;
+  min-height: 50vh;
+  min-height: 50dvh;
   max-height: min(62dvh, 68vh);
   transform: translateY(calc(100% + var(--dock-sheet-gap, 61px) + var(--sheet-drag-y, 0px)));
   transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
@@ -2899,7 +2900,8 @@ html.bottom-nav-hidden-by-fast-input .cart-action-strip {
   }
 
   .modal-overlay--cart .modal.modal--cart.cart-sheet {
-    max-height: min(50dvh, 56vh);
+    /* Не ниже половины экрана; верх — как у шторки билетов, чтобы список номерков помещался */
+    max-height: min(78dvh, 85vh);
     border-radius: 22px 22px 0 0;
   }
 
@@ -5296,6 +5298,33 @@ a.raffle-pay__btn {
 .chat-bubble__text {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-bubble__text .chat-max-join-btn,
+.admin-msg-bubble__body .chat-max-join-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(145deg, #5b21b6 0%, #7c3aed 48%, #6d28d9 100%);
+  box-shadow: 0 4px 14px rgba(91, 33, 182, 0.35);
+  word-break: break-word;
+}
+
+.chat-bubble__text .chat-max-join-btn:active,
+.admin-msg-bubble__body .chat-max-join-btn:active {
+  filter: brightness(0.95);
 }
 
 .panel-chat__input {

@@ -85,6 +85,7 @@ import {
   listConfirmedTicketGroupsForUser,
   listPendingReviewTicketGroupsForUser,
   listReservedOrdersForUser,
+  clearAllUserReservedCartItems,
   orderToDto,
   rejectOrderByAdmin,
   getPublicOrderStatusByToken,
@@ -114,6 +115,26 @@ const PORT = Number(process.env.PORT) || 3000;
 function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
   const r = Math.floor(Number(raffleId));
   if (Number.isFinite(r) && r > 0) broadcastRaffleGridUpdated(r);
+}
+
+/** Ссылка-приглашение в приватный чат Андрея Болотова в MAX (показывается в авто-сообщении после утверждения чека). */
+const MAX_PRIVATE_CHAT_JOIN_URL =
+  "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
+
+function buildStaffRaffleReceiptConfirmedChatBody(raffleTitle: string, ticketNumbers: number[]): string {
+  const uniq = [
+    ...new Set(ticketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
+  ];
+  uniq.sort((a, b) => a - b);
+  const numsHuman = uniq.length ? uniq.map((n) => `№${n}`).join(", ") : "—";
+  const safeTitle = String(raffleTitle || "акция")
+    .trim()
+    .slice(0, 180);
+  return (
+    `Поздравляем! Чек по акции «${safeTitle}» подтверждён — номерки закреплены за вами: ${numsHuman}.\n\n` +
+    `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
+    MAX_PRIVATE_CHAT_JOIN_URL
+  );
 }
 
 const RAFFLE_VIEW_TTL_MS = 70_000;
@@ -1058,6 +1079,17 @@ app.get("/api/raffles/cart", (c) => {
   return c.json({ items, server_time_ms: Date.now() });
 });
 
+app.post("/api/raffles/cart/clear", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  if (!rateLimitAllow(`post:cart-clear:${u.id}`, 15, 60_000)) return rateLimitExceeded(c);
+  const r = clearAllUserReservedCartItems(u.id);
+  if (!r.ok) return c.json({ error: r.error }, 400);
+  broadcastRaffleTicketsUpdated(u.id);
+  for (const rid of r.raffle_ids) notifyRaffleGridMutated(rid);
+  return c.json({ ok: true, server_time_ms: Date.now() });
+});
+
 app.get("/api/raffles/my-tickets", (c) => {
   const u = requireUser(c);
   if (u instanceof Response) return u;
@@ -1351,10 +1383,27 @@ app.post("/api/admin/raffle-payments/:orderId/confirm", (c) => {
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
   const owner = listPendingPayments().find((p) => Number(p.id) === orderId);
+  const ticketNumsBefore = getTicketNumbersForOrder(orderId);
   const res = confirmOrderByAdmin(orderId);
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (owner && Number.isFinite(Number(owner.user_id))) {
-    broadcastRaffleTicketsUpdated(Number(owner.user_id));
+    const uid = Number(owner.user_id);
+    try {
+      const title = String(owner.raffle_title ?? "").trim() || "Акция";
+      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore);
+      const msgId = insertSupportMessage(uid, body, true, null);
+      markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = getSupportMessageById(msgId);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      notifyUserEmailStaffReply(uid, { body, attachmentName: null, attachmentMime: null });
+    } catch (e) {
+      console.error(
+        "[admin/raffle-payments confirm] chat notify:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+    broadcastRaffleTicketsUpdated(uid);
   }
   notifyRaffleGridMutated(owner?.raffle_id);
   return c.json({ ok: true });

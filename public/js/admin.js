@@ -112,10 +112,36 @@
     );
   }
 
+  function formatAdminBodyWithMaxJoinLineAsButton(escapedBody) {
+    var raw = String(escapedBody || "");
+    if (!raw) return "";
+    var lines = raw.split(/\n/g);
+    var out = [];
+    var maxJoinRe = /^https:\/\/max\.ru\/join\/[A-Za-z0-9_-]+$/;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (maxJoinRe.test(line)) {
+        var href = line.replace(/"/g, "&quot;");
+        out.push(
+          '<a class="chat-max-join-btn" href="' +
+            href +
+            '" target="_blank" rel="noopener noreferrer">Присоединиться к чату в MAX</a>',
+        );
+      } else if (line) {
+        out.push(line);
+      } else {
+        out.push("");
+      }
+    }
+    return out.join("<br/>");
+  }
+
   function messageBubbleInnerHtml(m) {
     var att = attachmentHtml(m);
     var body = String(m.body || "").trim();
-    var text = body ? '<div class="admin-msg-bubble__body">' + esc(m.body) + "</div>" : "";
+    var text = body
+      ? '<div class="admin-msg-bubble__body">' + formatAdminBodyWithMaxJoinLineAsButton(esc(m.body)) + "</div>"
+      : "";
     return att + text;
   }
 

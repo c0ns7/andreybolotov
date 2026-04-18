@@ -752,6 +752,30 @@ export function listReservedOrdersForUser(userId: number): Array<{
   }));
 }
 
+/** Снять все видимые пользователю активные брони (очистка корзины) за один заход к БД по списку заявок. */
+export function clearAllUserReservedCartItems(
+  userId: number,
+): { ok: true; raffle_ids: number[] } | { ok: false; error: string } {
+  cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const rows = db
+    .prepare(
+      `SELECT o.id, o.raffle_id FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
+         AND COALESCE(r.hidden_from_public, 0) = 0`,
+    )
+    .all(userId, now) as { id: number; raffle_id: number }[];
+  const raffleIds = new Set<number>();
+  for (const row of rows) {
+    const res = userCancelReservedRaffleOrder(row.id, userId);
+    if (!res.ok) return { ok: false, error: res.error };
+    const rid = Number(row.raffle_id);
+    if (Number.isFinite(rid) && rid > 0) raffleIds.add(rid);
+  }
+  return { ok: true, raffle_ids: [...raffleIds] };
+}
+
 export function removeTicketFromReservedOrder(
   orderId: number,
   userId: number,
