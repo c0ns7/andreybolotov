@@ -4501,8 +4501,8 @@ a.raffle-pay__btn {
   position: relative;
   width: 100%;
   max-width: 24rem;
-  max-height: min(92dvh, calc(100dvh - 32px));
-  overflow: hidden auto;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px);
+  overflow: hidden;
   margin: 0 auto;
   background: #fff;
   border-radius: 32px;
@@ -4510,6 +4510,7 @@ a.raffle-pay__btn {
   padding: 24px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   transform: translateY(12px);
   transition: transform 0.25s ease;
 }
@@ -4546,14 +4547,20 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__body {
-  min-height: 200px;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   padding-top: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .profile-modal__hero {
+  flex-shrink: 0;
   text-align: center;
   margin-bottom: 24px;
 }
@@ -4587,6 +4594,7 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__card {
+  flex-shrink: 0;
   background: #f9fafb;
   border: 1px solid #f3f4f6;
   border-radius: 16px;
@@ -4612,6 +4620,10 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__tickets-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   margin-bottom: 12px;
   border-radius: 16px;
   border: 1px solid #f3f4f6;
@@ -4620,6 +4632,7 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__tickets-card-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4642,9 +4655,13 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__tickets-body {
-  max-height: min(42vh, 340px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(52dvh, 420px);
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 16px;
   background: #f9fafb;
   border: none;
@@ -4718,6 +4735,7 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__hint {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -4736,6 +4754,7 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__stats {
+  flex-shrink: 0;
   display: flex;
   align-items: stretch;
   justify-content: space-around;
@@ -4781,10 +4800,12 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__admin {
+  flex-shrink: 0;
   margin: 12px 0 12px;
 }
 
 .profile-modal__actions-row {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -4846,24 +4867,29 @@ a.raffle-pay__btn {
   transform: scale(0.98);
 }
 
-/* Профиль на телефонах — нижняя шторка (оверлей выше дока, шторка к низу экрана + safe area) */
+/* Профиль на телефонах — шторка на всю высоту экрана, прокрутка внутри + отдельный скролл «Мои билеты» */
 @media (max-width: 640px) {
   .modal-overlay--profile {
-    align-items: flex-end;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
     padding: 0;
-    padding-top: max(8px, env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .modal-overlay--profile .profile-modal {
     max-width: none;
     width: 100%;
-    max-height: min(70dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    height: auto;
     margin: 0;
-    padding: 10px 14px max(12px, env(safe-area-inset-bottom, 0px));
-    border-radius: 18px 18px 0 0;
+    padding: 10px 14px 12px;
+    border-radius: 20px 20px 0 0;
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.12);
-    overflow: hidden auto;
+    overflow: hidden;
     -webkit-overflow-scrolling: touch;
     transform: translateY(calc(100% + 24px + var(--sheet-drag-y, 0px)));
     transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
@@ -4886,9 +4912,16 @@ a.raffle-pay__btn {
   }
 
   .profile-modal__body {
+    flex: 1 1 auto;
     min-height: 0;
     justify-content: flex-start;
     padding-top: 0;
+  }
+
+  .profile-modal__tickets-body {
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 120px;
   }
 
   .profile-modal__close {
