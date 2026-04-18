@@ -72,6 +72,11 @@
   let chatMessagesPollTimer = null;
   /** @type {number | null} */
   let chatUnreadPollTimer = null;
+  /** Снэпшот списка сообщений (id, прочитанность, длина тела), чтобы не перерисовывать чат без изменений */
+  let lastChatMessageListSig = "";
+  let lastChatStaffTypingFromHttp = false;
+  /** @type {Array<{ id: number; is_staff: boolean; read_by_staff: boolean; body: string; created_at: number }> | null} */
+  let lastChatMessagesCache = null;
 
   let staffTypingActive = false;
   /** @type {number | null} */
@@ -420,7 +425,19 @@
     const meta = out
       ? '<div class="chat-bubble__meta--out"><span class="chat-bubble__time">' + time + "</span>" + ticksHtml(m) + "</div>"
       : '<span class="chat-bubble__time">' + time + "</span>";
-    return '<div class="' + rowClass + '"><div class="' + bClass + '">' + att + textBlock + meta + "</div></div>";
+    return (
+      '<div class="' +
+      rowClass +
+      '" data-chat-msg-id="' +
+      String(m.id) +
+      '"><div class="' +
+      bClass +
+      '">' +
+      att +
+      textBlock +
+      meta +
+      "</div></div>"
+    );
   }
 
   function setAppView(_view) {
@@ -505,7 +522,10 @@
     }
     mountStaffTypingIndicator();
     var box = document.getElementById("chat-messages");
-    if (box) box.scrollTop = box.scrollHeight;
+    if (box) {
+      var dist = box.scrollHeight - box.scrollTop - box.clientHeight;
+      if (dist <= 120) box.scrollTop = box.scrollHeight;
+    }
   }
 
   function resendUserTypingFromInput() {
@@ -534,10 +554,51 @@
     }).catch(function () {});
   }
 
-  function renderChatMessages(messages) {
+  function computeChatMessageListSig(messages) {
+    if (!messages || !messages.length) return "";
+    return messages
+      .map(function (m) {
+        return (
+          String(m.id) +
+          "," +
+          (m.is_staff ? "1" : "0") +
+          "," +
+          (m.read_by_staff ? "1" : "0") +
+          "," +
+          String((m.body || "").length) +
+          "," +
+          String(m.created_at || 0)
+        );
+      })
+      .join("|");
+  }
+
+  function cloneMessagesForCache(messages) {
+    if (!messages || !messages.length) return [];
+    return messages.map(function (x) {
+      return {
+        id: x.id,
+        is_staff: !!x.is_staff,
+        read_by_staff: !!x.read_by_staff,
+        body: String(x.body || ""),
+        created_at: x.created_at,
+      };
+    });
+  }
+
+  function renderChatMessages(messages, options) {
+    options = options || {};
     const box = document.getElementById("chat-messages");
     if (!box) return;
+    var forceBottom = !!options.forceScrollBottom;
+    var preserveScroll = options.preserveScroll !== false && !forceBottom;
+    var distFromBottom = 0;
+    if (preserveScroll && box.querySelector("[data-chat-msg-id]")) {
+      distFromBottom = box.scrollHeight - box.scrollTop - box.clientHeight;
+    }
     if (!messages || !messages.length) {
+      lastChatMessagesCache = [];
+      lastChatMessageListSig = "";
       box.innerHTML =
         '<p class="chat-empty" style="text-align:center;color:#9ca3af;font-size:0.85rem;margin:auto 0;">Напишите нам — ответим в порядке очереди.</p>';
       if (staffTypingActive) mountStaffTypingIndicator();
@@ -545,10 +606,93 @@
     }
     box.innerHTML = messages.map(chatBubbleHtml).join("");
     if (staffTypingActive) mountStaffTypingIndicator();
-    box.scrollTop = box.scrollHeight;
+    lastChatMessagesCache = cloneMessagesForCache(messages);
+    lastChatMessageListSig = computeChatMessageListSig(messages);
+    function finishScroll() {
+      if (forceBottom) {
+        box.scrollTop = box.scrollHeight;
+        return;
+      }
+      if (preserveScroll) {
+        var nearBottom = distFromBottom <= 88;
+        if (nearBottom) {
+          box.scrollTop = box.scrollHeight;
+        } else {
+          var maxScroll = Math.max(0, box.scrollHeight - box.clientHeight);
+          box.scrollTop = Math.max(0, maxScroll - distFromBottom);
+        }
+      } else {
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(finishScroll);
+    });
   }
 
-  async function loadChatMessagesHttp() {
+  function tryPatchChatReadsOnly(newMsgs) {
+    var old = lastChatMessagesCache;
+    if (!old || !newMsgs || old.length !== newMsgs.length) return false;
+    var i;
+    for (i = 0; i < old.length; i++) {
+      if (old[i].id !== newMsgs[i].id) return false;
+      if (old[i].is_staff !== !!newMsgs[i].is_staff) return false;
+      if (String(old[i].body) !== String(newMsgs[i].body || "")) return false;
+    }
+    var changed = false;
+    for (i = 0; i < newMsgs.length; i++) {
+      if (!old[i].is_staff && old[i].read_by_staff !== !!newMsgs[i].read_by_staff) changed = true;
+    }
+    if (!changed) {
+      lastChatMessagesCache = cloneMessagesForCache(newMsgs);
+      lastChatMessageListSig = computeChatMessageListSig(newMsgs);
+      return true;
+    }
+    var box = document.getElementById("chat-messages");
+    if (!box) return false;
+    for (i = 0; i < newMsgs.length; i++) {
+      if (newMsgs[i].is_staff) continue;
+      var row = box.querySelector('[data-chat-msg-id="' + String(newMsgs[i].id) + '"]');
+      if (!row) return false;
+      var ticks = row.querySelector(".chat-bubble__ticks");
+      if (!ticks) continue;
+      var read = !!newMsgs[i].read_by_staff;
+      ticks.classList.toggle("chat-bubble__ticks--read", read);
+      ticks.setAttribute("aria-label", read ? "Прочитано поддержкой" : "Доставлено");
+      ticks.setAttribute("title", read ? "Прочитано поддержкой" : "Доставлено");
+      ticks.textContent = read ? "✓✓" : "✓";
+    }
+    lastChatMessagesCache = cloneMessagesForCache(newMsgs);
+    lastChatMessageListSig = computeChatMessageListSig(newMsgs);
+    return true;
+  }
+
+  function tryAppendNewChatOnly(oldArr, newArr) {
+    if (!oldArr || !newArr || newArr.length <= oldArr.length) return false;
+    var i;
+    for (i = 0; i < oldArr.length; i++) {
+      if (oldArr[i].id !== newArr[i].id) return false;
+    }
+    var box = document.getElementById("chat-messages");
+    if (!box) return false;
+    var empty = box.querySelector(".chat-empty");
+    if (empty) empty.remove();
+    for (i = oldArr.length; i < newArr.length; i++) {
+      var wrap = document.createElement("div");
+      wrap.innerHTML = chatBubbleHtml(newArr[i]);
+      var row = wrap.firstElementChild;
+      if (row) box.appendChild(row);
+    }
+    if (staffTypingActive) mountStaffTypingIndicator();
+    lastChatMessagesCache = cloneMessagesForCache(newArr);
+    lastChatMessageListSig = computeChatMessageListSig(newArr);
+    var dist = box.scrollHeight - box.scrollTop - box.clientHeight;
+    if (dist <= 120) box.scrollTop = box.scrollHeight;
+    return true;
+  }
+
+  async function loadChatMessagesHttp(options) {
+    options = options || {};
     const s = loadSession();
     if (!s || !s.token || !authVerified) return;
     try {
@@ -556,10 +700,36 @@
         headers: authHeaders(),
         cache: "no-store",
       });
-      renderChatMessages(data.messages || []);
-      if (typeof data.staff_typing === "boolean") {
-        setStaffTypingVisible(data.staff_typing);
+      const messages = data.messages || [];
+      const typing = typeof data.staff_typing === "boolean" ? data.staff_typing : false;
+      const listSig = computeChatMessageListSig(messages);
+
+      if (listSig === lastChatMessageListSig) {
+        if (typing !== lastChatStaffTypingFromHttp) {
+          lastChatStaffTypingFromHttp = typing;
+          setStaffTypingVisible(typing);
+        }
+        return;
       }
+
+      if (lastChatMessagesCache && tryAppendNewChatOnly(lastChatMessagesCache, messages)) {
+        lastChatStaffTypingFromHttp = typing;
+        setStaffTypingVisible(typing);
+        return;
+      }
+
+      if (lastChatMessagesCache && tryPatchChatReadsOnly(messages)) {
+        lastChatStaffTypingFromHttp = typing;
+        setStaffTypingVisible(typing);
+        return;
+      }
+
+      lastChatStaffTypingFromHttp = typing;
+      setStaffTypingVisible(typing);
+      renderChatMessages(messages, {
+        forceScrollBottom: !!options.forceScrollBottom,
+        preserveScroll: !options.forceScrollBottom,
+      });
     } catch (_) {
       /* ignore */
     }
@@ -622,8 +792,9 @@
     chatMessagesPollTimer = window.setInterval(function () {
       var panel = document.getElementById("panel-chat");
       if (!panel || panel.classList.contains("screen--hidden")) return;
+      if (chatWs && chatWs.readyState === WebSocket.OPEN) return;
       loadChatMessagesHttp();
-    }, 2500);
+    }, 9000);
   }
 
   function stopChatMessagesPolling() {
@@ -643,6 +814,23 @@
       el.setAttribute("title", "Прочитано поддержкой");
       el.textContent = "✓✓";
     });
+    if (lastChatMessagesCache && lastChatMessagesCache.length) {
+      lastChatMessagesCache = lastChatMessagesCache.map(function (m) {
+        if (m.is_staff) return m;
+        return Object.assign({}, m, { read_by_staff: true });
+      });
+      lastChatMessageListSig = computeChatMessageListSig(
+        lastChatMessagesCache.map(function (m) {
+          return {
+            id: m.id,
+            is_staff: m.is_staff,
+            read_by_staff: m.read_by_staff,
+            body: m.body,
+            created_at: m.created_at,
+          };
+        }),
+      );
+    }
   }
 
   /**
@@ -886,13 +1074,12 @@
       }
       if (d.type === "ready" && Array.isArray(d.messages)) {
         gotReady = true;
-        renderChatMessages(d.messages);
+        renderChatMessages(d.messages, { forceScrollBottom: true });
         resendUserTypingFromInput();
         return;
       }
       if (d.type === "thread_read") {
         markOutgoingChatTicksReadInDom();
-        loadChatMessagesHttp();
         return;
       }
       if (d.type === "typing" && d.from === "staff") {
@@ -912,6 +1099,27 @@
         const row = wrap.firstElementChild;
         if (row) box.appendChild(row);
         if (staffTypingActive) mountStaffTypingIndicator();
+        if (lastChatMessagesCache) {
+          var nm = d.message;
+          lastChatMessagesCache.push({
+            id: nm.id,
+            is_staff: !!nm.is_staff,
+            read_by_staff: !!nm.read_by_staff,
+            body: String(nm.body || ""),
+            created_at: nm.created_at,
+          });
+          lastChatMessageListSig = computeChatMessageListSig(
+            lastChatMessagesCache.map(function (m) {
+              return {
+                id: m.id,
+                is_staff: m.is_staff,
+                read_by_staff: m.read_by_staff,
+                body: m.body,
+                created_at: m.created_at,
+              };
+            }),
+          );
+        }
         box.scrollTop = box.scrollHeight;
         if (d.message.is_staff && chatOpen) {
           postMarkStaffChatRead().then(function () {
@@ -944,7 +1152,7 @@
     panel.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     setChatTabUnreadHighlight(false);
-    loadChatMessagesHttp()
+    loadChatMessagesHttp({ forceScrollBottom: true })
       .then(function () {
         return postMarkStaffChatRead();
       })
@@ -972,6 +1180,9 @@
     document.body.style.overflow = "";
     disconnectChatWs();
     stopChatMessagesPolling();
+    lastChatMessageListSig = "";
+    lastChatMessagesCache = null;
+    lastChatStaffTypingFromHttp = false;
     setBottomNavActive();
     refreshChatUnreadCount();
   }
@@ -6896,7 +7107,7 @@
             name: data.name,
             mime: data.mime,
           }).then(function (resp) {
-            renderChatMessages(resp.messages || []);
+            renderChatMessages(resp.messages || [], { forceScrollBottom: true });
             if (input) input.value = "";
             syncChatSendState();
           });
@@ -6928,7 +7139,7 @@
     setChatComposerSending(true);
     postChatMessage(textToSend, null)
       .then(function (data) {
-        renderChatMessages(data.messages || []);
+        renderChatMessages(data.messages || [], { forceScrollBottom: true });
       })
       .catch(function (err) {
         if (input) input.value = textToSend;

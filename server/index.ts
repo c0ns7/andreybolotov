@@ -99,6 +99,7 @@ import {
   getRaffleOccupiedCount,
   listWholesaleSlotsForUser,
   adminUserTicketsForPrimaryRaffle,
+  listUserIdsWithConfirmedRaffleOrders,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import {
@@ -132,6 +133,14 @@ function buildStaffRaffleReceiptConfirmedChatBody(raffleTitle: string, ticketNum
     .slice(0, 180);
   return (
     `Поздравляем! Чек по акции «${safeTitle}» подтверждён — номерки закреплены за вами: ${numsHuman}.\n\n` +
+    `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
+    MAX_PRIVATE_CHAT_JOIN_URL
+  );
+}
+
+/** Только приглашение в MAX (без текста про закрепление номерков) — массовая рассылка в чат. */
+function buildStaffMaxPrivateInviteOnlyChatBody(): string {
+  return (
     `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
     MAX_PRIVATE_CHAT_JOIN_URL
   );
@@ -1350,6 +1359,40 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   broadcastRaffleTicketsUpdated(u.id);
   notifyRaffleGridMutated(order.raffle_id);
   return c.json({ order: orderToDto(order), server_time_ms: Date.now() });
+});
+
+app.post("/api/admin/broadcast-max-chat-invite", (c) => {
+  const auth = requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!rateLimitAllow(`post:broadcast-max:${auth.id}`, 2, 120_000)) {
+    return rateLimitExceeded(c);
+  }
+  const userIds = listUserIdsWithConfirmedRaffleOrders();
+  if (!userIds.length) {
+    return c.json({ ok: true, sent: 0, total: 0, message: "Нет пользователей с подтверждёнными оплатами" });
+  }
+  const body = buildStaffMaxPrivateInviteOnlyChatBody();
+  let sent = 0;
+  const errors: string[] = [];
+  for (const uid of userIds) {
+    try {
+      const msgId = insertSupportMessage(uid, body, true, null);
+      markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = getSupportMessageById(msgId);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      sent++;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`user ${uid}: ${msg}`);
+    }
+  }
+  return c.json({
+    ok: true,
+    sent,
+    total: userIds.length,
+    errors: errors.length ? errors.slice(0, 5) : [],
+  });
 });
 
 app.get("/api/admin/raffle-payments", (c) => {

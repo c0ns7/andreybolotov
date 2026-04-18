@@ -722,6 +722,20 @@ export function getTicketNumbersForOrder(orderId: number): number[] {
   return rows.map((r) => r.ticket_number);
 }
 
+/** Пользователи с хотя бы одной подтверждённой оплатой по акции (для рассылок в чат). */
+export function listUserIdsWithConfirmedRaffleOrders(): number[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT o.user_id AS uid
+       FROM raffle_orders o
+       INNER JOIN users u ON u.id = o.user_id
+       WHERE o.status = 'confirmed' AND COALESCE(u.blocked, 0) = 0
+       ORDER BY uid ASC`,
+    )
+    .all() as { uid: number }[];
+  return rows.map((r) => Number(r.uid)).filter((id) => Number.isFinite(id) && id > 0);
+}
+
 export function listReservedOrdersForUser(userId: number): Array<{
   order: ReturnType<typeof orderToDto>;
   numbers: number[];

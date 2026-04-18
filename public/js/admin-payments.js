@@ -226,6 +226,45 @@
     });
   }
 
+  function bindMaxInviteBroadcast(root, token) {
+    if (!root || !token) return;
+    var btn = root.querySelector("[data-admin-max-invite-broadcast]");
+    if (!btn || btn.getAttribute("data-bound-broadcast") === "1") return;
+    btn.setAttribute("data-bound-broadcast", "1");
+    btn.addEventListener("click", function () {
+      if (
+        !window.confirm(
+          "Отправить в чат поддержки всем с подтверждённой оплатой короткое приглашение в приватный чат MAX (без текста про номерки)? Повтор — не чаще раз в 2 минуты.",
+        )
+      ) {
+        return;
+      }
+      btn.disabled = true;
+      fetch("/api/admin/broadcast-max-chat-invite", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: "{}",
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { ok: res.ok, data: data };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok) throw new Error((x.data && x.data.error) || "Ошибка");
+          var sent = Number(x.data.sent) || 0;
+          var total = Number(x.data.total) || 0;
+          window.alert("Готово: сообщение отправлено " + String(sent) + " из " + String(total) + " пользователей.");
+        })
+        .catch(function (e) {
+          window.alert(String(e.message || "Ошибка"));
+        })
+        .finally(function () {
+          btn.disabled = false;
+        });
+    });
+  }
+
   function loadList() {
     const listEl = document.getElementById("admin-payments-list");
     const tabsSlot = document.getElementById("admin-payments-tabs-slot");
@@ -272,9 +311,11 @@
             "<p class=\"admin-payments-empty__hint\">Нет активных броней и заявок с чеками.</p>" +
             '<div class="admin-payments-empty__actions">' +
             '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
+            '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (подтверждённые)</button>' +
             "</div>" +
             "</div>";
           bindPaymentsReloadButton(listEl);
+          bindMaxInviteBroadcast(listEl, s.token);
           return;
         }
 
@@ -299,6 +340,12 @@
           '">На подтверждение <span class="admin-payments-tab__badge" data-payments-count="pending">' +
           String(nPen) +
           "</span></button>";
+        tabsHtml += "</div>";
+        tabsHtml += '<div class="admin-payments-broadcast">';
+        tabsHtml +=
+          '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (подтверждённые)</button>';
+        tabsHtml +=
+          '<p class="admin-payments-broadcast__hint">Всем с подтверждённой оплатой — в чат уйдёт только приглашение в приватный MAX, без текста про номерки.</p>';
         tabsHtml += "</div>";
 
         var panelsHtml = "";
@@ -334,6 +381,7 @@
         var rootForTabs = mainEl || listEl;
         bindPaymentsTabs(rootForTabs);
         bindChatHandlers(listEl, s.token);
+        bindMaxInviteBroadcast(rootForTabs, s.token);
         initReservedUntilCountdown(serverTimeMs);
       })
       .catch(function (e) {
