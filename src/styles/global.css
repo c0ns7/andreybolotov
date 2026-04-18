@@ -1217,11 +1217,12 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   white-space: nowrap;
 }
 
-.bottom-nav-btn--dock-search {
+/* Dock search only on raffle grid; must beat later .bottom-nav-btn { display: flex } */
+.bottom-nav-btn.bottom-nav-btn--dock-search {
   display: none;
 }
 
-html.raffle-purchase-page .bottom-nav-btn--dock-search {
+html.raffle-grid-page .bottom-nav-btn.bottom-nav-btn--dock-search {
   display: flex;
 }
 

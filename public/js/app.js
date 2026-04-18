@@ -418,7 +418,7 @@
       if (el) el.classList.remove("bottom-nav-btn--active");
     });
 
-    if (searchOpen && tabTicketSearch && IS_RAFFLE_PURCHASE_PAGE) {
+    if (searchOpen && tabTicketSearch && IS_RAFFLE_PURCHASE_PAGE && document.documentElement.classList.contains("raffle-grid-page")) {
       tabTicketSearch.classList.add("bottom-nav-btn--active");
     } else if (cartOpen) {
       /* Корзина — отдельная шторка, без пункта в доке */
