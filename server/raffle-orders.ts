@@ -544,6 +544,19 @@ export function adminFullyReleaseRaffleOrder(
   return { ok: true };
 }
 
+/** Отмена активной брони самим пользователем (только до отправки чека). */
+export function userCancelReservedRaffleOrder(
+  orderId: number,
+  userId: number,
+): { ok: true } | { ok: false; error: string } {
+  const o = getOrderByIdForUser(orderId, userId);
+  if (!o) return { ok: false, error: "Не найдено" };
+  if (o.status !== "reserved") {
+    return { ok: false, error: "Отменить можно только активную бронь до отправки чека" };
+  }
+  return adminFullyReleaseRaffleOrder(orderId, "Отменено пользователем");
+}
+
 export function rejectOrderByAdmin(
   orderId: number,
   opts?: { adminNote?: string },

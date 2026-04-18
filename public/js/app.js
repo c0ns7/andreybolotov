@@ -405,10 +405,9 @@
   }
 
   function setBottomNavActive() {
-    const tabSearch = document.getElementById("tab-search");
+    const tabHome = document.getElementById("tab-home");
     const tabChat = document.getElementById("tab-chat");
     const tabCart = document.getElementById("tab-cart");
-    const tabTickets = document.getElementById("tab-tickets");
     const tabProfile = document.getElementById("tab-profile");
     const panelChat = document.getElementById("panel-chat");
     const modalProfileEl = document.getElementById("modal-profile");
@@ -418,15 +417,26 @@
     const ticketsOpen = modalTickets && modalTickets.classList.contains("is-open");
     const searchOpen = modalTicketSearch && modalTicketSearch.classList.contains("is-open");
 
-    [tabSearch, tabChat, tabCart, tabTickets, tabProfile].forEach(function (el) {
+    [tabHome, tabChat, tabCart, tabProfile].forEach(function (el) {
       if (el) el.classList.remove("bottom-nav-btn--active");
     });
 
-    if (searchOpen && tabSearch) tabSearch.classList.add("bottom-nav-btn--active");
-    else if (cartOpen && tabCart) tabCart.classList.add("bottom-nav-btn--active");
-    else if (ticketsOpen && tabTickets) tabTickets.classList.add("bottom-nav-btn--active");
-    else if (chatOpen && tabChat) tabChat.classList.add("bottom-nav-btn--active");
+    if (searchOpen) {
+      /* Поиск номера — отдельная шторка, пункт в доке не подсвечиваем */
+    } else if (cartOpen && tabCart) tabCart.classList.add("bottom-nav-btn--active");
+    else if (ticketsOpen) {
+      /* Модалка «Билеты» (редкие случаи) — без отдельной кнопки в доке */
+    } else if (chatOpen && tabChat) tabChat.classList.add("bottom-nav-btn--active");
     else if (profileOpen && tabProfile) tabProfile.classList.add("bottom-nav-btn--active");
+    else if (
+      tabHome &&
+      (IS_HOME_APP || IS_HOME_SETTINGS_PAGE) &&
+      !IS_RAFFLE_PURCHASE_PAGE &&
+      !IS_RAFFLE_PAY_PAGE &&
+      !IS_RAFFLE_CONFIRM_PAGE
+    ) {
+      tabHome.classList.add("bottom-nav-btn--active");
+    }
   }
 
   function clearStaffTypingAnimation() {
@@ -945,29 +955,32 @@
   function renderDashboard() {
     const s = loadSession();
     const authed = !!(s && s.token && s.phone && authVerified);
-    const nameHero = document.getElementById("profile-modal-heading");
+    const headingHero = document.getElementById("profile-modal-heading");
     const phoneHero = document.getElementById("profile-modal-phone-hero");
-    const fieldName = document.getElementById("profile-field-name");
-    const fieldPhone = document.getElementById("profile-field-phone");
     const fieldEmail = document.getElementById("profile-field-email");
     const letterEl = document.getElementById("bottom-nav-profile-letter");
     const guestBar = document.getElementById("guest-auth-bar");
     const adminWrap = document.getElementById("profile-admin-wrap");
 
     if (guestBar) guestBar.style.display = authed ? "none" : "flex";
-    if (nameHero && phoneHero && fieldName && fieldPhone && fieldEmail) {
-      if (s && s.name) {
-        nameHero.textContent = s.name;
-        phoneHero.textContent = formatRuPhone(s.phone);
-        fieldName.textContent = s.name;
-        fieldPhone.textContent = formatRuPhone(s.phone);
-        fieldEmail.textContent = s.email || "—";
+    if (headingHero) {
+      var nm = s && s.name ? String(s.name).trim() : "";
+      headingHero.textContent = nm || "Профиль";
+    }
+    if (phoneHero) {
+      if (s && s.token && s.phone) {
+        var phDisp = formatRuPhone(s.phone);
+        phoneHero.textContent = phDisp || String(s.phone).trim() || "—";
       } else {
-        nameHero.textContent = "";
         phoneHero.textContent = "";
-        fieldName.textContent = "";
-        fieldPhone.textContent = "";
-        fieldEmail.textContent = "";
+      }
+    }
+    if (fieldEmail) {
+      if (s && s.token && s.email) {
+        var em = String(s.email).trim();
+        fieldEmail.textContent = em || "—";
+      } else {
+        fieldEmail.textContent = "—";
       }
     }
     if (letterEl) {
@@ -1031,6 +1044,7 @@
   const modalTicketSearch = document.getElementById("modal-ticket-search");
   const modalReserveSuccess = document.getElementById("modal-reserve-success");
   const modalReservePayment = document.getElementById("modal-reserve-payment");
+  const modalReservePaymentCancelConfirm = document.getElementById("modal-reserve-payment-cancel-confirm");
   const modalWaitReceipt = document.getElementById("modal-wait-receipt");
   const modalReserveExpired = document.getElementById("modal-reserve-expired");
   const modalActionError = document.getElementById("modal-action-error");
@@ -1922,6 +1936,7 @@
   }
 
   function closeReservePaymentModal() {
+    if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
     stopReservePaymentTimer();
     switchReservePaymentStep("requisites");
     var input = document.getElementById("reserve-payment-file");
@@ -1931,9 +1946,20 @@
     if (modalReservePayment) closeModal(modalReservePayment);
   }
 
+  function requestCloseReservePaymentModal() {
+    if (!modalReservePayment || !modalReservePayment.classList.contains("is-open")) return;
+    if (!reserveFlowState.orderId) {
+      closeReservePaymentModal();
+      return;
+    }
+    if (modalReservePaymentCancelConfirm) openModal(modalReservePaymentCancelConfirm);
+    else closeReservePaymentModal();
+  }
+
   function openReserveExpiredModal() {
     stopReservePaymentTimer();
     if (modalReserveSuccess) closeModal(modalReserveSuccess);
+    if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
     if (modalReservePayment) closeModal(modalReservePayment);
     if (modalWaitReceipt) closeModal(modalWaitReceipt);
     raffleDetailState.order = null;
@@ -2131,7 +2157,7 @@
   }
 
   function syncTicketsNavBadge() {
-    var tab = document.getElementById("tab-tickets");
+    var tab = document.getElementById("tab-profile");
     var badge = document.getElementById("tickets-nav-badge");
     if (!tab || !badge) return;
     var s = loadSession();
@@ -2207,11 +2233,25 @@
     );
   }
 
+  /** Пустой список билетов в модалке профиля (отдельная вёрстка от шторки «Билеты»). */
+  function profileTicketsEmptyAllHtml() {
+    return (
+      '<div class="profile-tickets-empty" role="status">' +
+      '<div class="profile-tickets-empty__icon-ring" aria-hidden="true">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>' +
+      '<path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path>' +
+      "</svg></div>" +
+      '<p class="profile-tickets-empty__title">Билетов пока нет</p>' +
+      '<p class="profile-tickets-empty__sub">Участвуйте в акциях!</p></div>'
+    );
+  }
+
   function ticketsEmptyReservedOnlyHtml() {
     return (
       '<div class="tickets-empty">' +
       '<h4 class="tickets-empty__title">Нет номерков в брони</h4>' +
-      '<p class="tickets-empty__text">Забронируйте номерки в акции. Купленные билеты смотрите во вкладке «Купленные».</p></div>'
+      '<p class="tickets-empty__text">Забронируйте номерки в акции. Купленные билеты — в профиле, раздел «Мои билеты».</p></div>'
     );
   }
 
@@ -2229,41 +2269,6 @@
       '<h4 class="tickets-empty__title">Нет купленных билетов</h4>' +
       '<p class="tickets-empty__text">После оплаты и подтверждения по акциям они появятся здесь.</p></div>'
     );
-  }
-
-  function buildTicketsTimelineHtml(timeline) {
-    if (!Array.isArray(timeline) || !timeline.length) return "";
-    var html = '<div class="tickets-timeline"><p class="tickets-timeline__title">История заказа</p><ol class="tickets-timeline__list">';
-    for (var ti = 0; ti < timeline.length; ti++) {
-      var it = timeline[ti] || {};
-      var at = Number(it.at);
-      var timeStr = "";
-      if (Number.isFinite(at) && at > 0) {
-        try {
-          timeStr = new Date(at).toLocaleString("ru-RU", {
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        } catch (_) {
-          timeStr = "";
-        }
-      }
-      var det = it.detail
-        ? '<span class="tickets-timeline__detail">' + escapeHtml(String(it.detail)) + "</span>"
-        : "";
-      html +=
-        '<li class="tickets-timeline__item"><span class="tickets-timeline__label">' +
-        escapeHtml(String(it.label || it.kind || "")) +
-        '</span><span class="tickets-timeline__time">' +
-        escapeHtml(timeStr) +
-        "</span>" +
-        det +
-        "</li>";
-    }
-    html += "</ol></div>";
-    return html;
   }
 
   function buildTrackingStatusLink(order) {
@@ -2305,7 +2310,6 @@
       html += '<p class="tickets-reserved-meta">' + escapeHtml(meta) + "</p>";
       html += '<p class="tickets-group__meta">Заказ: <strong>' + escapeHtml(orderCode) + "</strong></p>";
       html += buildTrackingStatusLink(ro);
-      html += buildTicketsTimelineHtml(rv.timeline);
       html += '<p class="tickets-reserved-status">' + clockSvg + "ожидают оплаты (" + String(pendingCount) + ")</p>";
       html += '<div class="tickets-chips tickets-chips--pending">';
       for (j = 0; j < nums.length; j++) {
@@ -2353,7 +2357,6 @@
       var cnums = cv.numbers || [];
       html += '<section class="tickets-group">';
       html += '<h3 class="tickets-group__title">' + ctitle + "</h3>";
-      html += buildTicketsTimelineHtml(cv.timeline);
       html += '<div class="tickets-chips">';
       for (j = 0; j < cnums.length; j++) {
         var cj = cnums[j];
@@ -2421,7 +2424,6 @@
       html += '<h3 class="tickets-group__title">' + ptitle + "</h3>";
       html += '<p class="tickets-group__meta">Заказ: <strong>' + escapeHtml(porderCode) + "</strong></p>";
       html += buildTrackingStatusLink(porder);
-      html += buildTicketsTimelineHtml(pv.timeline);
       html += '<p class="tickets-reserved-status">' + clockSvg + "на проверке (" + String(pnums.length) + ")</p>";
       html += '<div class="tickets-chips tickets-chips--pending">';
       for (j = 0; j < pnums.length; j++) {
@@ -2458,40 +2460,47 @@
   }
 
   function paintTicketsModalBody() {
-    var body = document.getElementById("modal-tickets-body");
-    if (!body) return;
+    var modalBody = document.getElementById("modal-tickets-body");
+    var profileBody = document.getElementById("profile-tickets-body");
+    var targets = [modalBody, profileBody].filter(Boolean);
+    if (!targets.length) return;
     var reserved = ticketsModalDataCache.reserved || [];
     var pending = ticketsModalDataCache.pending_review || [];
     var confirmed = ticketsModalDataCache.confirmed || [];
     var bothEmpty = !reserved.length && !pending.length && !confirmed.length;
-    if (bothEmpty) {
-      body.innerHTML = ticketsEmptyAllHtml();
-      updateTicketsModalSubtitle();
-      return;
-    }
     var html = "";
-    if (reserved.length) {
-      html += '<section class="tickets-section"><h3 class="tickets-section__title">Забронированные</h3>';
-      html += buildTicketsReservedHtml(reserved);
-      html += "</section>";
+    if (!bothEmpty) {
+      if (reserved.length) {
+        html += '<section class="tickets-section"><h3 class="tickets-section__title">Забронированные</h3>';
+        html += buildTicketsReservedHtml(reserved);
+        html += "</section>";
+      }
+      if (pending.length) {
+        html += '<section class="tickets-section"><h3 class="tickets-section__title">На проверке</h3>';
+        html += buildTicketsPendingHtml(pending);
+        html += "</section>";
+      }
+      if (confirmed.length) {
+        html += '<section class="tickets-section"><h3 class="tickets-section__title">Утвержденные</h3>';
+        html += buildTicketsConfirmedHtml(confirmed);
+        html += "</section>";
+      }
+      html += buildTicketsWholesaleSectionHtml(
+        ticketsModalDataCache.wholesale_slots || [],
+        reserved,
+        pending,
+        confirmed,
+      );
     }
-    if (pending.length) {
-      html += '<section class="tickets-section"><h3 class="tickets-section__title">На проверке</h3>';
-      html += buildTicketsPendingHtml(pending);
-      html += "</section>";
+    for (var bi = 0; bi < targets.length; bi++) {
+      var tb = targets[bi];
+      if (bothEmpty) {
+        var isProfileTickets = tb.id === "profile-tickets-body" || tb.getAttribute("data-profile-tickets") === "1";
+        tb.innerHTML = isProfileTickets ? profileTicketsEmptyAllHtml() : ticketsEmptyAllHtml();
+      } else {
+        tb.innerHTML = html;
+      }
     }
-    if (confirmed.length) {
-      html += '<section class="tickets-section"><h3 class="tickets-section__title">Утвержденные</h3>';
-      html += buildTicketsConfirmedHtml(confirmed);
-      html += "</section>";
-    }
-    html += buildTicketsWholesaleSectionHtml(
-      ticketsModalDataCache.wholesale_slots || [],
-      reserved,
-      pending,
-      confirmed,
-    );
-    body.innerHTML = html;
     updateTicketsModalSubtitle();
   }
 
@@ -2692,7 +2701,9 @@
     if (!s || !s.token || !authVerified) return;
     try {
       var data = await fetchTicketsFromApi();
-      if (modalTickets && modalTickets.classList.contains("is-open")) {
+      var ticketsSheetOpen = modalTickets && modalTickets.classList.contains("is-open");
+      var profileOpen = modalProfile && modalProfile.classList.contains("is-open");
+      if (ticketsSheetOpen || profileOpen) {
         renderTicketsModalBody(data);
       }
       syncProfileTicketCount();
@@ -4365,6 +4376,20 @@
       location.href = "/home";
     });
 
+    document.getElementById("raffle-page-open-ticket-search")?.addEventListener("click", function () {
+      var s = loadSession();
+      if (!s || !s.token) {
+        openModal(modalLogin);
+        return;
+      }
+      if (!authVerified) return;
+      if (modalTicketSearch && modalTicketSearch.classList.contains("is-open")) {
+        closeTicketSearchModal();
+        return;
+      }
+      openTicketSearchModal();
+    });
+
     document.getElementById("raffle-pay-numbers")?.addEventListener("click", function (e) {
       var rm = e.target.closest("[data-raffle-pay-remove]");
       if (!rm) return;
@@ -4838,10 +4863,78 @@
   });
 
   document.getElementById("reserve-payment-close")?.addEventListener("click", function () {
-    closeReservePaymentModal();
+    requestCloseReservePaymentModal();
   });
   modalReservePayment?.addEventListener("click", function (e) {
-    if (e.target === modalReservePayment) closeReservePaymentModal();
+    if (e.target === modalReservePayment) requestCloseReservePaymentModal();
+  });
+  document.getElementById("reserve-payment-cancel-dismiss")?.addEventListener("click", function () {
+    if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
+  });
+  modalReservePaymentCancelConfirm?.addEventListener("click", function (e) {
+    if (e.target === modalReservePaymentCancelConfirm) {
+      if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
+    }
+  });
+  document.getElementById("reserve-payment-cancel-confirm")?.addEventListener("click", async function () {
+    var oid = Number(reserveFlowState.orderId) || 0;
+    if (oid < 1) {
+      if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
+      closeReservePaymentModal();
+      return;
+    }
+    var dismissBtn = document.getElementById("reserve-payment-cancel-dismiss");
+    var confirmBtn = document.getElementById("reserve-payment-cancel-confirm");
+    if (dismissBtn) dismissBtn.disabled = true;
+    if (confirmBtn) confirmBtn.disabled = true;
+    try {
+      var res = await fetch("/api/raffles/orders/" + String(oid) + "/cancel-reservation", {
+        method: "POST",
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (res.status === 401) throw new Error("SESSION_EXPIRED");
+      if (!res.ok) throw new Error(data.error || "Не удалось отменить бронь");
+      applyRaffleServerTimeSkewFromPayload(data);
+      reserveFlowState.orderId = 0;
+      reserveFlowState.reservedUntil = 0;
+      reserveFlowState.numbers = [];
+      closeReservePaymentModal();
+      try {
+        await syncRaffleOrderAndUi();
+      } catch (_) {
+        raffleDetailState.order = null;
+        raffleDetailState.orderNumbers = [];
+        clearRaffleDetailTimer();
+        clearRaffleReservationCountdownAnchor();
+        resetRaffleDetailSelection();
+        persistRaffleDraftSelection();
+        updateRaffleSelectionLabel();
+        updateRafflePurchaseChrome();
+        setRaffleDetailSteps("grid");
+      }
+      loadRaffleTicketSlice().catch(function () {});
+      fetchCartFromApi().catch(function () {});
+      fetchTicketsFromApi().catch(function () {});
+      loadRafflesFeed().catch(function () {});
+      showToast("Бронь отменена", "success");
+      emitUxEvent("raffle_reservation_cancelled", { order_id: oid });
+    } catch (err) {
+      var msg = String((err && err.message) || "Ошибка");
+      if (msg === "SESSION_EXPIRED") {
+        showActionErrorModal("Сессия истекла", "Войдите снова, чтобы продолжить.", function () {
+          openModal(modalLogin);
+        });
+      } else {
+        showToast(msg, "error");
+      }
+    } finally {
+      if (dismissBtn) dismissBtn.disabled = false;
+      if (confirmBtn) confirmBtn.disabled = false;
+    }
   });
   document.getElementById("reserve-payment-done")?.addEventListener("click", function () {
     switchReservePaymentStep("confirm");
@@ -5190,9 +5283,14 @@
   modalTickets?.addEventListener("click", function (e) {
     if (e.target === modalTickets) closeTicketsModal();
   });
-  modalTickets?.addEventListener("input", function (e) {
+  function ticketsPanelFieldRoot(el) {
+    if (!el || typeof el.closest !== "function") return null;
+    return el.closest("#modal-tickets-body") || el.closest("#profile-tickets-body");
+  }
+  function onTicketsPanelInput(e) {
     var t = e.target;
     if (!t || t.getAttribute("data-tickets-lookup") !== "1") return;
+    if (!ticketsPanelFieldRoot(t)) return;
     var raffleId = Number(t.getAttribute("data-raffle-id"));
     var orderId = Number(t.getAttribute("data-order-id"));
     var row = t.closest(".tickets-add-row");
@@ -5230,8 +5328,11 @@
           setTicketLookupSuffix(span, "error", n);
         });
     }, 320);
-  });
-  modalTickets?.addEventListener("click", function (e) {
+  }
+  modalTickets?.addEventListener("input", onTicketsPanelInput);
+  modalProfile?.addEventListener("input", onTicketsPanelInput);
+  function onTicketsPanelActionClick(e) {
+    if (!ticketsPanelFieldRoot(e.target)) return;
     var attach = e.target.closest("[data-tickets-attach]");
     if (attach) {
       e.preventDefault();
@@ -5253,6 +5354,7 @@
       renderReserveFlowModals();
       switchReservePaymentStep("confirm");
       if (modalTickets) closeModal(modalTickets);
+      if (modalProfile) closeModal(modalProfile);
       if (modalReservePayment) openModal(modalReservePayment);
       startReservePaymentTimer(reserveFlowState.reservedUntil);
       return;
@@ -5327,7 +5429,9 @@
           showToast(String(err.message || "Ошибка"), "error");
         });
     }
-  });
+  }
+  modalTickets?.addEventListener("click", onTicketsPanelActionClick);
+  modalProfile?.addEventListener("click", onTicketsPanelActionClick);
 
   function updateTicketSearchApplyUI() {
     var apply = document.getElementById("ticket-search-apply");
@@ -5739,27 +5843,38 @@
     }, 20);
   }
 
+  function syncBodyOverflowForModals() {
+    if (document.querySelector(".modal-overlay.is-open")) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+  }
+
   function closeModal(overlay) {
     if (!overlay) return;
     if (overlay.id === "modal-wait-receipt") stopWaitReceiptModalTimer();
     clearBottomSheetDrag(overlay);
     overlay.classList.remove("is-open");
     overlay.setAttribute("aria-hidden", "true");
-    document.body.style.overflow = "";
     if (overlay.id === "modal-cart") {
       document.getElementById("tab-cart")?.classList.remove("bottom-nav-btn--cart-open");
       setBottomNavActive();
+      syncBodyOverflowForModals();
       return;
     }
     if (overlay.id === "modal-tickets") {
       setBottomNavActive();
+      syncBodyOverflowForModals();
       return;
     }
     if (overlay.id === "modal-ticket-search") {
       setBottomNavActive();
+      syncBodyOverflowForModals();
       return;
     }
     if (overlay.id === "modal-profile") setBottomNavActive();
+    syncBodyOverflowForModals();
   }
 
   function closeAllModals() {
@@ -5793,8 +5908,34 @@
     closeTicketsModal();
     closeTicketSearchModal();
     renderDashboard();
+    var pb = document.getElementById("profile-tickets-body");
+    if (pb) pb.innerHTML = renderTicketsLoadingSkeleton();
     openModal(modalProfile);
     setBottomNavActive();
+    var s = loadSession();
+    if (!s || !s.token || !authVerified) return;
+    (async function () {
+      try {
+        await fetchTicketsFromApi();
+        renderTicketsModalBody(
+          raffleDataCache.tickets || {
+            reserved: [],
+            pending_review: [],
+            confirmed: [],
+            wholesale_slots: [],
+          },
+        );
+      } catch (e) {
+        var em = String((e && e.message) || "Ошибка");
+        if (em === "SESSION_EXPIRED") {
+          showActionErrorModal("Сессия истекла", "Войдите снова, чтобы открыть профиль.", function () {
+            openModal(modalLogin);
+          });
+        } else if (pb) {
+          pb.innerHTML = '<p class="profile-modal__tickets-err">' + escapeHtml(em) + "</p>";
+        }
+      }
+    })();
   }
 
   function closeProfileModal() {
@@ -5976,8 +6117,6 @@
       el.setAttribute("aria-hidden", blocked ? "false" : "true");
     }
     root.classList.toggle("js-account-blocked", blocked);
-    var btnLogout = document.getElementById("btn-profile-logout");
-    if (btnLogout) btnLogout.hidden = blocked;
     if (blocked) {
       closeChatPanel();
       closeAllModals();
@@ -6537,20 +6676,15 @@
     syncRaffleScrollTopButton();
   }
 
-  var tabSearchEl = document.getElementById("tab-search");
-  if (tabSearchEl) {
-    tabSearchEl.addEventListener("click", function () {
-      var s = loadSession();
-      if (!s || !s.token) {
-        openModal(modalLogin);
-        return;
-      }
-      if (!authVerified) return;
-      if (modalTicketSearch && modalTicketSearch.classList.contains("is-open")) {
-        closeTicketSearchModal();
-        return;
-      }
-      openTicketSearchModal();
+  var tabHomeEl = document.getElementById("tab-home");
+  if (tabHomeEl) {
+    tabHomeEl.addEventListener("click", function () {
+      closeChatPanel();
+      closeCartModal();
+      closeTicketsModal();
+      closeTicketSearchModal();
+      if (modalProfile) closeModal(modalProfile);
+      location.href = "/home";
     });
   }
 
@@ -6569,20 +6703,6 @@
     });
   }
 
-  var tabTicketsEl = document.getElementById("tab-tickets");
-  if (tabTicketsEl)
-    tabTicketsEl.addEventListener("click", function () {
-      const s = loadSession();
-      if (!s || !s.token) {
-        openModal(modalLogin);
-        return;
-      }
-      if (!authVerified) return;
-      appView = "feed";
-      setAppView("feed");
-      openTicketsModal().catch(function () {});
-    });
-
   var tabProfileEl = document.getElementById("tab-profile");
   if (tabProfileEl) tabProfileEl.addEventListener("click", function () {
     const s = loadSession();
@@ -6593,29 +6713,6 @@
     if (!authVerified) return;
     closeChatPanel();
     openProfileModal();
-  });
-
-  var btnProfileLogout = document.getElementById("btn-profile-logout");
-  if (btnProfileLogout) btnProfileLogout.addEventListener("click", function () {
-    const s = loadSession();
-    const finish = function () {
-      clearSession();
-      authVerified = false;
-      appView = "feed";
-      closeChatPanel();
-      updateScreens();
-      showToast("Вы вышли из аккаунта", "neutral");
-    };
-    if (s && s.token) {
-      apiJson("/api/auth/logout", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + s.token },
-      })
-        .catch(function () {})
-        .finally(finish);
-    } else {
-      finish();
-    }
   });
 
   document.addEventListener("visibilitychange", function () {

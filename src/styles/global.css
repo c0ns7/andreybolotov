@@ -1196,17 +1196,17 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
 
-.bottom-nav__inner--5 {
+.bottom-nav__inner--4 {
   gap: 2px;
   padding: 8px 4px;
 }
 
-.bottom-nav__inner--5 .bottom-nav-btn {
+.bottom-nav__inner--4 .bottom-nav-btn {
   min-width: 0;
   padding: 8px 2px;
 }
 
-.bottom-nav__inner--5 .bottom-nav-btn__label {
+.bottom-nav__inner--4 .bottom-nav-btn__label {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1316,6 +1316,11 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   height: 52px;
 }
 
+/* Корзина с номерками: зелёная «активная» — иконка чуть выше и крупнее */
+.bottom-nav-btn--center.bottom-nav-btn--cart-has-items:not(.bottom-nav-btn--cart-open) .bottom-nav-btn__icon {
+  transform: translateY(-10px) scale(1.1);
+}
+
 .bottom-nav-btn--cart-open.bottom-nav-btn--center .bottom-nav-btn__icon {
   width: 58px;
   height: 58px;
@@ -1323,6 +1328,10 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   background: linear-gradient(165deg, #34c759 0%, #22c55e 100%);
   color: #fff;
   box-shadow: 0 12px 32px rgba(52, 199, 89, 0.55);
+}
+
+.bottom-nav-btn--cart-open.bottom-nav-btn--center.bottom-nav-btn--cart-has-items .bottom-nav-btn__icon {
+  transform: translateY(-10px) scale(1.1);
 }
 
 .bottom-nav-btn--cart-open.bottom-nav-btn--cart-has-items {
@@ -1352,11 +1361,6 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   background: #34c759;
   border-radius: 999px;
   border: 2px solid #fff;
-}
-
-/* Кнопка «Поиск» только на /home/raffle (сетка номерков) */
-html:not(.raffle-grid-page) #tab-search {
-  display: none !important;
 }
 
 .bottom-nav-btn--tickets-has-items {
@@ -3320,6 +3324,18 @@ a.raffle-pay__btn {
   overscroll-behavior: contain;
 }
 
+.modal-overlay--reserve-flow.modal-overlay--reserve-above-payment {
+  z-index: 140;
+}
+
+.reserve-payment-abandon__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
 @supports (justify-content: safe center) {
   .modal-overlay--reserve-flow {
     justify-content: safe center;
@@ -3376,6 +3392,11 @@ a.raffle-pay__btn {
   background: linear-gradient(180deg, #111827 0%, #000 100%);
   color: #fff;
   box-shadow: 0 8px 20px rgba(2, 6, 23, 0.24);
+}
+.reserve-flow-btn--muted {
+  background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  color: #f8fafc;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2);
 }
 .reserve-flow-btn--green {
   background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
@@ -4413,6 +4434,98 @@ a.raffle-pay__btn {
   margin-bottom: 0;
 }
 
+.profile-modal__field--solo {
+  margin-bottom: 0;
+}
+
+.profile-modal__field--solo .profile-modal__value {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-modal__tickets-card {
+  margin-bottom: 12px;
+  border-radius: 16px;
+  border: 1px solid #f3f4f6;
+  background: #f9fafb;
+  overflow: hidden;
+}
+
+.profile-modal__tickets-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  background: #f9fafb;
+}
+
+.profile-modal__tickets-card-head-icon {
+  flex-shrink: 0;
+  color: #8b5cf6;
+}
+
+.profile-modal__tickets-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #6b7280;
+}
+
+.profile-modal__tickets-body {
+  max-height: min(42vh, 340px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  background: #f9fafb;
+  border: none;
+}
+
+.profile-tickets-empty {
+  text-align: center;
+  padding: 16px 4px;
+}
+
+.profile-tickets-empty__icon-ring {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-tickets-empty__icon-ring svg {
+  color: #d1d5db;
+}
+
+.profile-tickets-empty__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.profile-tickets-empty__sub {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  line-height: 1.35;
+}
+
+.profile-modal__tickets-body .tickets-section:first-of-type {
+  margin-top: 0;
+}
+
+.profile-modal__tickets-err {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  color: #b91c1c;
+}
+
 .profile-modal__label {
   display: block;
   font-size: 10px;
@@ -4500,11 +4613,44 @@ a.raffle-pay__btn {
 }
 
 .profile-modal__admin {
-  margin: 0 0 12px;
+  margin: 12px 0 12px;
 }
 
-.profile-modal__actions {
+.profile-modal__actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding-top: 8px;
+}
+
+.profile-modal__icon-settings {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #6b7280;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition:
+    transform 0.12s ease,
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.profile-modal__icon-settings:hover {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.profile-modal__icon-settings:active {
+  transform: scale(0.97);
 }
 
 .profile-modal__btn-back {
@@ -4522,27 +4668,14 @@ a.raffle-pay__btn {
   transition: transform 0.12s ease;
 }
 
+.profile-modal__btn-back--row {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
 .profile-modal__btn-back:active {
   transform: scale(0.98);
-}
-
-.profile-modal__btn-logout {
-  width: 100%;
-  margin-top: 10px;
-  padding: 12px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.profile-modal__btn-logout:hover {
-  color: #111827;
 }
 
 /* Профиль на телефонах — нижняя шторка (оверлей выше дока, шторка к низу экрана + safe area) */
@@ -4675,7 +4808,7 @@ a.raffle-pay__btn {
   }
 
   .profile-modal__admin {
-    margin: 0 0 8px;
+    margin: 10px 0 8px;
   }
 
   .profile-modal .btn-admin-link {
@@ -4684,20 +4817,21 @@ a.raffle-pay__btn {
     border-radius: 14px;
   }
 
-  .profile-modal__actions {
+  .profile-modal__actions-row {
     padding-top: 4px;
+    gap: 8px;
+  }
+
+  .profile-modal__icon-settings {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
   }
 
   .profile-modal__btn-back {
     padding: 12px 14px;
     font-size: 0.92rem;
     border-radius: 14px;
-  }
-
-  .profile-modal__btn-logout {
-    margin-top: 6px;
-    padding: 10px;
-    font-size: 0.82rem;
   }
 }
 
@@ -5112,6 +5246,20 @@ a.raffle-pay__btn {
   border-color: #93c5fd;
   color: #2563eb;
   background: #eff6ff;
+}
+
+.raffle-range-search {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .raffle-range-tab {
@@ -6482,6 +6630,21 @@ html.raffle-grid-page .raffle-range-eye:hover {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
+html.raffle-grid-page .raffle-range-search {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  color: var(--text-muted);
+}
+
+html.raffle-grid-page .raffle-range-search:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
 html.raffle-grid-page .raffle-range-eye--active {
   color: #2563eb;
   border-color: color-mix(in srgb, #2563eb 48%, var(--border));
@@ -6629,6 +6792,11 @@ html.raffle-purchase-page .raffle-ticket-grid {
   background: transparent;
   box-shadow: none;
   justify-content: start;
+}
+
+/* Пока сетка пустая, min-height: 0 схлопывает блок — лоадер с inset:0 почти не виден */
+html.raffle-purchase-page .raffle-ticket-grid.raffle-ticket-grid--loading {
+  min-height: clamp(220px, 48dvh, 520px);
 }
 
 @media (min-width: 1024px) {
@@ -7362,34 +7530,6 @@ html.theme-dark .settings-msg--ok {
   color: #a7f3d0;
 }
 
-.profile-modal__link-settings {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  margin: 0 0 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 700;
-  font-family: inherit;
-  text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.profile-modal__link-settings:hover {
-  background: color-mix(in srgb, var(--surface) 88%, var(--accent));
-  color: var(--accent);
-}
-
-.profile-modal__link-settings:active {
-  transform: scale(0.99);
-}
-
 html.theme-dark .bottom-nav__inner {
   background: rgba(22, 22, 30, 0.94);
   border-color: rgba(255, 255, 255, 0.1);
@@ -7466,6 +7606,49 @@ html.theme-dark .profile-modal__value {
   border-bottom-color: var(--border);
 }
 
+html.theme-dark .profile-modal__tickets-card {
+  background: color-mix(in srgb, var(--surface-muted) 88%, var(--bg));
+  border-color: var(--border);
+}
+
+html.theme-dark .profile-modal__tickets-card-head {
+  background: color-mix(in srgb, var(--surface-muted) 88%, var(--bg));
+  border-bottom-color: var(--border);
+}
+
+html.theme-dark .profile-modal__tickets-card-label {
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-modal__tickets-card-head-icon {
+  color: #a78bfa;
+}
+
+html.theme-dark .profile-modal__tickets-body {
+  background: color-mix(in srgb, var(--surface-muted) 88%, var(--bg));
+}
+
+html.theme-dark .profile-tickets-empty__icon-ring {
+  background: color-mix(in srgb, var(--surface) 55%, var(--bg));
+}
+
+html.theme-dark .profile-tickets-empty__icon-ring svg {
+  color: var(--border);
+}
+
+html.theme-dark .profile-tickets-empty__title {
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-tickets-empty__sub {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+html.theme-dark .profile-modal__tickets-err {
+  color: #fecaca;
+}
+
 html.theme-dark .profile-modal__stats {
   background: var(--surface-muted);
   border-color: var(--border);
@@ -7488,8 +7671,16 @@ html.theme-dark .profile-modal__btn-back {
   color: #0f172a;
 }
 
-html.theme-dark .profile-modal__btn-logout:hover {
-  color: var(--text);
+html.theme-dark .profile-modal__icon-settings {
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-modal__icon-settings:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
 /* ========== Тёмная тема: жёсткие светлые фоны и границы по всему UI ========== */

@@ -75,6 +75,7 @@ import {
   getTicketNumbersForOrder,
   listPendingPayments,
   adminFullyReleaseRaffleOrder,
+  userCancelReservedRaffleOrder,
   listActiveOrdersForAdmin,
   getAdminRaffleParticipantsBundle,
   recalculateWholesaleForRaffle,
@@ -1252,6 +1253,21 @@ app.post("/api/raffles/:id/reserve", async (c) => {
     skipped_still_occupied: r.skipped_still_occupied,
     released_after_cleanup: r.released_after_cleanup,
   });
+});
+
+app.post("/api/raffles/orders/:orderId/cancel-reservation", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  if (!rateLimitAllow(`post:cancel-reservation:${u.id}`, 20, 60_000)) return rateLimitExceeded(c);
+  const orderId = Number(c.req.param("orderId"));
+  if (!Number.isFinite(orderId)) return c.json({ error: "Некорректный id" }, 400);
+  const res = userCancelReservedRaffleOrder(orderId, u.id);
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  const orderRow = getOrderById(orderId);
+  const raffleId = orderRow && Number.isFinite(Number(orderRow.raffle_id)) ? Number(orderRow.raffle_id) : 0;
+  broadcastRaffleTicketsUpdated(u.id);
+  if (raffleId > 0) notifyRaffleGridMutated(raffleId);
+  return c.json({ ok: true, server_time_ms: Date.now() });
 });
 
 app.patch("/api/raffles/orders/:orderId/bank", async (c) => {
