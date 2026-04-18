@@ -175,6 +175,16 @@ import "../styles/admin-raffles.css";
             </div>
             <div id="admin-thread" class="admin-thread" hidden>
               <div class="admin-thread__head">
+                <button
+                  type="button"
+                  class="admin-thread__back"
+                  id="btn-admin-thread-back"
+                  aria-label="Назад к списку чатов"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 18l-6-6 6-6"></path>
+                  </svg>
+                </button>
                 <div class="admin-thread__head-text">
                   <h2 id="admin-thread-name" class="admin-thread__name"></h2>
                   <p id="admin-thread-meta" class="admin-thread__meta"></p>
@@ -1249,6 +1259,116 @@ import "../styles/admin-raffles.css";
     padding: 16px 18px;
     border-bottom: 1px solid #e2e8f0;
     background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    position: relative;
+  }
+
+  .admin-thread__back {
+    display: none;
+  }
+
+  /* Мобильный полноэкранный режим переписки (как мессенджер) + кнопка «назад» в шапке треда */
+  @media (max-width: 699px) {
+    .admin-thread__head {
+      padding-left: 52px;
+      padding-top: calc(14px + env(safe-area-inset-top, 0px));
+      align-items: center;
+    }
+
+    .admin-thread__back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      left: max(10px, env(safe-area-inset-left, 0px));
+      top: calc(14px + env(safe-area-inset-top, 0px));
+      width: 40px;
+      height: 40px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+      color: #334155;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+
+    .admin-thread__back:active {
+      transform: scale(0.97);
+    }
+
+    html.admin-mobile-chat-active .admin-head {
+      display: none !important;
+    }
+
+    html.admin-mobile-chat-active .admin-page {
+      padding: 0;
+      min-height: 100dvh;
+    }
+
+    html.admin-mobile-chat-active .admin-shell {
+      padding: 0;
+      max-width: none;
+    }
+
+    html.admin-mobile-chat-active #admin-root:not([hidden]) {
+      flex: 1;
+      min-height: 0;
+    }
+
+    html.admin-mobile-chat-active .admin-app:not([hidden]) {
+      flex: 1;
+      min-height: 0;
+    }
+
+    html.admin-mobile-chat-active .admin-layout {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      height: 100dvh;
+      max-height: 100dvh;
+      gap: 0;
+    }
+
+    html.admin-mobile-chat-active .admin-sidebar {
+      display: none !important;
+    }
+
+    html.admin-mobile-chat-active .admin-main {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+    }
+
+    html.admin-mobile-chat-active .admin-thread {
+      flex: 1;
+      min-height: 0;
+    }
+
+    html.admin-mobile-chat-active .admin-thread__body {
+      flex: 1;
+      min-height: 0;
+    }
+
+    html.admin-mobile-chat-active .admin-messages {
+      flex: 1;
+    }
+
+    html.admin-mobile-chat-active .admin-reply {
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  html.admin-mobile-chat-active {
+    overflow: hidden;
+  }
+
+  html.admin-mobile-chat-active body {
+    overflow: hidden;
   }
   .admin-thread__head-text {
     min-width: 0;

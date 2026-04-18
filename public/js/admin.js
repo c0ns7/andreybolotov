@@ -266,6 +266,9 @@
   }
 
   function showGate(msg) {
+    try {
+      document.documentElement.classList.remove("admin-mobile-chat-active");
+    } catch (_) {}
     if (adminLoading) adminLoading.hidden = true;
     if (gate) {
       gate.hidden = false;
@@ -292,6 +295,26 @@
     } catch (_) {
       return "support";
     }
+  }
+
+  function isAdminMobileChatLayout() {
+    try {
+      return window.matchMedia("(max-width: 699px)").matches;
+    } catch (_) {
+      return window.innerWidth <= 699;
+    }
+  }
+
+  function syncAdminMobileChatShell() {
+    try {
+      var threadEl = document.getElementById("admin-thread");
+      var supportVisible = getAdminTab() === "support" && app && !app.hidden;
+      var threadOpen = !!(threadEl && !threadEl.hidden);
+      document.documentElement.classList.toggle(
+        "admin-mobile-chat-active",
+        supportVisible && threadOpen && isAdminMobileChatLayout(),
+      );
+    } catch (_) {}
   }
 
   function applyAdminTab() {
@@ -353,6 +376,7 @@
     if (tab === "settings" && typeof window.abInitSettings === "function") {
       window.abInitSettings();
     }
+    syncAdminMobileChatShell();
   }
 
   function showApp() {
@@ -379,6 +403,7 @@
     selectedId = id;
     if (empty) empty.hidden = true;
     if (thread) thread.hidden = false;
+    syncAdminMobileChatShell();
     loadThread(id).catch(function (e) {
       alert(e.message || "Не удалось открыть чат");
     });
@@ -447,6 +472,7 @@
         });
         if (empty) empty.hidden = true;
         if (thread) thread.hidden = false;
+        syncAdminMobileChatShell();
         loadThread(id).catch(function (e) {
           alert(e.message || "Ошибка загрузки");
         });
@@ -494,6 +520,7 @@
           selectedId = null;
           if (thread) thread.hidden = true;
           if (empty) empty.hidden = false;
+          syncAdminMobileChatShell();
         }
       } else {
         if (listEl) {
@@ -756,6 +783,7 @@
       await loadUsers().catch(function () {});
     } finally {
       if (threadLoadUserId === uid) threadLoadUserId = null;
+      syncAdminMobileChatShell();
     }
   }
 
@@ -879,6 +907,36 @@
 
   function init() {
     bindTabs();
+    try {
+      var mq = window.matchMedia("(max-width: 699px)");
+      if (mq && typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", syncAdminMobileChatShell);
+      } else if (mq && typeof mq.addListener === "function") {
+        mq.addListener(syncAdminMobileChatShell);
+      }
+    } catch (_) {
+      window.addEventListener("resize", syncAdminMobileChatShell);
+    }
+
+    var btnThreadBack = document.getElementById("btn-admin-thread-back");
+    if (btnThreadBack) {
+      btnThreadBack.addEventListener("click", function () {
+        stopUserTypingPoll();
+        setUserTypingIndicatorVisible(false);
+        sendAdminTyping(false);
+        selectedId = null;
+        selectedUserData = null;
+        if (thread) thread.hidden = true;
+        if (empty) empty.hidden = false;
+        if (listEl) {
+          listEl.querySelectorAll(".admin-user-item").forEach(function (b) {
+            b.classList.remove("is-active");
+          });
+        }
+        syncAdminMobileChatShell();
+      });
+    }
+
     connectAdminWs();
     loadUsers()
       .catch(function (e) {
