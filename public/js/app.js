@@ -6480,6 +6480,19 @@
   bindPasswordToggle(document.getElementById("toggle-pass-reg2"), "pass-reg2");
   bindPasswordToggle(document.getElementById("toggle-pass-login"), "pass-login");
 
+  document.getElementById("btn-reg-skip-email")?.addEventListener("click", function () {
+    var inp = document.getElementById("email-reg");
+    var grp = document.getElementById("email-reg-group");
+    if (!inp) return;
+    inp.value = "";
+    if (grp) grp.classList.add("form-group--email-skipped");
+    showToast("Почту можно не указывать. Сохраните пароль в надёжном месте.", "neutral");
+  });
+  document.getElementById("email-reg")?.addEventListener("input", function () {
+    var grp = document.getElementById("email-reg-group");
+    if (grp && String(this.value || "").trim()) grp.classList.remove("form-group--email-skipped");
+  });
+
   function clearBottomSheetDrag(overlay) {
     if (!overlay || !overlay.id) return;
     if (overlay.id === "modal-cart") {
@@ -7075,8 +7088,8 @@
       showToast("Укажите ФИО", "warning");
       return;
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast("Укажите корректный email", "warning");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("Укажите корректный email или очистите поле", "warning");
       return;
     }
     if (p1.length < 6) {
@@ -7090,7 +7103,7 @@
 
     apiJson("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ phone, name, email, password: p1 }),
+      body: JSON.stringify({ phone, name, email: email || "", password: p1 }),
     })
       .then(function (data) {
         authVerified = true;
@@ -7107,6 +7120,7 @@
         }
         formRegister.reset();
         phoneReg.value = "";
+        document.getElementById("email-reg-group")?.classList.remove("form-group--email-skipped");
       })
       .catch(function (err) {
         showToast(err.message || "Ошибка регистрации", "error");

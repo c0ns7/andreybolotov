@@ -92,16 +92,19 @@ import InstallAppModal from "../components/InstallAppModal.astro";
             <label for="fio-reg">ФИО</label>
             <input class="input" type="text" id="fio-reg" name="fio" autocomplete="name" placeholder="Как к вам обращаться" />
           </div>
-          <div class="form-group">
-            <label for="email-reg">Email (для восстановления)</label>
-            <input class="input" type="email" id="email-reg" name="email" autocomplete="email" placeholder="you@example.com" />
+          <div class="form-group" id="email-reg-group">
+            <label for="email-reg">Email <span class="form-optional">необязательно</span></label>
+            <input class="input" type="email" id="email-reg" name="email" autocomplete="email" placeholder="Если есть — укажите" />
             <div class="info-hint">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"></circle>
                 <path d="M12 16v-5M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
               </svg>
-              <span>Email обязателен. На него придёт ссылка, если вы забудете пароль.</span>
+              <span>Если укажете почту, на неё можно будет отправить ссылку при забытом пароле. Без почты восстановление — через поддержку по телефону.</span>
             </div>
+            <button type="button" class="reg-email-skip" id="btn-reg-skip-email">
+              У меня нет электронной почты
+            </button>
           </div>
           <div class="form-group">
             <label for="pass-reg">Придумайте пароль</label>
@@ -249,7 +252,7 @@ import InstallAppModal from "../components/InstallAppModal.astro";
       </div>
       <div class="modal__body">
         <p class="modal__sub" style="margin-top: 0; margin-bottom: 18px">
-          Введите email, указанный при регистрации. Мы отправим на него ссылку для сброса пароля.
+          Введите email, если вы указывали его при регистрации. Если почты не было — напишите в поддержку, помогут по номеру телефона.
         </p>
         <form id="form-forgot" novalidate>
           <div class="form-group">

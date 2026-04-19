@@ -114,6 +114,25 @@
   bindPasswordToggle(document.getElementById("toggle-pass-reg2"), "pass-reg2");
   bindPasswordToggle(document.getElementById("toggle-pass-login"), "pass-login");
 
+  var btnSkipEmail = document.getElementById("btn-reg-skip-email");
+  if (btnSkipEmail) {
+    btnSkipEmail.addEventListener("click", function () {
+      var inp = document.getElementById("email-reg");
+      var grp = document.getElementById("email-reg-group");
+      if (!inp) return;
+      inp.value = "";
+      if (grp) grp.classList.add("form-group--email-skipped");
+      showToast("Почту можно не указывать. Сохраните пароль в надёжном месте.", "neutral");
+    });
+  }
+  var emailRegInp = document.getElementById("email-reg");
+  if (emailRegInp) {
+    emailRegInp.addEventListener("input", function () {
+      var grp = document.getElementById("email-reg-group");
+      if (grp && String(this.value || "").trim()) grp.classList.remove("form-group--email-skipped");
+    });
+  }
+
   function openModal(overlay) {
     if (!overlay) return;
     overlay.classList.add("is-open");
@@ -294,8 +313,8 @@
       showToast("Укажите ФИО", "warning");
       return;
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast("Укажите корректный email", "warning");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("Укажите корректный email или очистите поле", "warning");
       return;
     }
     if (p1.length < 6) {
@@ -306,12 +325,14 @@
       showToast("Пароли не совпадают", "warning");
       return;
     }
-    saveSession({ phone: phone, name: name, email: email, password: p1 });
+    saveSession({ phone: phone, name: name, email: email || "", password: p1 });
     closeAllModals();
     showToast("Добро пожаловать, " + name.split(" ")[0] + "!", "success");
     updateScreens();
     formRegister.reset();
     phoneReg.value = "";
+    var grpAfter = document.getElementById("email-reg-group");
+    if (grpAfter) grpAfter.classList.remove("form-group--email-skipped");
   });
 
   formLogin.addEventListener("submit", function (e) {

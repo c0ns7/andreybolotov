@@ -578,7 +578,7 @@ app.post("/api/auth/register", async (c) => {
   }
   const phone = normalizePhone(String(body.phone ?? ""));
   const name = String(body.name ?? "").trim();
-  const email = String(body.email ?? "").trim().toLowerCase();
+  const emailRaw = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
 
   if (!phone) return c.json({ error: "Введите полный номер телефона" }, 400);
@@ -586,19 +586,24 @@ app.post("/api/auth/register", async (c) => {
     return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
   }
   if (!name) return c.json({ error: "Укажите ФИО" }, 400);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return c.json({ error: "Укажите корректный email" }, 400);
+  let emailDb: string | null = null;
+  if (emailRaw) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+      return c.json({ error: "Укажите корректный email" }, 400);
+    }
+    if (getUserByEmail(emailRaw)) {
+      return c.json({ error: "Этот email уже зарегистрирован" }, 409);
+    }
+    emailDb = emailRaw;
+  }
   if (password.length < 6) return c.json({ error: "Пароль не короче 6 символов" }, 400);
 
   if (getUserByPhone(phone)) {
     return c.json({ error: "Этот номер телефона уже зарегистрирован" }, 409);
   }
-  if (getUserByEmail(email)) {
-    return c.json({ error: "Этот email уже зарегистрирован" }, 409);
-  }
 
   const passwordHash = bcrypt.hashSync(password, 10);
-  const userId = insertUser(phone, name, email, passwordHash);
+  const userId = insertUser(phone, name, emailDb, passwordHash);
   try {
     const affected = materializeRafflePreassignmentsForUser(userId);
     for (const rid of affected) notifyRaffleGridMutated(rid);
@@ -608,12 +613,13 @@ app.post("/api/auth/register", async (c) => {
   const row = getUserById(userId);
   const token = randomUUID();
   createSession(token, userId);
+  const emailOut = row?.email != null && String(row.email).trim() ? String(row.email).trim().toLowerCase() : "";
   return c.json({
     token,
     user: {
       phone,
       name,
-      email,
+      email: emailOut,
       role: row?.role ?? "user",
       blocked: false,
     },
@@ -661,7 +667,7 @@ app.post("/api/auth/login", async (c) => {
     user: {
       phone: user.phone,
       name: user.name,
-      email: user.email,
+      email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
       role: user.role ?? "user",
       blocked: user.blocked === 1,
     },
@@ -688,7 +694,7 @@ app.get("/api/auth/me", (c) => {
     user: {
       phone: user.phone,
       name: user.name,
-      email: user.email,
+      email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
       role: user.role ?? "user",
       blocked: user.blocked === 1,
       email_notify_chat: notifyChat,
@@ -736,9 +742,9 @@ app.post("/api/auth/forgot", async (c) => {
   const expiresAt = Date.now() + PASSWORD_RESET_TTL_MS;
   setPasswordResetTokenForUser(user.id, tokenHash, expiresAt);
   const resetUrl = `${publicAppOrigin()}/home/reset-password?token=${encodeURIComponent(rawToken)}`;
-  console.log("[auth/forgot] send reset email →", user.email);
+  console.log("[auth/forgot] send reset email →", email);
   try {
-    await sendPasswordResetEmail(user.email, resetUrl);
+    await sendPasswordResetEmail(email, resetUrl);
     console.log("[auth/forgot] reset email accepted by SMTP");
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -998,7 +1004,10 @@ app.get("/api/admin/users/:userId/messages", (c) => {
       id: target.id,
       phone: target.phone,
       name: target.name,
-      email: target.email,
+      email:
+        target.email != null && String(target.email).trim()
+          ? String(target.email).trim().toLowerCase()
+          : "",
       role: target.role ?? "user",
       blocked: target.blocked === 1,
     },
@@ -1848,7 +1857,21 @@ app.patch("/api/admin/users/:userId", async (c) => {
   if (wantsProfile) {
     const name = String(body.name ?? target.name).trim();
     const phoneRaw = body.phone !== undefined ? String(body.phone) : target.phone;
-    const email = String(body.email ?? target.email).trim().toLowerCase();
+
+    let emailFinal: string | null;
+    if (body.email !== undefined) {
+      const raw = String(body.email).trim().toLowerCase();
+      if (!raw) {
+        emailFinal = null;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+        return c.json({ error: "Укажите корректный email" }, 400);
+      } else {
+        emailFinal = raw;
+      }
+    } else {
+      const t = target.email != null ? String(target.email).trim().toLowerCase() : "";
+      emailFinal = t || null;
+    }
 
     const phone = normalizePhone(phoneRaw);
     if (!phone) return c.json({ error: "Введите корректный телефон" }, 400);
@@ -1856,20 +1879,19 @@ app.patch("/api/admin/users/:userId", async (c) => {
       return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
     }
     if (!name) return c.json({ error: "Укажите имя" }, 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return c.json({ error: "Укажите корректный email" }, 400);
-    }
 
     const existing = getUserByPhone(phone);
     if (existing && existing.id !== userId) {
       return c.json({ error: "Этот номер уже занят другим пользователем" }, 409);
     }
-    const existingEmail = getUserByEmail(email);
-    if (existingEmail && existingEmail.id !== userId) {
-      return c.json({ error: "Этот email уже занят другим пользователем" }, 409);
+    if (emailFinal) {
+      const existingEmail = getUserByEmail(emailFinal);
+      if (existingEmail && existingEmail.id !== userId) {
+        return c.json({ error: "Этот email уже занят другим пользователем" }, 409);
+      }
     }
 
-    updateUserProfile(userId, { name, phone, email });
+    updateUserProfile(userId, { name, phone, email: emailFinal });
   }
 
   if (body.role !== undefined) {
@@ -1902,7 +1924,10 @@ app.patch("/api/admin/users/:userId", async (c) => {
       id: updated.id,
       phone: updated.phone,
       name: updated.name,
-      email: updated.email,
+      email:
+        updated.email != null && String(updated.email).trim()
+          ? String(updated.email).trim().toLowerCase()
+          : "",
       role: updated.role ?? "user",
       blocked: updated.blocked === 1,
     },

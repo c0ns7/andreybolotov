@@ -324,6 +324,69 @@ function migrate() {
   if (!rafCols2.some((c) => c.name === "launch_notify_sent_at")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN launch_notify_sent_at INTEGER`);
   }
+
+  migrateUsersEmailNullable();
+}
+
+/** Регистрация без почты: email NULL, уникальность только для непустых адресов. */
+function migrateUsersEmailNullable(): void {
+  const info = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string; notnull: number }>;
+  const emailCol = info.find((c) => c.name === "email");
+  if (!emailCol || emailCol.notnull !== 1) return;
+
+  db.exec(`DROP INDEX IF EXISTS idx_users_email_lower`);
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.exec(`
+      CREATE TABLE _users_mig (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        email TEXT,
+        password_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        blocked INTEGER NOT NULL DEFAULT 0,
+        email_notify_chat INTEGER NOT NULL DEFAULT 1,
+        email_notify_raffles INTEGER NOT NULL DEFAULT 1,
+        chat_unread_email_last_at INTEGER,
+        email_notify_raffle_orders INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO _users_mig (
+        id, phone, name, email, password_hash, created_at, role, blocked,
+        email_notify_chat, email_notify_raffles, chat_unread_email_last_at, email_notify_raffle_orders
+      )
+      SELECT
+        id,
+        phone,
+        name,
+        NULLIF(TRIM(LOWER(email)), ''),
+        password_hash,
+        created_at,
+        COALESCE(role, 'user'),
+        COALESCE(blocked, 0),
+        COALESCE(email_notify_chat, 1),
+        COALESCE(email_notify_raffles, 1),
+        chat_unread_email_last_at,
+        COALESCE(email_notify_raffle_orders, COALESCE(email_notify_raffles, 1))
+      FROM users;
+      DROP TABLE users;
+      ALTER TABLE _users_mig RENAME TO users;
+    `);
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
+  try {
+    db.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email)) WHERE email IS NOT NULL AND length(trim(email)) > 0`,
+    );
+  } catch {
+    try {
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email))`);
+    } catch {
+      /* дубликаты email в старых данных */
+    }
+  }
 }
 
 migrate();
@@ -332,7 +395,7 @@ export type UserRow = {
   id: number;
   phone: string;
   name: string;
-  email: string;
+  email: string | null;
   password_hash: string;
   created_at: number;
   role: string;
@@ -347,9 +410,15 @@ export type UserRow = {
 export function insertUser(
   phone: string,
   name: string,
-  email: string,
+  email: string | null,
   passwordHash: string,
 ): number {
+  const em =
+    email != null && String(email).trim()
+      ? String(email)
+          .trim()
+          .toLowerCase()
+      : null;
   const info = db
     .prepare(
       `INSERT INTO users (phone, name, email, password_hash, created_at, role)
@@ -358,7 +427,7 @@ export function insertUser(
     .run({
       phone,
       name,
-      email,
+      email: em,
       password_hash: passwordHash,
       created_at: Date.now(),
     });
@@ -391,7 +460,7 @@ export type SessionUser = {
   id: number;
   phone: string;
   name: string;
-  email: string;
+  email: string | null;
   role: string;
   blocked: number;
 };
@@ -613,12 +682,18 @@ export function messageToDto(r: SupportMessageRow) {
 
 export function updateUserProfile(
   id: number,
-  data: { name: string; phone: string; email: string },
+  data: { name: string; phone: string; email: string | null },
 ): void {
+  const em =
+    data.email != null && String(data.email).trim()
+      ? String(data.email)
+          .trim()
+          .toLowerCase()
+      : null;
   db.prepare(`UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?`).run(
     data.name,
     data.phone,
-    data.email,
+    em,
     id,
   );
 }
