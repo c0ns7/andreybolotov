@@ -100,6 +100,8 @@ import {
   listWholesaleSlotsForUser,
   adminUserTicketsForPrimaryRaffle,
   listUserIdsWithConfirmedRaffleOrders,
+  buildRafflePaymentParticipationContext,
+  listReceiptHistoryPriorForPendingOrder,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import {
@@ -1084,7 +1086,10 @@ app.get("/api/raffles/cart", (c) => {
   if (u instanceof Response) return u;
   if (!rateLimitAllow(`get:cart:${u.id}`, 60, 60_000)) return rateLimitExceeded(c);
   c.header("Cache-Control", "private, no-store");
-  const items = listReservedOrdersForUser(u.id);
+  const items = listReservedOrdersForUser(u.id).map((it) => ({
+    ...it,
+    payment_participation: buildRafflePaymentParticipationContext(u.id, it.order.raffle_id, it.order.id),
+  }));
   return c.json({ items, server_time_ms: Date.now() });
 });
 
@@ -1134,13 +1139,20 @@ app.get("/api/raffles/:id/order", (c) => {
   const serverTimeMs = Date.now();
   const order = getActiveOrderForUser(id, u.id);
   if (!order) {
-    return c.json({ order: null, numbers: [], raffle: raffleToDto(raffle), server_time_ms: serverTimeMs });
+    return c.json({
+      order: null,
+      numbers: [],
+      raffle: raffleToDto(raffle),
+      server_time_ms: serverTimeMs,
+      payment_participation: buildRafflePaymentParticipationContext(u.id, id, null),
+    });
   }
   return c.json({
     order: orderToDto(order),
     numbers: getTicketNumbersForOrder(order.id),
     raffle: raffleToDto(raffle),
     server_time_ms: serverTimeMs,
+    payment_participation: buildRafflePaymentParticipationContext(u.id, id, order.id),
   });
 });
 
@@ -1259,6 +1271,7 @@ app.get("/api/raffles/orders/:orderId", (c) => {
     numbers: getTicketNumbersForOrder(orderId),
     raffle: raffleToDto(raffle),
     server_time_ms: serverTimeMs,
+    payment_participation: buildRafflePaymentParticipationContext(u.id, order.raffle_id, order.id),
   });
 });
 
@@ -1293,6 +1306,7 @@ app.post("/api/raffles/:id/reserve", async (c) => {
     server_time_ms: serverTimeMs,
     skipped_still_occupied: r.skipped_still_occupied,
     released_after_cleanup: r.released_after_cleanup,
+    payment_participation: buildRafflePaymentParticipationContext(u.id, id, order.id),
   });
 });
 
@@ -1358,7 +1372,11 @@ app.post("/api/raffles/orders/:orderId/receipt", async (c) => {
   if (!order) return c.json({ error: "Ошибка" }, 500);
   broadcastRaffleTicketsUpdated(u.id);
   notifyRaffleGridMutated(order.raffle_id);
-  return c.json({ order: orderToDto(order), server_time_ms: Date.now() });
+  return c.json({
+    order: orderToDto(order),
+    server_time_ms: Date.now(),
+    payment_participation: buildRafflePaymentParticipationContext(u.id, order.raffle_id, order.id),
+  });
 });
 
 app.post("/api/admin/broadcast-max-chat-invite", (c) => {
@@ -1409,6 +1427,12 @@ app.get("/api/admin/raffle-payments", (c) => {
       user_phone: row.user_phone,
       user_name: row.user_name,
       user_id: row.user_id,
+      receipt_history_prior: listReceiptHistoryPriorForPendingOrder(
+        row.user_id,
+        row.raffle_id,
+        row.id,
+        row.receipt_url,
+      ),
     })),
     active_orders: active.map((row) => ({
       ...orderToDto(row),

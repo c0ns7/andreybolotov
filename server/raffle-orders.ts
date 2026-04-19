@@ -76,8 +76,192 @@ export function listRaffleOrderTimeline(orderId: number): RaffleOrderTimelineIte
     kind: r.kind,
     label: TIMELINE_LABELS[r.kind] ?? r.kind,
     at: r.created_at,
-    detail: r.detail ?? null,
+    /* JSON с url чека хранится в БД для истории оплат, на странице статуса не показываем */
+    detail: r.kind === "receipt_submitted" ? null : (r.detail ?? null),
   }));
+}
+
+export type RaffleReceiptArchiveItemDto = {
+  order_public_id: string;
+  at_ms: number;
+  url: string;
+  name: string;
+  mime: string | null;
+};
+
+export type RafflePaymentParticipationDto = {
+  has_confirmed_tickets: boolean;
+  confirmed_ticket_numbers: number[];
+  receipt_submitted_event_count: number;
+  current_order_reject_count: number;
+  /** Показать предупреждение о повторной оплате / ранее отправленных чеках */
+  show_repeat_payment_notice: boolean;
+  prior_receipts: RaffleReceiptArchiveItemDto[];
+};
+
+type ReceiptArchiveRow = {
+  order_id: number;
+  order_public_id: string;
+  at_ms: number;
+  url: string;
+  name: string;
+  mime: string | null;
+};
+
+function listReceiptArchiveForUserRaffle(userId: number, raffleId: number): ReceiptArchiveRow[] {
+  const items: ReceiptArchiveRow[] = [];
+  const eventRows = db
+    .prepare(
+      `SELECT e.order_id AS order_id, e.detail AS detail, e.created_at AS created_at
+       FROM raffle_order_events e
+       INNER JOIN raffle_orders o ON o.id = e.order_id
+       WHERE o.raffle_id = ? AND o.user_id = ? AND e.kind = 'receipt_submitted'
+       ORDER BY e.created_at DESC`,
+    )
+    .all(raffleId, userId) as Array<{ order_id: number; detail: string | null; created_at: number }>;
+
+  for (const row of eventRows) {
+    const d = String(row.detail ?? "").trim();
+    if (!d.startsWith("{")) continue;
+    try {
+      const j = JSON.parse(d) as { url?: string; name?: string; mime?: string };
+      const url = String(j.url ?? "").trim();
+      if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(url)) continue;
+      items.push({
+        order_id: row.order_id,
+        order_public_id: `A${row.order_id}`,
+        at_ms: row.created_at,
+        url,
+        name: String(j.name ?? "чек").slice(0, 255) || "чек",
+        mime: j.mime ? String(j.mime) : null,
+      });
+    } catch {
+      /* ignore malformed */
+    }
+  }
+
+  const ordersWithReceipt = db
+    .prepare(
+      `SELECT id, receipt_url, receipt_name, receipt_mime, updated_at
+       FROM raffle_orders
+       WHERE raffle_id = ? AND user_id = ? AND receipt_url IS NOT NULL`,
+    )
+    .all(raffleId, userId) as Array<{
+    id: number;
+    receipt_url: string;
+    receipt_name: string | null;
+    receipt_mime: string | null;
+    updated_at: number;
+  }>;
+
+  for (const o of ordersWithReceipt) {
+    const url = String(o.receipt_url || "").trim();
+    if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(url)) continue;
+    if (items.some((x) => x.order_id === o.id && x.url === url)) continue;
+    items.push({
+      order_id: o.id,
+      order_public_id: `A${o.id}`,
+      at_ms: o.updated_at,
+      url,
+      name: String(o.receipt_name || "чек").slice(0, 255) || "чек",
+      mime: o.receipt_mime ? String(o.receipt_mime) : null,
+    });
+  }
+
+  items.sort((a, b) => b.at_ms - a.at_ms);
+  return items.slice(0, 40);
+}
+
+/** Чеки по той же акции и пользователю, кроме текущего файла на проверяемой заявке (для админки). */
+export type AdminPriorReceiptItem = {
+  order_id: number;
+  order_public_id: string;
+  at_ms: number;
+  url: string;
+  name: string;
+  mime: string | null;
+  /** Тот же заказ, но другой файл (например, после отклонения) */
+  same_order: boolean;
+};
+
+export function listReceiptHistoryPriorForPendingOrder(
+  userId: number,
+  raffleId: number,
+  currentOrderId: number,
+  currentReceiptUrl: string | null,
+): AdminPriorReceiptItem[] {
+  const all = listReceiptArchiveForUserRaffle(userId, raffleId);
+  const curUrl = String(currentReceiptUrl ?? "").trim();
+  return all
+    .filter((x) => !(x.order_id === currentOrderId && curUrl && x.url === curUrl))
+    .slice(0, 22)
+    .map((x) => ({
+      order_id: x.order_id,
+      order_public_id: x.order_public_id,
+      at_ms: x.at_ms,
+      url: x.url,
+      name: x.name,
+      mime: x.mime,
+      same_order: x.order_id === currentOrderId,
+    }));
+}
+
+export function buildRafflePaymentParticipationContext(
+  userId: number,
+  raffleId: number,
+  currentOrderId: number | null,
+): RafflePaymentParticipationDto {
+  const confirmedRows = db
+    .prepare(
+      `SELECT h.ticket_number AS ticket_number
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.user_id = ? AND o.status = 'confirmed'
+       ORDER BY h.ticket_number ASC`,
+    )
+    .all(raffleId, userId) as Array<{ ticket_number: number }>;
+  const confirmed_ticket_numbers = confirmedRows.map((r) => r.ticket_number);
+  const has_confirmed_tickets = confirmed_ticket_numbers.length > 0;
+
+  const evCountRow = db
+    .prepare(
+      `SELECT COUNT(*) AS c
+       FROM raffle_order_events e
+       INNER JOIN raffle_orders o ON o.id = e.order_id
+       WHERE o.raffle_id = ? AND o.user_id = ? AND e.kind = 'receipt_submitted'`,
+    )
+    .get(raffleId, userId) as { c: number };
+  const receipt_submitted_event_count = Math.floor(Number(evCountRow?.c ?? 0));
+
+  let current_order_reject_count = 0;
+  if (currentOrderId != null && Number.isFinite(currentOrderId) && currentOrderId > 0) {
+    const o = getOrderByIdForUser(currentOrderId, userId);
+    if (o) current_order_reject_count = Math.floor(Number((o as RaffleOrderRow).receipt_reject_count ?? 0));
+  }
+
+  const prior = listReceiptArchiveForUserRaffle(userId, raffleId);
+  const prior_receipts: RaffleReceiptArchiveItemDto[] = prior.map((x) => ({
+    order_public_id: x.order_public_id,
+    at_ms: x.at_ms,
+    url: x.url,
+    name: x.name,
+    mime: x.mime,
+  }));
+
+  const show_repeat_payment_notice =
+    has_confirmed_tickets ||
+    current_order_reject_count > 0 ||
+    receipt_submitted_event_count > 1 ||
+    prior_receipts.length > 1;
+
+  return {
+    has_confirmed_tickets,
+    confirmed_ticket_numbers,
+    receipt_submitted_event_count,
+    current_order_reject_count,
+    show_repeat_payment_notice,
+    prior_receipts,
+  };
 }
 
 /** Порог «осталось не больше N минут»: 0 = выключено. */
@@ -487,7 +671,12 @@ export function attachReceiptToOrder(
   db.prepare(
     `UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`,
   ).run(orderId);
-  insertRaffleOrderEvent(orderId, "receipt_submitted", null);
+  const receiptEventDetail = JSON.stringify({
+    url: receipt.url,
+    name: receipt.name,
+    mime: receipt.mime,
+  });
+  insertRaffleOrderEvent(orderId, "receipt_submitted", receiptEventDetail);
   return { ok: true };
 }
 

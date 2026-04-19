@@ -329,6 +329,14 @@ import InstallAppModal from "./InstallAppModal.astro";
     </nav>
     <p id="reserve-payment-phase-hint" class="reserve-payment-modal__phase-hint" role="status"></p>
 
+    <div id="reserve-payment-repeat-wrap" class="reserve-pay-repeat" hidden>
+      <p id="reserve-payment-repeat-text" class="reserve-pay-repeat__text"></p>
+      <button type="button" id="reserve-payment-repeat-toggle" class="reserve-pay-repeat__toggle" hidden>
+        Показать ранее отправленные чеки
+      </button>
+      <ul id="reserve-payment-repeat-list" class="reserve-pay-repeat__list" hidden></ul>
+    </div>
+
     <div class="reserve-payment-modal__progress-track">
       <div id="reserve-payment-progress" class="reserve-payment-modal__progress-fill"></div>
     </div>
@@ -551,6 +559,13 @@ import InstallAppModal from "./InstallAppModal.astro";
     <p class="wait-receipt-modal__sub">
       Вы отметили перевод, но чек ещё не прикреплён. Без чека заявку сложно подтвердить, а время брони ограничено — приложите файл ниже.
     </p>
+    <div id="wait-receipt-repeat-wrap" class="reserve-pay-repeat reserve-pay-repeat--wait" hidden>
+      <p id="wait-receipt-repeat-text" class="reserve-pay-repeat__text"></p>
+      <button type="button" id="wait-receipt-repeat-toggle" class="reserve-pay-repeat__toggle" hidden>
+        Показать ранее отправленные чеки
+      </button>
+      <ul id="wait-receipt-repeat-list" class="reserve-pay-repeat__list" hidden></ul>
+    </div>
     <p id="wait-receipt-amount" class="wait-receipt-modal__amount">0 ₽</p>
     <button type="button" class="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Прикрепить чек (шаг 3)</button>
     <p id="wait-receipt-left" class="wait-receipt-modal__left">Бронь держится 00:00</p>

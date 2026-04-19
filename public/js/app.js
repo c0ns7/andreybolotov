@@ -1406,6 +1406,8 @@
     tbankEnabled: false,
     qrEnabled: true,
     paymentMethod: "collection",
+    /** @type {Record<string, unknown> | null} */
+    paymentParticipation: null,
   };
   /** Кэш корзины и «Мои билеты» — подгружается после входа, обновляется при мутациях */
   var raffleDataCache = {
@@ -2147,6 +2149,7 @@
       rulesUrl = String(raffleDetailState.raffle.rules_url || "").trim();
     }
     paintRaffleRulesLinks(rulesUrl);
+    paintReservePaymentParticipation();
   }
 
   function startReservePaymentTimer(untilTs) {
@@ -2178,6 +2181,7 @@
     if (input) input.value = "";
     var nameEl = document.getElementById("reserve-payment-file-name");
     if (nameEl) nameEl.textContent = "Фото или PDF перевода";
+    reserveFlowState.paymentParticipation = null;
     if (modalReservePayment) closeModal(modalReservePayment);
   }
 
@@ -2222,7 +2226,7 @@
       : null;
   }
 
-  function fillReserveFlowState(order, numbers, raffle) {
+  function fillReserveFlowState(order, numbers, raffle, paymentParticipationOpt) {
     if (!order || !raffle) return;
     reserveFlowState.orderId = Number(order.id) || 0;
     reserveFlowState.raffleId = Number(order.raffle_id || (raffle && raffle.id) || 0) || 0;
@@ -2259,19 +2263,173 @@
         ? !!raffle.qr_enabled
         : Boolean(String((raffle && raffle.qr_image_url) || "").trim());
     reserveFlowState.paymentMethod = "collection";
+    if (arguments.length >= 4) {
+      reserveFlowState.paymentParticipation =
+        paymentParticipationOpt != null ? paymentParticipationOpt : null;
+    } else {
+      reserveFlowState.paymentParticipation = null;
+    }
   }
 
-  function openReserveSuccessFlow(order, numbers, raffle) {
+  function openReserveSuccessFlow(order, numbers, raffle, paymentParticipationOpt) {
     if (!order || !raffle) return;
-    fillReserveFlowState(order, numbers, raffle);
+    if (arguments.length >= 4) {
+      fillReserveFlowState(order, numbers, raffle, paymentParticipationOpt);
+    } else {
+      fillReserveFlowState(order, numbers, raffle);
+    }
     renderReserveFlowModals();
     paintPaymentFlowSteps("reserve-success-steps", "success");
     emitUxEvent("raffle_reserved", { order_id: reserveFlowState.orderId, tickets: reserveFlowState.numbers.length });
     if (modalReserveSuccess) openModal(modalReserveSuccess);
   }
 
-  function armReservePaymentUiFromFlowState() {
+  async function refreshReserveFlowPaymentParticipation() {
+    var oid = Number(reserveFlowState.orderId) || 0;
+    var rid = Number(reserveFlowState.raffleId) || 0;
+    if (oid < 1 || rid < 1) {
+      reserveFlowState.paymentParticipation = null;
+      return;
+    }
+    try {
+      var res = await fetch("/api/raffles/" + String(rid) + "/order", {
+        cache: "no-store",
+        headers: authHeaders(),
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok || !data) {
+        reserveFlowState.paymentParticipation = null;
+        return;
+      }
+      reserveFlowState.paymentParticipation = data.payment_participation || null;
+    } catch (_) {
+      reserveFlowState.paymentParticipation = null;
+    }
+  }
+
+  function formatReceiptArchiveTs(ms) {
+    var t = Number(ms) || 0;
+    if (!t) return "—";
+    try {
+      return new Date(t).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function paintReservePaymentParticipation() {
+    var ctx = reserveFlowState && reserveFlowState.paymentParticipation;
+    var pairs = [
+      ["reserve-payment-repeat-wrap", "reserve-payment-repeat-text", "reserve-payment-repeat-toggle", "reserve-payment-repeat-list"],
+      ["wait-receipt-repeat-wrap", "wait-receipt-repeat-text", "wait-receipt-repeat-toggle", "wait-receipt-repeat-list"],
+    ];
+    for (var pi = 0; pi < pairs.length; pi++) {
+      var wrap = document.getElementById(pairs[pi][0]);
+      var textEl = document.getElementById(pairs[pi][1]);
+      var toggle = document.getElementById(pairs[pi][2]);
+      var listEl = document.getElementById(pairs[pi][3]);
+      if (!wrap || !textEl) continue;
+      if (!ctx || !ctx.show_repeat_payment_notice) {
+        wrap.hidden = true;
+        if (toggle) {
+          toggle.hidden = true;
+          toggle.textContent = "Показать ранее отправленные чеки";
+        }
+        if (listEl) {
+          listEl.hidden = true;
+          listEl.innerHTML = "";
+        }
+        continue;
+      }
+      wrap.hidden = false;
+      var lines = [];
+      var receipts = Array.isArray(ctx.prior_receipts) ? ctx.prior_receipts : [];
+      if (ctx.has_confirmed_tickets) {
+        var nums = Array.isArray(ctx.confirmed_ticket_numbers) ? ctx.confirmed_ticket_numbers : [];
+        var ns = nums
+          .slice(0, 20)
+          .map(function (n) {
+            return "№" + String(n);
+          })
+          .join(", ");
+        if (nums.length > 20) ns += "…";
+        lines.push("По этой акции у вас уже есть подтверждённые номерки" + (ns ? ": " + ns + "." : "."));
+      }
+      if (ctx.current_order_reject_count > 0) {
+        lines.push(
+          "Ранее чек по этой брони не приняли — отправьте новый файл (не повторяйте тот же, если об этом было в уведомлении).",
+        );
+      }
+      if (!ctx.has_confirmed_tickets && !(ctx.current_order_reject_count > 0) && receipts.length > 1) {
+        lines.push(
+          "Ранее по этой акции вы уже отправляли несколько чеков — прикрепляйте актуальный файл по текущему переводу.",
+        );
+      }
+      if (!lines.length) {
+        lines.push("Проверьте, что оплачиваете текущую бронь и не прикрепляете старый чек от другого заказа.");
+      }
+      textEl.textContent = lines.join(" ");
+
+      if (receipts.length && toggle && listEl) {
+        toggle.hidden = false;
+        listEl.innerHTML = receipts
+          .map(function (r) {
+            var url = String((r && r.url) || "").trim();
+            if (!url) return "";
+            var name = escapeHtml(String((r && r.name) || "чек"));
+            var when = escapeHtml(formatReceiptArchiveTs(Number(r && r.at_ms)));
+            var oid = escapeHtml(String((r && r.order_public_id) || ""));
+            return (
+              '<li><span class="reserve-pay-repeat__item-when">' +
+              when +
+              "</span> · заказ <strong>" +
+              oid +
+              '</strong> — <a href="' +
+              escapeHtml(url) +
+              '" target="_blank" rel="noopener noreferrer">' +
+              name +
+              "</a></li>"
+            );
+          })
+          .filter(Boolean)
+          .join("");
+        listEl.hidden = true;
+        toggle.textContent = "Показать ранее отправленные чеки";
+      } else {
+        if (toggle) {
+          toggle.hidden = true;
+          toggle.textContent = "Показать ранее отправленные чеки";
+        }
+        if (listEl) {
+          listEl.hidden = true;
+          listEl.innerHTML = "";
+        }
+      }
+    }
+  }
+
+  function wireReservePayRepeatToggles() {
+    [
+      ["reserve-payment-repeat-toggle", "reserve-payment-repeat-list"],
+      ["wait-receipt-repeat-toggle", "wait-receipt-repeat-list"],
+    ].forEach(function (pair) {
+      var btn = document.getElementById(pair[0]);
+      var list = document.getElementById(pair[1]);
+      if (!btn || !list || btn.dataset.wired) return;
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", function () {
+        list.hidden = !list.hidden;
+        btn.textContent = list.hidden ? "Показать ранее отправленные чеки" : "Скрыть список чеков";
+      });
+    });
+  }
+
+  async function armReservePaymentUiFromFlowState() {
     if (!reserveFlowState.orderId) return;
+    await refreshReserveFlowPaymentParticipation();
+    renderReserveFlowModals();
     fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/bank", {
       method: "PATCH",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -2308,12 +2466,12 @@
       }
       var rid = Number((it.raffle && it.raffle.id) || order.raffle_id) || 0;
       var raffle = await fetchFullRaffleDtoById(rid);
-      fillReserveFlowState(order, numbers, raffle);
+      fillReserveFlowState(order, numbers, raffle, it.payment_participation);
       renderReserveFlowModals();
       closeCartModal();
       closeChatPanel();
       if (modalProfile) closeModal(modalProfile);
-      armReservePaymentUiFromFlowState();
+      await armReservePaymentUiFromFlowState();
       applyCartBadgeFromItems(raffleDataCache.cart && raffleDataCache.cart.items ? raffleDataCache.cart.items : []);
     } catch (e) {
       showToast(String((e && e.message) || "Ошибка"), "error");
@@ -2358,12 +2516,12 @@
     var raffleDto = data.raffle;
     if (!raffleDto || raffleDto.id == null) throw new Error("Акция не найдена");
     var full = await fetchFullRaffleDtoById(Number(raffleDto.id));
-    fillReserveFlowState(data.order, data.numbers || [], full);
+    fillReserveFlowState(data.order, data.numbers || [], full, data.payment_participation);
     renderReserveFlowModals();
     closeCartModal();
     closeChatPanel();
     if (modalProfile) closeModal(modalProfile);
-    armReservePaymentUiFromFlowState();
+    await armReservePaymentUiFromFlowState();
     applyCartBadgeFromItems(raffleDataCache.cart && raffleDataCache.cart.items ? raffleDataCache.cart.items : []);
   }
 
@@ -2394,7 +2552,7 @@
     if (!isRaffleLockedByReceiptPending()) return;
     var r = raffleDetailState.raffle;
     var rid = r && r.id != null ? Number(r.id) : 0;
-    function paintAndOpen() {
+    async function paintAndOpen() {
       if (!isRaffleLockedByReceiptPending()) {
         fetchCartFromApi().catch(function () {});
         fetchTicketsFromApi().catch(function () {});
@@ -2443,6 +2601,7 @@
         reserveFlowState.paymentMethod === "qr" || reserveFlowState.paymentMethod === "tbank_collection"
           ? reserveFlowState.paymentMethod
           : "collection";
+      await refreshReserveFlowPaymentParticipation();
       renderReserveFlowModals();
       var amountEl = document.getElementById("wait-receipt-amount");
       var leftEl = document.getElementById("wait-receipt-left");
@@ -2470,7 +2629,7 @@
             return { ok: res.ok, d: d };
           });
         })
-        .then(function (x) {
+        .then(async function (x) {
           if (x.ok && x.d) {
             applyRaffleServerTimeSkewFromPayload(x.d);
             raffleDetailState.order = x.d.order || null;
@@ -2479,13 +2638,13 @@
               clearRaffleReservationCountdownAnchor();
             }
           }
-          paintAndOpen();
+          await paintAndOpen();
         })
         .catch(function () {
-          paintAndOpen();
+          void paintAndOpen().catch(function () {});
         });
     } else {
-      paintAndOpen();
+      void paintAndOpen().catch(function () {});
     }
   }
 
@@ -5248,25 +5407,20 @@
 
   document.getElementById("reserve-success-go-pay")?.addEventListener("click", function () {
     if (!reserveFlowState.orderId) return;
-    fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/bank", {
-      method: "PATCH",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ bank: "sber" }),
-    }).catch(function () {});
-    if (modalReserveSuccess) closeModal(modalReserveSuccess);
-    if (modalReservePayment) openModal(modalReservePayment);
-    try {
-      if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission().catch(function () {});
-      }
-    } catch (_) {}
-    switchReservePaymentStep("requisites");
-    startReservePaymentTimer(reserveFlowState.reservedUntil);
-    emitUxEvent("raffle_payment_opened", { order_id: reserveFlowState.orderId });
+    void armReservePaymentUiFromFlowState()
+      .then(function () {
+        try {
+          if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission().catch(function () {});
+          }
+        } catch (_) {}
+      })
+      .catch(function () {});
   });
   modalReserveSuccess?.addEventListener("click", function (e) {
     if (e.target === modalReserveSuccess) closeModal(modalReserveSuccess);
   });
+  wireReservePayRepeatToggles();
 
   document.getElementById("reserve-payment-close")?.addEventListener("click", function () {
     requestCloseReservePaymentModal();
@@ -5483,8 +5637,16 @@
     if (modalWaitReceipt) closeModal(modalWaitReceipt);
     var until = reserveFlowState.reservedUntil;
     requestAnimationFrame(function () {
-      if (modalReservePayment) openModal(modalReservePayment);
-      startReservePaymentTimer(until);
+      void refreshReserveFlowPaymentParticipation()
+        .then(function () {
+          renderReserveFlowModals();
+          if (modalReservePayment) openModal(modalReservePayment);
+          startReservePaymentTimer(until);
+        })
+        .catch(function () {
+          if (modalReservePayment) openModal(modalReservePayment);
+          startReservePaymentTimer(until);
+        });
     });
   });
   document.getElementById("reserve-expired-close")?.addEventListener("click", function () {
@@ -5696,7 +5858,19 @@
     var hasReservedOrder = !!(order && String(order.status || "") === "reserved" && Number(order.id) > 0);
     var reserveReq = null;
     if (hasReservedOrder) {
-      reserveReq = Promise.resolve({ order: order, numbers: raffleDetailState.orderNumbers || [] });
+      reserveReq = apiJson("/api/raffles/" + String(raffleId) + "/order", {
+        cache: "no-store",
+        headers: authHeaders(),
+      }).then(function (d) {
+        if (!d || !d.order || String(d.order.status || "") !== "reserved") {
+          throw new Error("Нет активной брони");
+        }
+        return {
+          order: d.order,
+          numbers: Array.isArray(d.numbers) ? d.numbers : [],
+          payment_participation: d.payment_participation,
+        };
+      });
     } else {
       if (!Number.isFinite(raffleId) || raffleId < 1 || !nums.length) {
         setCartCheckoutLoading(false);
@@ -5719,7 +5893,7 @@
         persistRaffleDraftSelection();
         closeCartModal();
         setCartCheckoutLoading(false);
-        openReserveSuccessFlow(ord, raffleDetailState.orderNumbers, raffle);
+        openReserveSuccessFlow(ord, raffleDetailState.orderNumbers, raffle, data && data.payment_participation);
         var released = data && Array.isArray(data.released_after_cleanup) ? data.released_after_cleanup : [];
         var skipped = data && Array.isArray(data.skipped_still_occupied) ? data.skipped_still_occupied : [];
         if (released.length || skipped.length) {
@@ -5848,12 +6022,24 @@
       reserveFlowState.amountRub = Number.isFinite(attachAmount) ? attachAmount : 0;
       reserveFlowState.reservedUntil = Number.isFinite(attachUntil) ? attachUntil : 0;
       reserveFlowState.numbers = [];
-      renderReserveFlowModals();
-      switchReservePaymentStep("confirm");
-      if (modalTickets) closeModal(modalTickets);
-      if (modalProfile) closeModal(modalProfile);
-      if (modalReservePayment) openModal(modalReservePayment);
-      startReservePaymentTimer(reserveFlowState.reservedUntil);
+      reserveFlowState.paymentParticipation = null;
+      void refreshReserveFlowPaymentParticipation()
+        .then(function () {
+          renderReserveFlowModals();
+          switchReservePaymentStep("confirm");
+          if (modalTickets) closeModal(modalTickets);
+          if (modalProfile) closeModal(modalProfile);
+          if (modalReservePayment) openModal(modalReservePayment);
+          startReservePaymentTimer(reserveFlowState.reservedUntil);
+        })
+        .catch(function () {
+          renderReserveFlowModals();
+          switchReservePaymentStep("confirm");
+          if (modalTickets) closeModal(modalTickets);
+          if (modalProfile) closeModal(modalProfile);
+          if (modalReservePayment) openModal(modalReservePayment);
+          startReservePaymentTimer(reserveFlowState.reservedUntil);
+        });
       return;
     }
     var rm = e.target.closest("[data-tickets-remove]");

@@ -66,6 +66,65 @@
     });
   }
 
+  /** Компактная дата для списка старых чеков */
+  function formatReceiptHistoryLocal(ms) {
+    var n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    return new Date(n).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function renderPendingReceiptHistory(p) {
+    var items = Array.isArray(p.receipt_history_prior) ? p.receipt_history_prior : [];
+    if (!items.length) return "";
+    var rows = items
+      .map(function (it) {
+        var oid = esc(String(it.order_public_id != null ? it.order_public_id : "A" + String(it.order_id)));
+        var when = esc(formatReceiptHistoryLocal(it.at_ms));
+        var name = esc(String(it.name || "чек"));
+        var url = esc(String(it.url || "").trim());
+        if (!url) return "";
+        var tag = it.same_order
+          ? '<span class="admin-payment-rhist__tag" title="Другая попытка по этой же заявке">та же заявка</span>'
+          : "";
+        return (
+          '<li class="admin-payment-rhist__item">' +
+          '<span class="admin-payment-rhist__meta">' +
+          when +
+          " · " +
+          oid +
+          (tag ? " " + tag : "") +
+          "</span>" +
+          '<a class="admin-payment-rhist__link" href="' +
+          url +
+          '" target="_blank" rel="noopener noreferrer">' +
+          ICO.receipt +
+          '<span class="admin-payment-rhist__fname">' +
+          name +
+          "</span>" +
+          '<span class="admin-payment-rhist__go" aria-hidden="true">↗</span></a></li>'
+        );
+      })
+      .filter(Boolean)
+      .join("");
+    if (!rows) return "";
+    return (
+      '<div class="admin-payment-rhist" role="region" aria-label="Ранее отправленные чеки по этой акции">' +
+      '<div class="admin-payment-rhist__head">' +
+      ICO.receipt +
+      '<span class="admin-payment-rhist__title">Ранее по акции</span>' +
+      '<span class="admin-payment-rhist__hint">другие заказы и старые файлы</span>' +
+      "</div>" +
+      '<ul class="admin-payment-rhist__list">' +
+      rows +
+      "</ul></div>"
+    );
+  }
+
   /** Если часы устройства заметно расходятся с сервером — короткая подсказка. */
   function renderServerSkewNote(serverMs) {
     if (serverMs == null || !Number.isFinite(Number(serverMs))) return "";
@@ -615,6 +674,7 @@
       sameReceiptFact +
       rejectMetaFacts(p) +
       "</ul>" +
+      renderPendingReceiptHistory(p) +
       '<div class="admin-payment-card__actions">' +
       chatBtn +
       '<button type="button" class="admin-payment-btn admin-payment-btn--confirm" data-confirm-order="' +

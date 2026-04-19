@@ -4031,6 +4031,63 @@ a.raffle-pay__btn {
   font-size: 0.95rem;
 }
 
+.reserve-pay-repeat {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 58, 138, 0.35);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.reserve-pay-repeat--wait {
+  margin-top: 4px;
+}
+
+.reserve-pay-repeat__text {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: #e2e8f0;
+}
+
+.reserve-pay-repeat__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.5);
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reserve-pay-repeat__toggle:hover {
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #dbeafe;
+}
+
+.reserve-pay-repeat__list {
+  margin: 6px 0 0;
+  padding: 0 0 0 18px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+.reserve-pay-repeat__list a {
+  color: #93c5fd;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.reserve-pay-repeat__list a:hover {
+  color: #bfdbfe;
+}
+
 .wait-receipt-modal__amount {
   margin: 0 0 14px;
   text-align: center;
