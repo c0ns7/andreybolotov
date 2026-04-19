@@ -357,20 +357,35 @@ import "../styles/admin-raffles.css";
             <div class="admin-raffles-toolbar__text">
               <span class="admin-raffles-toolbar__label"
                 >Пользователи <span id="admin-users-total-count" class="admin-users-toolbar__count" aria-live="polite">(…)</span></span>
-              <p class="admin-raffles-toolbar__hint">Поиск по имени, телефону или email. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
+              <p class="admin-raffles-toolbar__hint">Поиск по имени, телефону или email; отдельно — точный поиск по ID аккаунта. Если заполнен ID, текстовый поиск не используется. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
             </div>
           </div>
         </div>
-        <label class="admin-users-search-wrap">
-          <span class="visually-hidden">Поиск пользователей</span>
-          <input
-            id="admin-users-search"
-            class="input admin-users-search"
-            type="search"
-            placeholder="Поиск по имени, телефону, email…"
-            autocomplete="off"
-          />
-        </label>
+        <div class="admin-users-search-bar">
+          <label class="admin-users-search-wrap admin-users-search-wrap--main">
+            <span class="visually-hidden">Поиск пользователей</span>
+            <input
+              id="admin-users-search"
+              class="input admin-users-search"
+              type="search"
+              placeholder="Поиск по имени, телефону, email…"
+              autocomplete="off"
+            />
+          </label>
+          <label class="admin-users-search-wrap admin-users-search-wrap--id">
+            <span class="visually-hidden">Поиск по ID аккаунта</span>
+            <input
+              id="admin-users-search-id"
+              class="input admin-users-search-id"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="12"
+              placeholder="ID"
+              title="Точный номер ID аккаунта"
+            />
+          </label>
+        </div>
         <div id="admin-users-list" class="admin-users-list-wrap"></div>
       </div>
 
@@ -859,6 +874,7 @@ import "../styles/admin-raffles.css";
           </button>
         </div>
         <div class="modal__body">
+          <p class="admin-edit-user-id" id="edit-user-account-id" aria-live="polite"></p>
           <form id="form-edit-user" novalidate>
             <div class="form-group">
               <label for="edit-user-name">Имя и фамилия</label>
@@ -1511,6 +1527,20 @@ import "../styles/admin-raffles.css";
   .admin-edit-modal {
     max-width: 420px;
   }
+  .admin-edit-user-id {
+    margin: 0 0 14px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+  }
+  .admin-edit-user-id:empty {
+    display: none;
+  }
   .admin-sidebar {
     background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
     border: 1px solid rgba(226, 232, 240, 0.95);
@@ -1970,14 +2000,58 @@ import "../styles/admin-raffles.css";
     min-width: 0;
   }
 
+  .admin-users-search-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 14px;
+    max-width: 520px;
+  }
+
   .admin-users-search-wrap {
     display: block;
-    margin-bottom: 14px;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .admin-users-search-wrap--main {
+    flex: 1 1 220px;
+  }
+
+  .admin-users-search-wrap--id {
+    flex: 0 0 auto;
+    width: 86px;
   }
 
   .admin-users-search {
     width: 100%;
-    max-width: 420px;
+    max-width: none;
+  }
+
+  .admin-users-search-id {
+    width: 100%;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.88rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+
+  .admin-users-search-id:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .admin-users-search-id::placeholder {
+    font-weight: 600;
+    color: #94a3b8;
+    letter-spacing: 0.06em;
   }
 
   .admin-users-list-wrap {

@@ -44,8 +44,10 @@ import {
   setMaintenanceEnabled,
   countActiveAdmins,
   listUsersForAdminPage,
+  listUsersForAdminPageByExactId,
   countUsersForAdmin,
   countUsersForAdminBySearch,
+  countUsersForAdminByExactId,
   updateUserRole,
   updateUserBlocked,
 } from "./db.js";
@@ -967,12 +969,22 @@ app.get("/api/admin/users/all", (c) => {
   const rawOff = c.req.query("offset");
   const rawLim = c.req.query("limit");
   const q = String(c.req.query("q") ?? "").trim();
+  const rawFilterId = String(c.req.query("id") ?? "").trim();
   const offset = Number(rawOff ?? "0");
   const limit = Number(rawLim ?? "10");
   const safeOff = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
   const safeLim = Number.isFinite(limit) ? Math.min(Math.max(1, Math.floor(limit)), 100) : 10;
-  const rows = listUsersForAdminPage(safeOff, safeLim, q || null);
-  const total = q ? countUsersForAdminBySearch(q) : countUsersForAdmin();
+  let filterById: number | null = null;
+  if (/^\d+$/.test(rawFilterId)) {
+    const n = Number(rawFilterId);
+    if (n > 0 && Number.isSafeInteger(n)) filterById = n;
+  }
+  const rows =
+    filterById != null
+      ? listUsersForAdminPageByExactId(filterById, safeOff, safeLim)
+      : listUsersForAdminPage(safeOff, safeLim, q || null);
+  const total =
+    filterById != null ? countUsersForAdminByExactId(filterById) : q ? countUsersForAdminBySearch(q) : countUsersForAdmin();
   return c.json({
     users: rows.map((x) => ({
       id: x.id,

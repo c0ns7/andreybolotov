@@ -1528,6 +1528,20 @@
   word-break: break-word;
 }
 
+.admin-user-card__account-id {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+
 .admin-user-card__status {
   font-size: 0.7rem;
   font-weight: 700;

@@ -542,6 +542,33 @@ export function countUsersForAdminBySearch(search: string): number {
 }
 
 /** Постраничный список: без поиска — новые сверху (id DESC); с поиском — старые регистрации раньше (id ASC), чтобы «давних» не прятать за 1-й страницей совпадений. */
+/** Точное совпадение по первичному ключу (для отдельного поля «ID» в админке). */
+export function countUsersForAdminByExactId(userId: number): number {
+  if (!Number.isFinite(userId) || userId <= 0 || !Number.isInteger(userId)) return 0;
+  const r = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE id = ?`).get(userId) as { c: number };
+  return Number(r?.c ?? 0);
+}
+
+export function listUsersForAdminPageByExactId(
+  userId: number,
+  offset: number,
+  limit: number,
+): AdminUserListRow[] {
+  if (!Number.isFinite(userId) || userId <= 0 || !Number.isInteger(userId)) return [];
+  const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
+  const off = Math.max(0, Math.floor(offset));
+  if (off > 0) return [];
+  return db
+    .prepare(
+      `SELECT id, phone, name, email,
+              COALESCE(role,'user') AS role,
+              COALESCE(blocked,0) AS blocked,
+              created_at
+       FROM users WHERE id = ? LIMIT ?`,
+    )
+    .all(userId, lim) as AdminUserListRow[];
+}
+
 export function listUsersForAdminPage(offset: number, limit: number, search: string | null): AdminUserListRow[] {
   const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
   const off = Math.max(0, Math.floor(offset));

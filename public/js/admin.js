@@ -727,6 +727,13 @@
     const n = document.getElementById("edit-user-name");
     const p = document.getElementById("edit-user-phone");
     const em = document.getElementById("edit-user-email");
+    const idLine = document.getElementById("edit-user-account-id");
+    if (idLine) {
+      idLine.textContent =
+        selectedUserData.id != null && String(selectedUserData.id).trim() !== ""
+          ? "ID аккаунта: " + selectedUserData.id
+          : "";
+    }
     if (n) n.value = selectedUserData.name || "";
     if (p) p.value = formatRuPhone(selectedUserData.phone);
     if (em) em.value = selectedUserData.email || "";

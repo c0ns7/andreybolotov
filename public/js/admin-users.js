@@ -87,6 +87,8 @@
   /** Увеличивается при каждом «сбросе» списка (поиск / перезагрузка), чтобы отбрасывать ответы устаревших запросов (в т.ч. догрузки по скроллу). */
   let fetchGeneration = 0;
   let currentSearch = "";
+  /** Только цифры, точный id; если непусто — запрос с `id=`, текстовый `q` не шлём */
+  let currentIdSearch = "";
   /** @type {IntersectionObserver | null} */
   let ioObserver = null;
   const PAGE_SIZE = 10;
@@ -197,6 +199,9 @@
             '<h3 class="admin-user-card__name">' +
             esc(u.name) +
             "</h3>" +
+            '<span class="admin-user-card__account-id" title="ID аккаунта в системе">ID ' +
+            esc(String(u.id)) +
+            "</span>" +
             '<span class="admin-user-card__status ' +
             stClass +
             '">' +
@@ -305,6 +310,8 @@
     listLoading = true;
     const offset = reset ? 0 : usersCache.length;
     const q = currentSearch.trim();
+    const idRaw = currentIdSearch.trim();
+    const useIdFilter = /^\d+$/.test(idRaw) && Number(idRaw) > 0;
     if (reset) {
       usersCache = [];
       renderUsers();
@@ -315,7 +322,8 @@
         String(offset) +
         "&limit=" +
         String(PAGE_SIZE);
-      if (q) url += "&q=" + encodeURIComponent(q);
+      if (useIdFilter) url += "&id=" + encodeURIComponent(idRaw);
+      else if (q) url += "&q=" + encodeURIComponent(q);
       const data = await apiJson(url, {
         headers: authHeaders(),
         cache: "no-store",
@@ -345,25 +353,35 @@
     if (!el || el.dataset.inited === "1") return;
     el.dataset.inited = "1";
     var search = document.getElementById("admin-users-search");
+    var searchId = document.getElementById("admin-users-search-id");
     /** @type {ReturnType<typeof setTimeout> | null} */
     var searchDebounceTimer = null;
+    function scheduleRefetch() {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(function () {
+        searchDebounceTimer = null;
+        var next = search ? String(search.value || "").trim() : "";
+        var nextId = searchId ? String(searchId.value || "").trim().replace(/\D/g, "") : "";
+        if (searchId && String(searchId.value || "").replace(/\D/g, "") !== String(searchId.value || "")) {
+          searchId.value = nextId;
+        }
+        if (next === currentSearch && nextId === currentIdSearch) return;
+        currentSearch = next;
+        currentIdSearch = nextId;
+        fetchUsersPage(true).catch(function (e) {
+          if (e.status === 403 || e.status === 401) {
+            location.replace(e.status === 401 ? "/" : "/home");
+            return;
+          }
+          alert(e.message || "Ошибка загрузки");
+        });
+      }, 320);
+    }
     if (search) {
-      search.addEventListener("input", function () {
-        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-        searchDebounceTimer = setTimeout(function () {
-          searchDebounceTimer = null;
-          var next = String(search.value || "").trim();
-          if (next === currentSearch) return;
-          currentSearch = next;
-          fetchUsersPage(true).catch(function (e) {
-            if (e.status === 403 || e.status === 401) {
-              location.replace(e.status === 401 ? "/" : "/home");
-              return;
-            }
-            alert(e.message || "Ошибка загрузки");
-          });
-        }, 320);
-      });
+      search.addEventListener("input", scheduleRefetch);
+    }
+    if (searchId) {
+      searchId.addEventListener("input", scheduleRefetch);
     }
     fetchUsersPage(true).catch(function (e) {
       if (e.status === 403 || e.status === 401) {
