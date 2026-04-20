@@ -3801,6 +3801,10 @@
     }
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
     var ctaLabel = st === "active" || st === "paused" || st === "closed" ? "Участвовать" : "Подробнее";
+    var ctaInner =
+      ctaLabel === "Участвовать"
+        ? '<span class="raffle-card__cta-label">Участвовать</span><span class="raffle-card__cta-arrow" aria-hidden="true">→</span>'
+        : '<span class="raffle-card__cta-label">' + escapeHtml(ctaLabel) + "</span>";
     var ctaDisabledAttr = st === "paused" || st === "closed" ? ' disabled aria-disabled="true"' : "";
     var viewers = Math.max(0, Number(r.viewers_count) || 0);
     var total = Math.max(0, Number(r.ticket_count) || 0);
@@ -3876,7 +3880,7 @@
       '"' +
       ctaDisabledAttr +
       ">" +
-      ctaLabel +
+      ctaInner +
       "</button></div>" +
       "</div></article>"
     );

@@ -1010,7 +1010,6 @@ html.js-intro-done #welcome-splash {
 
 .raffle-card__foot {
   display: block;
-  padding: 12px 14px 12px;
   background: #fff;
 }
 
@@ -1020,12 +1019,14 @@ html.js-intro-done #welcome-splash {
   justify-content: space-between;
   gap: 12px;
   margin-top: 10px;
+  background: #111827;
+  padding: 16px 12px;
 }
 
 .raffle-card__price {
   font-weight: 700;
   font-size: 1rem;
-  color: var(--accent);
+  color: #fff;
 }
 
 .raffle-card__price-old {
@@ -1054,15 +1055,30 @@ html.js-intro-done #welcome-splash {
   font-weight: 800;
   color: #fff;
   padding: 9px 18px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
   font-family: inherit;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.raffle-card__cta-arrow {
+  display: inline-block;
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.raffle-card__cta:not([disabled]):hover .raffle-card__cta-arrow,
+.raffle-card__cta:not([aria-disabled="true"]):hover .raffle-card__cta-arrow {
+  transform: translateX(4px);
 }
 
 .raffle-card__cta--dark {
-  background: #111;
+  color: #111827;
+  background: #fff;
 }
 
 .raffle-card__cta--indigo {
@@ -1071,6 +1087,7 @@ html.js-intro-done #welcome-splash {
 
 .raffle-card__progress-wrap {
   margin-top: 0;
+  padding: 14px 12px 8px;
 }
 
 .raffle-card__progress-meta {
