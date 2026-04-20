@@ -5,6 +5,8 @@
 
   /** @type {Array<{id:number;phone:string;name:string;email:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
   let allUsersCache = [];
+  /** Строка поиска в сайдбаре «Диалоги» (телефон / текст); синхронизируется с полем с debounce */
+  let supportThreadSearch = "";
   /** @type {'all' | 'new' | 'unanswered'} */
   let adminTab = "all";
   /** @type {WebSocket | null} */
@@ -467,8 +469,10 @@
     if (!listEl) return;
     const users = filterUsers(allUsersCache);
     if (!users.length) {
-      listEl.innerHTML =
-        '<p style="padding:16px;color:var(--text-muted);font-size:0.85rem;text-align:center;">Нет диалогов в этой категории</p>';
+      var emptyMsg = supportThreadSearch
+        ? "Ничего не найдено. Попробуйте другой номер или фразу из переписки."
+        : "Нет диалогов в этой категории";
+      listEl.innerHTML = '<p class="admin-user-list__empty">' + esc(emptyMsg) + "</p>";
       return;
     }
     listEl.innerHTML = users
@@ -531,7 +535,12 @@
   }
 
   async function loadUsers() {
-    const data = await apiJson("/api/admin/users", { headers: authHeaders() });
+    const qs =
+      supportThreadSearch.length > 0 ? "?search=" + encodeURIComponent(supportThreadSearch) : "";
+    const data = await apiJson("/api/admin/users" + qs, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
     allUsersCache = data.users || [];
     mergeOpenThreadIntoUserList();
     renderUserList();
@@ -896,6 +905,41 @@
     });
   }
 
+  function bindSupportThreadSearch() {
+    var inp = document.getElementById("admin-support-thread-search");
+    if (!inp) return;
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    var debounceTimer = null;
+    function runLoad() {
+      loadUsers().catch(function (e) {
+        if (e.status === 403 || e.status === 401) {
+          location.replace(e.status === 401 ? "/" : "/home");
+        }
+      });
+    }
+    inp.addEventListener("input", function () {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        debounceTimer = null;
+        var next = String(inp.value || "").trim();
+        if (next === supportThreadSearch) return;
+        supportThreadSearch = next;
+        runLoad();
+      }, 350);
+    });
+    inp.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      inp.value = "";
+      if (supportThreadSearch === "") return;
+      supportThreadSearch = "";
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      runLoad();
+    });
+  }
+
   function isAdminRole(role) {
     return String(role == null ? "" : role)
       .trim()
@@ -940,6 +984,7 @@
 
   function init() {
     bindTabs();
+    bindSupportThreadSearch();
     try {
       var mq = window.matchMedia("(max-width: 699px)");
       if (mq && typeof mq.addEventListener === "function") {

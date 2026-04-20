@@ -1,0 +1,176 @@
+---
+/** Публичная витрина свободных номерков по текущей акции + WS-обновления */
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8fafc" />
+    <meta
+      name="description"
+      content="Свободные номерки по текущей акции: обновление в реальном времени."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Свободные номерки — andreybolotov.ru</title>
+    <style is:global>
+      :root {
+        --numbers-bg: #f1f5f9;
+        --numbers-card: #fff;
+        --numbers-text: #0f172a;
+        --numbers-muted: #64748b;
+        --numbers-accent: #2563eb;
+        --numbers-border: #e2e8f0;
+        --numbers-chip: #eff6ff;
+        --numbers-chip-border: #bfdbfe;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body.numbers-body {
+        margin: 0;
+        min-height: 100dvh;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          Ubuntu,
+          "Helvetica Neue",
+          sans-serif;
+        background: var(--numbers-bg);
+        color: var(--numbers-text);
+        line-height: 1.45;
+      }
+      .numbers-page {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 20px 16px 48px;
+      }
+      .numbers-top {
+        background: var(--numbers-card);
+        border: 1px solid var(--numbers-border);
+        border-radius: 18px;
+        padding: 20px 20px 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+      }
+      .numbers-top h1 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .numbers-meta {
+        margin: 0 0 12px;
+        font-size: 0.88rem;
+        color: var(--numbers-muted);
+        font-weight: 600;
+      }
+      .numbers-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .numbers-nav a {
+        font-size: 0.86rem;
+        font-weight: 700;
+        color: var(--numbers-accent);
+        text-decoration: none;
+      }
+      .numbers-nav a:hover {
+        text-decoration: underline;
+      }
+      .numbers-status {
+        font-size: 0.78rem;
+        color: var(--numbers-muted);
+        font-weight: 600;
+      }
+      .numbers-status--ok {
+        color: #15803d;
+      }
+      .numbers-status--err {
+        color: #b91c1c;
+      }
+      .numbers-band {
+        background: var(--numbers-card);
+        border: 1px solid var(--numbers-border);
+        border-radius: 16px;
+        padding: 16px 16px 14px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+      }
+      .numbers-band__head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px 14px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--numbers-border);
+      }
+      .numbers-band__title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+      .numbers-band__stat {
+        font-size: 0.8rem;
+        color: var(--numbers-muted);
+        font-weight: 600;
+      }
+      .numbers-band__stat strong {
+        color: var(--numbers-text);
+        font-weight: 800;
+      }
+      .numbers-band__empty {
+        margin: 0;
+        font-size: 0.84rem;
+        color: var(--numbers-muted);
+        font-weight: 600;
+      }
+      .numbers-band__trunc {
+        margin: 10px 0 0;
+        font-size: 0.78rem;
+        color: var(--numbers-muted);
+        font-weight: 600;
+      }
+      .numbers-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 8px;
+        align-content: flex-start;
+      }
+      .numbers-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        background: var(--numbers-chip);
+        border: 1px solid var(--numbers-chip-border);
+        color: #1e40af;
+      }
+    </style>
+  </head>
+  <body class="numbers-body">
+    <div id="numbers-page" class="numbers-page">
+      <header class="numbers-top">
+        <h1 id="numbers-page-title">Свободные номерки</h1>
+        <p id="numbers-page-meta" class="numbers-meta">Загрузка данных…</p>
+        <div class="numbers-nav">
+          <a href="/">На главную</a>
+          <a href="/home">Личный кабинет</a>
+          <span id="numbers-status" class="numbers-status" aria-live="polite"></span>
+        </div>
+      </header>
+      <div id="numbers-bands"></div>
+    </div>
+    <script src="/js/numbers-page.js" defer></script>
+  </body>
+</html>

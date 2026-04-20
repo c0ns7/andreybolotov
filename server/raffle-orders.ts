@@ -375,6 +375,33 @@ export function isRaffleTicketBlocked(raffleId: number, ticketNumber: number): b
   return Boolean(pre);
 }
 
+/** Все номера 1..N, свободные для брони (без активного hold и без предназначения по телефону). */
+export function listGloballyFreeTicketNumbers(raffleId: number): number[] {
+  cleanupExpiredRaffleOrders();
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return [];
+  const maxN = Math.max(0, Math.floor(Number(raffle.ticket_count)));
+  if (maxN < 1) return [];
+  const occ = new Set<number>();
+  const heldRows = db
+    .prepare(
+      `SELECT h.ticket_number AS n FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
+    )
+    .all(raffleId) as { n: number }[];
+  for (const r of heldRows) occ.add(Math.floor(Number(r.n)));
+  const preRows = db
+    .prepare(`SELECT ticket_number AS n FROM raffle_phone_preassignments WHERE raffle_id = ?`)
+    .all(raffleId) as { n: number }[];
+  for (const r of preRows) occ.add(Math.floor(Number(r.n)));
+  const free: number[] = [];
+  for (let n = 1; n <= maxN; n++) {
+    if (!occ.has(n)) free.push(n);
+  }
+  return free;
+}
+
 function getPreassignmentPhone(raffleId: number, ticketNumber: number): string | null {
   const row = db
     .prepare(

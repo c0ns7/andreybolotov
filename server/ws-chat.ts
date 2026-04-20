@@ -17,6 +17,8 @@ const OPEN = WebSocket.OPEN;
 
 const adminSockets = new Set<WebSocket>();
 const userSockets = new Map<number, Set<WebSocket>>();
+/** Анонимные клиенты (страница /numbers): только события сетки и ленты акций */
+const publicRaffleFeedSockets = new Set<WebSocket>();
 
 /** SQLite/JSON иногда дают id как number | string — Map ключи должны совпадать */
 function uid(userId: number): number {
@@ -106,6 +108,17 @@ export function broadcastRaffleTicketsUpdated(userId: number) {
   }
 }
 
+function broadcastJsonToPublicRaffleFeed(payload: unknown) {
+  const raw = JSON.stringify(payload);
+  for (const ws of publicRaffleFeedSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(raw);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Всем пользователям: занятость номерков в акции изменилась (корзина / сетка на клиенте). */
 export function broadcastRaffleGridUpdated(raffleId: number) {
   const rid = Math.floor(Number(raffleId));
@@ -120,6 +133,7 @@ export function broadcastRaffleGridUpdated(raffleId: number) {
       }
     }
   }
+  broadcastJsonToPublicRaffleFeed({ type: "raffle_grid_updated", raffle_id: rid });
 }
 
 /** Уведомление всем клиентам: лента акций/статусы изменились */
@@ -141,6 +155,7 @@ export function broadcastRafflesFeedUpdated() {
       }
     }
   }
+  broadcastJsonToPublicRaffleFeed({ type: "raffles_feed_updated" });
 }
 
 /** Пользователь печатает → всем админам (видно в выбранном диалоге) */
@@ -264,6 +279,16 @@ export function attachWebSocket(wss: WebSocketServer) {
       ws.close();
       return;
     }
+    const scope = url.searchParams.get("scope");
+    if (scope === "public_raffle_feed") {
+      publicRaffleFeedSockets.add(ws);
+      sendJson(ws, { type: "ready", role: "public_raffle_feed" });
+      ws.on("close", () => {
+        publicRaffleFeedSockets.delete(ws);
+      });
+      return;
+    }
+
     const token = url.searchParams.get("token");
     if (!token) {
       ws.close();

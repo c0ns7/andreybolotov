@@ -22,6 +22,7 @@ import {
   insertSupportMessage,
   insertUser,
   listAdminThreadsWithMeta,
+  searchAdminSupportThreads,
   listSupportMessagesForUser,
   markThreadReadByStaff,
   markStaffMessagesReadByUser,
@@ -36,6 +37,7 @@ import {
   updateRaffle,
   deleteRaffle,
   getRaffleById,
+  getLatestVisibleActiveRaffle,
   listRafflesAll,
   listRafflesPublic,
   isRaffleVisibleOnSite,
@@ -104,6 +106,7 @@ import {
   listUserIdsWithConfirmedRaffleOrders,
   buildRafflePaymentParticipationContext,
   listReceiptHistoryPriorForPendingOrder,
+  listGloballyFreeTicketNumbers,
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import {
@@ -563,6 +566,36 @@ app.get("/api/public/raffle-order-status", (c) => {
   return c.json(dto);
 });
 
+/** Публично: последняя видимая активная акция и полный список свободных номерков (для /numbers). */
+app.get("/api/public/latest-raffle/free-numbers", (c) => {
+  const ip = String(c.req.header("x-forwarded-for") ?? "")
+    .split(",")[0]
+    .trim();
+  const keyIp = ip || c.req.header("x-real-ip") || "local";
+  if (!rateLimitAllow(`get:pub-free-nums:${keyIp}`, 30, 60_000)) return rateLimitExceeded(c);
+  c.header("Cache-Control", "no-store");
+  const row = getLatestVisibleActiveRaffle();
+  if (!row) {
+    return c.json({
+      raffle: null,
+      raffle_id: null,
+      ticket_count: 0,
+      free_numbers: [],
+      free_count: 0,
+      server_time_ms: Date.now(),
+    });
+  }
+  const free = listGloballyFreeTicketNumbers(row.id);
+  return c.json({
+    raffle: raffleToDto(row),
+    raffle_id: row.id,
+    ticket_count: row.ticket_count,
+    free_numbers: free,
+    free_count: free.length,
+    server_time_ms: Date.now(),
+  });
+});
+
 app.get("/api/internal/cron/raffle-mail-tick", (c) => {
   const want = process.env.CRON_SECRET?.trim();
   const got = String(c.req.query("secret") ?? "").trim();
@@ -945,7 +978,9 @@ app.post("/api/chat/messages", async (c) => {
 app.get("/api/admin/users", (c) => {
   const auth = requireAdmin(c);
   if (auth instanceof Response) return auth;
-  const list = listAdminThreadsWithMeta();
+  c.header("Cache-Control", "no-store");
+  const threadSearch = String(c.req.query("search") ?? c.req.query("thread_q") ?? "").trim();
+  const list = threadSearch ? searchAdminSupportThreads(threadSearch) : listAdminThreadsWithMeta();
   return c.json({
     users: list.map((x) => ({
       id: x.id,

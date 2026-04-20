@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { normalizePhone } from "./phone.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "..", "data");
@@ -1090,10 +1091,10 @@ export function deleteRaffle(id: number): void {
   db.prepare(`DELETE FROM raffles WHERE id = ?`).run(id);
 }
 
-export function listAdminThreadsWithMeta(): AdminThreadRow[] {
-  return db
-    .prepare(
-      `SELECT u.id, u.phone, u.name, u.email, COALESCE(u.role,'user') AS role,
+/** Фрагмент WHERE после `EXISTS (… диалог …)` — например `AND u.id IN (?)`. */
+function sqlAdminThreadsSelect(extraAnd = ""): string {
+  return (
+    `SELECT u.id, u.phone, u.name, u.email, COALESCE(u.role,'user') AS role,
               COALESCE(u.blocked,0) AS blocked,
               (SELECT CASE
                 WHEN TRIM(COALESCE(sm.body,'')) != '' THEN sm.body
@@ -1105,10 +1106,89 @@ export function listAdminThreadsWithMeta(): AdminThreadRow[] {
               (SELECT COUNT(*) FROM support_messages smu WHERE smu.user_id = u.id AND smu.is_staff = 0 AND smu.read_by_staff_at IS NULL) AS unread_count
        FROM users u
        WHERE EXISTS (SELECT 1 FROM support_messages smx WHERE smx.user_id = u.id)
+       ${extraAnd}
        ORDER BY COALESCE(
          (SELECT MAX(created_at) FROM support_messages sm4 WHERE sm4.user_id = u.id),
          u.created_at
-       ) DESC`,
+       ) DESC`
+  );
+}
+
+export function listAdminThreadsWithMeta(): AdminThreadRow[] {
+  return db.prepare(sqlAdminThreadsSelect()).all() as AdminThreadRow[];
+}
+
+/** Мета по тредам только для указанных user id (порядок в ответе не гарантируется). */
+export function listAdminThreadsWithMetaForUserIds(userIds: number[]): AdminThreadRow[] {
+  const ids = [...new Set(userIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return [];
+  const ph = ids.map(() => "?").join(",");
+  return db.prepare(sqlAdminThreadsSelect(`AND u.id IN (${ph})`)).all(...ids) as AdminThreadRow[];
+}
+
+function supportMessageLikePattern(raw: string): string {
+  const t = raw
+    .trim()
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+  return `%${t}%`;
+}
+
+/**
+ * Поиск диалогов поддержки: сначала по телефону (точный и по последним 10 цифрам),
+ * если не найдено — по тексту сообщений (подстрока, без учёта регистра).
+ */
+export function searchAdminSupportThreads(raw: string): AdminThreadRow[] {
+  const q = raw.trim();
+  if (!q) return listAdminThreadsWithMeta();
+
+  const digits = q.replace(/\D/g, "");
+
+  const norm = normalizePhone(q);
+  if (norm && /^79\d{9}$/.test(norm)) {
+    const row = db
+      .prepare(
+        `SELECT u.id FROM users u
+         WHERE u.phone = ?
+         AND EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)`,
+      )
+      .get(norm) as { id: number } | undefined;
+    if (row) return listAdminThreadsWithMetaForUserIds([row.id]);
+  }
+
+  if (digits.length >= 10) {
+    const tail = digits.slice(-10);
+    const rows = db
+      .prepare(
+        `SELECT u.id FROM users u
+         WHERE EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)
+         AND substr(u.phone, -10) = ?`,
+      )
+      .all(tail) as { id: number }[];
+    if (rows.length) {
+      const uid = rows.map((r) => r.id);
+      return listAdminThreadsWithMetaForUserIds(uid);
+    }
+  }
+
+  if (q.length < 2) return [];
+
+  const pat = supportMessageLikePattern(q);
+  const msgRows = db
+    .prepare(
+      `SELECT sm.user_id AS id, MAX(sm.created_at) AS mx
+       FROM support_messages sm
+       WHERE lower(sm.body) LIKE lower(?)
+       GROUP BY sm.user_id
+       ORDER BY mx DESC`,
     )
-    .all() as AdminThreadRow[];
+    .all(pat) as { id: number }[];
+
+  const orderedIds = msgRows.map((r) => r.id);
+  if (!orderedIds.length) return [];
+
+  const threads = listAdminThreadsWithMetaForUserIds(orderedIds);
+  const map = new Map(threads.map((t) => [t.id, t]));
+  return orderedIds.map((id) => map.get(id)).filter((x): x is AdminThreadRow => x !== undefined);
 }

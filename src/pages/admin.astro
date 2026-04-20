@@ -133,6 +133,18 @@ import "../styles/admin-raffles.css";
               </span>
               Диалоги
             </h2>
+            <div class="admin-sidebar-search">
+              <label class="visually-hidden" for="admin-support-thread-search">Поиск по телефону или тексту сообщения</label>
+              <input
+                id="admin-support-thread-search"
+                class="input admin-sidebar-search__input"
+                type="search"
+                placeholder="Телефон или фраза из чата…"
+                autocomplete="off"
+                enterkeyhint="search"
+              />
+              <p class="admin-sidebar-search__hint">Сначала совпадение по номеру, иначе по тексту в сообщениях.</p>
+            </div>
             <div class="admin-tabs" role="tablist" aria-label="Фильтр диалогов">
               <button type="button" class="admin-tab admin-tab--active" data-tab="all" role="tab" aria-selected="true">
                 <span class="admin-tab__icon" aria-hidden="true">
@@ -1581,6 +1593,47 @@ import "../styles/admin-raffles.css";
     color: #3b82f6;
     border: 1px solid #e2e8f0;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  }
+
+  .admin-sidebar-search {
+    flex-shrink: 0;
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+  }
+
+  .admin-sidebar-search__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.84rem;
+    background: #f8fafc;
+  }
+
+  .admin-sidebar-search__input:focus {
+    outline: none;
+    border-color: #93c5fd;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+
+  .admin-sidebar-search__hint {
+    margin: 6px 0 0;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+
+  .admin-user-list__empty {
+    margin: 0;
+    padding: 18px 14px;
+    text-align: center;
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.45;
   }
 
   .admin-tabs {
