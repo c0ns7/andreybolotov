@@ -7,6 +7,7 @@ import {
   isRaffleVisibleOnSite,
   getLatestVisibleActiveRaffle,
   listRafflesPublic,
+  setRafflePromoGiftLockedCount,
 } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 
@@ -726,16 +727,52 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
   const o = getOrderById(orderId);
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
+  const raffle = getRaffleById(o.raffle_id);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
   const now = Date.now();
   const raffleId = o.raffle_id;
-  db.prepare(
-    `UPDATE raffle_orders SET status = 'confirmed', receipt_reject_count = 0, last_reject_comment = NULL, updated_at = ? WHERE id = ?`,
-  ).run(now, orderId);
-  db.prepare(
-    `UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`,
-  ).run(orderId);
-  insertRaffleOrderEvent(orderId, "confirmed", null);
-  recalculateWholesaleForRaffle(raffleId);
+  const paidCount = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
+  const giftWant =
+    Number(raffle.promo_5_plus_1_enabled) === 1 && paidCount >= 5 ? Math.floor(paidCount / 5) : 0;
+  const giftedNumbers: number[] = [];
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE raffle_orders SET status = 'confirmed', receipt_reject_count = 0, last_reject_comment = NULL, updated_at = ? WHERE id = ?`,
+    ).run(now, orderId);
+    db.prepare(
+      `UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`,
+    ).run(orderId);
+    if (giftWant > 0) {
+      const free = listGloballyFreeTicketNumbers(raffleId);
+      for (let i = free.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = free[i]!;
+        free[i] = free[j]!;
+        free[j] = t;
+      }
+      const picked = free.slice(0, Math.min(giftWant, free.length));
+      if (picked.length > 0) {
+        const ins = db.prepare(
+          `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, hold_status, expires_at, created_at)
+           VALUES (?, ?, ?, ?, 1, 'confirmed', NULL, ?)`,
+        );
+        for (const n of picked) {
+          ins.run(raffleId, orderId, o.user_id, n, now);
+          giftedNumbers.push(n);
+        }
+      }
+    }
+    const eventDetail = giftedNumbers.length
+      ? JSON.stringify({
+          promo: "5+1",
+          gift_count: giftedNumbers.length,
+          gift_numbers: giftedNumbers,
+        })
+      : null;
+    insertRaffleOrderEvent(orderId, "confirmed", eventDetail);
+  });
+  tx();
+  recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true };
 }
 
@@ -756,7 +793,7 @@ export function adminFullyReleaseRaffleOrder(
     `UPDATE raffle_orders SET status = 'rejected', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL, updated_at = ? WHERE id = ?`,
   ).run(now, orderId);
   insertRaffleOrderEvent(orderId, "fully_released", eventDetail);
-  recalculateWholesaleForRaffle(raffleId);
+  recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true };
 }
 
@@ -810,7 +847,7 @@ export function rejectOrderByAdmin(
     `UPDATE raffle_ticket_holds SET hold_status = 'reserved', expires_at = ? WHERE order_id = ?`,
   ).run(newUntil, orderId);
   insertRaffleOrderEvent(orderId, "reject_rework", note || null);
-  recalculateWholesaleForRaffle(raffleId);
+  recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true, mode: "rework" };
 }
 
@@ -933,6 +970,17 @@ export function getTicketNumbersForOrder(orderId: number): number[] {
   const rows = db
     .prepare(
       `SELECT ticket_number FROM raffle_ticket_holds WHERE order_id = ? ORDER BY ticket_number ASC`,
+    )
+    .all(orderId) as { ticket_number: number }[];
+  return rows.map((r) => r.ticket_number);
+}
+
+function getPaidTicketNumbersForOrder(orderId: number): number[] {
+  const rows = db
+    .prepare(
+      `SELECT ticket_number FROM raffle_ticket_holds
+       WHERE order_id = ? AND COALESCE(is_bonus, 0) = 0
+       ORDER BY ticket_number ASC`,
     )
     .all(orderId) as { ticket_number: number }[];
   return rows.map((r) => r.ticket_number);
@@ -1095,10 +1143,12 @@ export function adminDetachParticipantTicket(
       if (nums.length === 0) {
         db.prepare(`DELETE FROM raffle_orders WHERE id = ?`).run(orderId);
       } else {
-        const amount = nums.length * raffle.price_rub;
+        const paidNums = getPaidTicketNumbersForOrder(orderId);
+        const paidCount = paidNums.length;
+        const amount = paidCount * raffle.price_rub;
         db.prepare(
           `UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`,
-        ).run(amount, nums.length, now, orderId);
+        ).run(amount, paidCount, now, orderId);
         insertRaffleOrderEvent(orderId, "admin_ticket_removed", "№ " + String(n));
       }
     });
@@ -1107,7 +1157,7 @@ export function adminDetachParticipantTicket(
     return { ok: false, error: "Не удалось снять номерок" };
   }
 
-  recalculateWholesaleForRaffle(raffleId);
+  recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true, affected_user_id: affectedUserId };
 }
 
@@ -1289,7 +1339,7 @@ export function recalculateWholesaleForRaffle(raffleId: number): void {
       `SELECT h.user_id AS user_id, h.ticket_number AS ticket_number, o.updated_at AS ord_u, o.id AS oid
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
-       WHERE h.raffle_id = ? AND o.status = 'confirmed'
+       WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
        ORDER BY o.updated_at ASC, o.id ASC, h.ticket_number ASC`,
     )
     .all(raffleId) as Array<{ user_id: number; ticket_number: number; ord_u: number; oid: number }>;
@@ -1311,6 +1361,26 @@ export function recalculateWholesaleForRaffle(raffleId: number): void {
     const slotIdx = c / 10;
     ins.run(raffleId, uid, slotIdx, globalN, now);
   }
+}
+
+/** Сколько бонусных номерков 5+1 закреплено подтверждёнными заказами по акции. */
+export function recalculatePromoGiftStatsForRaffle(raffleId: number): void {
+  const raffle = getRaffleById(raffleId);
+  if (!raffle) return;
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 1`,
+    )
+    .get(raffleId) as { c: number } | undefined;
+  setRafflePromoGiftLockedCount(raffleId, Number(row?.c ?? 0));
+}
+
+export function recalculateRaffleDerivedStatsForRaffle(raffleId: number): void {
+  recalculateWholesaleForRaffle(raffleId);
+  recalculatePromoGiftStatsForRaffle(raffleId);
 }
 
 export type AdminWholesalerRow = {
@@ -1419,7 +1489,7 @@ export function materializeRafflePreassignmentsForUser(userId: number): number[]
       createOrAppendConfirmedTicketsForUser(raffleId, userId, nums);
     }
     for (const raffleId of byRaffle.keys()) {
-      recalculateWholesaleForRaffle(raffleId);
+      recalculateRaffleDerivedStatsForRaffle(raffleId);
     }
   });
   tx();
@@ -1460,7 +1530,9 @@ export function adminBulkAssignPhoneLinesToRaffle(
   raffleId: number,
   rawLines: string[],
   startNumber: number,
-): { ok: true; assigned: number; skipped: BulkAssignSkip[] } | { ok: false; error: string } {
+):
+  | { ok: true; assigned: number; skipped: BulkAssignSkip[]; affected_user_ids: number[] }
+  | { ok: false; error: string } {
   const raffle = getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const maxN = raffle.ticket_count;
@@ -1535,7 +1607,7 @@ export function adminBulkAssignPhoneLinesToRaffle(
     valid.push({ line: p.line, phone: p.phone, ticket_number: found });
   }
 
-  if (!valid.length) return { ok: true, assigned: 0, skipped };
+  if (!valid.length) return { ok: true, assigned: 0, skipped, affected_user_ids: [] };
 
   const byPhone = new Map<string, Entry[]>();
   for (const e of valid) {
@@ -1544,6 +1616,7 @@ export function adminBulkAssignPhoneLinesToRaffle(
     byPhone.set(e.phone, arr);
   }
 
+  const affectedUserIds = new Set<number>();
   const tx = db.transaction(() => {
     for (const [, list] of byPhone) {
       list.sort((a, b) => a.ticket_number - b.ticket_number);
@@ -1552,6 +1625,7 @@ export function adminBulkAssignPhoneLinesToRaffle(
       const user = getUserByPhone(phone);
       if (user) {
         createOrAppendConfirmedTicketsForUser(raffleId, user.id, tickets);
+        if (Number.isFinite(user.id) && user.id > 0) affectedUserIds.add(user.id);
       } else {
         const now = Date.now();
         const ins = db.prepare(
@@ -1562,18 +1636,18 @@ export function adminBulkAssignPhoneLinesToRaffle(
         }
       }
     }
-    recalculateWholesaleForRaffle(raffleId);
+    recalculateRaffleDerivedStatsForRaffle(raffleId);
   });
   tx();
 
-  return { ok: true, assigned: valid.length, skipped };
+  return { ok: true, assigned: valid.length, skipped, affected_user_ids: [...affectedUserIds] };
 }
 
 export function adminAssignPhoneToExactTicket(
   raffleId: number,
   rawPhone: string,
   ticketNumber: number,
-): { ok: true } | { ok: false; error: string } {
+): { ok: true; affected_user_id: number | null } | { ok: false; error: string } {
   const raffle = getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const phone = normalizePhone(String(rawPhone || ""));
@@ -1595,8 +1669,8 @@ export function adminAssignPhoneToExactTicket(
       `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
     ).run(raffleId, n, phone, Date.now());
   }
-  recalculateWholesaleForRaffle(raffleId);
-  return { ok: true };
+  recalculateRaffleDerivedStatsForRaffle(raffleId);
+  return { ok: true, affected_user_id: user ? user.id : null };
 }
 
 export function getAdminRaffleParticipantsBundle(raffleId: number): {
@@ -1613,7 +1687,7 @@ export function getAdminRaffleParticipantsBundle(raffleId: number): {
       `SELECT h.user_id AS user_id, COUNT(*) AS c
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
-       WHERE h.raffle_id = ? AND o.status = 'confirmed'
+       WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
        GROUP BY h.user_id`,
     )
     .all(raffleId) as Array<{ user_id: number; c: number }>;

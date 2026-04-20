@@ -881,7 +881,9 @@
     raffleTicketsRealtimeInFlight = true;
     try {
       var data = await fetchTicketsFromApi();
-      if (modalTickets && modalTickets.classList.contains("is-open")) {
+      var ticketsOpen = modalTickets && modalTickets.classList.contains("is-open");
+      var profileOpen = modalProfile && modalProfile.classList.contains("is-open");
+      if (ticketsOpen || profileOpen) {
         renderTicketsModalBody(data);
       }
       syncProfileTicketCount();
@@ -3799,6 +3801,10 @@
         escapeHtml(String(r.cover_image_url)) +
         '" alt="" width="480" height="160" loading="lazy" />';
     }
+    var promoBadge =
+      Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true
+        ? '<div class="raffle-card__promo-badge">АКЦИЯ 5+1</div>'
+        : "";
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
     var ctaLabel = st === "active" || st === "paused" || st === "closed" ? "Участвовать" : "Подробнее";
     var ctaInner =
@@ -3842,6 +3848,7 @@
       cover +
       '<div class="raffle-card__grad"></div>' +
       viewersBlock +
+      promoBadge +
       badgeBlock +
       '<h3 class="raffle-card__title">' +
       escapeHtml(String(r.title || "")) +

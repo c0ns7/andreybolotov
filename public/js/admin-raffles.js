@@ -257,6 +257,11 @@
       esc(String(r.ticket_count)) +
       " номерков" +
       (r.wholesale_enabled ? " · оптовики вкл." : "") +
+      (r.promo_5_plus_1_enabled
+        ? " · 5+1 вкл. (бонусных: " +
+          esc(String(Math.max(0, Number(r.promo_5_plus_1_locked_free_count) || 0))) +
+          ")"
+        : "") +
       "</p>" +
       '<div class="admin-raffle-card__actions">' +
       '<div class="admin-raffle-card__row">' +
@@ -518,6 +523,13 @@
         );
     var whEl = document.getElementById("raffle-wholesale-enabled");
     if (whEl) whEl.checked = edit ? !!edit.wholesale_enabled : false;
+    var promoEl = document.getElementById("raffle-promo-5-plus-1-enabled");
+    if (promoEl) promoEl.checked = edit ? !!edit.promo_5_plus_1_enabled : false;
+    var promoStatsEl = document.getElementById("raffle-promo-5-plus-1-stats");
+    if (promoStatsEl) {
+      var locked = edit ? Math.max(0, Number(edit.promo_5_plus_1_locked_free_count) || 0) : 0;
+      promoStatsEl.textContent = "Закреплено бесплатных номерков: " + String(locked);
+    }
     var hidEl = document.getElementById("raffle-hidden-from-public");
     if (hidEl) hidEl.checked = edit ? !!edit.hidden_from_public : false;
     var cf = document.getElementById("raffle-cover-file");
@@ -1185,6 +1197,10 @@
       wholesale_enabled: (function () {
         var w = document.getElementById("raffle-wholesale-enabled");
         return w ? !!w.checked : false;
+      })(),
+      promo_5_plus_1_enabled: (function () {
+        var x = document.getElementById("raffle-promo-5-plus-1-enabled");
+        return x ? !!x.checked : false;
       })(),
       hidden_from_public: (function () {
         var h = document.getElementById("raffle-hidden-from-public");

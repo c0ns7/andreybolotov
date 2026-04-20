@@ -131,6 +131,7 @@ function migrate() {
       order_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
       ticket_number INTEGER NOT NULL,
+      is_bonus INTEGER NOT NULL DEFAULT 0,
       hold_status TEXT NOT NULL,
       expires_at INTEGER,
       created_at INTEGER NOT NULL,
@@ -254,6 +255,16 @@ function migrate() {
   }
   if (!rafCols.some((c) => c.name === "qr_enabled")) {
     db.exec(`ALTER TABLE raffles ADD COLUMN qr_enabled INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!rafCols.some((c) => c.name === "promo_5_plus_1_enabled")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN promo_5_plus_1_enabled INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!rafCols.some((c) => c.name === "promo_5_plus_1_locked_free_count")) {
+    db.exec(`ALTER TABLE raffles ADD COLUMN promo_5_plus_1_locked_free_count INTEGER NOT NULL DEFAULT 0`);
+  }
+  const rthCols = db.prepare(`PRAGMA table_info(raffle_ticket_holds)`).all() as { name: string }[];
+  if (!rthCols.some((c) => c.name === "is_bonus")) {
+    db.exec(`ALTER TABLE raffle_ticket_holds ADD COLUMN is_bonus INTEGER NOT NULL DEFAULT 0`);
   }
 
   db.exec(`
@@ -851,6 +862,8 @@ export type RaffleRow = {
   status: string;
   sort_order: number;
   wholesale_enabled: number;
+  promo_5_plus_1_enabled?: number;
+  promo_5_plus_1_locked_free_count?: number;
   hidden_from_public?: number;
   launch_notify_sent_at?: number | null;
   created_at: number;
@@ -879,6 +892,8 @@ export type RaffleDto = {
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
+  promo_5_plus_1_enabled: boolean;
+  promo_5_plus_1_locked_free_count: number;
   hidden_from_public?: boolean;
 };
 
@@ -912,6 +927,11 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     status: st,
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
+    promo_5_plus_1_enabled: Boolean(Number((r as RaffleRow).promo_5_plus_1_enabled ?? 0)),
+    promo_5_plus_1_locked_free_count: Math.max(
+      0,
+      Math.floor(Number((r as RaffleRow).promo_5_plus_1_locked_free_count ?? 0)),
+    ),
   };
   if (opts?.forAdmin) {
     dto.hidden_from_public = Boolean(Number((r as RaffleRow).hidden_from_public));
@@ -976,6 +996,7 @@ export function insertRaffle(data: {
   status: string;
   sort_order: number;
   wholesale_enabled: number;
+  promo_5_plus_1_enabled: number;
   hidden_from_public: number;
 }): number {
   const now = Date.now();
@@ -985,8 +1006,8 @@ export function insertRaffle(data: {
         title, cover_image_url, price_rub, old_price_rub, ticket_count,
         collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
         sber_enabled, tbank_enabled, qr_enabled, rules_url,
-        status, sort_order, wholesale_enabled, hidden_from_public, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, hidden_from_public, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.title,
@@ -1009,6 +1030,7 @@ export function insertRaffle(data: {
       data.status,
       data.sort_order,
       data.wholesale_enabled,
+      data.promo_5_plus_1_enabled,
       data.hidden_from_public,
       now,
       now,
@@ -1039,6 +1061,7 @@ export function updateRaffle(
     status: string;
     sort_order: number;
     wholesale_enabled: number;
+    promo_5_plus_1_enabled: number;
     hidden_from_public: number;
   },
 ): void {
@@ -1047,7 +1070,7 @@ export function updateRaffle(
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, hidden_from_public = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, promo_5_plus_1_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
   ).run(
     data.title,
@@ -1070,9 +1093,19 @@ export function updateRaffle(
     data.status,
     data.sort_order,
     data.wholesale_enabled,
+    data.promo_5_plus_1_enabled,
     data.hidden_from_public,
     Date.now(),
     id,
+  );
+}
+
+export function setRafflePromoGiftLockedCount(raffleId: number, lockedCount: number): void {
+  const c = Math.max(0, Math.floor(Number(lockedCount) || 0));
+  db.prepare(`UPDATE raffles SET promo_5_plus_1_locked_free_count = ?, updated_at = ? WHERE id = ?`).run(
+    c,
+    Date.now(),
+    raffleId,
   );
 }
 

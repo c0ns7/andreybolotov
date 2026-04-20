@@ -878,6 +878,27 @@ html.js-intro-done #welcome-splash {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.14) 48%, transparent 100%);
 }
 
+.raffle-card__promo-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  box-shadow: 0 6px 14px rgba(239, 68, 68, 0.34);
+  pointer-events: none;
+}
+
 .raffle-card__badge-wrap {
   position: absolute;
   inset: 0;
@@ -8100,6 +8121,11 @@ html.theme-dark .raffle-card__progress-track {
 
 html.theme-dark .raffle-card__progress-meta {
   color: #94a3b8;
+}
+
+html.theme-dark .raffle-card__promo-badge {
+  border-color: rgba(255, 255, 255, 0.33);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.42);
 }
 
 html.theme-dark .modal-overlay--cart .modal.modal--cart.cart-sheet {

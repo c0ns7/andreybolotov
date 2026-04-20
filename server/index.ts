@@ -82,7 +82,7 @@ import {
   userCancelReservedRaffleOrder,
   listActiveOrdersForAdmin,
   getAdminRaffleParticipantsBundle,
-  recalculateWholesaleForRaffle,
+  recalculateRaffleDerivedStatsForRaffle,
   addTicketsToReservedOrder,
   appendRandomTicketsToReservedOrder,
   getTicketCellKind,
@@ -129,17 +129,34 @@ function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
 const MAX_PRIVATE_CHAT_JOIN_URL =
   "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
 
-function buildStaffRaffleReceiptConfirmedChatBody(raffleTitle: string, ticketNumbers: number[]): string {
-  const uniq = [
-    ...new Set(ticketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
+function buildStaffRaffleReceiptConfirmedChatBody(
+  raffleTitle: string,
+  paidTicketNumbers: number[],
+  bonusTicketNumbers: number[],
+): string {
+  const paidUniq = [
+    ...new Set(paidTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
   ];
-  uniq.sort((a, b) => a - b);
-  const numsHuman = uniq.length ? uniq.map((n) => `№${n}`).join(", ") : "—";
+  paidUniq.sort((a, b) => a - b);
+  const bonusUniq = [
+    ...new Set(
+      bonusTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ];
+  bonusUniq.sort((a, b) => a - b);
+  const paidHuman = paidUniq.length ? paidUniq.map((n) => `№${n}`).join(", ") : "—";
+  const bonusHuman = bonusUniq.length ? bonusUniq.map((n) => `№${n}`).join(", ") : "—";
   const safeTitle = String(raffleTitle || "акция")
     .trim()
     .slice(0, 180);
+  const bonusBlock = bonusUniq.length
+    ? `\n\n🎁 По акции 5+1 дополнительно закреплены бонусные номерки: ${bonusHuman}.`
+    : "";
   return (
-    `Поздравляем! Чек по акции «${safeTitle}» подтверждён — номерки закреплены за вами: ${numsHuman}.\n\n` +
+    `Поздравляем! Чек по акции «${safeTitle}» подтверждён.\n` +
+    `Оплаченные номерки: ${paidHuman}.` +
+    bonusBlock +
+    `\n\n` +
     `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
     MAX_PRIVATE_CHAT_JOIN_URL
   );
@@ -454,6 +471,7 @@ type RaffleInput = {
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
+  promo_5_plus_1_enabled: boolean;
   hidden_from_public: boolean;
 };
 
@@ -517,6 +535,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     : "paused";
 
   const wholesale_enabled = Boolean(body.wholesale_enabled);
+  const promo_5_plus_1_enabled = Boolean(body.promo_5_plus_1_enabled);
   const hidden_from_public = Boolean(body.hidden_from_public);
 
   let rules_url = String(body.rules_url ?? "").trim();
@@ -548,6 +567,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       status,
       sort_order,
       wholesale_enabled,
+      promo_5_plus_1_enabled,
       hidden_from_public,
     },
   };
@@ -1509,11 +1529,14 @@ app.post("/api/admin/raffle-payments/:orderId/confirm", (c) => {
   const ticketNumsBefore = getTicketNumbersForOrder(orderId);
   const res = confirmOrderByAdmin(orderId);
   if (!res.ok) return c.json({ error: res.error }, 400);
+  const ticketNumsAfter = getTicketNumbersForOrder(orderId);
+  const beforeSet = new Set(ticketNumsBefore.map((n) => Math.floor(Number(n))));
+  const bonusNums = ticketNumsAfter.filter((n) => !beforeSet.has(Math.floor(Number(n))));
   if (owner && Number.isFinite(Number(owner.user_id))) {
     const uid = Number(owner.user_id);
     try {
       const title = String(owner.raffle_title ?? "").trim() || "Акция";
-      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore);
+      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums);
       const msgId = insertSupportMessage(uid, body, true, null);
       markThreadReadByStaff(uid);
       broadcastThreadReadByStaff(uid);
@@ -1710,6 +1733,7 @@ app.post("/api/admin/raffles", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
@@ -1757,9 +1781,10 @@ app.patch("/api/admin/raffles/:id", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
-  recalculateWholesaleForRaffle(id);
+  recalculateRaffleDerivedStatsForRaffle(id);
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles PATCH] notify:", e instanceof Error ? e.message : e),
   );
@@ -1842,6 +1867,11 @@ app.post("/api/admin/raffles/:id/bulk-assign-phones", async (c) => {
   const r = adminBulkAssignPhoneLinesToRaffle(id, lines, startNum);
   if (!r.ok) return c.json({ error: r.error }, 400);
   if (r.assigned > 0) notifyRaffleGridMutated(id);
+  if (Array.isArray(r.affected_user_ids)) {
+    for (const uid of r.affected_user_ids) {
+      if (Number.isFinite(uid) && uid > 0) broadcastRaffleTicketsUpdated(uid);
+    }
+  }
   return c.json({ assigned: r.assigned, skipped: r.skipped });
 });
 
@@ -1865,6 +1895,7 @@ app.post("/api/admin/raffles/:id/assign-phone-ticket", async (c) => {
   const res = adminAssignPhoneToExactTicket(id, phone, ticket_number);
   if (!res.ok) return c.json({ error: res.error }, 400);
   notifyRaffleGridMutated(id);
+  if (res.affected_user_id != null) broadcastRaffleTicketsUpdated(res.affected_user_id);
   return c.json({ ok: true });
 });
 
