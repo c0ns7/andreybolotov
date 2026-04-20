@@ -886,6 +886,9 @@
       if (ticketsOpen || profileOpen) {
         renderTicketsModalBody(data);
       }
+      if (modalParticipationHistory && modalParticipationHistory.classList.contains("is-open")) {
+        refreshParticipationHistoryModalContent();
+      }
       syncProfileTicketCount();
     } catch (_) {
       // silent realtime failure; next event/poll will recover
@@ -1277,6 +1280,7 @@
   const modalRaffleUnavailable = document.getElementById("modal-raffle-unavailable");
   const modalCart = document.getElementById("modal-cart");
   const modalTickets = document.getElementById("modal-tickets");
+  const modalParticipationHistory = document.getElementById("modal-participation-history");
   const modalTicketSearch = document.getElementById("modal-ticket-search");
   const modalReserveSuccess = document.getElementById("modal-reserve-success");
   const modalReservePayment = document.getElementById("modal-reserve-payment");
@@ -1415,6 +1419,7 @@
   var raffleDataCache = {
     cart: /** @type {{ items: unknown[] } | null} */ (null),
     tickets: /** @type {{ reserved: unknown[]; pending_review?: unknown[]; confirmed: unknown[]; wholesale_slots?: unknown[] } | null} */ (null),
+    participation_history: /** @type {{ raffles: unknown[] } | null } */ (null),
   };
   var lastCartCheckoutAt = 0;
   var lastCartRemoveAt = 0;
@@ -3416,6 +3421,111 @@
         showToast(em, "error");
       }
     }
+  }
+
+  function historyNumbersLine(title, nums, cls) {
+    var arr = Array.isArray(nums) ? nums : [];
+    if (!arr.length) return "";
+    var s = arr
+      .map(function (n) {
+        return "№" + String(Math.floor(Number(n)));
+      })
+      .join(", ");
+    return '<p class="history-row' + (cls ? " " + cls : "") + '"><strong>' + escapeHtml(title) + ":</strong> " + escapeHtml(s) + "</p>";
+  }
+
+  function historyStatusLabel(st) {
+    var x = String(st || "active");
+    if (x === "closed") return "Закрыта";
+    if (x === "paused") return "Пауза";
+    return "Активна";
+  }
+
+  function renderParticipationHistoryModalBody(payload) {
+    var body = document.getElementById("modal-participation-history-body");
+    if (!body) return;
+    var list = (payload && Array.isArray(payload.raffles) ? payload.raffles : []).slice();
+    if (!list.length) {
+      body.innerHTML = '<p class="history-empty">История участия пока пуста.</p>';
+      return;
+    }
+    body.innerHTML = list
+      .map(function (it) {
+        var raffle = (it && it.raffle) || {};
+        var nums = (it && it.numbers) || {};
+        var dtRaw = Number(it && it.last_activity_at);
+        var dt = Number.isFinite(dtRaw) && dtRaw > 0 ? formatReceiptArchiveTs(dtRaw) : "—";
+        return (
+          '<article class="history-card">' +
+          '<div class="history-card__head">' +
+          '<h3 class="history-card__title">' +
+          escapeHtml(String(raffle.title || "Акция")) +
+          "</h3>" +
+          '<span class="history-card__meta">' +
+          escapeHtml(historyStatusLabel(raffle.status)) +
+          " · " +
+          escapeHtml(dt) +
+          "</span>" +
+          "</div>" +
+          historyNumbersLine("В брони", nums.reserved, "") +
+          historyNumbersLine("На проверке", nums.pending_review, "") +
+          historyNumbersLine("Подтверждено", nums.confirmed, "") +
+          historyNumbersLine("Бонус 5+1", nums.bonus_confirmed, "history-row--bonus") +
+          "</article>"
+        );
+      })
+      .join("");
+  }
+
+  async function fetchParticipationHistoryFromApi() {
+    var s = loadSession();
+    if (!s || !s.token || !authVerified) {
+      raffleDataCache.participation_history = null;
+      throw new Error("no auth");
+    }
+    var res = await fetch("/api/raffles/participation-history", { cache: "no-store", headers: authHeaders() });
+    if (res.status === 401) throw new Error("SESSION_EXPIRED");
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) throw new Error(data.error || "Ошибка");
+    raffleDataCache.participation_history = { raffles: Array.isArray(data.raffles) ? data.raffles : [] };
+    return raffleDataCache.participation_history;
+  }
+
+  async function refreshParticipationHistoryModalContent() {
+    var s = loadSession();
+    if (!s || !s.token || !authVerified) return;
+    var body = document.getElementById("modal-participation-history-body");
+    try {
+      var data = await fetchParticipationHistoryFromApi();
+      if (modalParticipationHistory && modalParticipationHistory.classList.contains("is-open")) {
+        renderParticipationHistoryModalBody(data);
+      }
+    } catch (e) {
+      var em = String((e && e.message) || "Ошибка");
+      if (em === "SESSION_EXPIRED") {
+        showActionErrorModal("Сессия истекла", "Войдите снова, чтобы открыть историю участий.", function () {
+          openModal(modalLogin);
+        });
+      } else if (body) {
+        body.innerHTML = '<p class="history-empty">' + escapeHtml(em) + "</p>";
+      }
+    }
+  }
+
+  function openParticipationHistoryModal() {
+    closeProfileModal();
+    if (!modalParticipationHistory) return;
+    var body = document.getElementById("modal-participation-history-body");
+    if (body) body.innerHTML = renderTicketsLoadingSkeleton();
+    openModal(modalParticipationHistory);
+    setBottomNavActive();
+    refreshParticipationHistoryModalContent();
+  }
+
+  function closeParticipationHistoryModal() {
+    closeModal(modalParticipationHistory);
   }
 
   async function openTicketsModal() {
@@ -6521,6 +6631,11 @@
       if (ss) ss.style.removeProperty("--sheet-drag-y");
       return;
     }
+    if (overlay.id === "modal-participation-history") {
+      var hs = modalParticipationHistory && modalParticipationHistory.querySelector(".modal--tickets-sheet");
+      if (hs) hs.style.removeProperty("--sheet-drag-y");
+      return;
+    }
     if (overlay.id === "modal-profile") {
       var ps = modalProfile && modalProfile.querySelector(".profile-modal");
       if (ps) ps.style.removeProperty("--sheet-drag-y");
@@ -6580,6 +6695,11 @@
       syncBodyOverflowForModals();
       return;
     }
+    if (overlay.id === "modal-participation-history") {
+      setBottomNavActive();
+      syncBodyOverflowForModals();
+      return;
+    }
     if (overlay.id === "modal-profile") setBottomNavActive();
     syncBodyOverflowForModals();
   }
@@ -6587,12 +6707,13 @@
   function closeAllModals() {
     closeCartModal();
     closeTicketsModal();
+    closeParticipationHistoryModal();
     closeTicketSearchModal();
     if (modalReserveSuccess) closeModal(modalReserveSuccess);
     closeReservePaymentModal();
     if (modalWaitReceipt) closeModal(modalWaitReceipt);
     if (modalReserveExpired) closeModal(modalReserveExpired);
-    [modalRegister, modalLogin, modalForgot, modalProfile, modalInstallApp].forEach(closeModal);
+    [modalRegister, modalLogin, modalForgot, modalProfile, modalInstallApp, modalParticipationHistory].forEach(closeModal);
     closeRaffleUnavailableModal();
     if (modalActionError) closeModal(modalActionError);
   }
@@ -6613,6 +6734,7 @@
   function openProfileModal() {
     closeCartModal();
     closeTicketsModal();
+    closeParticipationHistoryModal();
     closeTicketSearchModal();
     renderDashboard();
     var pb = document.getElementById("profile-tickets-body");
@@ -6655,6 +6777,7 @@
     var THRESHOLD = 100;
     var cartSheet = document.getElementById("modal-cart-sheet");
     var ticketsSheet = modalTickets && modalTickets.querySelector(".modal--tickets-sheet");
+    var historySheet = modalParticipationHistory && modalParticipationHistory.querySelector(".modal--tickets-sheet");
     var searchSheet = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
     var profileSheet = modalProfile && modalProfile.querySelector(".profile-modal");
 
@@ -6724,6 +6847,7 @@
 
     bind(modalCart, cartSheet, closeCartModal, ".cart-sheet__grabber, .cart-sheet__head");
     bind(modalTickets, ticketsSheet, closeTicketsModal, ".cart-sheet__grabber, .tickets-sheet__header");
+    bind(modalParticipationHistory, historySheet, closeParticipationHistoryModal, ".cart-sheet__grabber, .tickets-sheet__header");
     bind(modalTicketSearch, searchSheet, closeTicketSearchModal, ".ticket-search-sheet__grabber, .ticket-search-sheet__head");
     bind(modalProfile, profileSheet, closeProfileModal, ".profile-modal__sheet-handle");
   })();
@@ -7064,7 +7188,7 @@
     openModal(modalLogin);
   });
 
-  [modalRegister, modalLogin, modalForgot, modalProfile].forEach(function (ov) {
+  [modalRegister, modalLogin, modalForgot, modalProfile, modalParticipationHistory].forEach(function (ov) {
     if (!ov) return;
     ov.addEventListener("click", function (e) {
       if (e.target === ov) closeModal(ov);
@@ -7079,6 +7203,14 @@
   if (profileModalDismiss) profileModalDismiss.addEventListener("click", function () {
     closeProfileModal();
   });
+  document.getElementById("profile-open-history")?.addEventListener("click", function () {
+    openParticipationHistoryModal();
+  });
+  document
+    .getElementById("modal-participation-history-close")
+    ?.addEventListener("click", function () {
+      closeParticipationHistoryModal();
+    });
 
   if (formRegister) formRegister.addEventListener("submit", function (e) {
     e.preventDefault();

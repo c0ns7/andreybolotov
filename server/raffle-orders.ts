@@ -1192,6 +1192,101 @@ export function listConfirmedTicketGroupsForUser(userId: number): Array<{
   }));
 }
 
+export type ParticipationHistoryRaffle = {
+  raffle: { id: number; title: string; status: string };
+  last_activity_at: number;
+  numbers: {
+    reserved: number[];
+    pending_review: number[];
+    confirmed: number[];
+    bonus_confirmed: number[];
+  };
+};
+
+/** История участий пользователя по всем акциям: какие номерки закреплялись в каждом статусе. */
+export function listParticipationHistoryForUser(userId: number): ParticipationHistoryRaffle[] {
+  type Row = {
+    raffle_id: number;
+    raffle_title: string;
+    raffle_status: string;
+    order_status: string;
+    ord_updated_at: number;
+    ticket_number: number;
+    is_bonus: number;
+  };
+  const rows = db
+    .prepare(
+      `SELECT
+         r.id AS raffle_id,
+         r.title AS raffle_title,
+         r.status AS raffle_status,
+         o.status AS order_status,
+         o.updated_at AS ord_updated_at,
+         h.ticket_number AS ticket_number,
+         COALESCE(h.is_bonus, 0) AS is_bonus
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       INNER JOIN raffle_ticket_holds h ON h.order_id = o.id
+       WHERE o.user_id = ? AND o.status IN ('reserved', 'pending_review', 'confirmed')
+       ORDER BY o.updated_at DESC, o.id DESC, h.ticket_number ASC`,
+    )
+    .all(userId) as Row[];
+
+  const map = new Map<number, ParticipationHistoryRaffle>();
+  for (const row of rows) {
+    const rid = Number(row.raffle_id);
+    if (!Number.isFinite(rid) || rid < 1) continue;
+    let entry = map.get(rid);
+    if (!entry) {
+      entry = {
+        raffle: {
+          id: rid,
+          title: String(row.raffle_title || ""),
+          status: String(row.raffle_status || "active"),
+        },
+        last_activity_at: Number(row.ord_updated_at) || 0,
+        numbers: {
+          reserved: [],
+          pending_review: [],
+          confirmed: [],
+          bonus_confirmed: [],
+        },
+      };
+      map.set(rid, entry);
+    } else if ((Number(row.ord_updated_at) || 0) > entry.last_activity_at) {
+      entry.last_activity_at = Number(row.ord_updated_at) || 0;
+    }
+    const n = Math.floor(Number(row.ticket_number));
+    if (!Number.isFinite(n) || n < 1) continue;
+    const st = String(row.order_status || "");
+    if (st === "reserved") {
+      if (!entry.numbers.reserved.includes(n)) entry.numbers.reserved.push(n);
+      continue;
+    }
+    if (st === "pending_review") {
+      if (!entry.numbers.pending_review.includes(n)) entry.numbers.pending_review.push(n);
+      continue;
+    }
+    if (st === "confirmed") {
+      if (Number(row.is_bonus) === 1) {
+        if (!entry.numbers.bonus_confirmed.includes(n)) entry.numbers.bonus_confirmed.push(n);
+      } else if (!entry.numbers.confirmed.includes(n)) {
+        entry.numbers.confirmed.push(n);
+      }
+    }
+  }
+
+  const out = [...map.values()];
+  for (const it of out) {
+    it.numbers.reserved.sort((a, b) => a - b);
+    it.numbers.pending_review.sort((a, b) => a - b);
+    it.numbers.confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_confirmed.sort((a, b) => a - b);
+  }
+  out.sort((a, b) => b.last_activity_at - a.last_activity_at);
+  return out;
+}
+
 export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
   order: ReturnType<typeof orderToDto>;
   numbers: number[];

@@ -87,6 +87,7 @@ import {
   appendRandomTicketsToReservedOrder,
   getTicketCellKind,
   listConfirmedTicketGroupsForUser,
+  listParticipationHistoryForUser,
   listPendingReviewTicketGroupsForUser,
   listReservedOrdersForUser,
   clearAllUserReservedCartItems,
@@ -1190,6 +1191,17 @@ app.get("/api/raffles/my-tickets", (c) => {
     pending_review: listPendingReviewTicketGroupsForUser(u.id),
     confirmed: listConfirmedTicketGroupsForUser(u.id),
     wholesale_slots: listWholesaleSlotsForUser(u.id),
+    server_time_ms: Date.now(),
+  });
+});
+
+app.get("/api/raffles/participation-history", (c) => {
+  const u = requireUser(c);
+  if (u instanceof Response) return u;
+  if (!rateLimitAllow(`get:participation-history:${u.id}`, 60, 60_000)) return rateLimitExceeded(c);
+  c.header("Cache-Control", "private, no-store");
+  return c.json({
+    raffles: listParticipationHistoryForUser(u.id),
     server_time_ms: Date.now(),
   });
 });

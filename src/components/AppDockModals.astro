@@ -74,6 +74,10 @@ import InstallAppModal from "./InstallAppModal.astro";
         <div id="profile-tickets-body" class="profile-modal__tickets-body custom-scrollbar" data-profile-tickets="1"></div>
       </div>
 
+      <button type="button" class="profile-modal__history-btn" id="profile-open-history">
+        История участий
+      </button>
+
       <div class="profile-modal__hint">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10"></circle>
@@ -105,6 +109,31 @@ import InstallAppModal from "./InstallAppModal.astro";
         <button type="button" class="profile-modal__btn-back profile-modal__btn-back--row" id="profile-modal-dismiss">Вернуться</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div
+  id="modal-participation-history"
+  class="modal-overlay modal-overlay--tickets"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-participation-history-title"
+>
+  <div class="modal modal--tickets-sheet">
+    <div class="cart-sheet__grabber" aria-hidden="true"></div>
+    <div class="tickets-sheet__header">
+      <div class="tickets-sheet__header-text">
+        <h2 id="modal-participation-history-title" class="tickets-sheet__title">История участий</h2>
+        <p class="tickets-sheet__subtitle">Все акции и ваши номерки по ним</p>
+      </div>
+      <button type="button" class="tickets-sheet__close" id="modal-participation-history-close" aria-label="Закрыть">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="tickets-sheet__body custom-scrollbar" id="modal-participation-history-body"></div>
   </div>
 </div>
 

@@ -5017,6 +5017,91 @@ html.theme-dark .reg-email-skip:hover {
   transform: scale(0.98);
 }
 
+.profile-modal__history-btn {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.profile-modal__history-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.history-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 12px 10px;
+  background: #fff;
+  margin-bottom: 10px;
+}
+
+.history-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.history-card__title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.history-card__meta {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.history-row {
+  margin: 4px 0;
+  font-size: 0.78rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.history-row strong {
+  color: #0f172a;
+}
+
+.history-row--bonus strong {
+  color: #b45309;
+}
+
+.history-empty {
+  margin: 0;
+  padding: 20px 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+/* Шторка истории: минимум половина экрана, растет по контенту, скролл внутри */
+#modal-participation-history .modal.modal--tickets-sheet {
+  min-height: 50vh;
+  min-height: 50dvh;
+  max-height: min(90dvh, 94vh);
+}
+
+#modal-participation-history .tickets-sheet__body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Профиль на телефонах — шторка на всю высоту экрана, прокрутка внутри + отдельный скролл «Мои билеты» */
 @media (max-width: 640px) {
   .modal-overlay--profile {
@@ -8004,6 +8089,30 @@ html.theme-dark .profile-modal__icon-settings:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--surface) 78%, var(--accent));
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+html.theme-dark .profile-modal__history-btn {
+  background: rgba(30, 64, 175, 0.24);
+  border-color: rgba(96, 165, 250, 0.38);
+  color: #bfdbfe;
+}
+
+html.theme-dark .profile-modal__history-btn:hover {
+  background: rgba(30, 64, 175, 0.34);
+}
+
+html.theme-dark .history-card {
+  background: var(--surface);
+  border-color: var(--hairline);
+}
+
+html.theme-dark .history-card__title {
+  color: var(--text);
+}
+
+html.theme-dark .history-card__meta,
+html.theme-dark .history-row {
+  color: var(--text-muted);
 }
 
 /* ========== Тёмная тема: жёсткие светлые фоны и границы по всему UI ========== */
