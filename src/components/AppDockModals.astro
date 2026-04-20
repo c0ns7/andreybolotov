@@ -138,6 +138,67 @@ import InstallAppModal from "./InstallAppModal.astro";
 </div>
 
 <div
+  id="modal-promo-5-plus-1"
+  class="modal-overlay modal-overlay--tickets"
+  aria-hidden="true"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-promo-5-plus-1-title"
+>
+  <div class="modal modal--tickets-sheet promo-5-plus-1-sheet">
+    <div class="cart-sheet__grabber" aria-hidden="true"></div>
+    <div class="tickets-sheet__header">
+      <div class="tickets-sheet__header-text">
+        <h2 id="modal-promo-5-plus-1-title" class="tickets-sheet__title">Что за акция 5+1?</h2>
+        <p class="tickets-sheet__subtitle">Простыми словами и с быстрым расчетом</p>
+      </div>
+      <button type="button" class="tickets-sheet__close" id="modal-promo-5-plus-1-close" aria-label="Закрыть">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="tickets-sheet__body custom-scrollbar promo-5-plus-1-sheet__body">
+      <div class="promo-5-plus-1-sheet__hero">
+        <span class="promo-5-plus-1-sheet__hero-badge">АКЦИЯ 5+1</span>
+        <p class="promo-5-plus-1-sheet__hero-text">
+          Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляется <strong>1 случайный номерок в подарок</strong>.
+          Если покупаете <strong>10</strong>, получите <strong>+2</strong>, и так далее.
+        </p>
+      </div>
+      <div class="promo-5-plus-1-sheet__steps">
+        <p class="promo-5-plus-1-sheet__step">
+          <strong>1.</strong> Выбираете и оплачиваете номерки.
+        </p>
+        <p class="promo-5-plus-1-sheet__step">
+          <strong>2.</strong> Администратор подтверждает чек.
+        </p>
+        <p class="promo-5-plus-1-sheet__step">
+          <strong>3.</strong> Бонусные номерки закрепляются автоматически и случайно.
+        </p>
+      </div>
+      <section class="promo-5-plus-1-sheet__calc" aria-labelledby="promo-5-plus-1-calc-title">
+        <h3 id="promo-5-plus-1-calc-title" class="promo-5-plus-1-sheet__calc-title">Калькулятор бонуса</h3>
+        <label class="promo-5-plus-1-sheet__label" for="promo-5-plus-1-input">Сколько номерков хотите купить</label>
+        <input
+          id="promo-5-plus-1-input"
+          class="promo-5-plus-1-sheet__input"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          autocomplete="off"
+          placeholder="Например: 7 или 15"
+        />
+        <p id="promo-5-plus-1-result" class="promo-5-plus-1-sheet__result" aria-live="polite">
+          В подарок: 0 номерков
+        </p>
+      </section>
+      <button type="button" class="promo-5-plus-1-sheet__ok" id="modal-promo-5-plus-1-ok">Понятно</button>
+    </div>
+  </div>
+</div>
+
+<div
   id="modal-raffle-unavailable"
   class="modal-overlay modal-overlay--raffle-unavailable"
   aria-hidden="true"

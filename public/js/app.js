@@ -1281,6 +1281,7 @@
   const modalCart = document.getElementById("modal-cart");
   const modalTickets = document.getElementById("modal-tickets");
   const modalParticipationHistory = document.getElementById("modal-participation-history");
+  const modalPromo5Plus1 = document.getElementById("modal-promo-5-plus-1");
   const modalTicketSearch = document.getElementById("modal-ticket-search");
   const modalReserveSuccess = document.getElementById("modal-reserve-success");
   const modalReservePayment = document.getElementById("modal-reserve-payment");
@@ -3528,6 +3529,48 @@
     closeModal(modalParticipationHistory);
   }
 
+  function updatePromo5Plus1Calc() {
+    var input = document.getElementById("promo-5-plus-1-input");
+    var result = document.getElementById("promo-5-plus-1-result");
+    if (!result) return;
+    var raw = input ? String(input.value || "") : "";
+    var clean = raw.replace(/[^\d]/g, "");
+    if (input && clean !== raw) input.value = clean;
+    var paid = Number(clean);
+    if (!Number.isFinite(paid) || paid <= 0) {
+      result.textContent = "В подарок: 0 номерков";
+      return;
+    }
+    var bonus = Math.floor(paid / 5);
+    result.textContent =
+      "В подарок: " +
+      String(bonus) +
+      " " +
+      (bonus % 10 === 1 && bonus % 100 !== 11
+        ? "номерок"
+        : bonus % 10 >= 2 && bonus % 10 <= 4 && !(bonus % 100 >= 12 && bonus % 100 <= 14)
+          ? "номерка"
+          : "номерков");
+  }
+
+  function openPromo5Plus1Modal() {
+    closeProfileModal();
+    closeCartModal();
+    closeTicketsModal();
+    closeParticipationHistoryModal();
+    closeTicketSearchModal();
+    if (!modalPromo5Plus1) return;
+    var input = document.getElementById("promo-5-plus-1-input");
+    if (input) input.value = "";
+    updatePromo5Plus1Calc();
+    openModal(modalPromo5Plus1);
+    setBottomNavActive();
+  }
+
+  function closePromo5Plus1Modal() {
+    closeModal(modalPromo5Plus1);
+  }
+
   async function openTicketsModal() {
     if (!modalTickets) return;
     var s = loadSession();
@@ -3915,6 +3958,12 @@
       Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true
         ? '<div class="raffle-card__promo-badge">АКЦИЯ 5+1</div>'
         : "";
+    var promoInfoBtn =
+      Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true
+        ? '<button type="button" class="raffle-card__promo-info-btn" data-promo-info-open="1" data-raffle-idx="' +
+          idx +
+          '">Что за акция 5+1?</button>'
+        : "";
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
     var ctaLabel = st === "active" || st === "paused" || st === "closed" ? "Участвовать" : "Подробнее";
     var ctaInner =
@@ -3999,6 +4048,7 @@
       ">" +
       ctaInner +
       "</button></div>" +
+      promoInfoBtn +
       "</div></article>"
     );
   }
@@ -4046,6 +4096,13 @@
             return;
           }
         }
+      });
+    });
+    el.querySelectorAll("[data-promo-info-open]").forEach(function (node) {
+      node.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openPromo5Plus1Modal();
       });
     });
   }
@@ -6636,6 +6693,11 @@
       if (hs) hs.style.removeProperty("--sheet-drag-y");
       return;
     }
+    if (overlay.id === "modal-promo-5-plus-1") {
+      var p5 = modalPromo5Plus1 && modalPromo5Plus1.querySelector(".modal--tickets-sheet");
+      if (p5) p5.style.removeProperty("--sheet-drag-y");
+      return;
+    }
     if (overlay.id === "modal-profile") {
       var ps = modalProfile && modalProfile.querySelector(".profile-modal");
       if (ps) ps.style.removeProperty("--sheet-drag-y");
@@ -6700,6 +6762,11 @@
       syncBodyOverflowForModals();
       return;
     }
+    if (overlay.id === "modal-promo-5-plus-1") {
+      setBottomNavActive();
+      syncBodyOverflowForModals();
+      return;
+    }
     if (overlay.id === "modal-profile") setBottomNavActive();
     syncBodyOverflowForModals();
   }
@@ -6708,12 +6775,13 @@
     closeCartModal();
     closeTicketsModal();
     closeParticipationHistoryModal();
+    closePromo5Plus1Modal();
     closeTicketSearchModal();
     if (modalReserveSuccess) closeModal(modalReserveSuccess);
     closeReservePaymentModal();
     if (modalWaitReceipt) closeModal(modalWaitReceipt);
     if (modalReserveExpired) closeModal(modalReserveExpired);
-    [modalRegister, modalLogin, modalForgot, modalProfile, modalInstallApp, modalParticipationHistory].forEach(closeModal);
+    [modalRegister, modalLogin, modalForgot, modalProfile, modalInstallApp, modalParticipationHistory, modalPromo5Plus1].forEach(closeModal);
     closeRaffleUnavailableModal();
     if (modalActionError) closeModal(modalActionError);
   }
@@ -6778,6 +6846,7 @@
     var cartSheet = document.getElementById("modal-cart-sheet");
     var ticketsSheet = modalTickets && modalTickets.querySelector(".modal--tickets-sheet");
     var historySheet = modalParticipationHistory && modalParticipationHistory.querySelector(".modal--tickets-sheet");
+    var promoSheet = modalPromo5Plus1 && modalPromo5Plus1.querySelector(".modal--tickets-sheet");
     var searchSheet = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
     var profileSheet = modalProfile && modalProfile.querySelector(".profile-modal");
 
@@ -6848,6 +6917,7 @@
     bind(modalCart, cartSheet, closeCartModal, ".cart-sheet__grabber, .cart-sheet__head");
     bind(modalTickets, ticketsSheet, closeTicketsModal, ".cart-sheet__grabber, .tickets-sheet__header");
     bind(modalParticipationHistory, historySheet, closeParticipationHistoryModal, ".cart-sheet__grabber, .tickets-sheet__header");
+    bind(modalPromo5Plus1, promoSheet, closePromo5Plus1Modal, ".cart-sheet__grabber, .tickets-sheet__header");
     bind(modalTicketSearch, searchSheet, closeTicketSearchModal, ".ticket-search-sheet__grabber, .ticket-search-sheet__head");
     bind(modalProfile, profileSheet, closeProfileModal, ".profile-modal__sheet-handle");
   })();
@@ -7188,7 +7258,7 @@
     openModal(modalLogin);
   });
 
-  [modalRegister, modalLogin, modalForgot, modalProfile, modalParticipationHistory].forEach(function (ov) {
+  [modalRegister, modalLogin, modalForgot, modalProfile, modalParticipationHistory, modalPromo5Plus1].forEach(function (ov) {
     if (!ov) return;
     ov.addEventListener("click", function (e) {
       if (e.target === ov) closeModal(ov);
@@ -7210,6 +7280,19 @@
     .getElementById("modal-participation-history-close")
     ?.addEventListener("click", function () {
       closeParticipationHistoryModal();
+    });
+  document.getElementById("promo-5-plus-1-input")?.addEventListener("input", function () {
+    updatePromo5Plus1Calc();
+  });
+  document
+    .getElementById("modal-promo-5-plus-1-close")
+    ?.addEventListener("click", function () {
+      closePromo5Plus1Modal();
+    });
+  document
+    .getElementById("modal-promo-5-plus-1-ok")
+    ?.addEventListener("click", function () {
+      closePromo5Plus1Modal();
     });
 
   if (formRegister) formRegister.addEventListener("submit", function (e) {

@@ -1106,6 +1106,35 @@ html.js-intro-done #welcome-splash {
   background: #6366f1;
 }
 
+.raffle-card__promo-info-btn {
+  width: calc(100% - 24px);
+  margin: 10px 12px 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #fed7aa;
+  background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
+  color: #9a3412;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.raffle-card__promo-info-btn:hover {
+  transform: translateY(-1px);
+  border-color: #fdba74;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.2);
+}
+
+.raffle-card__promo-info-btn:active {
+  transform: translateY(0);
+}
+
 .raffle-card__progress-wrap {
   margin-top: 0;
   padding: 14px 12px 8px;
@@ -5102,6 +5131,134 @@ html.theme-dark .reg-email-skip:hover {
   -webkit-overflow-scrolling: touch;
 }
 
+#modal-promo-5-plus-1 .modal.modal--tickets-sheet {
+  min-height: 52vh;
+  min-height: 52dvh;
+  max-height: min(80dvh, 84vh);
+}
+
+#modal-promo-5-plus-1 .promo-5-plus-1-sheet__body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: 14px;
+}
+
+.promo-5-plus-1-sheet__hero {
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(140deg, #fff7ed 0%, #fffbeb 100%);
+}
+
+.promo-5-plus-1-sheet__hero-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.promo-5-plus-1-sheet__hero-text {
+  margin: 10px 0 0;
+  color: #7c2d12;
+  font-size: 0.84rem;
+  line-height: 1.48;
+}
+
+.promo-5-plus-1-sheet__steps {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.promo-5-plus-1-sheet__step {
+  margin: 7px 0;
+  color: #334155;
+  font-size: 0.8rem;
+  line-height: 1.42;
+}
+
+.promo-5-plus-1-sheet__step strong {
+  color: #0f172a;
+}
+
+.promo-5-plus-1-sheet__calc {
+  margin-top: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.promo-5-plus-1-sheet__calc-title {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.promo-5-plus-1-sheet__label {
+  display: block;
+  margin-top: 10px;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.promo-5-plus-1-sheet__input {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 700;
+  padding: 11px 12px;
+  box-sizing: border-box;
+}
+
+.promo-5-plus-1-sheet__input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
+.promo-5-plus-1-sheet__result {
+  margin: 10px 0 0;
+  color: #1d4ed8;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.promo-5-plus-1-sheet__ok {
+  width: 100%;
+  margin-top: 14px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.promo-5-plus-1-sheet__ok:hover {
+  filter: brightness(1.06);
+}
+
 /* Профиль на телефонах — шторка на всю высоту экрана, прокрутка внутри + отдельный скролл «Мои билеты» */
 @media (max-width: 640px) {
   .modal-overlay--profile {
@@ -8115,6 +8272,51 @@ html.theme-dark .history-row {
   color: var(--text-muted);
 }
 
+html.theme-dark .promo-5-plus-1-sheet__hero {
+  border-color: #7c2d12;
+  background: linear-gradient(140deg, rgba(154, 52, 18, 0.24), rgba(146, 64, 14, 0.16));
+}
+
+html.theme-dark .promo-5-plus-1-sheet__hero-text {
+  color: #fdba74;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__steps {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+html.theme-dark .promo-5-plus-1-sheet__step {
+  color: #cbd5e1;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__step strong {
+  color: #f8fafc;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__calc {
+  border-color: #1d4ed8;
+  background: linear-gradient(180deg, rgba(29, 78, 216, 0.2), rgba(30, 41, 59, 0.5));
+}
+
+html.theme-dark .promo-5-plus-1-sheet__calc-title {
+  color: #bfdbfe;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__label {
+  color: #cbd5e1;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__input {
+  border-color: #1e40af;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+html.theme-dark .promo-5-plus-1-sheet__result {
+  color: #93c5fd;
+}
+
 /* ========== Тёмная тема: жёсткие светлые фоны и границы по всему UI ========== */
 
 html.theme-dark.raffle-grid-page,
@@ -8235,6 +8437,17 @@ html.theme-dark .raffle-card__progress-meta {
 html.theme-dark .raffle-card__promo-badge {
   border-color: rgba(255, 255, 255, 0.33);
   box-shadow: 0 8px 18px rgba(239, 68, 68, 0.42);
+}
+
+html.theme-dark .raffle-card__promo-info-btn {
+  border-color: #7c2d12;
+  background: linear-gradient(135deg, rgba(154, 52, 18, 0.24), rgba(146, 64, 14, 0.18));
+  color: #fed7aa;
+}
+
+html.theme-dark .raffle-card__promo-info-btn:hover {
+  border-color: #9a3412;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.2);
 }
 
 html.theme-dark .modal-overlay--cart .modal.modal--cart.cart-sheet {
