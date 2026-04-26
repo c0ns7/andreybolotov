@@ -40,13 +40,23 @@ async function copyTable(
       .filter((x) => x.length > 0),
   );
   const presentColumns = columns.filter((c) => sourceCols.has(c));
+  if (tableName === "raffles" && !presentColumns.includes("raffle_hash")) {
+    // In old SQLite schemas raffle_hash may be absent, but PostgreSQL requires NOT NULL.
+    // Force synthetic hash generation from id during SELECT/INSERT.
+    const idIndex = presentColumns.indexOf("id");
+    if (idIndex >= 0) presentColumns.splice(idIndex + 1, 0, "raffle_hash");
+    else presentColumns.unshift("raffle_hash");
+  }
   if (!presentColumns.length) {
     console.log(`[migrate] ${tableName}: skipped (no matching columns in sqlite source)`);
     return;
   }
   const selectColumns = presentColumns.map((c) => {
     if (tableName === "raffles" && c === "raffle_hash") {
-      return `COALESCE(NULLIF(TRIM(raffle_hash), ''), 'legacy-' || CAST(id AS TEXT)) AS raffle_hash`;
+      if (sourceCols.has("raffle_hash")) {
+        return `COALESCE(NULLIF(TRIM(raffle_hash), ''), 'legacy-' || CAST(id AS TEXT)) AS raffle_hash`;
+      }
+      return `'legacy-' || CAST(id AS TEXT) AS raffle_hash`;
     }
     return c;
   });
