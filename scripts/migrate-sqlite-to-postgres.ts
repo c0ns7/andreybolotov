@@ -44,7 +44,13 @@ async function copyTable(
     console.log(`[migrate] ${tableName}: skipped (no matching columns in sqlite source)`);
     return;
   }
-  const selectSql = `SELECT ${presentColumns.join(", ")} FROM ${tableName}`;
+  const selectColumns = presentColumns.map((c) => {
+    if (tableName === "raffles" && c === "raffle_hash") {
+      return `COALESCE(NULLIF(TRIM(raffle_hash), ''), 'legacy-' || CAST(id AS TEXT)) AS raffle_hash`;
+    }
+    return c;
+  });
+  const selectSql = `SELECT ${selectColumns.join(", ")} FROM ${tableName}`;
   const rows = sqlite.prepare(selectSql).all() as Record<string, unknown>[];
   if (!rows.length) {
     console.log(`[migrate] ${tableName}: 0 rows`);
