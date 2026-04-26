@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Clock3, Gift, Hourglass } from "lucide-react";
+import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
 import { getAbMyTicketsCached, invalidateAbMyTicketsCache } from "../../lib/ab-my-tickets-cache";
 import {
