@@ -10,6 +10,22 @@ function sqlitePathFromEnv(): string {
   return path.resolve(here, "../data/app.db");
 }
 
+function normalizeMigratedValue(
+  tableName: string,
+  col: string,
+  row: Record<string, unknown>,
+): unknown {
+  const value = row[col];
+  if (tableName === "raffles" && col === "raffle_hash") {
+    const raw = value != null ? String(value).trim() : "";
+    if (raw) return raw;
+    const id = Number(row.id);
+    if (Number.isFinite(id) && id > 0) return `legacy-${Math.floor(id)}`;
+    return `legacy-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  }
+  return value;
+}
+
 async function copyTable(
   tableName: string,
   columns: string[],
@@ -42,7 +58,7 @@ async function copyTable(
     for (const row of chunk) {
       const tuple: string[] = [];
       for (const col of presentColumns) {
-        values.push(row[col]);
+        values.push(normalizeMigratedValue(tableName, col, row));
         tuple.push(`$${values.length}`);
       }
       tuples.push(`(${tuple.join(", ")})`);
