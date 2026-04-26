@@ -330,7 +330,7 @@ export default function AppDockModalsLegacy() {
                 <path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"></path>
                 <circle cx="12" cy="12" r="10"></circle>
               </svg>
-              <svg className="raffle-unavailable__hero-icon-svg raffle-unavailable__hero-icon-svg--paused" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" hidden>
+              <svg className="raffle-unavailable__hero-icon-svg raffle-unavailable__hero-icon-svg--paused" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: "none" }}>
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="M12 8v4M12 16h.01"></path>
               </svg>
