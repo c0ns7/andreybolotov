@@ -53,9 +53,12 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
     }
     setSession(s);
     setAuthCheckInFlight(true);
+    const ctrl = new AbortController();
+    const abortTimer = window.setTimeout(() => ctrl.abort(), 10_000);
     try {
       const data = await abApiJson<{ user: AbSession & { blocked?: boolean } }>("/api/auth/me", {
         headers: { Authorization: `Bearer ${s.token}` },
+        signal: ctrl.signal,
       });
       const u = data.user;
       const blocked = !!u.blocked;
@@ -81,6 +84,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       setAuthVerified(false);
       toast("Не удалось проверить сессию. Попробуйте войти снова.", "warning");
     } finally {
+      window.clearTimeout(abortTimer);
       setAuthCheckInFlight(false);
     }
   }, [toast]);

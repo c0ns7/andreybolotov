@@ -1,6 +1,7 @@
 "use client";
 
 import { abAuthHeaders } from "./ab-api";
+import { loadAbSession } from "./ab-session";
 
 export type AbParticipationHistoryPayload = {
   raffles?: Array<{
@@ -12,9 +13,45 @@ export type AbParticipationHistoryPayload = {
 
 let historyCache: { ts: number; data: AbParticipationHistoryPayload } | null = null;
 let historyInFlight: Promise<AbParticipationHistoryPayload> | null = null;
+const HISTORY_CACHE_KEY = "ab_participation_history_cache_v1";
+
+function getStorageKey(): string {
+  const s = loadAbSession();
+  const phone = String(s?.phone || "").trim();
+  return phone ? `${HISTORY_CACHE_KEY}:${phone}` : HISTORY_CACHE_KEY;
+}
+
+function readPersistentCache(): { ts: number; data: AbParticipationHistoryPayload } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(getStorageKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ts?: unknown; data?: AbParticipationHistoryPayload };
+    const ts = Number(parsed?.ts);
+    if (!Number.isFinite(ts) || ts <= 0 || !parsed?.data) return null;
+    return { ts, data: parsed.data };
+  } catch {
+    return null;
+  }
+}
+
+function writePersistentCache(entry: { ts: number; data: AbParticipationHistoryPayload }): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getStorageKey(), JSON.stringify(entry));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function invalidateAbParticipationHistoryCache(): void {
   historyCache = null;
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(getStorageKey());
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function getAbParticipationHistoryCached(opts?: {
@@ -24,6 +61,9 @@ export async function getAbParticipationHistoryCached(opts?: {
   const force = Boolean(opts?.force);
   const ttlMs = Math.max(0, Math.floor(Number(opts?.ttlMs ?? 10_000)));
   const now = Date.now();
+  if (!historyCache) {
+    historyCache = readPersistentCache();
+  }
   if (!force && historyCache && now - historyCache.ts < ttlMs) {
     return historyCache.data;
   }
@@ -36,6 +76,7 @@ export async function getAbParticipationHistoryCached(opts?: {
         raffles: Array.isArray(data.raffles) ? data.raffles : [],
       };
       historyCache = { ts: Date.now(), data: next };
+      writePersistentCache(historyCache);
       return next;
     })();
   }

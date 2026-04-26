@@ -1012,6 +1012,40 @@ html.js-intro-done #welcome-splash {
   animation: rafflePromoBadgePulse 1.9s ease-in-out infinite;
 }
 
+.raffle-card__promo-special {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-radius: 12px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(236, 72, 153, 0.95));
+  box-shadow: 0 12px 24px rgba(91, 33, 182, 0.35);
+  padding: 8px 10px;
+  pointer-events: none;
+}
+
+.raffle-card__promo-special-title {
+  color: #fff;
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+.raffle-card__promo-special-timer {
+  margin-top: 4px;
+  color: #fde68a;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
 .raffle-card--cenopad {
   box-shadow:
     0 22px 42px rgba(190, 24, 93, 0.19),
@@ -1163,6 +1197,14 @@ html.js-intro-done #welcome-splash {
   animation: raffleSubPulse 2s ease-in-out infinite;
 }
 
+.raffle-card__sub--timer {
+  margin-top: 6px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fcd34d;
+}
+
 @keyframes raffleSubPulse {
   50% {
     opacity: 0.55;
@@ -1196,6 +1238,23 @@ html.js-intro-done #welcome-splash {
   margin-top: 10px;
   background: #111827;
   padding: 16px 12px;
+}
+
+.raffle-card__stream-cta {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .raffle-card__price {
@@ -5113,6 +5172,8 @@ html.theme-dark .auth-tabs__btn.is-active {
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 12px;
+  display: grid;
+  gap: 10px;
 }
 
 .profile-modal__field {
@@ -5267,13 +5328,14 @@ html.theme-dark .auth-tabs__btn.is-active {
   font-weight: 700;
   color: #9ca3af;
   margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .profile-modal__value {
   font-size: 0.875rem;
   font-weight: 500;
   color: #111827;
-  padding: 8px 0;
   border-bottom: 1px solid #e5e7eb;
 }
 

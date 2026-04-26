@@ -1,6 +1,7 @@
 "use client";
 
 import { abAuthHeaders } from "./ab-api";
+import { loadAbSession } from "./ab-session";
 
 export type AbMyTicketsResponse = {
   reserved?: Array<{
@@ -24,15 +25,54 @@ export type AbMyTicketsResponse = {
 
 let myTicketsCache: { ts: number; data: AbMyTicketsResponse } | null = null;
 let myTicketsInFlight: Promise<AbMyTicketsResponse> | null = null;
+const MY_TICKETS_CACHE_KEY = "ab_my_tickets_cache_v1";
+
+function getStorageKey(): string {
+  const s = loadAbSession();
+  const phone = String(s?.phone || "").trim();
+  return phone ? `${MY_TICKETS_CACHE_KEY}:${phone}` : MY_TICKETS_CACHE_KEY;
+}
+
+function readPersistentCache(): { ts: number; data: AbMyTicketsResponse } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(getStorageKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ts?: unknown; data?: AbMyTicketsResponse };
+    const ts = Number(parsed?.ts);
+    if (!Number.isFinite(ts) || ts <= 0 || !parsed?.data) return null;
+    return { ts, data: parsed.data };
+  } catch {
+    return null;
+  }
+}
+
+function writePersistentCache(entry: { ts: number; data: AbMyTicketsResponse }): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getStorageKey(), JSON.stringify(entry));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function invalidateAbMyTicketsCache(): void {
   myTicketsCache = null;
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(getStorageKey());
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function getAbMyTicketsCached(opts?: { force?: boolean; ttlMs?: number }): Promise<AbMyTicketsResponse> {
   const force = Boolean(opts?.force);
   const ttlMs = Math.max(0, Math.floor(Number(opts?.ttlMs ?? 5000)));
   const now = Date.now();
+  if (!myTicketsCache) {
+    myTicketsCache = readPersistentCache();
+  }
   if (!force && myTicketsCache && now - myTicketsCache.ts < ttlMs) {
     return myTicketsCache.data;
   }
@@ -47,6 +87,7 @@ export async function getAbMyTicketsCached(opts?: { force?: boolean; ttlMs?: num
         confirmed: Array.isArray(data.confirmed) ? data.confirmed : [],
       };
       myTicketsCache = { ts: Date.now(), data: next };
+      writePersistentCache(myTicketsCache);
       return next;
     })();
   }

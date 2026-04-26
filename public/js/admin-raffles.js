@@ -75,6 +75,34 @@
       .replace(/"/g, "&quot;");
   }
 
+  function formatDateTimeLocalFromMs(ms) {
+    var n = Math.floor(Number(ms));
+    if (!Number.isFinite(n) || n <= 0) return "";
+    var d = new Date(n);
+    var pad = function (x) {
+      return String(x).padStart(2, "0");
+    };
+    return (
+      String(d.getFullYear()) +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      "T" +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  }
+
+  function parseDateTimeLocalToMs(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return null;
+    var ts = Date.parse(s);
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+    return Math.floor(ts);
+  }
+
   const PARTICIPANT_ICO_TRASH =
     '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     "<polyline points=\"3 6 5 6 21 6\"></polyline>" +
@@ -303,11 +331,7 @@
       esc(String(r.ticket_count)) +
       " номерков" +
       (r.cenopad_enabled && Number(r.cenopad_price_rub) > 0
-        ? " · ценопад " +
-          esc(String(r.cenopad_price_rub)) +
-          " ₽ (взято: " +
-          esc(String(Math.max(0, Number(r.cenopad_sold_count) || 0))) +
-          ")"
+        ? " · вторая цена " + esc(String(r.cenopad_price_rub)) + " ₽"
         : "") +
       (r.wholesale_enabled ? " · оптовики вкл." : "") +
       (r.promo_5_plus_1_enabled
@@ -526,17 +550,27 @@
     }
     var cenopadStatsEl = document.getElementById("raffle-cenopad-stats");
     if (cenopadStatsEl) {
+      var baseTickets = Math.max(0, Number(edit && edit.sales_accounting && edit.sales_accounting.base_tickets) || 0);
+      var baseAmount = Math.max(0, Number(edit && edit.sales_accounting && edit.sales_accounting.base_amount_rub) || 0);
+      var secondTickets = Math.max(0, Number(edit && edit.sales_accounting && edit.sales_accounting.second_tickets) || 0);
+      var secondAmount = Math.max(0, Number(edit && edit.sales_accounting && edit.sales_accounting.second_amount_rub) || 0);
       cenopadStatsEl.textContent =
-        "Подтверждено номерков по ценопаду: " +
-        String(edit ? Math.max(0, Number(edit.cenopad_sold_count) || 0) : 0);
+        "Бухгалтерия продаж: основная цена — " +
+        String(baseTickets) +
+        " шт / " +
+        String(baseAmount) +
+        " ₽; вторая цена — " +
+        String(secondTickets) +
+        " шт / " +
+        String(secondAmount) +
+        " ₽";
     }
-    var rop = document.getElementById("raffle-old-price");
-    if (rop) {
-      rop.value =
-        edit && edit.old_price_rub != null && Number(edit.old_price_rub) > 0
-          ? String(edit.old_price_rub)
-          : "";
-    }
+    var secondStartEl = document.getElementById("raffle-cenopad-start-at");
+    if (secondStartEl)
+      secondStartEl.value = edit ? formatDateTimeLocalFromMs(edit.second_price_start_at || edit.cenopad_start_at) : "";
+    var secondEndEl = document.getElementById("raffle-cenopad-end-at");
+    if (secondEndEl)
+      secondEndEl.value = edit ? formatDateTimeLocalFromMs(edit.second_price_end_at || edit.cenopad_end_at) : "";
     document.getElementById("raffle-tickets").value = edit ? String(edit.ticket_count) : "0";
     document.getElementById("raffle-collection-url").value = edit ? edit.collection_url || "" : "";
     var tbankUrlEl = document.getElementById("raffle-tbank-collection-url");
@@ -547,6 +581,15 @@
     if (liveNoteEl) liveNoteEl.value = edit ? edit.live_stream_note || "" : "";
     var liveUrlEl = document.getElementById("raffle-live-stream-url");
     if (liveUrlEl) liveUrlEl.value = edit ? edit.live_stream_url || "" : "";
+    var liveAtEl = document.getElementById("raffle-live-stream-at");
+    if (liveAtEl) {
+      liveAtEl.value = edit ? formatDateTimeLocalFromMs(edit.live_stream_at) : "";
+    }
+    var liveStatusEl = document.getElementById("raffle-live-stream-status");
+    if (liveStatusEl) {
+      var st = edit ? String(edit.live_stream_status || "scheduled").toLowerCase() : "scheduled";
+      liveStatusEl.value = st === "live" || st === "ended" ? st : "scheduled";
+    }
     var sberRecEl = document.getElementById("raffle-recipient-sber");
     if (sberRecEl)
       sberRecEl.value = edit
@@ -1221,11 +1264,15 @@
         var s = el && String(el.value || "").trim();
         return s === "" ? 0 : Number(s);
       })(),
-      old_price_rub: (function () {
-        var el = document.getElementById("raffle-old-price");
-        var s = el && String(el.value || "").trim();
-        return s === "" ? 0 : Number(s);
+      cenopad_start_at: (function () {
+        var el = document.getElementById("raffle-cenopad-start-at");
+        return parseDateTimeLocalToMs(el ? el.value : "");
       })(),
+      cenopad_end_at: (function () {
+        var el = document.getElementById("raffle-cenopad-end-at");
+        return parseDateTimeLocalToMs(el ? el.value : "");
+      })(),
+      old_price_rub: 0,
       ticket_count: Number(document.getElementById("raffle-tickets").value),
       collection_url: document.getElementById("raffle-collection-url").value.trim(),
       tbank_collection_url: (function () {
@@ -1243,6 +1290,15 @@
       live_stream_url: (function () {
         var el = document.getElementById("raffle-live-stream-url");
         return el ? String(el.value || "").trim() : "";
+      })(),
+      live_stream_at: (function () {
+        var el = document.getElementById("raffle-live-stream-at");
+        return parseDateTimeLocalToMs(el ? el.value : "");
+      })(),
+      live_stream_status: (function () {
+        var el = document.getElementById("raffle-live-stream-status");
+        var st = String((el && el.value) || "scheduled").trim().toLowerCase();
+        return st === "live" || st === "ended" ? st : "scheduled";
       })(),
       collection_recipient: (function () {
         var el = document.getElementById("raffle-recipient-sber");

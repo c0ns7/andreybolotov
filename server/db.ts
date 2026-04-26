@@ -416,8 +416,11 @@ export type RaffleRow = {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  base_price_rub: number;
   cenopad_enabled?: number;
   cenopad_price_rub?: number;
+  cenopad_start_at?: number | null;
+  cenopad_end_at?: number | null;
   old_price_rub?: number;
   ticket_count: number;
   collection_url: string;
@@ -434,6 +437,8 @@ export type RaffleRow = {
   rules_url?: string;
   live_stream_note?: string;
   live_stream_url?: string;
+  live_stream_at?: number | null;
+  live_stream_status?: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -453,6 +458,10 @@ export type RaffleDto = {
   price_rub: number;
   cenopad_enabled?: boolean;
   cenopad_price_rub?: number | null;
+  second_price_enabled?: boolean;
+  second_price_rub?: number | null;
+  second_price_start_at?: number | null;
+  second_price_end_at?: number | null;
   cenopad_sold_count?: number;
   old_price_rub: number | null;
   ticket_count: number;
@@ -470,6 +479,8 @@ export type RaffleDto = {
   rules_url: string | null;
   live_stream_note: string | null;
   live_stream_url: string | null;
+  live_stream_at: number | null;
+  live_stream_status: "scheduled" | "live" | "ended" | null;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -484,9 +495,22 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
   const rulesRaw = String((r as RaffleRow).rules_url ?? "").trim();
   const liveStreamNoteRaw = String((r as RaffleRow).live_stream_note ?? "").trim();
   const liveStreamUrlRaw = String((r as RaffleRow).live_stream_url ?? "").trim();
+  const liveStreamAtRaw = Number((r as RaffleRow).live_stream_at ?? 0);
+  const liveStreamAt = Number.isFinite(liveStreamAtRaw) && liveStreamAtRaw > 0 ? Math.floor(liveStreamAtRaw) : null;
+  const streamStatusRaw = String((r as RaffleRow).live_stream_status ?? "")
+    .trim()
+    .toLowerCase();
+  const liveStreamStatus =
+    streamStatusRaw === "scheduled" || streamStatusRaw === "live" || streamStatusRaw === "ended"
+      ? streamStatusRaw
+      : null;
   const cenopadEnabled = Boolean(Number((r as RaffleRow).cenopad_enabled ?? 0));
   const cenopadPriceRaw = Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0));
   const cenopadPrice = cenopadPriceRaw > 0 ? cenopadPriceRaw : 0;
+  const secondPriceStartRaw = Number((r as RaffleRow).cenopad_start_at ?? 0);
+  const secondPriceEndRaw = Number((r as RaffleRow).cenopad_end_at ?? 0);
+  const secondPriceStart = Number.isFinite(secondPriceStartRaw) && secondPriceStartRaw > 0 ? Math.floor(secondPriceStartRaw) : null;
+  const secondPriceEnd = Number.isFinite(secondPriceEndRaw) && secondPriceEndRaw > 0 ? Math.floor(secondPriceEndRaw) : null;
   const effectivePrice = !opts?.forAdmin && cenopadEnabled && cenopadPrice > 0 ? cenopadPrice : r.price_rub;
   const dto: RaffleDto = {
     id: r.id,
@@ -494,8 +518,13 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     title: r.title,
     cover_image_url: r.cover_image_url,
     price_rub: effectivePrice,
+    base_price_rub: Math.max(0, Math.floor(Number(r.price_rub ?? 0))),
     cenopad_enabled: cenopadEnabled,
     cenopad_price_rub: cenopadPrice > 0 ? cenopadPrice : null,
+    second_price_enabled: cenopadEnabled,
+    second_price_rub: cenopadPrice > 0 ? cenopadPrice : null,
+    second_price_start_at: secondPriceStart,
+    second_price_end_at: secondPriceEnd,
     old_price_rub: oldP > 0 ? oldP : null,
     ticket_count: r.ticket_count,
     collection_url: r.collection_url,
@@ -516,6 +545,8 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     rules_url: rulesRaw ? rulesRaw : null,
     live_stream_note: liveStreamNoteRaw ? liveStreamNoteRaw : null,
     live_stream_url: liveStreamUrlRaw ? liveStreamUrlRaw : null,
+    live_stream_at: liveStreamAt,
+    live_stream_status: liveStreamStatus,
     status: st,
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
@@ -540,7 +571,13 @@ export function isRaffleCenopadActive(r: RaffleRow | undefined): boolean {
   if (!r) return false;
   const enabled = Boolean(Number((r as RaffleRow).cenopad_enabled ?? 0));
   const p = Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0));
-  return enabled && p > 0;
+  if (!(enabled && p > 0)) return false;
+  const startAt = Math.floor(Number((r as RaffleRow).cenopad_start_at ?? 0));
+  const endAt = Math.floor(Number((r as RaffleRow).cenopad_end_at ?? 0));
+  const now = Date.now();
+  if (Number.isFinite(startAt) && startAt > 0 && now < startAt) return false;
+  if (Number.isFinite(endAt) && endAt > 0 && now > endAt) return false;
+  return true;
 }
 
 export function getRaffleEffectiveUnitPrice(r: RaffleRow | undefined): number {
@@ -562,6 +599,47 @@ export async function countConfirmedTicketsSoldByCenopad(raffleId: number): Prom
     [raffleId],
   );
   return Math.max(0, Number(row?.n || 0));
+}
+
+export type RaffleSalesAccounting = {
+  base_tickets: number;
+  base_amount_rub: number;
+  second_tickets: number;
+  second_amount_rub: number;
+};
+
+export async function getRaffleSalesAccounting(raffleId: number): Promise<RaffleSalesAccounting> {
+  const row = await pgGet<{
+    base_tickets?: number;
+    base_amount_rub?: number;
+    second_tickets?: number;
+    second_amount_rub?: number;
+  }>(
+    `WITH hold_counts AS (
+       SELECT
+         o.id AS order_id,
+         COALESCE(o.cenopad_applied, 0)::int AS cenopad_applied,
+         COUNT(*)::int AS hold_count
+       FROM raffle_orders o
+       INNER JOIN raffle_ticket_holds h ON h.order_id = o.id
+       WHERE o.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
+       GROUP BY o.id, COALESCE(o.cenopad_applied, 0)
+     )
+     SELECT
+       COALESCE(SUM(CASE WHEN cenopad_applied = 0 THEN hold_count ELSE 0 END), 0)::int AS base_tickets,
+       COALESCE(SUM(CASE WHEN cenopad_applied = 0 THEN hold_count * r.price_rub ELSE 0 END), 0)::bigint AS base_amount_rub,
+       COALESCE(SUM(CASE WHEN cenopad_applied = 1 THEN hold_count ELSE 0 END), 0)::int AS second_tickets,
+       COALESCE(SUM(CASE WHEN cenopad_applied = 1 THEN hold_count * COALESCE(NULLIF(r.cenopad_price_rub,0), r.price_rub) ELSE 0 END), 0)::bigint AS second_amount_rub
+     FROM hold_counts hc
+     INNER JOIN raffles r ON r.id = ?`,
+    [raffleId, raffleId],
+  );
+  return {
+    base_tickets: Math.max(0, Number(row?.base_tickets ?? 0)),
+    base_amount_rub: Math.max(0, Number(row?.base_amount_rub ?? 0)),
+    second_tickets: Math.max(0, Number(row?.second_tickets ?? 0)),
+    second_amount_rub: Math.max(0, Number(row?.second_amount_rub ?? 0)),
+  };
 }
 
 export async function listRafflesAll(): Promise<RaffleRow[]> {
@@ -599,6 +677,8 @@ export async function insertRaffle(data: {
   price_rub: number;
   cenopad_enabled: number;
   cenopad_price_rub: number;
+  cenopad_start_at: number | null;
+  cenopad_end_at: number | null;
   old_price_rub: number;
   ticket_count: number;
   collection_url: string;
@@ -615,6 +695,8 @@ export async function insertRaffle(data: {
   rules_url: string;
   live_stream_note: string;
   live_stream_url: string;
+  live_stream_at: number | null;
+  live_stream_status: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -625,10 +707,11 @@ export async function insertRaffle(data: {
   const row = await pgGet<{ id: number }>(
     `INSERT INTO raffles (
       raffle_hash, title, cover_image_url, price_rub, cenopad_enabled, cenopad_price_rub, old_price_rub, ticket_count,
+      cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
-      sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url,
+      sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
       status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, hidden_from_public, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -639,6 +722,8 @@ export async function insertRaffle(data: {
       data.cenopad_price_rub,
       data.old_price_rub,
       data.ticket_count,
+      data.cenopad_start_at,
+      data.cenopad_end_at,
       data.collection_url,
       data.tbank_collection_url,
       data.collection_recipient,
@@ -653,6 +738,8 @@ export async function insertRaffle(data: {
       data.rules_url,
       data.live_stream_note,
       data.live_stream_url,
+      data.live_stream_at,
+      data.live_stream_status,
       data.status,
       data.sort_order,
       data.wholesale_enabled,
@@ -673,6 +760,8 @@ export async function updateRaffle(
     price_rub: number;
     cenopad_enabled: number;
     cenopad_price_rub: number;
+    cenopad_start_at: number | null;
+    cenopad_end_at: number | null;
     old_price_rub: number;
     ticket_count: number;
     collection_url: string;
@@ -689,6 +778,8 @@ export async function updateRaffle(
     rules_url: string;
     live_stream_note: string;
     live_stream_url: string;
+    live_stream_at: number | null;
+    live_stream_status: string;
     status: string;
     sort_order: number;
     wholesale_enabled: number;
@@ -700,7 +791,9 @@ export async function updateRaffle(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
       cenopad_enabled = ?, cenopad_price_rub = ?,
+      cenopad_start_at = ?, cenopad_end_at = ?,
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
+      live_stream_at = ?, live_stream_status = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, promo_5_plus_1_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
@@ -712,6 +805,8 @@ export async function updateRaffle(
       data.ticket_count,
       data.cenopad_enabled,
       data.cenopad_price_rub,
+      data.cenopad_start_at,
+      data.cenopad_end_at,
       data.collection_url,
       data.tbank_collection_url,
       data.collection_recipient,
@@ -723,6 +818,8 @@ export async function updateRaffle(
       data.rules_url,
       data.live_stream_note,
       data.live_stream_url,
+      data.live_stream_at,
+      data.live_stream_status,
       data.sber_enabled,
       data.tbank_enabled,
       data.qr_enabled,

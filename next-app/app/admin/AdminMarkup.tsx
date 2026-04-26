@@ -500,33 +500,27 @@ export default function AdminMarkup() {
                 <label className="admin-toggle" htmlFor="raffle-cenopad-enabled">
                   <input id="raffle-cenopad-enabled" className="admin-toggle__input" type="checkbox" role="switch" />
                   <span className="admin-toggle__track" aria-hidden="true"></span>
-                  <span className="admin-toggle__label">Ценопад включен</span>
+                  <span className="admin-toggle__label">Вторая цена включена</span>
                 </label>
                 <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
-                  Временная сниженная цена для акции.
+                  Включает продажу по второй цене.
                 </p>
               </div>
               <div className="form-group">
-                <label htmlFor="raffle-cenopad-price">Цена по ценопаду, ₽</label>
-                <input id="raffle-cenopad-price" className="input" type="number" min="0" step="1" inputMode="numeric" placeholder="Например: 699" />
+                <label htmlFor="raffle-cenopad-price">Вторая цена, ₽</label>
+                <input id="raffle-cenopad-price" className="input" type="number" min="0" step="1" inputMode="numeric" placeholder="Например: 750" />
+              </div>
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label htmlFor="raffle-cenopad-start-at">Старт второй цены</label>
+                  <input id="raffle-cenopad-start-at" className="input" type="datetime-local" step={60} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-cenopad-end-at">Окончание второй цены</label>
+                  <input id="raffle-cenopad-end-at" className="input" type="datetime-local" step={60} />
+                </div>
               </div>
               <p className="admin-raffle-field-hint admin-raffle-field-hint--tight" id="raffle-cenopad-stats"></p>
-              <div className="form-group">
-                <label htmlFor="raffle-old-price">Старая цена, ₽</label>
-                <input
-                  id="raffle-old-price"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  placeholder="Не показывать"
-                  autoComplete="off"
-                />
-                <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
-                  Необязательно. На главной отображается зачёркнутой серым, если больше текущей цены (например 2000 при цене 1300).
-                </p>
-              </div>
             </section>
             <section className="admin-raffle-section" aria-labelledby="raffle-sec-pay">
               <h3 id="raffle-sec-pay" className="admin-raffle-section__title">
@@ -630,6 +624,25 @@ export default function AdminMarkup() {
                   maxLength={2000}
                   placeholder="Например: Эфир закончился, смотрите запись эфира по ссылке."
                 ></textarea>
+              </div>
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label htmlFor="raffle-live-stream-at">Время старта эфира</label>
+                  <input
+                    id="raffle-live-stream-at"
+                    className="input"
+                    type="datetime-local"
+                    step={60}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-live-stream-status">Статус эфира</label>
+                  <select id="raffle-live-stream-status" className="input input--select">
+                    <option value="scheduled">Запланирован</option>
+                    <option value="live">Идет</option>
+                    <option value="ended">Окончен</option>
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label htmlFor="raffle-live-stream-url">Ссылка на эфир (для кнопки в модалке)</label>

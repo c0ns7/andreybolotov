@@ -77,4 +77,8 @@ export async function closePgPool(): Promise<void> {
 
 export async function ensurePgRuntimeSchema(): Promise<void> {
   await pgPool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locality TEXT`);
+  await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS cenopad_start_at BIGINT`);
+  await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS cenopad_end_at BIGINT`);
+  await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS live_stream_at BIGINT`);
+  await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS live_stream_status TEXT NOT NULL DEFAULT 'scheduled'`);
 }

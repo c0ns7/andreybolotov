@@ -1409,6 +1409,7 @@
   var ticketSearchRandomQty = 5;
   var ticketsModalActiveTab = "reserved";
   var homeRafflesRefreshTimer = null;
+  var homeRaffleCountdownTimer = null;
   var raffleViewHeartbeatTimer = null;
   var rafflePageViewersRefreshTimer = null;
   var raffleSelectionSyncTimer = null;
@@ -3941,6 +3942,28 @@
   function buildRaffleCardHtml(r, idx) {
     var st = String(r.status || "active");
     var myOrderStatus = String(r.my_order_status || "");
+    var streamAt = Math.floor(Number(r.live_stream_at || 0));
+    var streamStatusRaw = String(r.live_stream_status || "")
+      .trim()
+      .toLowerCase();
+    var streamState =
+      streamStatusRaw === "ended"
+        ? "ended"
+        : streamStatusRaw === "live" || (streamAt > 0 && Date.now() >= streamAt)
+          ? "live"
+          : "scheduled";
+    var streamUrl = String(r.live_stream_url || "").trim();
+    var streamCountdown = "";
+    if (streamAt > 0 && streamState === "scheduled") {
+      var left = Math.max(0, streamAt - Date.now());
+      var totalSec = Math.floor(left / 1000);
+      var days = Math.floor(totalSec / 86400);
+      var hours = Math.floor((totalSec % 86400) / 3600);
+      var mins = Math.floor((totalSec % 3600) / 60);
+      var secs = totalSec % 60;
+      if (days > 0) streamCountdown = String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м";
+      else streamCountdown = String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    }
     var badgeBlock = "";
     if (st === "active" && myOrderStatus === "reserved") {
       badgeBlock =
@@ -3958,6 +3981,17 @@
         '<div class="raffle-card__sub">Скоро вернёмся</div>' +
         "</div>";
     } else if (st === "closed") {
+      var closedSub =
+        streamState === "scheduled"
+          ? '<div class="raffle-card__sub">До эфира</div>' +
+            (streamCountdown
+              ? '<div class="raffle-card__sub raffle-card__sub--timer" data-raffle-stream-countdown="' +
+                escapeHtml(String(streamAt)) +
+                '"></div>'
+              : "")
+          : streamState === "live"
+            ? '<div class="raffle-card__sub">ЭФИР УЖЕ НАЧАЛСЯ</div>'
+            : '<div class="raffle-card__sub">Эфир окончен</div>';
       badgeBlock =
         '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--closed">' +
         '<div class="raffle-card__badge raffle-card__badge--pause">' +
@@ -3965,7 +3999,7 @@
         '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' +
         " Продажи закрыты" +
         "</div>" +
-        '<div class="raffle-card__sub">Следите за новостями</div>' +
+        closedSub +
         "</div>";
     }
     var cover = "";
@@ -3976,7 +4010,7 @@
         '" alt="" width="480" height="160" loading="lazy" />';
     }
     var promoBadge =
-      Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true
+      !hasSecondPrice && (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true)
         ? '<div class="raffle-card__promo-badge">АКЦИЯ 5+1</div>'
         : "";
     var promoInfoBtn =
@@ -4007,7 +4041,27 @@
     var prevFreePct = Number(raffleCardPrevFreePct[String(r.id)]);
     var startPct = Number.isFinite(prevFreePct) ? prevFreePct : freePct;
     var pr = Number(r.price_rub ?? 0);
-    var priceInner = escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
+    var basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? pr)));
+    var hasSecondPrice = basePrice > pr && pr > 0;
+    var secondPriceEndAt = Math.floor(Number(r.second_price_end_at ?? r.cenopad_end_at ?? 0));
+    var specialPromoBadge = "";
+    if (hasSecondPrice) {
+      specialPromoBadge =
+        '<div class="raffle-card__promo-special">' +
+        '<div class="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>' +
+        '<div class="raffle-card__promo-special-timer" data-second-price-countdown="' +
+        escapeHtml(String(secondPriceEndAt)) +
+        '"></div>' +
+        "</div>";
+    }
+    var priceInner = hasSecondPrice
+      ? '<span class="raffle-card__price-old">' +
+        escapeHtml(formatRubleAmount(basePrice)) +
+        " ₽</span>" +
+        '<span class="raffle-card__price-current">' +
+        escapeHtml(formatRubleAmount(pr)) +
+        " ₽</span>"
+      : escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
     var viewersBlock =
       st === "paused" || st === "closed" || viewers <= 0
         ? ""
@@ -4028,6 +4082,7 @@
       cover +
       '<div class="raffle-card__grad"></div>' +
       viewersBlock +
+      specialPromoBadge +
       promoBadge +
       badgeBlock +
       '<h3 class="raffle-card__title">' +
@@ -4057,18 +4112,23 @@
       "</div>" +
       "</div>" +
       '<div class="raffle-card__price-row">' +
-      '<div class="raffle-card__price">' +
-      priceInner +
-      ' <span class="raffle-card__price-suffix">/ билет</span></div>' +
-      '<button type="button" class="' +
-      ctaClass +
-      '" data-raffle-open="1" data-raffle-idx="' +
-      idx +
-      '"' +
-      ctaDisabledAttr +
-      ">" +
-      ctaInner +
-      "</button></div>" +
+      (st === "closed" && streamUrl
+        ? '<a class="raffle-card__stream-cta" href="' +
+          escapeHtml(streamUrl) +
+          '" target="_blank" rel="noopener noreferrer">Смотреть эфир</a>'
+        : '<div class="raffle-card__price">' +
+          priceInner +
+          ' <span class="raffle-card__price-suffix">/ билет</span></div>' +
+          '<button type="button" class="' +
+          ctaClass +
+          '" data-raffle-open="1" data-raffle-idx="' +
+          idx +
+          '"' +
+          ctaDisabledAttr +
+          ">" +
+          ctaInner +
+          "</button>") +
+      "</div>" +
       promoInfoBtn +
       "</div></article>"
     );
@@ -4129,6 +4189,52 @@
         openPromo5Plus1Modal();
       });
     });
+    el.querySelectorAll(".raffle-card__stream-cta").forEach(function (node) {
+      node.addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+    });
+    updateRaffleStreamCountdowns(el);
+  }
+
+  function updateRaffleStreamCountdowns(rootEl) {
+    var root = rootEl || document;
+    root.querySelectorAll("[data-raffle-stream-countdown]").forEach(function (el) {
+      var at = Math.floor(Number(el.getAttribute("data-raffle-stream-countdown") || 0));
+      if (!Number.isFinite(at) || at <= 0) return;
+      var left = Math.max(0, at - Date.now());
+      var totalSec = Math.floor(left / 1000);
+      var days = Math.floor(totalSec / 86400);
+      var hours = Math.floor((totalSec % 86400) / 3600);
+      var mins = Math.floor((totalSec % 3600) / 60);
+      var secs = totalSec % 60;
+      el.textContent =
+        days > 0
+          ? String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м"
+          : String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    });
+    root.querySelectorAll("[data-second-price-countdown]").forEach(function (el) {
+      var at = Math.floor(Number(el.getAttribute("data-second-price-countdown") || 0));
+      if (!Number.isFinite(at) || at <= 0) {
+        el.textContent = "Скоро завершится";
+        return;
+      }
+      var left = Math.max(0, at - Date.now());
+      var totalSec = Math.floor(left / 1000);
+      var days = Math.floor(totalSec / 86400);
+      var hours = Math.floor((totalSec % 86400) / 3600);
+      var mins = Math.floor((totalSec % 3600) / 60);
+      var secs = totalSec % 60;
+      el.textContent =
+        String(days) +
+        "д " +
+        String(hours).padStart(2, "0") +
+        "ч " +
+        String(mins).padStart(2, "0") +
+        "м " +
+        String(secs).padStart(2, "0") +
+        "с";
+    });
   }
 
   async function loadRafflesFeed() {
@@ -4182,6 +4288,12 @@
       if (!IS_HOME_APP || !authVerified || accountBlocked) return;
       loadRafflesFeed();
     }, 60 * 1000);
+    if (!homeRaffleCountdownTimer) {
+      homeRaffleCountdownTimer = setInterval(function () {
+        if (!IS_HOME_APP || !authVerified || accountBlocked) return;
+        updateRaffleStreamCountdowns(document);
+      }, 1000);
+    }
   }
 
   function stopRaffleViewHeartbeat() {
@@ -5198,7 +5310,7 @@
     }
     if (cover && "src" in cover) {
       var nextCover = String(r.cover_image_url || "").trim();
-      cover.src = nextCover || "/logo.png";
+      cover.src = nextCover || "/favicon.svg";
       cover.alt = String(r.title || "Обложка акции");
     }
     if (liveTime) {

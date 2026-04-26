@@ -191,7 +191,7 @@ export default function AppBottomNav({
 
   useEffect(() => {
     if (!profileOpen) return;
-    void refreshMyTickets(true);
+    void refreshMyTickets(false);
   }, [profileOpen, refreshMyTickets]);
 
   useEffect(() => {
@@ -228,9 +228,10 @@ export default function AppBottomNav({
         }
         if (d.type === "raffle_tickets_updated") {
           invalidateAbParticipationHistoryCache();
-          void refreshMyTickets(profileOpen);
+          invalidateAbMyTicketsCache();
+          void refreshMyTickets(true);
           void refreshHistorySummary();
-          if (historyOpen) void refreshHistory(false);
+          if (historyOpen) void refreshHistory(true);
         }
         if (d.type === "chat_message") {
           invalidateAbChatUnreadCache();

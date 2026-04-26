@@ -15,6 +15,7 @@ type RaffleRow = {
   status?: string;
   cover_image_url?: string;
   price_rub?: number;
+  base_price_rub?: number;
   cenopad_enabled?: number | boolean;
   cenopad_price_rub?: number | null;
   old_price_rub?: number | null;
@@ -25,10 +26,23 @@ type RaffleRow = {
   promo_5_plus_1_enabled?: number | boolean;
   live_stream_note?: string | null;
   live_stream_url?: string | null;
+  live_stream_at?: number | null;
+  live_stream_status?: string | null;
 };
 
 function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+function formatCountdown(targetMs: number, nowMs: number) {
+  const left = Math.max(0, targetMs - nowMs);
+  const totalSec = Math.floor(left / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  if (days > 0) return `${days}д ${hours.toString().padStart(2, "0")}ч ${mins.toString().padStart(2, "0")}м`;
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
 export default function HomeAppClient() {
@@ -46,6 +60,7 @@ export default function HomeAppClient() {
   const [localityModalOpen, setLocalityModalOpen] = useState(false);
   const [localityInput, setLocalityInput] = useState("");
   const [localitySaving, setLocalitySaving] = useState(false);
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const letter = useMemo(() => {
     const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
@@ -171,6 +186,13 @@ export default function HomeAppClient() {
   }, []);
 
   useEffect(() => {
+    const hasClosedStream = raffles.some((r) => String(r.status || "") === "closed" && Number(r.live_stream_at || 0) > 0);
+    if (!hasClosedStream) return;
+    const t = window.setInterval(() => setNowTs(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [raffles]);
+
+  useEffect(() => {
     if (!session?.token || !authVerified) return;
     const current = String(session.locality ?? "").trim();
     if (current) {
@@ -214,7 +236,7 @@ export default function HomeAppClient() {
         <div className="home-boot-loader" role="status" aria-live="polite" aria-label="Загрузка">
           <div className="home-boot-loader__inner">
             <div className="home-boot-loader__logo" aria-hidden="true">
-              <img src="/logo.png" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
+              <img src="/favicon.svg" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
             </div>
             <div className="home-boot-loader__spinner" aria-hidden="true">
               <span className="home-boot-loader__ring"></span>
@@ -247,17 +269,32 @@ export default function HomeAppClient() {
                 const myOrderStatus = String(r.my_order_status || "");
                 const isPaused = st === "paused";
                 const isClosed = st === "closed";
+                const streamAt = Math.floor(Number(r.live_stream_at || 0));
+                const streamStatusRaw = String(r.live_stream_status || "").trim().toLowerCase();
+                const streamState =
+                  streamStatusRaw === "ended"
+                    ? "ended"
+                    : streamStatusRaw === "live" || (streamAt > 0 && nowTs >= streamAt)
+                      ? "live"
+                      : "scheduled";
+                const streamCountdown = streamAt > 0 && streamState === "scheduled" ? formatCountdown(streamAt, nowTs) : "";
+                const streamUrl = String(r.live_stream_url || "").trim();
                 const isWaitCheck = st === "active" && myOrderStatus === "reserved";
                 const total = Math.max(0, Number(r.ticket_count) || 0);
                 const occupied = Math.max(0, Math.min(total, Number(r.occupied_count) || 0));
                 const free = Math.max(0, total - occupied);
                 const freePct = total > 0 ? (free / total) * 100 : 0;
                 const isLowFree = free <= 300;
-                const cenopadEnabled = Boolean(Number(r.cenopad_enabled ?? 0));
-                const oldPrice = Math.max(0, Math.floor(Number(r.old_price_rub ?? 0)));
                 const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
-                const hasCenopadPrice = cenopadEnabled && oldPrice > currentPrice && currentPrice > 0;
-                const discountPct = hasCenopadPrice ? Math.max(1, Math.round(((oldPrice - currentPrice) / oldPrice) * 100)) : 0;
+                const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? currentPrice)));
+                const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
+                const secondPriceEndAt = Math.floor(
+                  Number((r as { second_price_end_at?: number; cenopad_end_at?: number }).second_price_end_at ??
+                    (r as { cenopad_end_at?: number }).cenopad_end_at ??
+                    0),
+                );
+                const secondPriceCountdown =
+                  hasSecondPriceActive && secondPriceEndAt > nowTs ? formatCountdown(secondPriceEndAt, nowTs) : "";
                 const viewers = Math.max(0, Number(r.viewers_count) || 0);
                 const go = () => {
                   if (st === "active") {
@@ -277,7 +314,7 @@ export default function HomeAppClient() {
                     className={
                       "raffle-card" +
                       (st === "active" ? " raffle-card--active" : "") +
-                      (hasCenopadPrice ? " raffle-card--cenopad" : "")
+                      (hasSecondPriceActive ? " raffle-card--cenopad" : "")
                     }
                     data-status={st}
                     role={st === "active" ? "link" : undefined}
@@ -295,9 +332,12 @@ export default function HomeAppClient() {
                         <img src={String(r.cover_image_url)} alt="" width={480} height={160} loading={idx < 2 ? "eager" : "lazy"} />
                       ) : null}
                       <div className="raffle-card__grad" />
-                      {hasCenopadPrice ? (
-                        <div className="raffle-card__promo-badge" aria-label="Активен ценопад">
-                          ЦЕНОПАД · -{discountPct}%
+                      {hasSecondPriceActive ? (
+                        <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
+                          <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>
+                          <div className="raffle-card__promo-special-timer">
+                            {secondPriceCountdown || "Скоро завершится"}
+                          </div>
                         </div>
                       ) : null}
                       {!(isPaused || isClosed) && viewers > 0 ? (
@@ -332,7 +372,16 @@ export default function HomeAppClient() {
                             </svg>
                             Продажи закрыты
                           </div>
-                          <div className="raffle-card__sub">Следите за новостями</div>
+                          {streamState === "scheduled" ? (
+                            <>
+                              <div className="raffle-card__sub">До эфира</div>
+                              {streamCountdown ? <div className="raffle-card__sub raffle-card__sub--timer">{streamCountdown}</div> : null}
+                            </>
+                          ) : streamState === "live" ? (
+                            <div className="raffle-card__sub">Эфир уже начался</div>
+                          ) : (
+                            <div className="raffle-card__sub">Эфир окончен</div>
+                          )}
                         </div>
                       ) : null}
                       <h3 className="raffle-card__title">{String(r.title || "")}</h3>
@@ -356,37 +405,45 @@ export default function HomeAppClient() {
                         </div>
                       </div>
                       <div className="raffle-card__price-row">
-                        <div className="raffle-card__price">
-                          {hasCenopadPrice ? (
-                            <>
-                              <span className="raffle-card__price-old">{formatRub(oldPrice)} ₽</span>
-                              <span className="raffle-card__price-current">{formatRub(currentPrice)} ₽</span>{" "}
-                              <span className="raffle-card__price-suffix">/ билет</span>
-                            </>
-                          ) : (
-                            <>
-                              {formatRub(currentPrice)}&nbsp;₽ <span className="raffle-card__price-suffix">/ билет</span>
-                            </>
-                          )}
-                        </div>
-                        {st === "active" ? (
+                        {st === "closed" && streamUrl ? (
+                          <a href={streamUrl} target="_blank" rel="noopener noreferrer" className="raffle-card__stream-cta">
+                            Смотреть эфир
+                          </a>
+                        ) : (
+                          <>
+                            <div className="raffle-card__price">
+                              {hasSecondPriceActive ? (
+                                <>
+                                  <span className="raffle-card__price-old">{formatRub(basePrice)} ₽</span>
+                                  <span className="raffle-card__price-current">{formatRub(currentPrice)} ₽</span>{" "}
+                                  <span className="raffle-card__price-suffix">/ билет</span>
+                                </>
+                              ) : (
+                                <>
+                                  {formatRub(currentPrice)}&nbsp;₽ <span className="raffle-card__price-suffix">/ билет</span>
+                                </>
+                              )}
+                            </div>
+                            {st === "active" ? (
                           <span className="raffle-card__cta raffle-card__cta--dark">
                             <span className="raffle-card__cta-label">Участвовать</span>
                             <span className="raffle-card__cta-arrow" aria-hidden="true">
                               →
                             </span>
                           </span>
-                        ) : st === "closed" ? (
+                            ) : st === "closed" ? (
                           <button type="button" className="raffle-card__cta raffle-card__cta--dark" onClick={openClosedDetails}>
                             <span className="raffle-card__cta-label">Подробно</span>
                           </button>
-                        ) : (
+                            ) : (
                           <span className="raffle-card__cta raffle-card__cta--dark" aria-disabled="true">
                             <span className="raffle-card__cta-label">Участвовать</span>
                             <span className="raffle-card__cta-arrow" aria-hidden="true">
                               →
                             </span>
                           </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -457,7 +514,7 @@ export default function HomeAppClient() {
             <div className="raffle-unavailable__cover">
               <img
                 className="raffle-unavailable__cover-img"
-                src={String(closedRaffleModal.cover_image_url || "/logo.png")}
+                src={String(closedRaffleModal.cover_image_url || "/favicon.svg")}
                 alt={String(closedRaffleModal.title || "Обложка акции")}
               />
               <div className="raffle-unavailable__cover-fade"></div>

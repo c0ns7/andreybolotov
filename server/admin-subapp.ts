@@ -28,6 +28,7 @@ import {
   countUsersForAdminByExactId,
   countUsersForAdminBySearch,
   countConfirmedTicketsSoldByCenopad,
+  getRaffleSalesAccounting,
   deleteUserAccountByAdmin,
   markThreadReadByStaff,
   messageToDto,
@@ -302,6 +303,8 @@ type RaffleInput = {
   price_rub: number;
   cenopad_enabled: boolean;
   cenopad_price_rub: number;
+  cenopad_start_at: number | null;
+  cenopad_end_at: number | null;
   old_price_rub: number;
   ticket_count: number;
   collection_url: string;
@@ -318,6 +321,8 @@ type RaffleInput = {
   rules_url: string;
   live_stream_note: string;
   live_stream_url: string;
+  live_stream_at: number | null;
+  live_stream_status: "scheduled" | "live" | "ended";
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -371,13 +376,32 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     return { ok: false, error: "Некорректная старая цена" };
   }
   if (!Number.isFinite(cenopad_price_rub) || cenopad_price_rub < 0 || cenopad_price_rub > 1_000_000_000) {
-    return { ok: false, error: "Некорректная цена ценопада" };
+    return { ok: false, error: "Некорректная вторая цена" };
   }
   if (cenopad_enabled && cenopad_price_rub < 1) {
-    return { ok: false, error: "Укажите цену ценопада больше 0" };
+    return { ok: false, error: "Укажите вторую цену больше 0" };
   }
   if (cenopad_enabled && cenopad_price_rub >= price_rub) {
-    return { ok: false, error: "Цена ценопада должна быть ниже обычной цены" };
+    return { ok: false, error: "Вторая цена должна быть ниже основной" };
+  }
+  const cenopadStartRaw = body.cenopad_start_at;
+  const cenopadEndRaw = body.cenopad_end_at;
+  const cenopad_start_at =
+    cenopadStartRaw === undefined || cenopadStartRaw === null || cenopadStartRaw === ""
+      ? null
+      : Math.floor(Number(cenopadStartRaw));
+  const cenopad_end_at =
+    cenopadEndRaw === undefined || cenopadEndRaw === null || cenopadEndRaw === ""
+      ? null
+      : Math.floor(Number(cenopadEndRaw));
+  if (cenopad_start_at != null && (!Number.isFinite(cenopad_start_at) || cenopad_start_at <= 0)) {
+    return { ok: false, error: "Некорректное время старта второй цены" };
+  }
+  if (cenopad_end_at != null && (!Number.isFinite(cenopad_end_at) || cenopad_end_at <= 0)) {
+    return { ok: false, error: "Некорректное время окончания второй цены" };
+  }
+  if (cenopad_start_at != null && cenopad_end_at != null && cenopad_end_at <= cenopad_start_at) {
+    return { ok: false, error: "Окончание второй цены должно быть позже старта" };
   }
   if (old_price_rub > 0 && old_price_rub <= price_rub) {
     return { ok: false, error: "Старая цена должна быть больше текущей (или оставьте пустой)" };
@@ -410,6 +434,19 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   }
   const live_stream_note = String(body.live_stream_note ?? "").trim().slice(0, 2000);
   const live_stream_url = String(body.live_stream_url ?? "").trim();
+  const liveStreamAtRaw = body.live_stream_at;
+  const live_stream_at =
+    liveStreamAtRaw === undefined || liveStreamAtRaw === null || liveStreamAtRaw === ""
+      ? null
+      : Math.floor(Number(liveStreamAtRaw));
+  if (live_stream_at != null && (!Number.isFinite(live_stream_at) || live_stream_at <= 0)) {
+    return { ok: false, error: "Время эфира задано некорректно" };
+  }
+  const streamStatusRaw = String(body.live_stream_status ?? "scheduled")
+    .trim()
+    .toLowerCase();
+  const live_stream_status =
+    streamStatusRaw === "live" || streamStatusRaw === "ended" ? streamStatusRaw : "scheduled";
   if (live_stream_url.length > 2000) {
     return { ok: false, error: "Ссылка на эфир слишком длинная" };
   }
@@ -425,6 +462,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       price_rub,
       cenopad_enabled,
       cenopad_price_rub,
+      cenopad_start_at,
+      cenopad_end_at,
       old_price_rub,
       ticket_count,
       collection_url,
@@ -441,6 +480,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       rules_url,
       live_stream_note,
       live_stream_url,
+      live_stream_at,
+      live_stream_status,
       status,
       sort_order,
       wholesale_enabled,
@@ -873,10 +914,15 @@ adminSubApp.get("/raffles", async (c) => {
   const rows = await listRafflesAll();
   return c.json({
     raffles: await Promise.all(
-      rows.map(async (r) => ({
-        ...raffleToDto(r, { forAdmin: true }),
-        cenopad_sold_count: await countConfirmedTicketsSoldByCenopad(r.id),
-      })),
+      rows.map(async (r) => {
+        const soldBySecond = await countConfirmedTicketsSoldByCenopad(r.id);
+        const accounting = await getRaffleSalesAccounting(r.id);
+        return {
+          ...raffleToDto(r, { forAdmin: true }),
+          cenopad_sold_count: soldBySecond,
+          sales_accounting: accounting,
+        };
+      }),
     ),
   });
 });
@@ -941,6 +987,8 @@ adminSubApp.post("/raffles", async (c) => {
     price_rub: v.price_rub,
     cenopad_enabled: v.cenopad_enabled ? 1 : 0,
     cenopad_price_rub: v.cenopad_price_rub,
+    cenopad_start_at: v.cenopad_start_at,
+    cenopad_end_at: v.cenopad_end_at,
     old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
@@ -957,6 +1005,8 @@ adminSubApp.post("/raffles", async (c) => {
     rules_url: v.rules_url,
     live_stream_note: v.live_stream_note,
     live_stream_url: v.live_stream_url,
+    live_stream_at: v.live_stream_at,
+    live_stream_status: v.live_stream_status,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
@@ -995,6 +1045,8 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     price_rub: v.price_rub,
     cenopad_enabled: v.cenopad_enabled ? 1 : 0,
     cenopad_price_rub: v.cenopad_price_rub,
+    cenopad_start_at: v.cenopad_start_at,
+    cenopad_end_at: v.cenopad_end_at,
     old_price_rub: v.old_price_rub,
     ticket_count: v.ticket_count,
     collection_url: v.collection_url,
@@ -1011,6 +1063,8 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     rules_url: v.rules_url,
     live_stream_note: v.live_stream_note,
     live_stream_url: v.live_stream_url,
+    live_stream_at: v.live_stream_at,
+    live_stream_status: v.live_stream_status,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
