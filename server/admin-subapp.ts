@@ -1,4 +1,4 @@
-import "./load-env.js";
+import "./load-env";
 import { mkdirSync, existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";

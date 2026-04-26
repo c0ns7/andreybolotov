@@ -1,4 +1,4 @@
-import "./load-env.js";
+import "./load-env";
 import { Pool, types } from "pg";
 import type { PoolConfig, QueryResultRow } from "pg";
 
