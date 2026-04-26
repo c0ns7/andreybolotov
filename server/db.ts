@@ -1,503 +1,65 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 import { normalizePhone } from "./phone.js";
+import {
+  cleanupExpiredPasswordResetTokensPg,
+  consumePasswordResetTokenPg,
+  createSessionPg,
+  deleteSessionPg,
+  getUserByEmailPg,
+  getUserByIdPg,
+  getUserByPhonePg,
+  getUserBySessionTokenPg,
+  insertUserPg,
+  PASSWORD_RESET_TTL_MS_PG,
+  setPasswordResetTokenForUserPg,
+  touchUserLastActivePg,
+  updateUserEmailNotifyPrefsPg,
+  updateUserPasswordHashPg,
+} from "./db-auth-pg.js";
+import { pgAll, pgExec, pgGet } from "./pg-sql.js";
+import { pgPool } from "./pg.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, "..", "data");
-fs.mkdirSync(dataDir, { recursive: true });
+export type { SessionUser, UserRow } from "./db-auth-pg.js";
 
-const dbPath = path.join(dataDir, "app.db");
-export const db = new Database(dbPath);
-
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  phone TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  token TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-`);
-
-/** Миграции для существующих БД */
-function migrate() {
-  const cols = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === "role")) {
-    db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
-  }
-  if (!cols.some((c) => c.name === "blocked")) {
-    db.exec(`ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`);
-  }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS support_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      body TEXT NOT NULL,
-      is_staff INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_support_user ON support_messages(user_id, created_at);
-  `);
-  const smCols = db.prepare(`PRAGMA table_info(support_messages)`).all() as { name: string }[];
-  if (!smCols.some((c) => c.name === "read_by_staff_at")) {
-    db.exec(`ALTER TABLE support_messages ADD COLUMN read_by_staff_at INTEGER`);
-    db.exec(
-      `UPDATE support_messages SET read_by_staff_at = created_at WHERE is_staff = 0`,
-    );
-  }
-  const smCols2 = db.prepare(`PRAGMA table_info(support_messages)`).all() as { name: string }[];
-  if (!smCols2.some((c) => c.name === "attachment_url")) {
-    db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_url TEXT`);
-    db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_name TEXT`);
-    db.exec(`ALTER TABLE support_messages ADD COLUMN attachment_mime TEXT`);
-  }
-  const smCols3 = db.prepare(`PRAGMA table_info(support_messages)`).all() as { name: string }[];
-  if (!smCols3.some((c) => c.name === "read_by_user_at")) {
-    db.exec(`ALTER TABLE support_messages ADD COLUMN read_by_user_at INTEGER`);
-    /* Старые ответы поддержки считаем прочитанными, иначе загорится вся история */
-    db.exec(
-      `UPDATE support_messages SET read_by_user_at = created_at WHERE is_staff = 1 AND read_by_user_at IS NULL`,
-    );
-  }
-  db.prepare(`UPDATE users SET role = 'admin' WHERE lower(email) = ?`).run("c0ns7@bk.ru");
-
-  try {
-    db.exec(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email))`,
-    );
-  } catch {
-    /* при дубликатах email в старых данных индекс не создастся — проверка в коде остаётся */
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS raffles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      cover_image_url TEXT NOT NULL DEFAULT '',
-      price_rub INTEGER NOT NULL DEFAULT 0,
-      ticket_count INTEGER NOT NULL DEFAULT 0,
-      collection_url TEXT NOT NULL DEFAULT '',
-      collection_recipient TEXT NOT NULL DEFAULT '',
-      qr_image_url TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'active',
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_raffles_sort ON raffles (sort_order, id DESC);
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS raffle_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      raffle_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      bank TEXT,
-      amount_rub INTEGER NOT NULL,
-      ticket_count INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      reserved_until INTEGER NOT NULL,
-      receipt_url TEXT,
-      receipt_name TEXT,
-      receipt_mime TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_ro_raffle ON raffle_orders(raffle_id);
-    CREATE INDEX IF NOT EXISTS idx_ro_user ON raffle_orders(user_id);
-    CREATE INDEX IF NOT EXISTS idx_ro_status ON raffle_orders(status);
-
-    CREATE TABLE IF NOT EXISTS raffle_ticket_holds (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      raffle_id INTEGER NOT NULL,
-      order_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      ticket_number INTEGER NOT NULL,
-      is_bonus INTEGER NOT NULL DEFAULT 0,
-      hold_status TEXT NOT NULL,
-      expires_at INTEGER,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
-      FOREIGN KEY (order_id) REFERENCES raffle_orders(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      UNIQUE (raffle_id, ticket_number)
-    );
-    CREATE INDEX IF NOT EXISTS idx_rth_raffle ON raffle_ticket_holds(raffle_id);
-    CREATE INDEX IF NOT EXISTS idx_rth_order ON raffle_ticket_holds(order_id);
-  `);
-
-  const roCols = db.prepare(`PRAGMA table_info(raffle_orders)`).all() as { name: string }[];
-  if (!roCols.some((c) => c.name === "reserve_extended_once")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN reserve_extended_once INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!roCols.some((c) => c.name === "reserve_reminder_sent_at")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN reserve_reminder_sent_at INTEGER`);
-  }
-  if (!roCols.some((c) => c.name === "receipt_reject_count")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_reject_count INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!roCols.some((c) => c.name === "last_reject_comment")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN last_reject_comment TEXT`);
-  }
-  if (!roCols.some((c) => c.name === "public_status_token")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN public_status_token TEXT`);
-  }
-  if (!roCols.some((c) => c.name === "receipt_sha256")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_sha256 TEXT`);
-  }
-  if (!roCols.some((c) => c.name === "receipt_same_as_previous")) {
-    db.exec(`ALTER TABLE raffle_orders ADD COLUMN receipt_same_as_previous INTEGER NOT NULL DEFAULT 0`);
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS raffle_order_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      detail TEXT,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (order_id) REFERENCES raffle_orders(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_roe_order ON raffle_order_events(order_id);
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS used_receipts (
-      sha256 TEXT PRIMARY KEY,
-      first_order_id INTEGER NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_used_receipts_created_at ON used_receipts(created_at);
-  `);
-
-  // Backfill: если таблица использованных чеков только что создана,
-  // заполним ее sha256, которые уже встречались в существующих заявках.
-  db.exec(`
-    INSERT OR IGNORE INTO used_receipts (sha256, first_order_id, created_at)
-    SELECT
-      receipt_sha256 AS sha256,
-      MIN(id) AS first_order_id,
-      MIN(created_at) AS created_at
-    FROM raffle_orders
-    WHERE receipt_sha256 IS NOT NULL AND TRIM(receipt_sha256) != ''
-    GROUP BY receipt_sha256;
-  `);
-
-  try {
-    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ro_public_token ON raffle_orders(public_status_token)`);
-  } catch {
-    /* дубликаты токенов в старых данных */
-  }
-  db.prepare(
-    `UPDATE raffle_orders SET public_status_token = lower(hex(randomblob(16))) WHERE public_status_token IS NULL OR TRIM(public_status_token) = ''`,
-  ).run();
-
-  const rafCols = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
-  if (!rafCols.some((c) => c.name === "wholesale_enabled")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN wholesale_enabled INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!rafCols.some((c) => c.name === "old_price_rub")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN old_price_rub INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!rafCols.some((c) => c.name === "hidden_from_public")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN hidden_from_public INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!rafCols.some((c) => c.name === "rules_url")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN rules_url TEXT NOT NULL DEFAULT ''`);
-  }
-  if (!rafCols.some((c) => c.name === "tbank_collection_url")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_collection_url TEXT NOT NULL DEFAULT ''`);
-  }
-  if (!rafCols.some((c) => c.name === "sber_collection_recipient")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN sber_collection_recipient TEXT NOT NULL DEFAULT ''`);
-    db.exec(
-      `UPDATE raffles SET sber_collection_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(sber_collection_recipient, '')) = ''`,
-    );
-  }
-  if (!rafCols.some((c) => c.name === "tbank_collection_recipient")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_collection_recipient TEXT NOT NULL DEFAULT ''`);
-    db.exec(
-      `UPDATE raffles SET tbank_collection_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(tbank_collection_recipient, '')) = ''`,
-    );
-  }
-  if (!rafCols.some((c) => c.name === "qr_recipient")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN qr_recipient TEXT NOT NULL DEFAULT ''`);
-    db.exec(
-      `UPDATE raffles SET qr_recipient = COALESCE(collection_recipient, '') WHERE TRIM(COALESCE(qr_recipient, '')) = ''`,
-    );
-  }
-  if (!rafCols.some((c) => c.name === "qr_payment_purpose")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN qr_payment_purpose TEXT NOT NULL DEFAULT 'Оплата услуг'`);
-  }
-  if (!rafCols.some((c) => c.name === "sber_enabled")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN sber_enabled INTEGER NOT NULL DEFAULT 1`);
-  }
-  if (!rafCols.some((c) => c.name === "tbank_enabled")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN tbank_enabled INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!rafCols.some((c) => c.name === "qr_enabled")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN qr_enabled INTEGER NOT NULL DEFAULT 1`);
-  }
-  if (!rafCols.some((c) => c.name === "promo_5_plus_1_enabled")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN promo_5_plus_1_enabled INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!rafCols.some((c) => c.name === "promo_5_plus_1_locked_free_count")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN promo_5_plus_1_locked_free_count INTEGER NOT NULL DEFAULT 0`);
-  }
-  const rthCols = db.prepare(`PRAGMA table_info(raffle_ticket_holds)`).all() as { name: string }[];
-  if (!rthCols.some((c) => c.name === "is_bonus")) {
-    db.exec(`ALTER TABLE raffle_ticket_holds ADD COLUMN is_bonus INTEGER NOT NULL DEFAULT 0`);
-  }
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS site_settings (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      maintenance_enabled INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-  db.prepare(`INSERT OR IGNORE INTO site_settings (id, maintenance_enabled) VALUES (1, 0)`).run();
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS raffle_wholesale_assignments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      raffle_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      user_slot_index INTEGER NOT NULL,
-      wholesale_number INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      UNIQUE (raffle_id, user_id, user_slot_index),
-      UNIQUE (raffle_id, wholesale_number)
-    );
-    CREATE INDEX IF NOT EXISTS idx_rwa_raffle ON raffle_wholesale_assignments(raffle_id);
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS raffle_phone_preassignments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      raffle_id INTEGER NOT NULL,
-      ticket_number INTEGER NOT NULL,
-      phone TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (raffle_id) REFERENCES raffles(id) ON DELETE CASCADE,
-      UNIQUE (raffle_id, ticket_number)
-    );
-    CREATE INDEX IF NOT EXISTS idx_rpp_raffle_phone ON raffle_phone_preassignments(raffle_id, phone);
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE,
-      expires_at INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_prt_user ON password_reset_tokens(user_id);
-    CREATE INDEX IF NOT EXISTS idx_prt_expires ON password_reset_tokens(expires_at);
-  `);
-
-  const userCols2 = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
-  if (!userCols2.some((c) => c.name === "email_notify_chat")) {
-    db.exec(`ALTER TABLE users ADD COLUMN email_notify_chat INTEGER NOT NULL DEFAULT 1`);
-  }
-  if (!userCols2.some((c) => c.name === "email_notify_raffles")) {
-    db.exec(`ALTER TABLE users ADD COLUMN email_notify_raffles INTEGER NOT NULL DEFAULT 1`);
-  }
-  if (!userCols2.some((c) => c.name === "chat_unread_email_last_at")) {
-    db.exec(`ALTER TABLE users ADD COLUMN chat_unread_email_last_at INTEGER`);
-  }
-  if (!userCols2.some((c) => c.name === "email_notify_raffle_orders")) {
-    db.exec(`ALTER TABLE users ADD COLUMN email_notify_raffle_orders INTEGER NOT NULL DEFAULT 1`);
-    db.exec(`UPDATE users SET email_notify_raffle_orders = COALESCE(email_notify_raffles, 1)`);
-  }
-
-  const rafCols2 = db.prepare(`PRAGMA table_info(raffles)`).all() as { name: string }[];
-  if (!rafCols2.some((c) => c.name === "launch_notify_sent_at")) {
-    db.exec(`ALTER TABLE raffles ADD COLUMN launch_notify_sent_at INTEGER`);
-  }
-
-  migrateUsersEmailNullable();
-}
-
-/** Регистрация без почты: email NULL, уникальность только для непустых адресов. */
-function migrateUsersEmailNullable(): void {
-  const info = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string; notnull: number }>;
-  const emailCol = info.find((c) => c.name === "email");
-  if (!emailCol || emailCol.notnull !== 1) return;
-
-  db.exec(`DROP INDEX IF EXISTS idx_users_email_lower`);
-  db.pragma("foreign_keys = OFF");
-  try {
-    db.exec(`
-      CREATE TABLE _users_mig (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        email TEXT,
-        password_hash TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        blocked INTEGER NOT NULL DEFAULT 0,
-        email_notify_chat INTEGER NOT NULL DEFAULT 1,
-        email_notify_raffles INTEGER NOT NULL DEFAULT 1,
-        chat_unread_email_last_at INTEGER,
-        email_notify_raffle_orders INTEGER NOT NULL DEFAULT 1
-      );
-      INSERT INTO _users_mig (
-        id, phone, name, email, password_hash, created_at, role, blocked,
-        email_notify_chat, email_notify_raffles, chat_unread_email_last_at, email_notify_raffle_orders
-      )
-      SELECT
-        id,
-        phone,
-        name,
-        NULLIF(TRIM(LOWER(email)), ''),
-        password_hash,
-        created_at,
-        COALESCE(role, 'user'),
-        COALESCE(blocked, 0),
-        COALESCE(email_notify_chat, 1),
-        COALESCE(email_notify_raffles, 1),
-        chat_unread_email_last_at,
-        COALESCE(email_notify_raffle_orders, COALESCE(email_notify_raffles, 1))
-      FROM users;
-      DROP TABLE users;
-      ALTER TABLE _users_mig RENAME TO users;
-    `);
-  } finally {
-    db.pragma("foreign_keys = ON");
-  }
-  try {
-    db.exec(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email)) WHERE email IS NOT NULL AND length(trim(email)) > 0`,
-    );
-  } catch {
-    try {
-      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email))`);
-    } catch {
-      /* дубликаты email в старых данных */
-    }
-  }
-}
-
-migrate();
-
-export type UserRow = {
-  id: number;
-  phone: string;
-  name: string;
-  email: string | null;
-  password_hash: string;
-  created_at: number;
-  role: string;
-  blocked: number;
-  email_notify_chat?: number;
-  email_notify_raffles?: number;
-  /** Бронь, оплата, напоминания и доработка чека (не рассылка о новых акциях) */
-  email_notify_raffle_orders?: number;
-  chat_unread_email_last_at?: number | null;
-};
-
-export function insertUser(
+export async function insertUser(
   phone: string,
   name: string,
   email: string | null,
+  locality: string | null,
   passwordHash: string,
-): number {
-  const em =
-    email != null && String(email).trim()
-      ? String(email)
-          .trim()
-          .toLowerCase()
-      : null;
-  const info = db
-    .prepare(
-      `INSERT INTO users (phone, name, email, password_hash, created_at, role)
-       VALUES (@phone, @name, @email, @password_hash, @created_at, 'user')`,
-    )
-    .run({
-      phone,
-      name,
-      email: em,
-      password_hash: passwordHash,
-      created_at: Date.now(),
-    });
-  return Number(info.lastInsertRowid);
+): Promise<number> {
+  return insertUserPg(phone, name, email, locality, passwordHash);
 }
 
-export function getUserByPhone(phone: string): UserRow | undefined {
-  return db.prepare(`SELECT * FROM users WHERE phone = ?`).get(phone) as UserRow | undefined;
+export async function getUserByPhone(phone: string) {
+  return getUserByPhonePg(phone);
 }
 
-export function getUserByEmail(email: string): UserRow | undefined {
-  const em = email.trim().toLowerCase();
-  if (!em) return undefined;
-  return db.prepare(`SELECT * FROM users WHERE lower(email) = ?`).get(em) as UserRow | undefined;
+export async function getUserByEmail(email: string) {
+  return getUserByEmailPg(email);
 }
 
-export function getUserById(id: number): UserRow | undefined {
-  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+export async function getUserById(id: number) {
+  return getUserByIdPg(id);
 }
 
-export function createSession(token: string, userId: number): void {
-  db.prepare(`INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)`).run(
-    token,
-    userId,
-    Date.now(),
+export async function createSession(token: string, userId: number): Promise<void> {
+  return createSessionPg(token, userId);
+}
+
+export async function touchUserLastActive(userId: number): Promise<void> {
+  return touchUserLastActivePg(userId);
+}
+
+export async function getUserBySessionToken(token: string) {
+  return getUserBySessionTokenPg(token);
+}
+
+export async function countActiveAdmins(): Promise<number> {
+  const r = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM users
+     WHERE COALESCE(role,'user') = 'admin' AND COALESCE(blocked,0) = 0`,
   );
-}
-
-export type SessionUser = {
-  id: number;
-  phone: string;
-  name: string;
-  email: string | null;
-  role: string;
-  blocked: number;
-};
-
-export function getUserBySessionToken(token: string): SessionUser | undefined {
-  const row = db
-    .prepare(
-      `SELECT u.id AS id, u.phone AS phone, u.name AS name, u.email AS email,
-              COALESCE(u.role, 'user') AS role,
-              COALESCE(u.blocked, 0) AS blocked
-       FROM sessions s
-       INNER JOIN users u ON u.id = s.user_id
-       WHERE s.token = ?`,
-    )
-    .get(token) as SessionUser | undefined;
-  return row;
-}
-
-export function countActiveAdmins(): number {
-  const r = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM users
-       WHERE COALESCE(role,'user') = 'admin' AND COALESCE(blocked,0) = 0`,
-    )
-    .get() as { c: number };
   return Number(r?.c ?? 0);
 }
 
@@ -506,29 +68,29 @@ export type AdminUserListRow = {
   phone: string;
   name: string;
   email: string;
+  locality: string;
   role: string;
   blocked: number;
   created_at: number;
+  last_active_at: number | null;
 };
 
-export function listAllUsersForAdmin(): AdminUserListRow[] {
-  return db
-    .prepare(
-      `SELECT id, phone, name, email,
-              COALESCE(role,'user') AS role,
-              COALESCE(blocked,0) AS blocked,
-              created_at
-       FROM users ORDER BY id DESC`,
-    )
-    .all() as AdminUserListRow[];
+export async function listAllUsersForAdmin(): Promise<AdminUserListRow[]> {
+  return pgAll<AdminUserListRow>(
+    `SELECT id, phone, name, COALESCE(email,'') AS email, COALESCE(locality,'') AS locality,
+            COALESCE(role,'user') AS role,
+            COALESCE(blocked,0)::int AS blocked,
+            created_at,
+            last_active_at
+     FROM users ORDER BY id DESC`,
+  );
 }
 
-export function countUsersForAdmin(): number {
-  const r = db.prepare(`SELECT COUNT(*) AS c FROM users`).get() as { c: number };
+export async function countUsersForAdmin(): Promise<number> {
+  const r = await pgGet<{ c: number }>(`SELECT COUNT(*)::int AS c FROM users`);
   return Number(r?.c ?? 0);
 }
 
-/** Экранирование % и _ для LIKE */
 function adminUserLikePattern(raw: string): string {
   const t = raw
     .trim()
@@ -538,90 +100,111 @@ function adminUserLikePattern(raw: string): string {
   return `%${t}%`;
 }
 
-export function countUsersForAdminBySearch(search: string): number {
+export async function countUsersForAdminBySearch(search: string): Promise<number> {
   const t = search.trim();
   if (!t) return countUsersForAdmin();
   const pat = adminUserLikePattern(t);
-  const r = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM users
-       WHERE lower(name) LIKE lower(?)
-          OR lower(ifnull(phone,'')) LIKE lower(?)
-          OR lower(ifnull(email,'')) LIKE lower(?)`,
-    )
-    .get(pat, pat, pat) as { c: number };
+  const r = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM users
+     WHERE lower(name) LIKE lower(?) ESCAPE '\\'
+        OR lower(COALESCE(phone,'')) LIKE lower(?) ESCAPE '\\'
+        OR lower(COALESCE(email,'')) LIKE lower(?) ESCAPE '\\'`,
+    [pat, pat, pat],
+  );
   return Number(r?.c ?? 0);
 }
 
-/** Постраничный список: без поиска — новые сверху (id DESC); с поиском — старые регистрации раньше (id ASC), чтобы «давних» не прятать за 1-й страницей совпадений. */
-/** Точное совпадение по первичному ключу (для отдельного поля «ID» в админке). */
-export function countUsersForAdminByExactId(userId: number): number {
+export async function countUsersForAdminByExactId(userId: number): Promise<number> {
   if (!Number.isFinite(userId) || userId <= 0 || !Number.isInteger(userId)) return 0;
-  const r = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE id = ?`).get(userId) as { c: number };
+  const r = await pgGet<{ c: number }>(`SELECT COUNT(*)::int AS c FROM users WHERE id = ?`, [userId]);
   return Number(r?.c ?? 0);
 }
 
-export function listUsersForAdminPageByExactId(
+export async function listUsersForAdminPageByExactId(
   userId: number,
   offset: number,
   limit: number,
-): AdminUserListRow[] {
+): Promise<AdminUserListRow[]> {
   if (!Number.isFinite(userId) || userId <= 0 || !Number.isInteger(userId)) return [];
   const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
   const off = Math.max(0, Math.floor(offset));
   if (off > 0) return [];
-  return db
-    .prepare(
-      `SELECT id, phone, name, email,
-              COALESCE(role,'user') AS role,
-              COALESCE(blocked,0) AS blocked,
-              created_at
-       FROM users WHERE id = ? LIMIT ?`,
-    )
-    .all(userId, lim) as AdminUserListRow[];
+  return pgAll<AdminUserListRow>(
+    `SELECT id, phone, name, COALESCE(email,'') AS email, COALESCE(locality,'') AS locality,
+            COALESCE(role,'user') AS role,
+            COALESCE(blocked,0)::int AS blocked,
+            created_at,
+            last_active_at
+     FROM users WHERE id = ? LIMIT ?`,
+    [userId, lim],
+  );
 }
 
-export function listUsersForAdminPage(offset: number, limit: number, search: string | null): AdminUserListRow[] {
+export async function listUsersForAdminPage(
+  offset: number,
+  limit: number,
+  search: string | null,
+): Promise<AdminUserListRow[]> {
   const lim = Math.min(Math.max(1, Math.floor(limit)), 100);
   const off = Math.max(0, Math.floor(offset));
   const t = search?.trim() ?? "";
   if (t) {
     const pat = adminUserLikePattern(t);
-    return db
-      .prepare(
-        `SELECT id, phone, name, email,
-                COALESCE(role,'user') AS role,
-                COALESCE(blocked,0) AS blocked,
-                created_at
-         FROM users
-         WHERE lower(name) LIKE lower(?)
-            OR lower(ifnull(phone,'')) LIKE lower(?)
-            OR lower(ifnull(email,'')) LIKE lower(?)
-         ORDER BY id ASC LIMIT ? OFFSET ?`,
-      )
-      .all(pat, pat, pat, lim, off) as AdminUserListRow[];
-  }
-  return db
-    .prepare(
-      `SELECT id, phone, name, email,
+    return pgAll<AdminUserListRow>(
+      `SELECT id, phone, name, COALESCE(email,'') AS email, COALESCE(locality,'') AS locality,
               COALESCE(role,'user') AS role,
-              COALESCE(blocked,0) AS blocked,
-              created_at
-       FROM users ORDER BY id DESC LIMIT ? OFFSET ?`,
-    )
-    .all(lim, off) as AdminUserListRow[];
+              COALESCE(blocked,0)::int AS blocked,
+              created_at,
+              last_active_at
+       FROM users
+       WHERE lower(name) LIKE lower(?) ESCAPE '\\'
+          OR lower(COALESCE(phone,'')) LIKE lower(?) ESCAPE '\\'
+          OR lower(COALESCE(email,'')) LIKE lower(?) ESCAPE '\\'
+       ORDER BY id ASC LIMIT ? OFFSET ?`,
+      [pat, pat, pat, lim, off],
+    );
+  }
+  return pgAll<AdminUserListRow>(
+    `SELECT id, phone, name, COALESCE(email,'') AS email, COALESCE(locality,'') AS locality,
+            COALESCE(role,'user') AS role,
+            COALESCE(blocked,0)::int AS blocked,
+            created_at,
+            last_active_at
+     FROM users ORDER BY id DESC LIMIT ? OFFSET ?`,
+    [lim, off],
+  );
 }
 
-export function updateUserRole(userId: number, role: "admin" | "user"): void {
-  db.prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId);
+export async function updateUserRole(userId: number, role: "admin" | "user"): Promise<void> {
+  await pgExec(`UPDATE users SET role = ? WHERE id = ?`, [role, userId]);
 }
 
-export function updateUserBlocked(userId: number, blocked: 0 | 1): void {
-  db.prepare(`UPDATE users SET blocked = ? WHERE id = ?`).run(blocked, userId);
+export async function updateUserBlocked(userId: number, blocked: 0 | 1): Promise<void> {
+  await pgExec(`UPDATE users SET blocked = ? WHERE id = ?`, [blocked, userId]);
 }
 
-export function deleteSession(token: string): void {
-  db.prepare(`DELETE FROM sessions WHERE token = ?`).run(token);
+export async function deleteUserAccountByAdmin(userId: number): Promise<void> {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    await pgExec(`DELETE FROM raffle_wholesale_assignments WHERE user_id = ?`, [userId], client);
+    await pgExec(`DELETE FROM raffle_orders WHERE user_id = ?`, [userId], client);
+    await pgExec(`DELETE FROM users WHERE id = ?`, [userId], client);
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteSession(token: string): Promise<void> {
+  return deleteSessionPg(token);
 }
 
 export type SupportMessageRow = {
@@ -637,35 +220,56 @@ export type SupportMessageRow = {
   attachment_mime: string | null;
 };
 
-export function listSupportMessagesForUser(userId: number, limit = 200): SupportMessageRow[] {
-  return db
-    .prepare(
-      `SELECT * FROM support_messages WHERE user_id = ? ORDER BY created_at ASC LIMIT ?`,
-    )
-    .all(userId, limit) as SupportMessageRow[];
+export async function listSupportMessagesForUser(userId: number, limit = 200): Promise<SupportMessageRow[]> {
+  return pgAll<SupportMessageRow>(
+    `SELECT * FROM support_messages WHERE user_id = ? ORDER BY created_at ASC LIMIT ?`,
+    [userId, limit],
+  );
 }
 
-export function getSupportMessageById(id: number): SupportMessageRow | undefined {
-  return db.prepare(`SELECT * FROM support_messages WHERE id = ?`).get(id) as
-    | SupportMessageRow
-    | undefined;
+export async function listLatestSupportMessagesForUser(userId: number, limit = 40): Promise<SupportMessageRow[]> {
+  const rows = await pgAll<SupportMessageRow>(
+    `SELECT * FROM support_messages WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
+    [userId, Math.max(1, Math.min(200, Math.floor(limit)))],
+  );
+  rows.reverse();
+  return rows;
 }
 
-export function insertSupportMessage(
+export async function listSupportMessagesForUserBeforeId(
+  userId: number,
+  beforeId: number,
+  limit = 40,
+): Promise<SupportMessageRow[]> {
+  const rows = await pgAll<SupportMessageRow>(
+    `SELECT * FROM support_messages
+     WHERE user_id = ? AND id < ?
+     ORDER BY id DESC
+     LIMIT ?`,
+    [userId, beforeId, Math.max(1, Math.min(200, Math.floor(limit)))],
+  );
+  rows.reverse();
+  return rows;
+}
+
+export async function getSupportMessageById(id: number): Promise<SupportMessageRow | undefined> {
+  return pgGet<SupportMessageRow>(`SELECT * FROM support_messages WHERE id = ?`, [id]);
+}
+
+export async function insertSupportMessage(
   userId: number,
   body: string,
   isStaff: boolean,
   attachment?: { url: string; name: string; mime: string } | null,
-): number {
+): Promise<number> {
   const now = Date.now();
   const readAt = isStaff ? now : null;
   const att = attachment ?? null;
-  const info = db
-    .prepare(
-      `INSERT INTO support_messages (user_id, body, is_staff, created_at, read_by_staff_at, read_by_user_at, attachment_url, attachment_name, attachment_mime)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  const row = await pgGet<{ id: number }>(
+    `INSERT INTO support_messages (user_id, body, is_staff, created_at, read_by_staff_at, read_by_user_at, attachment_url, attachment_name, attachment_mime)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     RETURNING id`,
+    [
       userId,
       body.trim(),
       isStaff ? 1 : 0,
@@ -675,33 +279,34 @@ export function insertSupportMessage(
       att?.url ?? null,
       att?.name ?? null,
       att?.mime ?? null,
-    );
-  return Number(info.lastInsertRowid);
+    ],
+  );
+  return Number(row?.id ?? 0);
 }
 
-/** Ответы поддержки, которые пользователь ещё не открыл в чате (после открытия помечаются markStaffMessagesReadByUser). */
-export function countUnreadStaffMessagesForUser(userId: number): number {
-  const r = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM support_messages
-       WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
-    )
-    .get(userId) as { c: number };
+export async function countUnreadStaffMessagesForUser(userId: number): Promise<number> {
+  const r = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM support_messages
+     WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
+    [userId],
+  );
   return Number(r?.c ?? 0);
 }
 
-export function markStaffMessagesReadByUser(userId: number): void {
+export async function markStaffMessagesReadByUser(userId: number): Promise<void> {
   const now = Date.now();
-  db.prepare(
+  await pgExec(
     `UPDATE support_messages SET read_by_user_at = ? WHERE user_id = ? AND is_staff = 1 AND read_by_user_at IS NULL`,
-  ).run(now, userId);
+    [now, userId],
+  );
 }
 
-export function markThreadReadByStaff(userId: number): void {
+export async function markThreadReadByStaff(userId: number): Promise<void> {
   const now = Date.now();
-  db.prepare(
-    `UPDATE support_messages SET read_by_staff_at = ? WHERE user_id = ? AND is_staff = 0`,
-  ).run(now, userId);
+  await pgExec(`UPDATE support_messages SET read_by_staff_at = ? WHERE user_id = ? AND is_staff = 0`, [
+    now,
+    userId,
+  ]);
 }
 
 export function messageToDto(r: SupportMessageRow) {
@@ -711,7 +316,6 @@ export function messageToDto(r: SupportMessageRow) {
     body: r.body,
     is_staff: isStaff,
     created_at: r.created_at,
-    /** Всегда boolean в JSON (undefined ломает клиент после JSON.stringify по WS) */
     read_by_staff: isStaff ? false : r.read_by_staff_at != null,
     attachment_url: r.attachment_url ?? null,
     attachment_name: r.attachment_name ?? null,
@@ -719,118 +323,85 @@ export function messageToDto(r: SupportMessageRow) {
   };
 }
 
-export function updateUserProfile(
+export async function updateUserProfile(
   id: number,
-  data: { name: string; phone: string; email: string | null },
-): void {
+  data: { name: string; phone: string; email: string | null; locality?: string | null },
+): Promise<void> {
   const em =
     data.email != null && String(data.email).trim()
       ? String(data.email)
           .trim()
           .toLowerCase()
       : null;
-  db.prepare(`UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?`).run(
+  const locality =
+    data.locality != null && String(data.locality).trim()
+      ? String(data.locality).trim().slice(0, 200)
+      : null;
+  await pgExec(`UPDATE users SET name = ?, phone = ?, email = ?, locality = ? WHERE id = ?`, [
     data.name,
     data.phone,
     em,
+    locality,
     id,
-  );
+  ]);
 }
 
-export function updateUserEmailNotifyPrefs(
+export async function updateUserEmailNotifyPrefs(
   userId: number,
   prefs: {
     email_notify_chat?: boolean;
     email_notify_raffles?: boolean;
     email_notify_raffle_orders?: boolean;
   },
-): void {
-  const parts: string[] = [];
-  const vals: (number | string)[] = [];
-  if (prefs.email_notify_chat !== undefined) {
-    parts.push("email_notify_chat = ?");
-    vals.push(prefs.email_notify_chat ? 1 : 0);
-  }
-  if (prefs.email_notify_raffles !== undefined) {
-    parts.push("email_notify_raffles = ?");
-    vals.push(prefs.email_notify_raffles ? 1 : 0);
-  }
-  if (prefs.email_notify_raffle_orders !== undefined) {
-    parts.push("email_notify_raffle_orders = ?");
-    vals.push(prefs.email_notify_raffle_orders ? 1 : 0);
-  }
-  if (!parts.length) return;
-  vals.push(userId);
-  db.prepare(`UPDATE users SET ${parts.join(", ")} WHERE id = ?`).run(...vals);
+): Promise<void> {
+  return updateUserEmailNotifyPrefsPg(userId, prefs);
 }
 
-export function listUsersForRaffleLaunchEmail(): { id: number; email: string; name: string }[] {
-  return db
-    .prepare(
-      `SELECT u.id, u.email, u.name FROM users u
-       WHERE COALESCE(u.blocked, 0) = 0
-         AND COALESCE(u.email_notify_raffles, 1) = 1
-         AND TRIM(COALESCE(u.email, '')) != ''`,
-    )
-    .all() as { id: number; email: string; name: string }[];
+export async function listUsersForRaffleLaunchEmail(): Promise<{ id: number; email: string; name: string }[]> {
+  return pgAll<{ id: number; email: string; name: string }>(
+    `SELECT u.id, u.email, u.name FROM users u
+     WHERE COALESCE(u.blocked, 0) = 0
+       AND COALESCE(u.email_notify_raffles, 1) = 1
+       AND TRIM(COALESCE(u.email, '')) != ''`,
+  );
 }
 
-export function clearRaffleLaunchNotifySent(raffleId: number): void {
-  db.prepare(`UPDATE raffles SET launch_notify_sent_at = NULL WHERE id = ?`).run(raffleId);
+export async function clearRaffleLaunchNotifySent(raffleId: number): Promise<void> {
+  await pgExec(`UPDATE raffles SET launch_notify_sent_at = NULL WHERE id = ?`, [raffleId]);
 }
 
-export function markRaffleLaunchNotifySent(raffleId: number, ts: number): void {
-  db.prepare(`UPDATE raffles SET launch_notify_sent_at = ? WHERE id = ?`).run(ts, raffleId);
+export async function markRaffleLaunchNotifySent(raffleId: number, ts: number): Promise<void> {
+  await pgExec(`UPDATE raffles SET launch_notify_sent_at = ? WHERE id = ?`, [ts, raffleId]);
 }
 
-export function updateUserPasswordHash(userId: number, passwordHash: string): void {
-  db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(passwordHash, userId);
+export async function updateUserPasswordHash(userId: number, passwordHash: string): Promise<void> {
+  return updateUserPasswordHashPg(userId, passwordHash);
 }
 
-const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
-
-export function cleanupExpiredPasswordResetTokens(): void {
-  const now = Date.now();
-  db.prepare(`DELETE FROM password_reset_tokens WHERE expires_at < ?`).run(now);
+export async function cleanupExpiredPasswordResetTokens(): Promise<void> {
+  return cleanupExpiredPasswordResetTokensPg();
 }
 
-export function setPasswordResetTokenForUser(
+export async function setPasswordResetTokenForUser(
   userId: number,
   tokenHash: string,
   expiresAt: number,
-): void {
-  cleanupExpiredPasswordResetTokens();
-  db.prepare(`DELETE FROM password_reset_tokens WHERE user_id = ?`).run(userId);
-  db.prepare(
-    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
-     VALUES (?, ?, ?, ?)`,
-  ).run(userId, tokenHash, expiresAt, Date.now());
+): Promise<void> {
+  return setPasswordResetTokenForUserPg(userId, tokenHash, expiresAt);
 }
 
-/** При успешном сбросе удаляет строку токена и возвращает user_id, если токен ещё действителен. */
-export function consumePasswordResetToken(tokenHash: string): number | null {
-  cleanupExpiredPasswordResetTokens();
-  const now = Date.now();
-  const tx = db.transaction(() => {
-    const row = db
-      .prepare(
-        `SELECT id, user_id FROM password_reset_tokens WHERE token_hash = ? AND expires_at > ?`,
-      )
-      .get(tokenHash, now) as { id: number; user_id: number } | undefined;
-    if (!row) return null;
-    db.prepare(`DELETE FROM password_reset_tokens WHERE id = ?`).run(row.id);
-    return row.user_id;
-  });
-  return tx();
+export async function consumePasswordResetToken(tokenHash: string): Promise<number | null> {
+  return consumePasswordResetTokenPg(tokenHash);
 }
 
-export { PASSWORD_RESET_TTL_MS };
+export { PASSWORD_RESET_TTL_MS_PG as PASSWORD_RESET_TTL_MS };
 
 export type AdminThreadRow = {
   id: number;
   phone: string;
   name: string;
   email: string;
+  locality: string;
   role: string;
   blocked: number;
   last_body: string | null;
@@ -841,9 +412,12 @@ export type AdminThreadRow = {
 
 export type RaffleRow = {
   id: number;
+  raffle_hash?: string;
   title: string;
   cover_image_url: string;
   price_rub: number;
+  cenopad_enabled?: number;
+  cenopad_price_rub?: number;
   old_price_rub?: number;
   ticket_count: number;
   collection_url: string;
@@ -857,8 +431,9 @@ export type RaffleRow = {
   sber_enabled?: number;
   tbank_enabled?: number;
   qr_enabled?: number;
-  /** Ссылка на краткие правила / оферту (необязательно) */
   rules_url?: string;
+  live_stream_note?: string;
+  live_stream_url?: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -872,9 +447,13 @@ export type RaffleRow = {
 
 export type RaffleDto = {
   id: number;
+  raffle_hash: string;
   title: string;
   cover_image_url: string;
   price_rub: number;
+  cenopad_enabled?: boolean;
+  cenopad_price_rub?: number | null;
+  cenopad_sold_count?: number;
   old_price_rub: number | null;
   ticket_count: number;
   collection_url: string;
@@ -889,6 +468,8 @@ export type RaffleDto = {
   tbank_enabled: boolean;
   qr_enabled: boolean;
   rules_url: string | null;
+  live_stream_note: string | null;
+  live_stream_url: string | null;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -901,11 +482,20 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
   const st = r.status === "closed" || r.status === "paused" ? r.status : "active";
   const oldP = Number(r.old_price_rub ?? 0);
   const rulesRaw = String((r as RaffleRow).rules_url ?? "").trim();
+  const liveStreamNoteRaw = String((r as RaffleRow).live_stream_note ?? "").trim();
+  const liveStreamUrlRaw = String((r as RaffleRow).live_stream_url ?? "").trim();
+  const cenopadEnabled = Boolean(Number((r as RaffleRow).cenopad_enabled ?? 0));
+  const cenopadPriceRaw = Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0));
+  const cenopadPrice = cenopadPriceRaw > 0 ? cenopadPriceRaw : 0;
+  const effectivePrice = !opts?.forAdmin && cenopadEnabled && cenopadPrice > 0 ? cenopadPrice : r.price_rub;
   const dto: RaffleDto = {
     id: r.id,
+    raffle_hash: String((r as RaffleRow).raffle_hash ?? ""),
     title: r.title,
     cover_image_url: r.cover_image_url,
-    price_rub: r.price_rub,
+    price_rub: effectivePrice,
+    cenopad_enabled: cenopadEnabled,
+    cenopad_price_rub: cenopadPrice > 0 ? cenopadPrice : null,
     old_price_rub: oldP > 0 ? oldP : null,
     ticket_count: r.ticket_count,
     collection_url: r.collection_url,
@@ -924,6 +514,8 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     tbank_enabled: Boolean(Number((r as RaffleRow).tbank_enabled ?? 0)),
     qr_enabled: Boolean(Number((r as RaffleRow).qr_enabled ?? 1)),
     rules_url: rulesRaw ? rulesRaw : null,
+    live_stream_note: liveStreamNoteRaw ? liveStreamNoteRaw : null,
+    live_stream_url: liveStreamUrlRaw ? liveStreamUrlRaw : null,
     status: st,
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
@@ -939,46 +531,74 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
   return dto;
 }
 
-/** Видна на сайте и в пользовательских API (не скрыта админом). */
 export function isRaffleVisibleOnSite(r: RaffleRow | undefined): boolean {
   if (!r) return false;
   return !Number((r as RaffleRow).hidden_from_public);
 }
 
-export function listRafflesAll(): RaffleRow[] {
-  return db
-    .prepare(`SELECT * FROM raffles ORDER BY sort_order ASC, id DESC`)
-    .all() as RaffleRow[];
+export function isRaffleCenopadActive(r: RaffleRow | undefined): boolean {
+  if (!r) return false;
+  const enabled = Boolean(Number((r as RaffleRow).cenopad_enabled ?? 0));
+  const p = Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0));
+  return enabled && p > 0;
 }
 
-export function listRafflesPublic(): RaffleRow[] {
-  return db
-    .prepare(
-      `SELECT * FROM raffles WHERE COALESCE(hidden_from_public, 0) = 0 ORDER BY sort_order ASC, id DESC`,
-    )
-    .all() as RaffleRow[];
+export function getRaffleEffectiveUnitPrice(r: RaffleRow | undefined): number {
+  if (!r) return 0;
+  return isRaffleCenopadActive(r)
+    ? Math.max(0, Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0)))
+    : Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
 }
 
-/** Активные и видимые на сайте: с наибольшим id — «текущая» новая акция (не первая по sort_order). */
-export function getLatestVisibleActiveRaffle(): RaffleRow | undefined {
-  return db
-    .prepare(
-      `SELECT * FROM raffles
-       WHERE COALESCE(hidden_from_public, 0) = 0 AND status = 'active'
-       ORDER BY id DESC
-       LIMIT 1`,
-    )
-    .get() as RaffleRow | undefined;
+export async function countConfirmedTicketsSoldByCenopad(raffleId: number): Promise<number> {
+  const row = await pgGet<{ n?: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM raffle_ticket_holds th
+     INNER JOIN raffle_orders o ON o.id = th.order_id
+     WHERE th.raffle_id = ?
+       AND th.hold_status = 'confirmed'
+       AND COALESCE(th.is_bonus, 0) = 0
+       AND COALESCE(o.cenopad_applied, 0) = 1`,
+    [raffleId],
+  );
+  return Math.max(0, Number(row?.n || 0));
 }
 
-export function getRaffleById(id: number): RaffleRow | undefined {
-  return db.prepare(`SELECT * FROM raffles WHERE id = ?`).get(id) as RaffleRow | undefined;
+export async function listRafflesAll(): Promise<RaffleRow[]> {
+  return pgAll<RaffleRow>(`SELECT * FROM raffles ORDER BY sort_order ASC, id DESC`);
 }
 
-export function insertRaffle(data: {
+export async function listRafflesPublic(): Promise<RaffleRow[]> {
+  return pgAll<RaffleRow>(
+    `SELECT * FROM raffles WHERE COALESCE(hidden_from_public, 0) = 0 ORDER BY sort_order ASC, id DESC`,
+  );
+}
+
+export async function getLatestVisibleActiveRaffle(): Promise<RaffleRow | undefined> {
+  return pgGet<RaffleRow>(
+    `SELECT * FROM raffles
+     WHERE COALESCE(hidden_from_public, 0) = 0 AND status = 'active'
+     ORDER BY id DESC
+     LIMIT 1`,
+  );
+}
+
+export async function getRaffleById(id: number): Promise<RaffleRow | undefined> {
+  return pgGet<RaffleRow>(`SELECT * FROM raffles WHERE id = ?`, [id]);
+}
+
+export async function getRaffleByHash(hash: string): Promise<RaffleRow | undefined> {
+  const h = String(hash || "").trim();
+  if (!h) return undefined;
+  return pgGet<RaffleRow>(`SELECT * FROM raffles WHERE raffle_hash = ?`, [h]);
+}
+
+export async function insertRaffle(data: {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  cenopad_enabled: number;
+  cenopad_price_rub: number;
   old_price_rub: number;
   ticket_count: number;
   collection_url: string;
@@ -993,26 +613,30 @@ export function insertRaffle(data: {
   tbank_enabled: number;
   qr_enabled: number;
   rules_url: string;
+  live_stream_note: string;
+  live_stream_url: string;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
   promo_5_plus_1_enabled: number;
   hidden_from_public: number;
-}): number {
+}): Promise<number> {
   const now = Date.now();
-  const info = db
-    .prepare(
-      `INSERT INTO raffles (
-        title, cover_image_url, price_rub, old_price_rub, ticket_count,
-        collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
-        sber_enabled, tbank_enabled, qr_enabled, rules_url,
-        status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, hidden_from_public, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+  const row = await pgGet<{ id: number }>(
+    `INSERT INTO raffles (
+      raffle_hash, title, cover_image_url, price_rub, cenopad_enabled, cenopad_price_rub, old_price_rub, ticket_count,
+      collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
+      sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url,
+      status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, hidden_from_public, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id`,
+    [
+      randomUUID(),
       data.title,
       data.cover_image_url,
       data.price_rub,
+      data.cenopad_enabled,
+      data.cenopad_price_rub,
       data.old_price_rub,
       data.ticket_count,
       data.collection_url,
@@ -1027,6 +651,8 @@ export function insertRaffle(data: {
       data.tbank_enabled,
       data.qr_enabled,
       data.rules_url,
+      data.live_stream_note,
+      data.live_stream_url,
       data.status,
       data.sort_order,
       data.wholesale_enabled,
@@ -1034,16 +660,19 @@ export function insertRaffle(data: {
       data.hidden_from_public,
       now,
       now,
-    );
-  return Number(info.lastInsertRowid);
+    ],
+  );
+  return Number(row?.id ?? 0);
 }
 
-export function updateRaffle(
+export async function updateRaffle(
   id: number,
   data: {
     title: string;
     cover_image_url: string;
     price_rub: number;
+    cenopad_enabled: number;
+    cenopad_price_rub: number;
     old_price_rub: number;
     ticket_count: number;
     collection_url: string;
@@ -1058,121 +687,118 @@ export function updateRaffle(
     tbank_enabled: number;
     qr_enabled: number;
     rules_url: string;
+    live_stream_note: string;
+    live_stream_url: string;
     status: string;
     sort_order: number;
     wholesale_enabled: number;
     promo_5_plus_1_enabled: number;
     hidden_from_public: number;
   },
-): void {
-  db.prepare(
+): Promise<void> {
+  await pgExec(
     `UPDATE raffles SET
       title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
-      collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?,
+      cenopad_enabled = ?, cenopad_price_rub = ?,
+      collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, promo_5_plus_1_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
-  ).run(
-    data.title,
-    data.cover_image_url,
-    data.price_rub,
-    data.old_price_rub,
-    data.ticket_count,
-    data.collection_url,
-    data.tbank_collection_url,
-    data.collection_recipient,
-    data.sber_collection_recipient,
-    data.tbank_collection_recipient,
-    data.qr_image_url,
-    data.qr_recipient,
-    data.qr_payment_purpose,
-    data.rules_url,
-    data.sber_enabled,
-    data.tbank_enabled,
-    data.qr_enabled,
-    data.status,
-    data.sort_order,
-    data.wholesale_enabled,
-    data.promo_5_plus_1_enabled,
-    data.hidden_from_public,
-    Date.now(),
-    id,
+    [
+      data.title,
+      data.cover_image_url,
+      data.price_rub,
+      data.old_price_rub,
+      data.ticket_count,
+      data.cenopad_enabled,
+      data.cenopad_price_rub,
+      data.collection_url,
+      data.tbank_collection_url,
+      data.collection_recipient,
+      data.sber_collection_recipient,
+      data.tbank_collection_recipient,
+      data.qr_image_url,
+      data.qr_recipient,
+      data.qr_payment_purpose,
+      data.rules_url,
+      data.live_stream_note,
+      data.live_stream_url,
+      data.sber_enabled,
+      data.tbank_enabled,
+      data.qr_enabled,
+      data.status,
+      data.sort_order,
+      data.wholesale_enabled,
+      data.promo_5_plus_1_enabled,
+      data.hidden_from_public,
+      Date.now(),
+      id,
+    ],
   );
 }
 
-export function setRafflePromoGiftLockedCount(raffleId: number, lockedCount: number): void {
+export async function setRafflePromoGiftLockedCount(raffleId: number, lockedCount: number): Promise<void> {
   const c = Math.max(0, Math.floor(Number(lockedCount) || 0));
-  db.prepare(`UPDATE raffles SET promo_5_plus_1_locked_free_count = ?, updated_at = ? WHERE id = ?`).run(
+  await pgExec(`UPDATE raffles SET promo_5_plus_1_locked_free_count = ?, updated_at = ? WHERE id = ?`, [
     c,
     Date.now(),
     raffleId,
-  );
+  ]);
 }
 
-export function getSiteSettings(): { maintenance_enabled: boolean } {
-  const row = db
-    .prepare(`SELECT maintenance_enabled FROM site_settings WHERE id = 1`)
-    .get() as { maintenance_enabled: number } | undefined;
+export async function getSiteSettings(): Promise<{ maintenance_enabled: boolean }> {
+  const row = await pgGet<{ maintenance_enabled: number }>(
+    `SELECT maintenance_enabled FROM site_settings WHERE id = 1`,
+  );
   return { maintenance_enabled: Boolean(Number(row?.maintenance_enabled)) };
 }
 
-export function setMaintenanceEnabled(on: boolean): void {
-  db.prepare(`UPDATE site_settings SET maintenance_enabled = ? WHERE id = 1`).run(on ? 1 : 0);
+export async function setMaintenanceEnabled(on: boolean): Promise<void> {
+  await pgExec(`UPDATE site_settings SET maintenance_enabled = ? WHERE id = 1`, [on ? 1 : 0]);
 }
 
-export function deleteRaffle(id: number): void {
-  db.prepare(`DELETE FROM raffles WHERE id = ?`).run(id);
+export async function deleteRaffle(id: number): Promise<void> {
+  await pgExec(`DELETE FROM raffles WHERE id = ?`, [id]);
 }
 
-/** Фрагмент WHERE после `EXISTS (… диалог …)` — например `AND u.id IN (?)`. */
 function sqlAdminThreadsSelect(extraAnd = ""): string {
   return (
-    `SELECT u.id, u.phone, u.name, u.email, COALESCE(u.role,'user') AS role,
-              COALESCE(u.blocked,0) AS blocked,
-              (SELECT CASE
-                WHEN TRIM(COALESCE(sm.body,'')) != '' THEN sm.body
-                WHEN sm.attachment_url IS NOT NULL THEN '📎 Вложение'
-                ELSE COALESCE(sm.body,'')
-              END FROM support_messages sm WHERE sm.user_id = u.id ORDER BY sm.created_at DESC LIMIT 1) AS last_body,
-              (SELECT created_at FROM support_messages sm2 WHERE sm2.user_id = u.id ORDER BY sm2.created_at DESC LIMIT 1) AS last_at,
-              (SELECT is_staff FROM support_messages sm3 WHERE sm3.user_id = u.id ORDER BY sm3.created_at DESC LIMIT 1) AS last_is_staff,
-              (SELECT COUNT(*) FROM support_messages smu WHERE smu.user_id = u.id AND smu.is_staff = 0 AND smu.read_by_staff_at IS NULL) AS unread_count
-       FROM users u
-       WHERE EXISTS (SELECT 1 FROM support_messages smx WHERE smx.user_id = u.id)
-       ${extraAnd}
-       ORDER BY COALESCE(
-         (SELECT MAX(created_at) FROM support_messages sm4 WHERE sm4.user_id = u.id),
-         u.created_at
-       ) DESC`
+    `SELECT u.id, u.phone, u.name, COALESCE(u.email,'') AS email, COALESCE(u.locality,'') AS locality, COALESCE(u.role,'user') AS role,
+            COALESCE(u.blocked,0)::int AS blocked,
+            (SELECT CASE
+              WHEN TRIM(COALESCE(sm.body,'')) != '' THEN sm.body
+              WHEN sm.attachment_url IS NOT NULL THEN '📎 Вложение'
+              ELSE COALESCE(sm.body,'')
+            END FROM support_messages sm WHERE sm.user_id = u.id ORDER BY sm.created_at DESC LIMIT 1) AS last_body,
+            (SELECT created_at FROM support_messages sm2 WHERE sm2.user_id = u.id ORDER BY sm2.created_at DESC LIMIT 1) AS last_at,
+            (SELECT is_staff FROM support_messages sm3 WHERE sm3.user_id = u.id ORDER BY sm3.created_at DESC LIMIT 1) AS last_is_staff,
+            (SELECT COUNT(*)::int FROM support_messages smu WHERE smu.user_id = u.id AND smu.is_staff = 0 AND smu.read_by_staff_at IS NULL) AS unread_count
+     FROM users u
+     WHERE EXISTS (SELECT 1 FROM support_messages smx WHERE smx.user_id = u.id)
+     ${extraAnd}
+     ORDER BY COALESCE(
+       (SELECT MAX(created_at) FROM support_messages sm4 WHERE sm4.user_id = u.id),
+       u.created_at
+     ) DESC`
   );
 }
 
-export function listAdminThreadsWithMeta(): AdminThreadRow[] {
-  return db.prepare(sqlAdminThreadsSelect()).all() as AdminThreadRow[];
+export async function listAdminThreadsWithMeta(): Promise<AdminThreadRow[]> {
+  return pgAll<AdminThreadRow>(sqlAdminThreadsSelect());
 }
 
-/** Мета по тредам только для указанных user id (порядок в ответе не гарантируется). */
-export function listAdminThreadsWithMetaForUserIds(userIds: number[]): AdminThreadRow[] {
+export async function listAdminThreadsWithMetaForUserIds(userIds: number[]): Promise<AdminThreadRow[]> {
   const ids = [...new Set(userIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (!ids.length) return [];
-  const ph = ids.map(() => "?").join(",");
-  return db.prepare(sqlAdminThreadsSelect(`AND u.id IN (${ph})`)).all(...ids) as AdminThreadRow[];
+  const ph = ids.map((_, i) => `?`).join(",");
+  return pgAll<AdminThreadRow>(sqlAdminThreadsSelect(`AND u.id IN (${ph})`), ids);
 }
 
 function supportMessageLikePattern(raw: string): string {
-  const t = raw
-    .trim()
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_");
-  return `%${t}%`;
+  return adminUserLikePattern(raw);
 }
 
-/**
- * Поиск диалогов поддержки: сначала по телефону (точный и по последним 10 цифрам),
- * если не найдено — по тексту сообщений (подстрока, без учёта регистра).
- */
-export function searchAdminSupportThreads(raw: string): AdminThreadRow[] {
+export async function searchAdminSupportThreads(raw: string): Promise<AdminThreadRow[]> {
   const q = raw.trim();
   if (!q) return listAdminThreadsWithMeta();
 
@@ -1180,25 +806,23 @@ export function searchAdminSupportThreads(raw: string): AdminThreadRow[] {
 
   const norm = normalizePhone(q);
   if (norm && /^79\d{9}$/.test(norm)) {
-    const row = db
-      .prepare(
-        `SELECT u.id FROM users u
-         WHERE u.phone = ?
-         AND EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)`,
-      )
-      .get(norm) as { id: number } | undefined;
+    const row = await pgGet<{ id: number }>(
+      `SELECT u.id FROM users u
+       WHERE u.phone = ?
+       AND EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)`,
+      [norm],
+    );
     if (row) return listAdminThreadsWithMetaForUserIds([row.id]);
   }
 
   if (digits.length >= 10) {
     const tail = digits.slice(-10);
-    const rows = db
-      .prepare(
-        `SELECT u.id FROM users u
-         WHERE EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)
-         AND substr(u.phone, -10) = ?`,
-      )
-      .all(tail) as { id: number }[];
+    const rows = await pgAll<{ id: number }>(
+      `SELECT u.id FROM users u
+       WHERE EXISTS (SELECT 1 FROM support_messages sm WHERE sm.user_id = u.id)
+       AND RIGHT(u.phone, 10) = ?`,
+      [tail],
+    );
     if (rows.length) {
       const uid = rows.map((r) => r.id);
       return listAdminThreadsWithMetaForUserIds(uid);
@@ -1208,20 +832,19 @@ export function searchAdminSupportThreads(raw: string): AdminThreadRow[] {
   if (q.length < 2) return [];
 
   const pat = supportMessageLikePattern(q);
-  const msgRows = db
-    .prepare(
-      `SELECT sm.user_id AS id, MAX(sm.created_at) AS mx
-       FROM support_messages sm
-       WHERE lower(sm.body) LIKE lower(?)
-       GROUP BY sm.user_id
-       ORDER BY mx DESC`,
-    )
-    .all(pat) as { id: number }[];
+  const msgRows = await pgAll<{ id: number }>(
+    `SELECT sm.user_id AS id, MAX(sm.created_at) AS mx
+     FROM support_messages sm
+     WHERE lower(sm.body) LIKE lower(?) ESCAPE '\\'
+     GROUP BY sm.user_id
+     ORDER BY mx DESC`,
+    [pat],
+  );
 
   const orderedIds = msgRows.map((r) => r.id);
   if (!orderedIds.length) return [];
 
-  const threads = listAdminThreadsWithMetaForUserIds(orderedIds);
+  const threads = await listAdminThreadsWithMetaForUserIds(orderedIds);
   const map = new Map(threads.map((t) => [t.id, t]));
   return orderedIds.map((id) => map.get(id)).filter((x): x is AdminThreadRow => x !== undefined);
 }

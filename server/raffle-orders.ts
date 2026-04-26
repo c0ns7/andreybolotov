@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
+import type { PoolClient } from "pg";
 import {
-  db,
   getRaffleById,
+  getRaffleEffectiveUnitPrice,
+  isRaffleCenopadActive,
   getUserById,
   getUserByPhone,
   isRaffleVisibleOnSite,
@@ -10,9 +12,20 @@ import {
   setRafflePromoGiftLockedCount,
 } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
+import { pgPool } from "./pg.js";
+import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 25;
+
+function resolveOrderUnitPrice(order: RaffleOrderRow, rafflePriceFallback: number): number {
+  const cnt = Math.max(0, Math.floor(Number(order.ticket_count) || 0));
+  const amount = Math.max(0, Math.floor(Number(order.amount_rub) || 0));
+  if (cnt > 0 && amount > 0) {
+    return Math.max(0, Math.floor(amount / cnt));
+  }
+  return Math.max(0, Math.floor(Number(rafflePriceFallback) || 0));
+}
 
 export type RaffleOrderRow = {
   id: number;
@@ -21,6 +34,7 @@ export type RaffleOrderRow = {
   bank: string | null;
   amount_rub: number;
   ticket_count: number;
+  cenopad_applied?: number;
   status: string;
   reserved_until: number;
   reserve_extended_once: number;
@@ -50,10 +64,17 @@ export function raffleMaxRejectReworksFromEnv(): number {
   return Math.min(Math.floor(n), 20);
 }
 
-export function insertRaffleOrderEvent(orderId: number, kind: string, detail: string | null): void {
-  db.prepare(
+export async function insertRaffleOrderEvent(
+  orderId: number,
+  kind: string,
+  detail: string | null,
+  client?: PoolClient,
+): Promise<void> {
+  await pgExec(
     `INSERT INTO raffle_order_events (order_id, kind, detail, created_at) VALUES (?, ?, ?, ?)`,
-  ).run(orderId, kind, detail, Date.now());
+    [orderId, kind, detail, Date.now()],
+    client,
+  );
 }
 
 export type RaffleOrderTimelineItem = { kind: string; label: string; at: number; detail: string | null };
@@ -63,16 +84,15 @@ const TIMELINE_LABELS: Record<string, string> = {
   receipt_submitted: "Чек отправлен на проверку",
   reject_rework: "Чек не принят — нужна новая загрузка",
   fully_released: "Заявка отменена, номерки свободны",
-  confirmed: "Оплата подтверждена",
+  confirmed: "Оплата закреплена",
   admin_ticket_removed: "Номерок снят администратором",
 };
 
-export function listRaffleOrderTimeline(orderId: number): RaffleOrderTimelineItem[] {
-  const rows = db
-    .prepare(
-      `SELECT kind, detail, created_at FROM raffle_order_events WHERE order_id = ? ORDER BY created_at ASC`,
-    )
-    .all(orderId) as Array<{ kind: string; detail: string | null; created_at: number }>;
+export async function listRaffleOrderTimeline(orderId: number): Promise<RaffleOrderTimelineItem[]> {
+  const rows = await pgAll<{ kind: string; detail: string | null; created_at: number }>(
+    `SELECT kind, detail, created_at FROM raffle_order_events WHERE order_id = ? ORDER BY created_at ASC`,
+    [orderId],
+  );
   return rows.map((r) => ({
     kind: r.kind,
     label: TIMELINE_LABELS[r.kind] ?? r.kind,
@@ -109,17 +129,17 @@ type ReceiptArchiveRow = {
   mime: string | null;
 };
 
-function listReceiptArchiveForUserRaffle(userId: number, raffleId: number): ReceiptArchiveRow[] {
+async function listReceiptArchiveForUserRaffle(userId: number, raffleId: number): Promise<ReceiptArchiveRow[]> {
   const items: ReceiptArchiveRow[] = [];
-  const eventRows = db
-    .prepare(
-      `SELECT e.order_id AS order_id, e.detail AS detail, e.created_at AS created_at
+  const seen = new Set<string>();
+  const eventRows = await pgAll<{ order_id: number; detail: string | null; created_at: number }>(
+    `SELECT e.order_id AS order_id, e.detail AS detail, e.created_at AS created_at
        FROM raffle_order_events e
        INNER JOIN raffle_orders o ON o.id = e.order_id
        WHERE o.raffle_id = ? AND o.user_id = ? AND e.kind = 'receipt_submitted'
        ORDER BY e.created_at DESC`,
-    )
-    .all(raffleId, userId) as Array<{ order_id: number; detail: string | null; created_at: number }>;
+    [raffleId, userId],
+  );
 
   for (const row of eventRows) {
     const d = String(row.detail ?? "").trim();
@@ -128,6 +148,9 @@ function listReceiptArchiveForUserRaffle(userId: number, raffleId: number): Rece
       const j = JSON.parse(d) as { url?: string; name?: string; mime?: string };
       const url = String(j.url ?? "").trim();
       if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(url)) continue;
+      const key = `${row.order_id}:${url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       items.push({
         order_id: row.order_id,
         order_public_id: `A${row.order_id}`,
@@ -141,24 +164,25 @@ function listReceiptArchiveForUserRaffle(userId: number, raffleId: number): Rece
     }
   }
 
-  const ordersWithReceipt = db
-    .prepare(
-      `SELECT id, receipt_url, receipt_name, receipt_mime, updated_at
-       FROM raffle_orders
-       WHERE raffle_id = ? AND user_id = ? AND receipt_url IS NOT NULL`,
-    )
-    .all(raffleId, userId) as Array<{
+  const ordersWithReceipt = await pgAll<{
     id: number;
     receipt_url: string;
     receipt_name: string | null;
     receipt_mime: string | null;
     updated_at: number;
-  }>;
+  }>(
+    `SELECT id, receipt_url, receipt_name, receipt_mime, updated_at
+       FROM raffle_orders
+       WHERE raffle_id = ? AND user_id = ? AND receipt_url IS NOT NULL`,
+    [raffleId, userId],
+  );
 
   for (const o of ordersWithReceipt) {
     const url = String(o.receipt_url || "").trim();
     if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(url)) continue;
-    if (items.some((x) => x.order_id === o.id && x.url === url)) continue;
+    const key = `${o.id}:${url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     items.push({
       order_id: o.id,
       order_public_id: `A${o.id}`,
@@ -185,13 +209,13 @@ export type AdminPriorReceiptItem = {
   same_order: boolean;
 };
 
-export function listReceiptHistoryPriorForPendingOrder(
+export async function listReceiptHistoryPriorForPendingOrder(
   userId: number,
   raffleId: number,
   currentOrderId: number,
   currentReceiptUrl: string | null,
-): AdminPriorReceiptItem[] {
-  const all = listReceiptArchiveForUserRaffle(userId, raffleId);
+): Promise<AdminPriorReceiptItem[]> {
+  const all = await listReceiptArchiveForUserRaffle(userId, raffleId);
   const curUrl = String(currentReceiptUrl ?? "").trim();
   return all
     .filter((x) => !(x.order_id === currentOrderId && curUrl && x.url === curUrl))
@@ -207,40 +231,38 @@ export function listReceiptHistoryPriorForPendingOrder(
     }));
 }
 
-export function buildRafflePaymentParticipationContext(
+export async function buildRafflePaymentParticipationContext(
   userId: number,
   raffleId: number,
   currentOrderId: number | null,
-): RafflePaymentParticipationDto {
-  const confirmedRows = db
-    .prepare(
-      `SELECT h.ticket_number AS ticket_number
+): Promise<RafflePaymentParticipationDto> {
+  const confirmedRows = await pgAll<{ ticket_number: number }>(
+    `SELECT h.ticket_number AS ticket_number
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.user_id = ? AND o.status = 'confirmed'
        ORDER BY h.ticket_number ASC`,
-    )
-    .all(raffleId, userId) as Array<{ ticket_number: number }>;
+    [raffleId, userId],
+  );
   const confirmed_ticket_numbers = confirmedRows.map((r) => r.ticket_number);
   const has_confirmed_tickets = confirmed_ticket_numbers.length > 0;
 
-  const evCountRow = db
-    .prepare(
-      `SELECT COUNT(*) AS c
+  const evCountRow = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
        FROM raffle_order_events e
        INNER JOIN raffle_orders o ON o.id = e.order_id
        WHERE o.raffle_id = ? AND o.user_id = ? AND e.kind = 'receipt_submitted'`,
-    )
-    .get(raffleId, userId) as { c: number };
+    [raffleId, userId],
+  );
   const receipt_submitted_event_count = Math.floor(Number(evCountRow?.c ?? 0));
 
   let current_order_reject_count = 0;
   if (currentOrderId != null && Number.isFinite(currentOrderId) && currentOrderId > 0) {
-    const o = getOrderByIdForUser(currentOrderId, userId);
+    const o = await getOrderByIdForUser(currentOrderId, userId);
     if (o) current_order_reject_count = Math.floor(Number((o as RaffleOrderRow).receipt_reject_count ?? 0));
   }
 
-  const prior = listReceiptArchiveForUserRaffle(userId, raffleId);
+  const prior = await listReceiptArchiveForUserRaffle(userId, raffleId);
   const prior_receipts: RaffleReceiptArchiveItemDto[] = prior.map((x) => ({
     order_public_id: x.order_public_id,
     at_ms: x.at_ms,
@@ -284,32 +306,32 @@ export type ReserveExpiryReminderRow = {
 };
 
 /** Активные брони, по которым ещё не слали напоминание и до конца ≤ leadMs. */
-export function listReservedOrdersForExpiryReminder(
+export async function listReservedOrdersForExpiryReminder(
   now: number,
   leadMs: number,
-): ReserveExpiryReminderRow[] {
+): Promise<ReserveExpiryReminderRow[]> {
   if (leadMs <= 0) return [];
-  cleanupExpiredRaffleOrders();
+  await cleanupExpiredRaffleOrders();
   const until = now + leadMs;
-  const rows = db
-    .prepare(
-      `SELECT id AS order_id, user_id, raffle_id, reserved_until, amount_rub, ticket_count
+  const rows = await pgAll<ReserveExpiryReminderRow>(
+    `SELECT id AS order_id, user_id, raffle_id, reserved_until, amount_rub, ticket_count
        FROM raffle_orders
        WHERE status = 'reserved'
          AND reserved_until > ?
          AND reserved_until <= ?
          AND reserve_reminder_sent_at IS NULL`,
-    )
-    .all(now, until) as ReserveExpiryReminderRow[];
+    [now, until],
+  );
   return rows;
 }
 
-export function markReserveReminderSent(orderId: number): void {
+export async function markReserveReminderSent(orderId: number): Promise<void> {
   const now = Date.now();
-  db.prepare(
+  await pgExec(
     `UPDATE raffle_orders SET reserve_reminder_sent_at = ?, updated_at = ?
      WHERE id = ? AND status = 'reserved'`,
-  ).run(now, now, orderId);
+    [now, now, orderId],
+  );
 }
 
 /** После отклонения чека: сколько минут даём на новый чек (минимум 15). */
@@ -328,73 +350,85 @@ export type TicketCellKind =
   | "self_pending"
   | "self_confirmed";
 
-export function cleanupExpiredRaffleOrders(): void {
+export async function cleanupExpiredRaffleOrders(client?: PoolClient): Promise<void> {
   const now = Date.now();
-  db.prepare(
+  await pgExec(
     `DELETE FROM raffle_ticket_holds WHERE order_id IN (
       SELECT id FROM raffle_orders WHERE status = 'reserved' AND reserved_until < ?
     )`,
-  ).run(now);
-  db.prepare(
+    [now],
+    client,
+  );
+  await pgExec(
     `UPDATE raffle_orders SET status = 'expired', updated_at = ? WHERE status = 'reserved' AND reserved_until < ?`,
-  ).run(now, now);
+    [now, now],
+    client,
+  );
 }
 
-function getHoldForNumber(raffleId: number, ticketNumber: number) {
-  return db
-    .prepare(
-      `SELECT h.*, o.status AS order_status, o.user_id AS order_user_id
+async function getHoldForNumber(raffleId: number, ticketNumber: number, client?: PoolClient) {
+  return await pgGet<{
+    user_id: number;
+    order_status: string;
+    order_user_id: number;
+    hold_status: string;
+  }>(
+    `SELECT h.*, o.status AS order_status, o.user_id AS order_user_id
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND h.ticket_number = ?`,
-    )
-    .get(raffleId, ticketNumber) as
-    | {
-        user_id: number;
-        order_status: string;
-        order_user_id: number;
-        hold_status: string;
-      }
-    | undefined;
+    [raffleId, ticketNumber],
+    client,
+  );
 }
 
 /** Занят ли номерок активной заявкой или предназначен заранее по телефону (ещё без аккаунта). */
-export function isRaffleTicketBlocked(raffleId: number, ticketNumber: number): boolean {
-  const held = db
-    .prepare(
-      `SELECT 1 FROM raffle_ticket_holds h
+export async function isRaffleTicketBlocked(
+  raffleId: number,
+  ticketNumber: number,
+  client?: PoolClient,
+): Promise<boolean> {
+  const held = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')`,
-    )
-    .get(raffleId, ticketNumber);
+    [raffleId, ticketNumber],
+    client,
+  );
   if (held) return true;
-  const pre = db
-    .prepare(
-      `SELECT 1 FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
-    )
-    .get(raffleId, ticketNumber);
+  const pre = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
+    [raffleId, ticketNumber],
+    client,
+  );
   return Boolean(pre);
 }
 
 /** Все номера 1..N, свободные для брони (без активного hold и без предназначения по телефону). */
-export function listGloballyFreeTicketNumbers(raffleId: number): number[] {
-  cleanupExpiredRaffleOrders();
-  const raffle = getRaffleById(raffleId);
+export async function listGloballyFreeTicketNumbers(
+  raffleId: number,
+  client?: PoolClient,
+): Promise<number[]> {
+  if (client) await cleanupExpiredRaffleOrders(client);
+  else await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return [];
   const maxN = Math.max(0, Math.floor(Number(raffle.ticket_count)));
   if (maxN < 1) return [];
   const occ = new Set<number>();
-  const heldRows = db
-    .prepare(
-      `SELECT h.ticket_number AS n FROM raffle_ticket_holds h
+  const heldRows = await pgAll<{ n: number }>(
+    `SELECT h.ticket_number AS n FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
-    )
-    .all(raffleId) as { n: number }[];
+    [raffleId],
+    client,
+  );
   for (const r of heldRows) occ.add(Math.floor(Number(r.n)));
-  const preRows = db
-    .prepare(`SELECT ticket_number AS n FROM raffle_phone_preassignments WHERE raffle_id = ?`)
-    .all(raffleId) as { n: number }[];
+  const preRows = await pgAll<{ n: number }>(
+    `SELECT ticket_number AS n FROM raffle_phone_preassignments WHERE raffle_id = ?`,
+    [raffleId],
+    client,
+  );
   for (const r of preRows) occ.add(Math.floor(Number(r.n)));
   const free: number[] = [];
   for (let n = 1; n <= maxN; n++) {
@@ -403,25 +437,29 @@ export function listGloballyFreeTicketNumbers(raffleId: number): number[] {
   return free;
 }
 
-function getPreassignmentPhone(raffleId: number, ticketNumber: number): string | null {
-  const row = db
-    .prepare(
-      `SELECT phone FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
-    )
-    .get(raffleId, ticketNumber) as { phone: string } | undefined;
+async function getPreassignmentPhone(
+  raffleId: number,
+  ticketNumber: number,
+  client?: PoolClient,
+): Promise<string | null> {
+  const row = await pgGet<{ phone: string }>(
+    `SELECT phone FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
+    [raffleId, ticketNumber],
+    client,
+  );
   return row ? row.phone : null;
 }
 
-export function getTicketCellKind(
+export async function getTicketCellKind(
   raffleId: number,
   ticketNumber: number,
   currentUserId: number,
-): TicketCellKind {
-  const row = getHoldForNumber(raffleId, ticketNumber);
+): Promise<TicketCellKind> {
+  const row = await getHoldForNumber(raffleId, ticketNumber);
   if (!row) {
-    const prePhone = getPreassignmentPhone(raffleId, ticketNumber);
+    const prePhone = await getPreassignmentPhone(raffleId, ticketNumber);
     if (prePhone) {
-      const u = getUserById(currentUserId);
+      const u = await getUserById(currentUserId);
       if (u && u.phone === prePhone) return "self_confirmed";
       return "taken";
     }
@@ -436,57 +474,133 @@ export function getTicketCellKind(
   return "taken";
 }
 
-export function getTicketGridSlice(
+export async function getTicketGridSlice(
   raffleId: number,
   userId: number,
   from: number,
   to: number,
-): { cells: { n: number; kind: TicketCellKind }[]; free_count: number } {
-  cleanupExpiredRaffleOrders();
-  const raffle = getRaffleById(raffleId);
+): Promise<{ cells: { n: number; kind: TicketCellKind }[]; free_count: number }> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) {
     return { cells: [], free_count: 0 };
   }
   const maxN = raffle.ticket_count;
   const a = Math.max(1, Math.floor(from));
   const b = Math.min(maxN, Math.floor(to));
+  if (a > b) {
+    return { cells: [], free_count: Math.max(0, maxN) };
+  }
+
+  const holdRows = await pgAll<{ ticket_number: number; order_status: string; order_user_id: number }>(
+    `SELECT h.ticket_number AS ticket_number, o.status AS order_status, o.user_id AS order_user_id
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number BETWEEN ? AND ?`,
+    [raffleId, a, b],
+  );
+
+  const holdByNumber = new Map<number, { order_status: string; order_user_id: number }>();
+  const holdScore = (status: string): number => {
+    return status === "expired" || status === "rejected" ? 1 : 2;
+  };
+  for (const row of holdRows) {
+    const n = Math.floor(Number(row.ticket_number));
+    if (!Number.isFinite(n) || n < a || n > b) continue;
+    const next = { order_status: String(row.order_status || ""), order_user_id: Math.floor(Number(row.order_user_id)) };
+    const prev = holdByNumber.get(n);
+    if (!prev || holdScore(next.order_status) > holdScore(prev.order_status)) {
+      holdByNumber.set(n, next);
+    }
+  }
+
+  const preRows = await pgAll<{ ticket_number: number; phone: string }>(
+    `SELECT ticket_number AS ticket_number, phone AS phone
+       FROM raffle_phone_preassignments
+       WHERE raffle_id = ? AND ticket_number BETWEEN ? AND ?`,
+    [raffleId, a, b],
+  );
+  const preByNumber = new Map<number, string>();
+  for (const row of preRows) {
+    const n = Math.floor(Number(row.ticket_number));
+    if (!Number.isFinite(n) || n < a || n > b) continue;
+    preByNumber.set(n, String(row.phone || ""));
+  }
+
+  const userPhone = String((await getUserById(userId))?.phone || "");
   const cells: { n: number; kind: TicketCellKind }[] = [];
   for (let n = a; n <= b; n++) {
-    cells.push({ n, kind: getTicketCellKind(raffleId, n, userId) });
+    const hold = holdByNumber.get(n);
+    if (hold) {
+      const st = hold.order_status;
+      if (st === "expired" || st === "rejected") {
+        cells.push({ n, kind: "free" });
+        continue;
+      }
+      if (hold.order_user_id !== userId) {
+        cells.push({ n, kind: "taken" });
+        continue;
+      }
+      if (st === "confirmed") {
+        cells.push({ n, kind: "self_confirmed" });
+        continue;
+      }
+      if (st === "pending_review") {
+        cells.push({ n, kind: "self_pending" });
+        continue;
+      }
+      if (st === "reserved") {
+        cells.push({ n, kind: "self_reserved" });
+        continue;
+      }
+      cells.push({ n, kind: "taken" });
+      continue;
+    }
+    const prePhone = preByNumber.get(n);
+    if (prePhone) {
+      cells.push({ n, kind: userPhone && prePhone === userPhone ? "self_confirmed" : "taken" });
+      continue;
+    }
+    cells.push({ n, kind: "free" });
   }
-  const occupied = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM raffle_ticket_holds h
+  const occupied = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
-    )
-    .get(raffleId) as { c: number };
-  const preC = db
-    .prepare(`SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`)
-    .get(raffleId) as { c: number };
+    [raffleId],
+  );
+  const preC = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`,
+    [raffleId],
+  );
   const free_count = Math.max(0, maxN - (occupied?.c ?? 0) - (preC?.c ?? 0));
   return { cells, free_count };
 }
 
-function listNumbersWithExpiredReserveHold(raffleId: number, ticketNumbers: number[], nowMs: number): number[] {
+async function listNumbersWithExpiredReserveHold(
+  raffleId: number,
+  ticketNumbers: number[],
+  nowMs: number,
+): Promise<number[]> {
   const out: number[] = [];
-  const stmt = db.prepare(
-    `SELECT 1 AS x FROM raffle_ticket_holds h
+  for (const n of ticketNumbers) {
+    const hit = await pgGet<{ x?: number }>(
+      `SELECT 1 AS x FROM raffle_ticket_holds h
      INNER JOIN raffle_orders o ON o.id = h.order_id
      WHERE h.raffle_id = ? AND h.ticket_number = ?
        AND o.status = 'reserved' AND o.reserved_until < ?`,
-  );
-  for (const n of ticketNumbers) {
-    if (stmt.get(raffleId, n, nowMs)) out.push(n);
+      [raffleId, n, nowMs],
+    );
+    if (hit) out.push(n);
   }
   return out;
 }
 
-export function createReservation(
+export async function createReservation(
   raffleId: number,
   userId: number,
   numbers: number[],
-):
+): Promise<
   | {
       ok: true;
       order_id: number;
@@ -494,19 +608,19 @@ export function createReservation(
       skipped_still_occupied: number[];
       released_after_cleanup: number[];
     }
-  | { ok: false; error: string } {
-  const raffle = getRaffleById(raffleId);
+  | { ok: false; error: string }
+> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle || raffle.status !== "active") {
     return { ok: false, error: "Акция недоступна" };
   }
   if (!isRaffleVisibleOnSite(raffle)) {
     return { ok: false, error: "Акция недоступна" };
   }
-  const existingOrder = db
-    .prepare(
-      `SELECT id FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status IN ('reserved', 'pending_review')`,
-    )
-    .get(raffleId, userId) as { id: number } | undefined;
+  const existingOrder = await pgGet<{ id: number }>(
+    `SELECT id FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status IN ('reserved', 'pending_review')`,
+    [raffleId, userId],
+  );
   if (existingOrder) {
     return {
       ok: false,
@@ -528,12 +642,21 @@ export function createReservation(
   }
 
   const now = Date.now();
-  const hadExpiredReserveHold = listNumbersWithExpiredReserveHold(raffleId, uniq, now);
-  cleanupExpiredRaffleOrders();
+  const hadExpiredReserveHold = await listNumbersWithExpiredReserveHold(raffleId, uniq, now);
+  await cleanupExpiredRaffleOrders();
 
-  const skipped_still_occupied = uniq.filter((n) => isRaffleTicketBlocked(raffleId, n));
-  const released_after_cleanup = hadExpiredReserveHold.filter((n) => !isRaffleTicketBlocked(raffleId, n));
-  const toReserve = uniq.filter((n) => !isRaffleTicketBlocked(raffleId, n));
+  const skipped_still_occupied: number[] = [];
+  for (const n of uniq) {
+    if (await isRaffleTicketBlocked(raffleId, n)) skipped_still_occupied.push(n);
+  }
+  const released_after_cleanup: number[] = [];
+  for (const n of hadExpiredReserveHold) {
+    if (!(await isRaffleTicketBlocked(raffleId, n))) released_after_cleanup.push(n);
+  }
+  const toReserve: number[] = [];
+  for (const n of uniq) {
+    if (!(await isRaffleTicketBlocked(raffleId, n))) toReserve.push(n);
+  }
 
   if (toReserve.length === 0) {
     const sample = skipped_still_occupied.slice(0, 8).join(", ");
@@ -548,43 +671,37 @@ export function createReservation(
   }
 
   const reservedUntil = now + RAFFLE_RESERVE_MS;
-  const amount = toReserve.length * raffle.price_rub;
+  const cenopadApplied = isRaffleCenopadActive(raffle) ? 1 : 0;
+  const unitPrice = getRaffleEffectiveUnitPrice(raffle);
+  const amount = toReserve.length * unitPrice;
 
+  const client = await pgPool.connect();
   try {
-    const tx = db.transaction(() => {
-      for (const n of toReserve) {
-        if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
-      }
-      const pubTok = newPublicOrderToken();
-      const info = db
-        .prepare(
-          `INSERT INTO raffle_orders (
-            raffle_id, user_id, bank, amount_rub, ticket_count, status,
+    await client.query("BEGIN");
+    for (const n of toReserve) {
+      if (await isRaffleTicketBlocked(raffleId, n, client)) throw new Error("OCCUPIED");
+    }
+    const pubTok = newPublicOrderToken();
+    const insRow = await pgGet<{ id: number }>(
+      `INSERT INTO raffle_orders (
+            raffle_id, user_id, bank, amount_rub, ticket_count, cenopad_applied, status,
             reserved_until, receipt_url, receipt_name, receipt_mime, public_status_token, created_at, updated_at
-          ) VALUES (?, ?, NULL, ?, ?, 'reserved', ?, NULL, NULL, NULL, ?, ?, ?)`,
-        )
-        .run(
-          raffleId,
-          userId,
-          amount,
-          toReserve.length,
-          reservedUntil,
-          pubTok,
-          now,
-          now,
-        );
-      const orderId = Number(info.lastInsertRowid);
-      insertRaffleOrderEvent(orderId, "reserved", null);
-      const ins = db.prepare(
+          ) VALUES (?, ?, NULL, ?, ?, ?, 'reserved', ?, NULL, NULL, NULL, ?, ?, ?) RETURNING id`,
+      [raffleId, userId, amount, toReserve.length, cenopadApplied, reservedUntil, pubTok, now, now],
+      client,
+    );
+    const orderId = Number(insRow?.id);
+    if (!Number.isFinite(orderId) || orderId <= 0) throw new Error("INSERT_FAILED");
+    await insertRaffleOrderEvent(orderId, "reserved", null, client);
+    for (const n of toReserve) {
+      await pgExec(
         `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
          VALUES (?, ?, ?, ?, 'reserved', ?, ?)`,
+        [raffleId, orderId, userId, n, reservedUntil, now],
+        client,
       );
-      for (const n of toReserve) {
-        ins.run(raffleId, orderId, userId, n, reservedUntil, now);
-      }
-      return orderId;
-    });
-    const orderId = tx();
+    }
+    await client.query("COMMIT");
     return {
       ok: true,
       order_id: orderId,
@@ -593,66 +710,65 @@ export function createReservation(
       released_after_cleanup,
     };
   } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     if (e instanceof Error && e.message === "OCCUPIED") {
       return { ok: false, error: "Один или несколько номерков уже заняты — обновите страницу и попробуйте снова." };
     }
     throw e;
+  } finally {
+    client.release();
   }
 }
 
-export function getActiveOrderForUser(
+export async function getActiveOrderForUser(
   raffleId: number,
   userId: number,
-): RaffleOrderRow | undefined {
-  cleanupExpiredRaffleOrders();
-  return db
-    .prepare(
-      `SELECT * FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status IN ('reserved', 'pending_review') ORDER BY id DESC LIMIT 1`,
-    )
-    .get(raffleId, userId) as RaffleOrderRow | undefined;
+): Promise<RaffleOrderRow | undefined> {
+  await cleanupExpiredRaffleOrders();
+  return await pgGet<RaffleOrderRow>(
+    `SELECT * FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status IN ('reserved', 'pending_review') ORDER BY id DESC LIMIT 1`,
+    [raffleId, userId],
+  );
 }
 
-export function getOrderByIdForUser(
+export async function getOrderByIdForUser(
   orderId: number,
   userId: number,
-): RaffleOrderRow | undefined {
-  cleanupExpiredRaffleOrders();
-  return db
-    .prepare(`SELECT * FROM raffle_orders WHERE id = ? AND user_id = ?`)
-    .get(orderId, userId) as RaffleOrderRow | undefined;
+  client?: PoolClient,
+): Promise<RaffleOrderRow | undefined> {
+  if (!client) await cleanupExpiredRaffleOrders();
+  return await pgGet<RaffleOrderRow>(`SELECT * FROM raffle_orders WHERE id = ? AND user_id = ?`, [orderId, userId], client);
 }
 
-export function getOrderById(orderId: number): RaffleOrderRow | undefined {
-  return db.prepare(`SELECT * FROM raffle_orders WHERE id = ?`).get(orderId) as
-    | RaffleOrderRow
-    | undefined;
+export async function getOrderById(orderId: number, client?: PoolClient): Promise<RaffleOrderRow | undefined> {
+  return await pgGet<RaffleOrderRow>(`SELECT * FROM raffle_orders WHERE id = ?`, [orderId], client);
 }
 
-export function setOrderBank(
+export async function setOrderBank(
   orderId: number,
   userId: number,
   bank: "sber" | "other",
-): { ok: true } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Статус не позволяет изменить банк" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
   const now = Date.now();
-  db.prepare(`UPDATE raffle_orders SET bank = ?, updated_at = ? WHERE id = ?`).run(
-    bank,
-    now,
-    orderId,
-  );
+  await pgExec(`UPDATE raffle_orders SET bank = ?, updated_at = ? WHERE id = ?`, [bank, now, orderId]);
   return { ok: true };
 }
 
-export function attachReceiptToOrder(
+export async function attachReceiptToOrder(
   orderId: number,
   userId: number,
   receipt: { url: string; name: string; mime: string; sha256?: string },
-): { ok: true } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
   if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(receipt.url)) {
     return { ok: false, error: "Некорректная ссылка на чек" };
   }
@@ -663,7 +779,7 @@ export function attachReceiptToOrder(
   if (sha && !/^[a-f0-9]{64}$/.test(sha)) {
     return { ok: false, error: "Некорректный отпечаток файла" };
   }
-  const o = getOrderByIdForUser(orderId, userId);
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Чек можно прикрепить только к активной брони" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
@@ -680,54 +796,54 @@ export function attachReceiptToOrder(
     // Защита от повторного использования чека (даже другим человеком на другой заявке).
     // Храним использованные отпечатки отдельно, чтобы если заявка ушла на доработку,
     // то заменяемый чек не давал обойти защиту.
-    const ins = db.prepare(
-      `INSERT OR IGNORE INTO used_receipts (sha256, first_order_id, created_at) VALUES (?, ?, ?)`,
+    const inserted = await pgExec(
+      `INSERT INTO used_receipts (sha256, first_order_id, created_at) VALUES (?, ?, ?) ON CONFLICT (sha256) DO NOTHING`,
+      [sha, orderId, now],
     );
-    const info = ins.run(sha, orderId, now);
-    if (!info || Number(info.changes) === 0) {
+    if (inserted === 0) {
       return { ok: false, error: "Этот чек уже использован ранее" };
     }
   }
 
   const isSameAsPrevious = 0;
-  db.prepare(
+  await pgExec(
     `UPDATE raffle_orders
      SET receipt_url = ?, receipt_name = ?, receipt_mime = ?, receipt_sha256 = ?, receipt_same_as_previous = ?,
          status = 'pending_review', updated_at = ?
      WHERE id = ?`,
-  ).run(receipt.url, receipt.name, receipt.mime, sha || null, isSameAsPrevious, now, orderId);
-  db.prepare(
-    `UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`,
-  ).run(orderId);
+    [receipt.url, receipt.name, receipt.mime, sha || null, isSameAsPrevious, now, orderId],
+  );
+  await pgExec(`UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`, [
+    orderId,
+  ]);
   const receiptEventDetail = JSON.stringify({
     url: receipt.url,
     name: receipt.name,
     mime: receipt.mime,
   });
-  insertRaffleOrderEvent(orderId, "receipt_submitted", receiptEventDetail);
+  await insertRaffleOrderEvent(orderId, "receipt_submitted", receiptEventDetail);
   return { ok: true };
 }
 
 export type PendingPaymentRow = RaffleOrderRow & { raffle_title: string; user_phone: string; user_name: string };
 
-export function listPendingPayments(): PendingPaymentRow[] {
-  return db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name
+export async function listPendingPayments(): Promise<PendingPaymentRow[]> {
+  return await pgAll<PendingPaymentRow>(
+    `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        INNER JOIN users u ON u.id = o.user_id
        WHERE o.status = 'pending_review'
        ORDER BY o.created_at ASC`,
-    )
-    .all() as PendingPaymentRow[];
+    [],
+  );
 }
 
-export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false; error: string } {
-  const o = getOrderById(orderId);
+export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const o = await getOrderById(orderId);
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
-  const raffle = getRaffleById(o.raffle_id);
+  const raffle = await getRaffleById(o.raffle_id);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const now = Date.now();
   const raffleId = o.raffle_id;
@@ -735,15 +851,17 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
   const giftWant =
     Number(raffle.promo_5_plus_1_enabled) === 1 && paidCount >= 5 ? Math.floor(paidCount / 5) : 0;
   const giftedNumbers: number[] = [];
-  const tx = db.transaction(() => {
-    db.prepare(
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    await pgExec(
       `UPDATE raffle_orders SET status = 'confirmed', receipt_reject_count = 0, last_reject_comment = NULL, updated_at = ? WHERE id = ?`,
-    ).run(now, orderId);
-    db.prepare(
-      `UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`,
-    ).run(orderId);
+      [now, orderId],
+      client,
+    );
+    await pgExec(`UPDATE raffle_ticket_holds SET hold_status = 'confirmed' WHERE order_id = ?`, [orderId], client);
     if (giftWant > 0) {
-      const free = listGloballyFreeTicketNumbers(raffleId);
+      const free = await listGloballyFreeTicketNumbers(raffleId, client);
       for (let i = free.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const t = free[i]!;
@@ -752,12 +870,13 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
       }
       const picked = free.slice(0, Math.min(giftWant, free.length));
       if (picked.length > 0) {
-        const ins = db.prepare(
-          `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, hold_status, expires_at, created_at)
-           VALUES (?, ?, ?, ?, 1, 'confirmed', NULL, ?)`,
-        );
         for (const n of picked) {
-          ins.run(raffleId, orderId, o.user_id, n, now);
+          await pgExec(
+            `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, hold_status, expires_at, created_at)
+           VALUES (?, ?, ?, ?, 1, 'confirmed', NULL, ?)`,
+            [raffleId, orderId, o.user_id, n, now],
+            client,
+          );
           giftedNumbers.push(n);
         }
       }
@@ -769,54 +888,62 @@ export function confirmOrderByAdmin(orderId: number): { ok: true } | { ok: false
           gift_numbers: giftedNumbers,
         })
       : null;
-    insertRaffleOrderEvent(orderId, "confirmed", eventDetail);
-  });
-  tx();
-  recalculateRaffleDerivedStatsForRaffle(raffleId);
+    await insertRaffleOrderEvent(orderId, "confirmed", eventDetail, client);
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true };
 }
 
 /** Полностью снять бронь / отменить заявку: номерки освобождаются. */
-export function adminFullyReleaseRaffleOrder(
+export async function adminFullyReleaseRaffleOrder(
   orderId: number,
   eventDetail: string | null = null,
-): { ok: true } | { ok: false; error: string } {
-  const o = getOrderById(orderId);
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const o = await getOrderById(orderId);
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "reserved" && o.status !== "pending_review") {
     return { ok: false, error: "Можно снять только активную бронь или заявку на проверке" };
   }
   const now = Date.now();
   const raffleId = o.raffle_id;
-  db.prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ?`).run(orderId);
-  db.prepare(
+  await pgExec(`DELETE FROM raffle_ticket_holds WHERE order_id = ?`, [orderId]);
+  await pgExec(
     `UPDATE raffle_orders SET status = 'rejected', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL, updated_at = ? WHERE id = ?`,
-  ).run(now, orderId);
-  insertRaffleOrderEvent(orderId, "fully_released", eventDetail);
-  recalculateRaffleDerivedStatsForRaffle(raffleId);
+    [now, orderId],
+  );
+  await insertRaffleOrderEvent(orderId, "fully_released", eventDetail);
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true };
 }
 
 /** Отмена активной брони самим пользователем (только до отправки чека). */
-export function userCancelReservedRaffleOrder(
+export async function userCancelReservedRaffleOrder(
   orderId: number,
   userId: number,
-): { ok: true } | { ok: false; error: string } {
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "reserved") {
     return { ok: false, error: "Отменить можно только активную бронь до отправки чека" };
   }
-  return adminFullyReleaseRaffleOrder(orderId, "Отменено пользователем");
+  return await adminFullyReleaseRaffleOrder(orderId, "Отменено пользователем");
 }
 
-export function rejectOrderByAdmin(
+export async function rejectOrderByAdmin(
   orderId: number,
   opts?: { adminNote?: string },
-):
-  | { ok: true; mode: "rework" | "fully_released" }
-  | { ok: false; error: string } {
-  const o = getOrderById(orderId);
+): Promise<{ ok: true; mode: "rework" | "fully_released" } | { ok: false; error: string }> {
+  const o = await getOrderById(orderId);
   if (!o) return { ok: false, error: "Не найдено" };
   if (o.status !== "pending_review") return { ok: false, error: "Неверный статус" };
   const note = String(opts?.adminNote ?? "").trim().slice(0, 500);
@@ -824,30 +951,32 @@ export function rejectOrderByAdmin(
   const max = raffleMaxRejectReworksFromEnv();
   if (count >= max) {
     const detail = note || `Достигнут лимит доработок чека (${max})`;
-    const r = adminFullyReleaseRaffleOrder(orderId, detail);
-    if (!r.ok) return r;
+    const r = await adminFullyReleaseRaffleOrder(orderId, detail);
+    if (!r.ok) return { ok: false, error: "error" in r ? r.error : "Неизвестная ошибка" };
     if (note) {
-      db.prepare(`UPDATE raffle_orders SET last_reject_comment = ?, updated_at = ? WHERE id = ?`).run(
+      await pgExec(`UPDATE raffle_orders SET last_reject_comment = ?, updated_at = ? WHERE id = ?`, [
         note,
         Date.now(),
         orderId,
-      );
+      ]);
     }
     return { ok: true, mode: "fully_released" };
   }
   const now = Date.now();
   const raffleId = o.raffle_id;
   const newUntil = now + rejectReopenReserveMsFromEnv();
-  db.prepare(
+  await pgExec(
     `UPDATE raffle_orders SET status = 'reserved', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL,
      reserved_until = ?, reserve_extended_once = 0, reserve_reminder_sent_at = NULL,
      receipt_reject_count = COALESCE(receipt_reject_count, 0) + 1, last_reject_comment = ?, updated_at = ? WHERE id = ?`,
-  ).run(newUntil, note || null, now, orderId);
-  db.prepare(
-    `UPDATE raffle_ticket_holds SET hold_status = 'reserved', expires_at = ? WHERE order_id = ?`,
-  ).run(newUntil, orderId);
-  insertRaffleOrderEvent(orderId, "reject_rework", note || null);
-  recalculateRaffleDerivedStatsForRaffle(raffleId);
+    [newUntil, note || null, now, orderId],
+  );
+  await pgExec(`UPDATE raffle_ticket_holds SET hold_status = 'reserved', expires_at = ? WHERE order_id = ?`, [
+    newUntil,
+    orderId,
+  ]);
+  await insertRaffleOrderEvent(orderId, "reject_rework", note || null);
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true, mode: "rework" };
 }
 
@@ -855,22 +984,110 @@ export type AdminActiveOrderRow = RaffleOrderRow & {
   raffle_title: string;
   user_phone: string;
   user_name: string;
+  user_id: number;
 };
 
-export function listActiveOrdersForAdmin(): AdminActiveOrderRow[] {
-  cleanupExpiredRaffleOrders();
+export async function listActiveOrdersForAdmin(): Promise<AdminActiveOrderRow[]> {
+  await cleanupExpiredRaffleOrders();
   const now = Date.now();
-  return db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name
+  return await pgAll<AdminActiveOrderRow>(
+    `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        INNER JOIN users u ON u.id = o.user_id
        WHERE o.status = 'reserved' AND o.reserved_until > ?
        ORDER BY o.reserved_until ASC
        LIMIT 300`,
-    )
-    .all(now) as AdminActiveOrderRow[];
+    [now],
+  );
+}
+
+export type AdminOrderReceiptHistoryItem = {
+  at_ms: number;
+  url: string;
+  name: string;
+  mime: string | null;
+};
+
+export type AdminPaymentHistoryRow = RaffleOrderRow & {
+  raffle_title: string;
+  user_phone: string;
+  user_name: string;
+  user_id: number;
+  ticket_numbers: number[];
+  receipt_history: AdminOrderReceiptHistoryItem[];
+};
+
+async function listReceiptHistoryForOrder(
+  orderId: number,
+  fallback?: { url?: string | null; name?: string | null; mime?: string | null },
+): Promise<AdminOrderReceiptHistoryItem[]> {
+  const rows = await pgAll<{ detail: string | null; created_at: number }>(
+    `SELECT detail, created_at
+       FROM raffle_order_events
+       WHERE order_id = ? AND kind = 'receipt_submitted'
+       ORDER BY created_at DESC`,
+    [orderId],
+  );
+  const items: AdminOrderReceiptHistoryItem[] = [];
+  for (const row of rows) {
+    const raw = String(row.detail ?? "").trim();
+    if (!raw.startsWith("{")) continue;
+    try {
+      const parsed = JSON.parse(raw) as { url?: string; name?: string; mime?: string };
+      const url = String(parsed.url ?? "").trim();
+      if (!url) continue;
+      items.push({
+        at_ms: Number(row.created_at) || 0,
+        url,
+        name: String(parsed.name ?? "чек").slice(0, 255) || "чек",
+        mime: parsed.mime ? String(parsed.mime) : null,
+      });
+    } catch {
+      /* ignore malformed history row */
+    }
+  }
+  const fallbackUrl = String(fallback?.url ?? "").trim();
+  if (fallbackUrl && !items.some((x) => x.url === fallbackUrl)) {
+    items.push({
+      at_ms: Date.now(),
+      url: fallbackUrl,
+      name: String(fallback?.name ?? "чек").slice(0, 255) || "чек",
+      mime: fallback?.mime ? String(fallback.mime) : null,
+    });
+  }
+  return items.slice(0, 40);
+}
+
+export async function listPaymentHistoryForAdmin(limit = 300, offset = 0): Promise<AdminPaymentHistoryRow[]> {
+  const lim = Math.max(1, Math.min(2000, Math.floor(Number(limit) || 300)));
+  const off = Math.max(0, Math.floor(Number(offset) || 0));
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; user_phone: string; user_name: string; user_id: number }>(
+    `SELECT o.*, r.title AS raffle_title, u.phone AS user_phone, u.name AS user_name, u.id AS user_id
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       INNER JOIN users u ON u.id = o.user_id
+       ORDER BY o.created_at DESC
+       LIMIT ? OFFSET ?`,
+    [lim, off],
+  );
+  return await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      user_id: Number(row.user_id) || 0,
+      ticket_numbers: await getTicketNumbersForOrder(row.id),
+      receipt_history: await listReceiptHistoryForOrder(row.id, {
+        url: row.receipt_url,
+        name: row.receipt_name,
+        mime: row.receipt_mime,
+      }),
+    })),
+  );
+}
+
+export async function countPaymentHistoryForAdmin(): Promise<number> {
+  const row = await pgGet<{ c: number }>(`SELECT COUNT(*) AS c FROM raffle_orders`, []);
+  return Math.max(0, Number(row?.c ?? 0));
 }
 
 export type PublicOrderStatusDto = {
@@ -893,14 +1110,12 @@ export function receiptReviewEtaHintFromEnv(): string {
   return `Обычно проверка занимает до ${h} ч.`;
 }
 
-export function getPublicOrderStatusByToken(rawToken: string): PublicOrderStatusDto | null {
+export async function getPublicOrderStatusByToken(rawToken: string): Promise<PublicOrderStatusDto | null> {
   const t = String(rawToken ?? "").trim().toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(t)) return null;
-  const o = db
-    .prepare(`SELECT * FROM raffle_orders WHERE public_status_token = ?`)
-    .get(t) as RaffleOrderRow | undefined;
+  const o = await pgGet<RaffleOrderRow>(`SELECT * FROM raffle_orders WHERE public_status_token = ?`, [t]);
   if (!o) return null;
-  const raffle = getRaffleById(o.raffle_id);
+  const raffle = await getRaffleById(o.raffle_id);
   const title = raffle ? raffle.title : "Акция";
   const rulesRaw = raffle ? String(raffle.rules_url ?? "").trim() : "";
   return {
@@ -912,7 +1127,7 @@ export function getPublicOrderStatusByToken(rawToken: string): PublicOrderStatus
     amount_rub: o.amount_rub,
     ticket_count: o.ticket_count,
     reserved_until: o.status === "reserved" ? o.reserved_until : null,
-    timeline: listRaffleOrderTimeline(o.id),
+    timeline: await listRaffleOrderTimeline(o.id),
     review_eta_hint: receiptReviewEtaHintFromEnv(),
   };
 }
@@ -942,14 +1157,12 @@ export function orderToDto(o: RaffleOrderRow) {
 const RESERVE_EXTEND_MS = 10 * 60 * 1000;
 
 /** Одно продление брони на +10 мин (поле reserve_extended_once). */
-export function extendReservedOrderOnce(
+export async function extendReservedOrderOnce(
   orderId: number,
   userId: number,
-):
-  | { ok: true; order: ReturnType<typeof orderToDto> }
-  | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<{ ok: true; order: ReturnType<typeof orderToDto> } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Нельзя продлить эту заявку" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
@@ -957,71 +1170,125 @@ export function extendReservedOrderOnce(
     return { ok: false, error: "Продление уже использовано" };
   const now = Date.now();
   const newUntil = o.reserved_until + RESERVE_EXTEND_MS;
-  db.prepare(
+  await pgExec(
     `UPDATE raffle_orders SET reserved_until = ?, reserve_extended_once = 1, reserve_reminder_sent_at = NULL, updated_at = ? WHERE id = ?`,
-  ).run(newUntil, now, orderId);
-  db.prepare(`UPDATE raffle_ticket_holds SET expires_at = ? WHERE order_id = ?`).run(newUntil, orderId);
-  const updated = getOrderByIdForUser(orderId, userId);
+    [newUntil, now, orderId],
+  );
+  await pgExec(`UPDATE raffle_ticket_holds SET expires_at = ? WHERE order_id = ?`, [newUntil, orderId]);
+  const updated = await getOrderByIdForUser(orderId, userId);
   if (!updated) return { ok: false, error: "Ошибка" };
   return { ok: true, order: orderToDto(updated) };
 }
 
-export function getTicketNumbersForOrder(orderId: number): number[] {
-  const rows = db
-    .prepare(
-      `SELECT ticket_number FROM raffle_ticket_holds WHERE order_id = ? ORDER BY ticket_number ASC`,
-    )
-    .all(orderId) as { ticket_number: number }[];
+export async function getTicketNumbersForOrder(orderId: number, client?: PoolClient): Promise<number[]> {
+  const rows = await pgAll<{ ticket_number: number }>(
+    `SELECT ticket_number FROM raffle_ticket_holds WHERE order_id = ? ORDER BY ticket_number ASC`,
+    [orderId],
+    client,
+  );
   return rows.map((r) => r.ticket_number);
 }
 
-function getPaidTicketNumbersForOrder(orderId: number): number[] {
-  const rows = db
-    .prepare(
-      `SELECT ticket_number FROM raffle_ticket_holds
+async function getPaidTicketNumbersForOrder(orderId: number, client?: PoolClient): Promise<number[]> {
+  const rows = await pgAll<{ ticket_number: number }>(
+    `SELECT ticket_number FROM raffle_ticket_holds
        WHERE order_id = ? AND COALESCE(is_bonus, 0) = 0
        ORDER BY ticket_number ASC`,
-    )
-    .all(orderId) as { ticket_number: number }[];
+    [orderId],
+    client,
+  );
   return rows.map((r) => r.ticket_number);
 }
 
 /** Пользователи с хотя бы одной подтверждённой оплатой по акции (для рассылок в чат). */
-export function listUserIdsWithConfirmedRaffleOrders(): number[] {
-  const rows = db
-    .prepare(
-      `SELECT DISTINCT o.user_id AS uid
+export async function listUserIdsWithConfirmedRaffleOrders(): Promise<number[]> {
+  const rows = await pgAll<{ uid: number }>(
+    `SELECT DISTINCT o.user_id AS uid
        FROM raffle_orders o
        INNER JOIN users u ON u.id = o.user_id
        WHERE o.status = 'confirmed' AND COALESCE(u.blocked, 0) = 0
        ORDER BY uid ASC`,
-    )
-    .all() as { uid: number }[];
+    [],
+  );
   return rows.map((r) => Number(r.uid)).filter((id) => Number.isFinite(id) && id > 0);
 }
 
-export function listReservedOrdersForUser(userId: number): Array<{
-  order: ReturnType<typeof orderToDto>;
-  numbers: number[];
-  timeline: RaffleOrderTimelineItem[];
-  raffle: { id: number; title: string; price_rub: number };
-}> {
-  cleanupExpiredRaffleOrders();
+export async function listReservedOrdersForUser(userId: number): Promise<
+  Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number };
+  }>
+> {
+  await cleanupExpiredRaffleOrders();
   const now = Date.now();
-  const rows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
          AND COALESCE(r.hidden_from_public, 0) = 0
        ORDER BY o.id DESC`,
-    )
-    .all(userId, now) as Array<RaffleOrderRow & { raffle_title: string; raffle_price: number }>;
+    [userId, now],
+  );
+  return await Promise.all(
+    rows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+      },
+    })),
+  );
+}
+
+/** Лёгкий вариант reserved-групп без timeline (для корзины и частых polling API). */
+export async function listReservedOrdersForUserLite(userId: number): Promise<
+  Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number };
+  }>
+> {
+  await cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
+         AND COALESCE(r.hidden_from_public, 0) = 0
+       ORDER BY o.id DESC`,
+    [userId, now],
+  );
+  const orderIds = rows
+    .map((row) => Math.floor(Number(row.id)))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  const numbersByOrderId = new Map<number, number[]>();
+  if (orderIds.length > 0) {
+    const placeholders = orderIds.map(() => "?").join(", ");
+    const numRows = await pgAll<{ order_id: number; ticket_number: number }>(
+      `SELECT order_id AS order_id, ticket_number AS ticket_number
+         FROM raffle_ticket_holds
+         WHERE order_id IN (${placeholders})
+         ORDER BY order_id ASC, ticket_number ASC`,
+      orderIds,
+    );
+    for (const row of numRows) {
+      const oid = Math.floor(Number(row.order_id));
+      if (!numbersByOrderId.has(oid)) numbersByOrderId.set(oid, []);
+      numbersByOrderId.get(oid)!.push(Math.floor(Number(row.ticket_number)));
+    }
+  }
   return rows.map((row) => ({
     order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
+    numbers: numbersByOrderId.get(Math.floor(Number(row.id))) ?? [],
+    timeline: [],
     raffle: {
       id: row.raffle_id,
       title: row.raffle_title,
@@ -1031,60 +1298,64 @@ export function listReservedOrdersForUser(userId: number): Array<{
 }
 
 /** Снять все видимые пользователю активные брони (очистка корзины) за один заход к БД по списку заявок. */
-export function clearAllUserReservedCartItems(
+export async function clearAllUserReservedCartItems(
   userId: number,
-): { ok: true; raffle_ids: number[] } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
+): Promise<{ ok: true; raffle_ids: number[] } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
   const now = Date.now();
-  const rows = db
-    .prepare(
-      `SELECT o.id, o.raffle_id FROM raffle_orders o
+  const rows = await pgAll<{ id: number; raffle_id: number }>(
+    `SELECT o.id, o.raffle_id FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
          AND COALESCE(r.hidden_from_public, 0) = 0`,
-    )
-    .all(userId, now) as { id: number; raffle_id: number }[];
+    [userId, now],
+  );
   const raffleIds = new Set<number>();
   for (const row of rows) {
-    const res = userCancelReservedRaffleOrder(row.id, userId);
-    if (!res.ok) return { ok: false, error: res.error };
+    const res = await userCancelReservedRaffleOrder(row.id, userId);
+    if (!res.ok) return { ok: false, error: "error" in res ? res.error : "Неизвестная ошибка" };
     const rid = Number(row.raffle_id);
     if (Number.isFinite(rid) && rid > 0) raffleIds.add(rid);
   }
   return { ok: true, raffle_ids: [...raffleIds] };
 }
 
-export function removeTicketFromReservedOrder(
+export async function removeTicketFromReservedOrder(
   orderId: number,
   userId: number,
   ticketNumber: number,
-):
-  | { ok: true; order: ReturnType<typeof orderToDto> | null; numbers: number[] }
-  | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<
+  { ok: true; order: ReturnType<typeof orderToDto> | null; numbers: number[] } | { ok: false; error: string }
+> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Нельзя изменить заявку" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
-  const raffle = getRaffleById(o.raffle_id);
+  const raffle = await getRaffleById(o.raffle_id);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
 
-  const del = db
-    .prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ? AND ticket_number = ?`)
-    .run(orderId, ticketNumber);
-  if (del.changes === 0) return { ok: false, error: "Номерок не в заявке" };
+  const del = await pgExec(`DELETE FROM raffle_ticket_holds WHERE order_id = ? AND ticket_number = ?`, [
+    orderId,
+    ticketNumber,
+  ]);
+  if (del === 0) return { ok: false, error: "Номерок не в заявке" };
 
-  const nums = getTicketNumbersForOrder(orderId);
+  const nums = await getTicketNumbersForOrder(orderId);
   const now = Date.now();
   if (nums.length === 0) {
-    db.prepare(`DELETE FROM raffle_orders WHERE id = ?`).run(orderId);
+    await pgExec(`DELETE FROM raffle_orders WHERE id = ?`, [orderId]);
     return { ok: true, order: null, numbers: [] };
   }
-  const amount = nums.length * raffle.price_rub;
-  db.prepare(
-    `UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`,
-  ).run(amount, nums.length, now, orderId);
-  const updated = getOrderByIdForUser(orderId, userId);
+  const unitPrice = resolveOrderUnitPrice(o, getRaffleEffectiveUnitPrice(raffle));
+  const amount = nums.length * unitPrice;
+  await pgExec(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`, [
+    amount,
+    nums.length,
+    now,
+    orderId,
+  ]);
+  const updated = await getOrderByIdForUser(orderId, userId);
   return {
     ok: true,
     order: updated ? orderToDto(updated) : null,
@@ -1096,35 +1367,33 @@ export function removeTicketFromReservedOrder(
  * Админ: снять номерок с участника по номеру (предназначение до регистрации, бронь, на проверке, подтверждённый).
  * Номер снова становится свободным; при пустом заказе запись заказа удаляется.
  */
-export function adminDetachParticipantTicket(
+export async function adminDetachParticipantTicket(
   raffleId: number,
   ticketNumber: number,
-):
-  | { ok: true; affected_user_id: number | null }
-  | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const raffle = getRaffleById(raffleId);
+): Promise<{ ok: true; affected_user_id: number | null } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const n = Math.floor(Number(ticketNumber));
   if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
     return { ok: false, error: "Некорректный номерок" };
   }
 
-  const pre = db
-    .prepare(`DELETE FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`)
-    .run(raffleId, n);
-  if (pre.changes > 0) {
+  const pre = await pgExec(`DELETE FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`, [
+    raffleId,
+    n,
+  ]);
+  if (pre > 0) {
     return { ok: true, affected_user_id: null };
   }
 
-  const row = db
-    .prepare(
-      `SELECT h.order_id AS order_id, o.user_id AS user_id
+  const row = await pgGet<{ order_id: number; user_id: number }>(
+    `SELECT h.order_id AS order_id, o.user_id AS user_id
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')`,
-    )
-    .get(raffleId, n) as { order_id: number; user_id: number } | undefined;
+    [raffleId, n],
+  );
 
   if (!row) return { ok: false, error: "Номерок не занят или уже снят" };
 
@@ -1132,64 +1401,75 @@ export function adminDetachParticipantTicket(
   const affectedUserId = row.user_id;
   const now = Date.now();
 
+  const client = await pgPool.connect();
   try {
-    const tx = db.transaction(() => {
-      const del = db
-        .prepare(`DELETE FROM raffle_ticket_holds WHERE order_id = ? AND ticket_number = ?`)
-        .run(orderId, n);
-      if (del.changes === 0) throw new Error("HOLD_MISSING");
+    await client.query("BEGIN");
+    const del = await pgExec(`DELETE FROM raffle_ticket_holds WHERE order_id = ? AND ticket_number = ?`, [orderId, n], client);
+    if (del === 0) throw new Error("HOLD_MISSING");
 
-      const nums = getTicketNumbersForOrder(orderId);
-      if (nums.length === 0) {
-        db.prepare(`DELETE FROM raffle_orders WHERE id = ?`).run(orderId);
-      } else {
-        const paidNums = getPaidTicketNumbersForOrder(orderId);
-        const paidCount = paidNums.length;
-        const amount = paidCount * raffle.price_rub;
-        db.prepare(
-          `UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`,
-        ).run(amount, paidCount, now, orderId);
-        insertRaffleOrderEvent(orderId, "admin_ticket_removed", "№ " + String(n));
-      }
-    });
-    tx();
+    const nums = await getTicketNumbersForOrder(orderId, client);
+    if (nums.length === 0) {
+      await pgExec(`DELETE FROM raffle_orders WHERE id = ?`, [orderId], client);
+    } else {
+      const paidNums = await getPaidTicketNumbersForOrder(orderId, client);
+      const paidCount = paidNums.length;
+      const ord = await getOrderById(orderId, client);
+      const unitPrice = resolveOrderUnitPrice(ord as RaffleOrderRow, getRaffleEffectiveUnitPrice(raffle));
+      const amount = paidCount * unitPrice;
+      await pgExec(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`, [
+        amount,
+        paidCount,
+        now,
+        orderId,
+      ], client);
+      await insertRaffleOrderEvent(orderId, "admin_ticket_removed", "№ " + String(n), client);
+    }
+    await client.query("COMMIT");
   } catch {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     return { ok: false, error: "Не удалось снять номерок" };
+  } finally {
+    client.release();
   }
 
-  recalculateRaffleDerivedStatsForRaffle(raffleId);
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true, affected_user_id: affectedUserId };
 }
 
-export function listConfirmedTicketGroupsForUser(userId: number): Array<{
-  order: ReturnType<typeof orderToDto>;
-  numbers: number[];
-  timeline: RaffleOrderTimelineItem[];
-  raffle: { id: number; title: string; price_rub: number; status: string };
-}> {
-  const rows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+export async function listConfirmedTicketGroupsForUser(userId: number): Promise<
+  Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }>
+> {
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'confirmed'
          AND COALESCE(r.hidden_from_public, 0) = 0
        ORDER BY o.id DESC`,
-    )
-    .all(userId) as Array<
-    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
-  >;
-  return rows.map((row) => ({
-    order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
-    raffle: {
-      id: row.raffle_id,
-      title: row.raffle_title,
-      price_rub: row.raffle_price,
-      status: String(row.raffle_status || "active"),
-    },
-  }));
+    [userId],
+  );
+  return await Promise.all(
+    rows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+        status: String(row.raffle_status || "active"),
+      },
+    })),
+  );
 }
 
 export type ParticipationHistoryRaffle = {
@@ -1204,7 +1484,7 @@ export type ParticipationHistoryRaffle = {
 };
 
 /** История участий пользователя по всем акциям: какие номерки закреплялись в каждом статусе. */
-export function listParticipationHistoryForUser(userId: number): ParticipationHistoryRaffle[] {
+export async function listParticipationHistoryForUser(userId: number): Promise<ParticipationHistoryRaffle[]> {
   type Row = {
     raffle_id: number;
     raffle_title: string;
@@ -1214,9 +1494,8 @@ export function listParticipationHistoryForUser(userId: number): ParticipationHi
     ticket_number: number;
     is_bonus: number;
   };
-  const rows = db
-    .prepare(
-      `SELECT
+  const rows = await pgAll<Row>(
+    `SELECT
          r.id AS raffle_id,
          r.title AS raffle_title,
          r.status AS raffle_status,
@@ -1229,8 +1508,8 @@ export function listParticipationHistoryForUser(userId: number): ParticipationHi
        INNER JOIN raffle_ticket_holds h ON h.order_id = o.id
        WHERE o.user_id = ? AND o.status IN ('reserved', 'pending_review', 'confirmed')
        ORDER BY o.updated_at DESC, o.id DESC, h.ticket_number ASC`,
-    )
-    .all(userId) as Row[];
+    [userId],
+  );
 
   const map = new Map<number, ParticipationHistoryRaffle>();
   for (const row of rows) {
@@ -1287,127 +1566,322 @@ export function listParticipationHistoryForUser(userId: number): ParticipationHi
   return out;
 }
 
-export function listPendingReviewTicketGroupsForUser(userId: number): Array<{
-  order: ReturnType<typeof orderToDto>;
-  numbers: number[];
-  timeline: RaffleOrderTimelineItem[];
-  raffle: { id: number; title: string; price_rub: number; status: string };
-}> {
-  const rows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+export type ParticipationHistorySummaryDto = {
+  raffles_count: number;
+  last_activity_at: number | null;
+};
+
+/** Лёгкая summary-версия истории участий (без разворачивания всех номерков). */
+export async function getParticipationHistorySummaryForUser(userId: number): Promise<ParticipationHistorySummaryDto> {
+  const row = await pgGet<{ raffles_count?: number; last_activity_at?: number | null }>(
+    `SELECT COUNT(DISTINCT o.raffle_id) AS raffles_count, MAX(o.updated_at) AS last_activity_at
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ?
+         AND o.status IN ('reserved', 'pending_review', 'confirmed')
+         AND COALESCE(r.hidden_from_public, 0) = 0`,
+    [userId],
+  );
+  return {
+    raffles_count: Math.max(0, Number(row?.raffles_count || 0)),
+    last_activity_at: row?.last_activity_at != null ? Number(row.last_activity_at) : null,
+  };
+}
+
+export async function listPendingReviewTicketGroupsForUser(userId: number): Promise<
+  Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }>
+> {
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.status = 'pending_review'
          AND COALESCE(r.hidden_from_public, 0) = 0
        ORDER BY o.id DESC`,
-    )
-    .all(userId) as Array<
-    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
-  >;
-  return rows.map((row) => ({
-    order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
-    raffle: {
+    [userId],
+  );
+  return await Promise.all(
+    rows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+        status: String(row.raffle_status || "active"),
+      },
+    })),
+  );
+}
+
+export type MyTicketsSummaryDto = {
+  reserved_count: number;
+  pending_review_count: number;
+  reserved_raffle_id: number | null;
+  rejected_reason: string;
+};
+
+/** Облегченный summary для главной: без разворачивания групп и списков номерков. */
+export async function getMyTicketsSummaryForUser(userId: number): Promise<MyTicketsSummaryDto> {
+  await cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const reservedCountRow = await pgGet<{ c?: number }>(
+    `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ?
+         AND o.status = 'reserved'
+         AND o.reserved_until > ?
+         AND COALESCE(r.hidden_from_public, 0) = 0`,
+    [userId, now],
+  );
+  const pendingCountRow = await pgGet<{ c?: number }>(
+    `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ?
+         AND o.status = 'pending_review'
+         AND COALESCE(r.hidden_from_public, 0) = 0`,
+    [userId],
+  );
+  const reservedOrderRow = await pgGet<{
+    raffle_id?: number;
+    last_reject_comment?: string | null;
+    receipt_reject_count?: number;
+  }>(
+    `SELECT o.raffle_id AS raffle_id, o.last_reject_comment AS last_reject_comment, o.receipt_reject_count AS receipt_reject_count
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ?
+         AND o.status = 'reserved'
+         AND o.reserved_until > ?
+         AND COALESCE(r.hidden_from_public, 0) = 0
+       ORDER BY o.id DESC
+       LIMIT 1`,
+    [userId, now],
+  );
+
+  const rid = Math.floor(Number(reservedOrderRow?.raffle_id ?? 0));
+  const rejected = Number(reservedOrderRow?.receipt_reject_count ?? 0) > 0;
+  return {
+    reserved_count: Math.max(0, Number(reservedCountRow?.c || 0)),
+    pending_review_count: Math.max(0, Number(pendingCountRow?.c || 0)),
+    reserved_raffle_id: Number.isFinite(rid) && rid > 0 ? rid : null,
+    rejected_reason: rejected ? String(reservedOrderRow?.last_reject_comment || "").trim() : "",
+  };
+}
+
+/** Быстрый вариант для /api/raffles/my-tickets: без timeline-запросов на каждый заказ. */
+export async function listMyTicketsBundleForUser(userId: number): Promise<{
+  reserved: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number };
+  }>;
+  pending_review: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }>;
+  confirmed: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }>;
+}> {
+  await cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const rows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+       FROM raffle_orders o
+       INNER JOIN raffles r ON r.id = o.raffle_id
+       WHERE o.user_id = ?
+         AND COALESCE(r.hidden_from_public, 0) = 0
+         AND (
+           o.status IN ('pending_review', 'confirmed')
+           OR (o.status = 'reserved' AND o.reserved_until > ?)
+         )
+       ORDER BY o.id DESC`,
+    [userId, now],
+  );
+
+  const orderIds = rows
+    .map((row) => Math.floor(Number(row.id)))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  const numbersByOrderId = new Map<number, number[]>();
+  if (orderIds.length > 0) {
+    const placeholders = orderIds.map(() => "?").join(", ");
+    const numRows = await pgAll<{ order_id: number; ticket_number: number }>(
+      `SELECT order_id AS order_id, ticket_number AS ticket_number
+         FROM raffle_ticket_holds
+         WHERE order_id IN (${placeholders})
+         ORDER BY order_id ASC, ticket_number ASC`,
+      orderIds,
+    );
+    for (const nr of numRows) {
+      const oid = Math.floor(Number(nr.order_id));
+      if (!numbersByOrderId.has(oid)) numbersByOrderId.set(oid, []);
+      numbersByOrderId.get(oid)!.push(Math.floor(Number(nr.ticket_number)));
+    }
+  }
+
+  const reserved: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number };
+  }> = [];
+  const pending_review: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }> = [];
+  const confirmed: Array<{
+    order: ReturnType<typeof orderToDto>;
+    numbers: number[];
+    timeline: RaffleOrderTimelineItem[];
+    raffle: { id: number; title: string; price_rub: number; status: string };
+  }> = [];
+
+  for (const row of rows) {
+    const oid = Math.floor(Number(row.id));
+    const base = {
+      order: orderToDto(row),
+      numbers: numbersByOrderId.get(oid) ?? [],
+      timeline: [] as RaffleOrderTimelineItem[],
+    };
+    const raffleBase = {
       id: row.raffle_id,
       title: row.raffle_title,
       price_rub: row.raffle_price,
-      status: String(row.raffle_status || "active"),
-    },
-  }));
+    };
+    if (row.status === "reserved") {
+      reserved.push({ ...base, raffle: raffleBase });
+      continue;
+    }
+    if (row.status === "pending_review") {
+      pending_review.push({
+        ...base,
+        raffle: { ...raffleBase, status: String(row.raffle_status || "active") },
+      });
+      continue;
+    }
+    if (row.status === "confirmed") {
+      confirmed.push({
+        ...base,
+        raffle: { ...raffleBase, status: String(row.raffle_status || "active") },
+      });
+    }
+  }
+
+  return { reserved, pending_review, confirmed };
 }
 
 /**
  * Админ: билеты пользователя по «текущей» акции — последняя по id среди активных и видимых на сайте
  * (новая акция, а не первая по полю «Порядок»).
  */
-export function adminUserTicketsForPrimaryRaffle(userId: number): {
+export async function adminUserTicketsForPrimaryRaffle(userId: number): Promise<{
   raffle: { id: number; title: string; status: string } | null;
-  reserved: ReturnType<typeof listReservedOrdersForUser>;
-  pending_review: ReturnType<typeof listPendingReviewTicketGroupsForUser>;
-  confirmed: ReturnType<typeof listConfirmedTicketGroupsForUser>;
+  reserved: Awaited<ReturnType<typeof listReservedOrdersForUser>>;
+  pending_review: Awaited<ReturnType<typeof listPendingReviewTicketGroupsForUser>>;
+  confirmed: Awaited<ReturnType<typeof listConfirmedTicketGroupsForUser>>;
   wholesale_numbers: number[];
-} {
-  cleanupExpiredRaffleOrders();
+}> {
+  await cleanupExpiredRaffleOrders();
   const now = Date.now();
-  const pub = listRafflesPublic();
-  const raffle = getLatestVisibleActiveRaffle() ?? pub[0];
+  const pub = await listRafflesPublic();
+  const raffle = (await getLatestVisibleActiveRaffle()) ?? pub[0];
   if (!raffle) {
     return { raffle: null, reserved: [], pending_review: [], confirmed: [], wholesale_numbers: [] };
   }
   const rid = raffle.id;
-  const wholesaleSlots = listWholesaleSlotsForUser(userId);
+  const wholesaleSlots = await listWholesaleSlotsForUser(userId);
   const wholesale_numbers = wholesaleSlots.find((s) => s.raffle_id === rid)?.wholesale_numbers ?? [];
 
-  const reservedRows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
+  const reservedRows = await pgAll<RaffleOrderRow & { raffle_title: string; raffle_price: number }>(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'reserved' AND o.reserved_until > ?
        ORDER BY o.id DESC`,
-    )
-    .all(userId, rid, now) as Array<RaffleOrderRow & { raffle_title: string; raffle_price: number }>;
+    [userId, rid, now],
+  );
 
-  const reserved = reservedRows.map((row) => ({
-    order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
-    raffle: {
-      id: row.raffle_id,
-      title: row.raffle_title,
-      price_rub: row.raffle_price,
-    },
-  }));
+  const reserved = await Promise.all(
+    reservedRows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+      },
+    })),
+  );
 
-  const pendingRows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+  const pendingRows = await pgAll<
+    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
+  >(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'pending_review'
        ORDER BY o.id DESC`,
-    )
-    .all(userId, rid) as Array<
+    [userId, rid],
+  );
+
+  const pending_review = await Promise.all(
+    pendingRows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+        status: String(row.raffle_status || "active"),
+      },
+    })),
+  );
+
+  const confirmedRows = await pgAll<
     RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
-  >;
-
-  const pending_review = pendingRows.map((row) => ({
-    order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
-    raffle: {
-      id: row.raffle_id,
-      title: row.raffle_title,
-      price_rub: row.raffle_price,
-      status: String(row.raffle_status || "active"),
-    },
-  }));
-
-  const confirmedRows = db
-    .prepare(
-      `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
+  >(
+    `SELECT o.*, r.title AS raffle_title, r.price_rub AS raffle_price, r.status AS raffle_status
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        WHERE o.user_id = ? AND o.raffle_id = ? AND o.status = 'confirmed'
        ORDER BY o.id DESC`,
-    )
-    .all(userId, rid) as Array<
-    RaffleOrderRow & { raffle_title: string; raffle_price: number; raffle_status: string }
-  >;
+    [userId, rid],
+  );
 
-  const confirmed = confirmedRows.map((row) => ({
-    order: orderToDto(row),
-    numbers: getTicketNumbersForOrder(row.id),
-    timeline: listRaffleOrderTimeline(row.id),
-    raffle: {
-      id: row.raffle_id,
-      title: row.raffle_title,
-      price_rub: row.raffle_price,
-      status: String(row.raffle_status || "active"),
-    },
-  }));
+  const confirmed = await Promise.all(
+    confirmedRows.map(async (row) => ({
+      order: orderToDto(row),
+      numbers: await getTicketNumbersForOrder(row.id),
+      timeline: await listRaffleOrderTimeline(row.id),
+      raffle: {
+        id: row.raffle_id,
+        title: row.raffle_title,
+        price_rub: row.raffle_price,
+        status: String(row.raffle_status || "active"),
+      },
+    })),
+  );
 
   return {
     raffle: {
@@ -1423,29 +1897,24 @@ export function adminUserTicketsForPrimaryRaffle(userId: number): {
 }
 
 /** Пересчёт номеров оптовиков: каждые 10 подтверждённых номерков в акции дают следующий глобальный № по времени подтверждения заказов. */
-export function recalculateWholesaleForRaffle(raffleId: number): void {
-  const raffle = getRaffleById(raffleId);
+export async function recalculateWholesaleForRaffle(raffleId: number): Promise<void> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
-  db.prepare(`DELETE FROM raffle_wholesale_assignments WHERE raffle_id = ?`).run(raffleId);
+  await pgExec(`DELETE FROM raffle_wholesale_assignments WHERE raffle_id = ?`, [raffleId]);
   if (!Number(raffle.wholesale_enabled)) return;
 
-  const rows = db
-    .prepare(
-      `SELECT h.user_id AS user_id, h.ticket_number AS ticket_number, o.updated_at AS ord_u, o.id AS oid
+  const rows = await pgAll<{ user_id: number; ticket_number: number; ord_u: number; oid: number }>(
+    `SELECT h.user_id AS user_id, h.ticket_number AS ticket_number, o.updated_at AS ord_u, o.id AS oid
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
        ORDER BY o.updated_at ASC, o.id ASC, h.ticket_number ASC`,
-    )
-    .all(raffleId) as Array<{ user_id: number; ticket_number: number; ord_u: number; oid: number }>;
+    [raffleId],
+  );
 
   const perUser = new Map<number, number>();
   let globalN = 0;
   const now = Date.now();
-  const ins = db.prepare(
-    `INSERT INTO raffle_wholesale_assignments (raffle_id, user_id, user_slot_index, wholesale_number, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  );
 
   for (const row of rows) {
     const uid = row.user_id;
@@ -1454,28 +1923,31 @@ export function recalculateWholesaleForRaffle(raffleId: number): void {
     if (c % 10 !== 0) continue;
     globalN += 1;
     const slotIdx = c / 10;
-    ins.run(raffleId, uid, slotIdx, globalN, now);
+    await pgExec(
+      `INSERT INTO raffle_wholesale_assignments (raffle_id, user_id, user_slot_index, wholesale_number, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+      [raffleId, uid, slotIdx, globalN, now],
+    );
   }
 }
 
 /** Сколько бонусных номерков 5+1 закреплено подтверждёнными заказами по акции. */
-export function recalculatePromoGiftStatsForRaffle(raffleId: number): void {
-  const raffle = getRaffleById(raffleId);
+export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Promise<void> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
-  const row = db
-    .prepare(
-      `SELECT COUNT(*) AS c
+  const row = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 1`,
-    )
-    .get(raffleId) as { c: number } | undefined;
-  setRafflePromoGiftLockedCount(raffleId, Number(row?.c ?? 0));
+    [raffleId],
+  );
+  await setRafflePromoGiftLockedCount(raffleId, Number(row?.c ?? 0));
 }
 
-export function recalculateRaffleDerivedStatsForRaffle(raffleId: number): void {
-  recalculateWholesaleForRaffle(raffleId);
-  recalculatePromoGiftStatsForRaffle(raffleId);
+export async function recalculateRaffleDerivedStatsForRaffle(raffleId: number): Promise<void> {
+  await recalculateWholesaleForRaffle(raffleId);
+  await recalculatePromoGiftStatsForRaffle(raffleId);
 }
 
 export type AdminWholesalerRow = {
@@ -1491,15 +1963,17 @@ export type AdminRaffleParticipantView = {
   user_id: number;
   user_name: string;
   user_email: string;
+  user_locality: string;
 };
 
 /** Подтверждённые номерки без оплаты (админ): одна или несколько записей в одном заказе. */
-export function createOrAppendConfirmedTicketsForUser(
+export async function createOrAppendConfirmedTicketsForUser(
   raffleId: number,
   userId: number,
   numbers: number[],
-): void {
-  const raffle = getRaffleById(raffleId);
+  client?: PoolClient,
+): Promise<void> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) throw new Error("NO_RAFFLE");
   const uniq = [...new Set(numbers.map((x) => Math.floor(Number(x))))].filter((n) => Number.isFinite(n));
   uniq.sort((a, b) => a - b);
@@ -1508,66 +1982,74 @@ export function createOrAppendConfirmedTicketsForUser(
     if (n < 1 || n > raffle.ticket_count) throw new Error("BAD_NUM");
   }
   const now = Date.now();
-  const existing = db
-    .prepare(
-      `SELECT id, ticket_count, amount_rub FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status = 'confirmed' ORDER BY id DESC LIMIT 1`,
-    )
-    .get(raffleId, userId) as { id: number; ticket_count: number; amount_rub: number } | undefined;
-
-  const insHold = db.prepare(
-    `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
-     VALUES (?, ?, ?, ?, 'confirmed', NULL, ?)`,
+  const existing = await pgGet<{ id: number; ticket_count: number; amount_rub: number }>(
+    `SELECT id, ticket_count, amount_rub FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status = 'confirmed' ORDER BY id DESC LIMIT 1`,
+    [raffleId, userId],
+    client,
   );
 
   if (existing) {
-    const existingNums = new Set(getTicketNumbersForOrder(existing.id));
+    const existingNums = new Set(await getTicketNumbersForOrder(existing.id, client));
     const toAdd = uniq.filter((n) => !existingNums.has(n));
     if (toAdd.length === 0) return;
     for (const n of toAdd) {
-      if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
+      if (await isRaffleTicketBlocked(raffleId, n, client)) throw new Error("OCCUPIED");
     }
     for (const n of toAdd) {
-      insHold.run(raffleId, existing.id, userId, n, now);
+      await pgExec(
+        `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
+     VALUES (?, ?, ?, ?, 'confirmed', NULL, ?)`,
+        [raffleId, existing.id, userId, n, now],
+        client,
+      );
     }
     const totalCount = existing.ticket_count + toAdd.length;
-    const amount = totalCount * raffle.price_rub;
-    db.prepare(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`).run(
+    const amount = totalCount * getRaffleEffectiveUnitPrice(raffle);
+    await pgExec(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`, [
       amount,
       totalCount,
       now,
       existing.id,
-    );
+    ], client);
     return;
   }
 
   for (const n of uniq) {
-    if (isRaffleTicketBlocked(raffleId, n)) throw new Error("OCCUPIED");
+    if (await isRaffleTicketBlocked(raffleId, n, client)) throw new Error("OCCUPIED");
   }
-  const amount = uniq.length * raffle.price_rub;
+  const cenopadApplied = isRaffleCenopadActive(raffle) ? 1 : 0;
+  const amount = uniq.length * getRaffleEffectiveUnitPrice(raffle);
   const pubTok = newPublicOrderToken();
-  const info = db
-    .prepare(
-      `INSERT INTO raffle_orders (
-        raffle_id, user_id, bank, amount_rub, ticket_count, status,
+  const insRow = await pgGet<{ id: number }>(
+    `INSERT INTO raffle_orders (
+        raffle_id, user_id, bank, amount_rub, ticket_count, cenopad_applied, status,
         reserved_until, receipt_url, receipt_name, receipt_mime, public_status_token, created_at, updated_at
-      ) VALUES (?, ?, NULL, ?, ?, 'confirmed', 0, NULL, NULL, NULL, ?, ?, ?)`,
-    )
-    .run(raffleId, userId, amount, uniq.length, pubTok, now, now);
-  const orderId = Number(info.lastInsertRowid);
-  insertRaffleOrderEvent(orderId, "confirmed", null);
+      ) VALUES (?, ?, NULL, ?, ?, ?, 'confirmed', 0, NULL, NULL, NULL, ?, ?, ?) RETURNING id`,
+    [raffleId, userId, amount, uniq.length, cenopadApplied, pubTok, now, now],
+    client,
+  );
+  const orderId = Number(insRow?.id);
+  if (!Number.isFinite(orderId) || orderId <= 0) throw new Error("INSERT_FAILED");
+  await insertRaffleOrderEvent(orderId, "confirmed", null, client);
   for (const n of uniq) {
-    insHold.run(raffleId, orderId, userId, n, now);
+    await pgExec(
+      `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
+     VALUES (?, ?, ?, ?, 'confirmed', NULL, ?)`,
+      [raffleId, orderId, userId, n, now],
+      client,
+    );
   }
 }
 
 /** Перенос предназначенных по телефону номерков в реальные подтверждённые заявки после регистрации/входа. Возвращает id акций, где что-то изменилось. */
-export function materializeRafflePreassignmentsForUser(userId: number): number[] {
-  const u = getUserById(userId);
+export async function materializeRafflePreassignmentsForUser(userId: number): Promise<number[]> {
+  const u = await getUserById(userId);
   if (!u) return [];
   const phone = u.phone;
-  const rows = db
-    .prepare(`SELECT raffle_id, ticket_number FROM raffle_phone_preassignments WHERE phone = ?`)
-    .all(phone) as Array<{ raffle_id: number; ticket_number: number }>;
+  const rows = await pgAll<{ raffle_id: number; ticket_number: number }>(
+    `SELECT raffle_id, ticket_number FROM raffle_phone_preassignments WHERE phone = ?`,
+    [phone],
+  );
   if (!rows.length) return [];
 
   const byRaffle = new Map<number, number[]>();
@@ -1577,18 +2059,31 @@ export function materializeRafflePreassignmentsForUser(userId: number): number[]
     byRaffle.set(r.raffle_id, arr);
   }
 
-  const tx = db.transaction(() => {
-    db.prepare(`DELETE FROM raffle_phone_preassignments WHERE phone = ?`).run(phone);
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    await pgExec(`DELETE FROM raffle_phone_preassignments WHERE phone = ?`, [phone], client);
     for (const [raffleId, nums] of byRaffle) {
       nums.sort((a, b) => a - b);
-      createOrAppendConfirmedTicketsForUser(raffleId, userId, nums);
+      await createOrAppendConfirmedTicketsForUser(raffleId, userId, nums, client);
     }
-    for (const raffleId of byRaffle.keys()) {
-      recalculateRaffleDerivedStatsForRaffle(raffleId);
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
     }
-  });
-  tx();
-  return [...byRaffle.keys()];
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  const ids = [...byRaffle.keys()];
+  for (const raffleId of ids) {
+    await recalculateRaffleDerivedStatsForRaffle(raffleId);
+  }
+  return ids;
 }
 
 export type BulkAssignSkip = {
@@ -1599,20 +2094,20 @@ export type BulkAssignSkip = {
 };
 
 /** У телефона уже есть любой номерок в этой акции (бронь / проверка / подтверждённый или предназначение до регистрации). */
-function phoneHasAssignmentInRaffle(raffleId: number, phone: string): boolean {
-  const pre = db
-    .prepare(`SELECT 1 FROM raffle_phone_preassignments WHERE raffle_id = ? AND phone = ? LIMIT 1`)
-    .get(raffleId, phone);
+async function phoneHasAssignmentInRaffle(raffleId: number, phone: string): Promise<boolean> {
+  const pre = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_phone_preassignments WHERE raffle_id = ? AND phone = ? LIMIT 1`,
+    [raffleId, phone],
+  );
   if (pre) return true;
-  const row = db
-    .prepare(
-      `SELECT 1 FROM raffle_ticket_holds h
+  const row = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        INNER JOIN users u ON u.id = h.user_id
        WHERE h.raffle_id = ? AND u.phone = ? AND o.status NOT IN ('expired', 'rejected')
        LIMIT 1`,
-    )
-    .get(raffleId, phone);
+    [raffleId, phone],
+  );
   return Boolean(row);
 }
 
@@ -1621,14 +2116,14 @@ function phoneHasAssignmentInRaffle(raffleId: number, phone: string): boolean {
  * Если занят — берём следующий свободный до max.
  * Если у телефона уже есть номерок в акции или он уже получил номер в этой загрузке — строка пропускается (без второго номерка).
  */
-export function adminBulkAssignPhoneLinesToRaffle(
+export async function adminBulkAssignPhoneLinesToRaffle(
   raffleId: number,
   rawLines: string[],
   startNumber: number,
-):
-  | { ok: true; assigned: number; skipped: BulkAssignSkip[]; affected_user_ids: number[] }
-  | { ok: false; error: string } {
-  const raffle = getRaffleById(raffleId);
+): Promise<
+  { ok: true; assigned: number; skipped: BulkAssignSkip[]; affected_user_ids: number[] } | { ok: false; error: string }
+> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const maxN = raffle.ticket_count;
   const start = Math.max(1, Math.floor(Number(startNumber)) || 1);
@@ -1671,7 +2166,7 @@ export function adminBulkAssignPhoneLinesToRaffle(
     }
     seenPhoneInFile.add(p.phone);
 
-    if (phoneHasAssignmentInRaffle(raffleId, p.phone)) {
+    if (await phoneHasAssignmentInRaffle(raffleId, p.phone)) {
       skipped.push({
         line: p.line,
         phone: p.phone,
@@ -1683,7 +2178,7 @@ export function adminBulkAssignPhoneLinesToRaffle(
 
     let found: number | null = null;
     for (let cand = p.idealFirst; cand <= maxN; cand++) {
-      if (!virt.has(cand) && !isRaffleTicketBlocked(raffleId, cand)) {
+      if (!virt.has(cand) && !(await isRaffleTicketBlocked(raffleId, cand))) {
         found = cand;
         break;
       }
@@ -1712,38 +2207,51 @@ export function adminBulkAssignPhoneLinesToRaffle(
   }
 
   const affectedUserIds = new Set<number>();
-  const tx = db.transaction(() => {
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
     for (const [, list] of byPhone) {
       list.sort((a, b) => a.ticket_number - b.ticket_number);
       const tickets = list.map((x) => x.ticket_number);
       const phone = list[0]!.phone;
-      const user = getUserByPhone(phone);
+      const user = await getUserByPhone(phone);
       if (user) {
-        createOrAppendConfirmedTicketsForUser(raffleId, user.id, tickets);
+        await createOrAppendConfirmedTicketsForUser(raffleId, user.id, tickets, client);
         if (Number.isFinite(user.id) && user.id > 0) affectedUserIds.add(user.id);
       } else {
         const now = Date.now();
-        const ins = db.prepare(
-          `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
-        );
         for (const t of tickets) {
-          ins.run(raffleId, t, phone, now);
+          await pgExec(
+            `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
+            [raffleId, t, phone, now],
+            client,
+          );
         }
       }
     }
-    recalculateRaffleDerivedStatsForRaffle(raffleId);
-  });
-  tx();
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
 
   return { ok: true, assigned: valid.length, skipped, affected_user_ids: [...affectedUserIds] };
 }
 
-export function adminAssignPhoneToExactTicket(
+export async function adminAssignPhoneToExactTicket(
   raffleId: number,
   rawPhone: string,
   ticketNumber: number,
-): { ok: true; affected_user_id: number | null } | { ok: false; error: string } {
-  const raffle = getRaffleById(raffleId);
+): Promise<{ ok: true; affected_user_id: number | null } | { ok: false; error: string }> {
+  const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const phone = normalizePhone(String(rawPhone || ""));
   if (!phone || !isValidRuMobile(phone)) {
@@ -1753,114 +2261,172 @@ export function adminAssignPhoneToExactTicket(
   if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
     return { ok: false, error: "Некорректный номерок" };
   }
-  if (isRaffleTicketBlocked(raffleId, n)) {
+  if (await isRaffleTicketBlocked(raffleId, n)) {
     return { ok: false, error: "Номерок уже занят" };
   }
-  const user = getUserByPhone(phone);
+  const user = await getUserByPhone(phone);
   if (user) {
-    createOrAppendConfirmedTicketsForUser(raffleId, user.id, [n]);
+    await createOrAppendConfirmedTicketsForUser(raffleId, user.id, [n]);
   } else {
-    db.prepare(
+    await pgExec(
       `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
-    ).run(raffleId, n, phone, Date.now());
+      [raffleId, n, phone, Date.now()],
+    );
   }
-  recalculateRaffleDerivedStatsForRaffle(raffleId);
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
   return { ok: true, affected_user_id: user ? user.id : null };
 }
 
-export function getAdminRaffleParticipantsBundle(raffleId: number): {
+export async function getAdminRaffleParticipantsBundle(raffleId: number): Promise<{
   wholesale_enabled: boolean;
   participants: AdminRaffleParticipantView[];
   wholesalers: AdminWholesalerRow[];
-} {
-  cleanupExpiredRaffleOrders();
-  const raffle = getRaffleById(raffleId);
+}> {
+  const page = await listAdminRaffleParticipantsPage(raffleId, { offset: 0, limit: 100000, search: "" });
+  const wholesalers = await listAdminRaffleWholesalers(raffleId);
+  return {
+    wholesale_enabled: page.wholesale_enabled,
+    participants: page.participants,
+    wholesalers,
+  };
+}
+
+function normalizeAdminParticipantsSearch(raw: string): { kind: "ticket" | "phone"; value: string } | null {
+  const digits = String(raw || "").replace(/[^\d]/g, "");
+  if (!digits) return null;
+  if (digits.length >= 7) return { kind: "phone", value: digits };
+  return { kind: "ticket", value: digits };
+}
+
+export async function listAdminRaffleWholesalers(raffleId: number): Promise<AdminWholesalerRow[]> {
+  const raffle = await getRaffleById(raffleId);
   const wholesale_enabled = Boolean(raffle && Number(raffle.wholesale_enabled));
+  if (!wholesale_enabled) return [];
+  return pgAll<AdminWholesalerRow>(
+    `SELECT w.wholesale_number AS wholesale_number, u.phone AS user_phone
+       FROM raffle_wholesale_assignments w
+       INNER JOIN users u ON u.id = w.user_id
+       WHERE w.raffle_id = ?
+       ORDER BY w.wholesale_number ASC`,
+    [raffleId],
+  );
+}
 
-  const countRows = db
-    .prepare(
-      `SELECT h.user_id AS user_id, COUNT(*) AS c
-       FROM raffle_ticket_holds h
-       INNER JOIN raffle_orders o ON o.id = h.order_id
-       WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
-       GROUP BY h.user_id`,
-    )
-    .all(raffleId) as Array<{ user_id: number; c: number }>;
-  const countMap = new Map(countRows.map((r) => [r.user_id, r.c]));
-
-  const partRows = db
-    .prepare(
-      `SELECT h.ticket_number AS ticket_number, u.phone AS user_phone, o.status AS order_status, h.user_id AS user_id,
-              u.name AS user_name, u.email AS user_email
-       FROM raffle_ticket_holds h
-       INNER JOIN raffle_orders o ON o.id = h.order_id
-       INNER JOIN users u ON u.id = o.user_id
-       WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')
-       ORDER BY h.ticket_number ASC`,
-    )
-    .all(raffleId) as Array<{
+export async function listAdminRaffleParticipantsPage(
+  raffleId: number,
+  opts?: { offset?: number; limit?: number; search?: string },
+): Promise<{ wholesale_enabled: boolean; participants: AdminRaffleParticipantView[]; total: number }> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
+  const wholesale_enabled = Boolean(raffle && Number(raffle.wholesale_enabled));
+  const limit = Math.min(Math.max(1, Math.floor(Number(opts?.limit) || 120)), 500);
+  const offset = Math.max(0, Math.floor(Number(opts?.offset) || 0));
+  const parsed = normalizeAdminParticipantsSearch(String(opts?.search || ""));
+  const holdParams: unknown[] = [raffleId];
+  const preParams: unknown[] = [raffleId];
+  let holdExtra = "";
+  let preExtra = "";
+  if (parsed) {
+    if (parsed.kind === "phone") {
+      const pat = `%${parsed.value}%`;
+      holdExtra = ` AND regexp_replace(COALESCE(u.phone, ''), '\\D', '', 'g') LIKE ?`;
+      preExtra = ` AND regexp_replace(COALESCE(p.phone, ''), '\\D', '', 'g') LIKE ?`;
+      holdParams.push(pat);
+      preParams.push(pat);
+    } else {
+      const pat = `${parsed.value}%`;
+      holdExtra = ` AND CAST(h.ticket_number AS TEXT) LIKE ?`;
+      preExtra = ` AND CAST(p.ticket_number AS TEXT) LIKE ?`;
+      holdParams.push(pat);
+      preParams.push(pat);
+    }
+  }
+  const totalRow = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c
+     FROM (
+       SELECT h.ticket_number
+         FROM raffle_ticket_holds h
+         INNER JOIN raffle_orders o ON o.id = h.order_id
+         INNER JOIN users u ON u.id = o.user_id
+        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')${holdExtra}
+       UNION ALL
+       SELECT p.ticket_number
+         FROM raffle_phone_preassignments p
+        WHERE p.raffle_id = ?${preExtra}
+     ) t`,
+    [...holdParams, ...preParams],
+  );
+  const rows = await pgAll<{
     ticket_number: number;
     user_phone: string;
     order_status: string;
+    is_wholesale: number;
     user_id: number;
     user_name: string;
     user_email: string;
-  }>;
-
-  const fromOrders: AdminRaffleParticipantView[] = partRows.map((row) => ({
-    ticket_number: row.ticket_number,
-    user_phone: row.user_phone,
-    order_status: row.order_status,
-    is_wholesale:
-      wholesale_enabled && (countMap.get(row.user_id) ?? 0) >= 10,
-    user_id: row.user_id,
-    user_name: row.user_name ?? "",
-    user_email: row.user_email ?? "",
-  }));
-
-  const preRows = db
-    .prepare(
-      `SELECT ticket_number, phone FROM raffle_phone_preassignments WHERE raffle_id = ? ORDER BY ticket_number ASC`,
-    )
-    .all(raffleId) as Array<{ ticket_number: number; phone: string }>;
-
-  const fromPre: AdminRaffleParticipantView[] = preRows.map((row) => ({
-    ticket_number: row.ticket_number,
-    user_phone: row.phone,
-    order_status: "preassigned",
-    is_wholesale: false,
-    user_id: 0,
-    user_name: "",
-    user_email: "",
-  }));
-
-  const participants: AdminRaffleParticipantView[] = [...fromOrders, ...fromPre].sort(
-    (a, b) => a.ticket_number - b.ticket_number,
+    user_locality: string;
+  }>(
+    `WITH confirmed_counts AS (
+       SELECT h.user_id AS user_id, COUNT(*)::int AS c
+         FROM raffle_ticket_holds h
+         INNER JOIN raffle_orders o ON o.id = h.order_id
+        WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
+        GROUP BY h.user_id
+     )
+     SELECT * FROM (
+       SELECT h.ticket_number AS ticket_number,
+              u.phone AS user_phone,
+              o.status AS order_status,
+              CASE WHEN ? = 1 AND COALESCE(cc.c, 0) >= 10 THEN 1 ELSE 0 END AS is_wholesale,
+              h.user_id AS user_id,
+              u.name AS user_name,
+              COALESCE(u.email, '') AS user_email,
+              COALESCE(u.locality, '') AS user_locality
+         FROM raffle_ticket_holds h
+         INNER JOIN raffle_orders o ON o.id = h.order_id
+         INNER JOIN users u ON u.id = o.user_id
+         LEFT JOIN confirmed_counts cc ON cc.user_id = h.user_id
+        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')${holdExtra}
+       UNION ALL
+       SELECT p.ticket_number AS ticket_number,
+              p.phone AS user_phone,
+              'preassigned' AS order_status,
+              0 AS is_wholesale,
+              0 AS user_id,
+              '' AS user_name,
+              '' AS user_email,
+              '' AS user_locality
+         FROM raffle_phone_preassignments p
+        WHERE p.raffle_id = ?${preExtra}
+     ) x
+     ORDER BY ticket_number ASC
+     LIMIT ? OFFSET ?`,
+    [raffleId, wholesale_enabled ? 1 : 0, ...holdParams, ...preParams, limit, offset],
   );
-
-  let wholesalers: AdminWholesalerRow[] = [];
-  if (wholesale_enabled) {
-    wholesalers = db
-      .prepare(
-        `SELECT w.wholesale_number AS wholesale_number, u.phone AS user_phone
-         FROM raffle_wholesale_assignments w
-         INNER JOIN users u ON u.id = w.user_id
-         WHERE w.raffle_id = ?
-         ORDER BY w.wholesale_number ASC`,
-      )
-      .all(raffleId) as AdminWholesalerRow[];
-  }
-
-  return { wholesale_enabled, participants, wholesalers };
+  return {
+    wholesale_enabled,
+    participants: rows.map((row) => ({
+      ticket_number: row.ticket_number,
+      user_phone: row.user_phone,
+      order_status: row.order_status,
+      is_wholesale: Number(row.is_wholesale) === 1,
+      user_id: row.user_id,
+      user_name: row.user_name ?? "",
+      user_email: row.user_email ?? "",
+      user_locality: row.user_locality ?? "",
+    })),
+    total: Number(totalRow?.c ?? 0),
+  };
 }
 
 /** Номера оптовика пользователя по акциям (для экрана «Мои билеты»). */
-export function listWholesaleSlotsForUser(userId: number): Array<{ raffle_id: number; wholesale_numbers: number[] }> {
-  const rows = db
-    .prepare(
-      `SELECT raffle_id, wholesale_number FROM raffle_wholesale_assignments WHERE user_id = ? ORDER BY raffle_id ASC, wholesale_number ASC`,
-    )
-    .all(userId) as Array<{ raffle_id: number; wholesale_number: number }>;
+export async function listWholesaleSlotsForUser(
+  userId: number,
+): Promise<Array<{ raffle_id: number; wholesale_numbers: number[] }>> {
+  const rows = await pgAll<{ raffle_id: number; wholesale_number: number }>(
+    `SELECT raffle_id, wholesale_number FROM raffle_wholesale_assignments WHERE user_id = ? ORDER BY raffle_id ASC, wholesale_number ASC`,
+    [userId],
+  );
   const map = new Map<number, number[]>();
   for (const r of rows) {
     const arr = map.get(r.raffle_id) ?? [];
@@ -1870,20 +2436,20 @@ export function listWholesaleSlotsForUser(userId: number): Array<{ raffle_id: nu
   return [...map.entries()].map(([raffle_id, wholesale_numbers]) => ({ raffle_id, wholesale_numbers }));
 }
 
-export function addTicketsToReservedOrder(
+export async function addTicketsToReservedOrder(
   orderId: number,
   userId: number,
   newNumbers: number[],
-): { ok: true } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Можно добавлять только к активной брони" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
-  const raffle = getRaffleById(o.raffle_id);
+  const raffle = await getRaffleById(o.raffle_id);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
 
-  const existing = new Set(getTicketNumbersForOrder(orderId));
+  const existing = new Set(await getTicketNumbersForOrder(orderId));
   const uniq = [...new Set(newNumbers.map((x) => Math.floor(Number(x))))].filter((n) =>
     Number.isFinite(n),
   );
@@ -1900,65 +2466,74 @@ export function addTicketsToReservedOrder(
 
   const now = Date.now();
   const reservedUntil = o.reserved_until;
+  const client = await pgPool.connect();
   try {
-    const tx = db.transaction(() => {
-      for (const n of toAdd) {
-        if (isRaffleTicketBlocked(o.raffle_id, n)) throw new Error("OCCUPIED");
-      }
-      const ins = db.prepare(
+    await client.query("BEGIN");
+    for (const n of toAdd) {
+      if (await isRaffleTicketBlocked(o.raffle_id, n, client)) throw new Error("OCCUPIED");
+    }
+    for (const n of toAdd) {
+      await pgExec(
         `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, hold_status, expires_at, created_at)
          VALUES (?, ?, ?, ?, 'reserved', ?, ?)`,
+        [o.raffle_id, orderId, userId, n, reservedUntil, now],
+        client,
       );
-      for (const n of toAdd) {
-        ins.run(o.raffle_id, orderId, userId, n, reservedUntil, now);
-      }
-      const allCount = existing.size + toAdd.length;
-      const amount = allCount * raffle.price_rub;
-      db.prepare(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`).run(
-        amount,
-        allCount,
-        now,
-        orderId,
-      );
-    });
-    tx();
+    }
+    const allCount = existing.size + toAdd.length;
+    const unitPrice = resolveOrderUnitPrice(o, getRaffleEffectiveUnitPrice(raffle));
+    const amount = allCount * unitPrice;
+    await pgExec(`UPDATE raffle_orders SET amount_rub = ?, ticket_count = ?, updated_at = ? WHERE id = ?`, [
+      amount,
+      allCount,
+      now,
+      orderId,
+    ], client);
+    await client.query("COMMIT");
     return { ok: true };
   } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     if (e instanceof Error && e.message === "OCCUPIED") {
       return { ok: false, error: "Один или несколько номерков уже заняты" };
     }
     throw e;
+  } finally {
+    client.release();
   }
 }
 
-export function appendRandomTicketsToReservedOrder(
+export async function appendRandomTicketsToReservedOrder(
   orderId: number,
   userId: number,
   want: number,
-): { ok: true; picked: number[] } | { ok: false; error: string } {
-  cleanupExpiredRaffleOrders();
-  const o = getOrderByIdForUser(orderId, userId);
+): Promise<{ ok: true; picked: number[] } | { ok: false; error: string }> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Можно добавлять только к активной брони" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
-  const raffle = getRaffleById(o.raffle_id);
+  const raffle = await getRaffleById(o.raffle_id);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
 
-  const existing = getTicketNumbersForOrder(orderId);
+  const existing = await getTicketNumbersForOrder(orderId);
   const slots = RAFFLE_MAX_SELECT - existing.length;
   const nPick = Math.min(Math.max(1, Math.floor(want)), slots);
   if (nPick < 1) return { ok: false, error: "Достигнут лимит номерков" };
 
-  const occupiedRows = db
-    .prepare(
-      `SELECT h.ticket_number FROM raffle_ticket_holds h
+  const occupiedRows = await pgAll<{ ticket_number: number }>(
+    `SELECT h.ticket_number FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o2 ON o2.id = h.order_id
        WHERE h.raffle_id = ? AND o2.status NOT IN ('expired', 'rejected')`,
-    )
-    .all(o.raffle_id) as { ticket_number: number }[];
-  const preRows = db
-    .prepare(`SELECT ticket_number FROM raffle_phone_preassignments WHERE raffle_id = ?`)
-    .all(o.raffle_id) as { ticket_number: number }[];
+    [o.raffle_id],
+  );
+  const preRows = await pgAll<{ ticket_number: number }>(
+    `SELECT ticket_number FROM raffle_phone_preassignments WHERE raffle_id = ?`,
+    [o.raffle_id],
+  );
   const occ = new Set([
     ...occupiedRows.map((r) => r.ticket_number),
     ...preRows.map((r) => r.ticket_number),
@@ -1977,24 +2552,23 @@ export function appendRandomTicketsToReservedOrder(
     free[j] = t!;
   }
   const picked = free.slice(0, Math.min(nPick, free.length));
-  const add = addTicketsToReservedOrder(orderId, userId, picked);
-  if (!add.ok) return add;
+  const add = await addTicketsToReservedOrder(orderId, userId, picked);
+  if (!add.ok) return { ok: false, error: "error" in add ? add.error : "Неизвестная ошибка" };
   return { ok: true, picked };
 }
 
 /** Сколько номерков уже занято по акции (бронь/проверка/подтверждено + предназначения по телефону). */
-export function getRaffleOccupiedCount(raffleId: number): number {
-  cleanupExpiredRaffleOrders();
-  const holds = db
-    .prepare(
-      `SELECT COUNT(*) AS c
+export async function getRaffleOccupiedCount(raffleId: number): Promise<number> {
+  await cleanupExpiredRaffleOrders();
+  const holds = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')`,
-    )
-    .get(raffleId) as { c: number } | undefined;
-  const pre = db
-    .prepare(`SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`)
-    .get(raffleId) as { c: number } | undefined;
+    [raffleId],
+  );
+  const pre = await pgGet<{ c: number }>(`SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`, [
+    raffleId,
+  ]);
   return Math.max(0, Number((holds && holds.c) || 0) + Number((pre && pre.c) || 0));
 }

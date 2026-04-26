@@ -7,13 +7,20 @@
   let rafflesCache = [];
   /** @type {'active' | 'hidden'} */
   let rafflesListTab = "active";
-  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,user_email?:string}>} */
+  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,user_email?:string,user_locality?:string}>} */
   let participantsCache = [];
   /** @type {Array<{wholesale_number:number,user_phone:string}>} */
   let wholesalersCache = [];
   let participantsRaffleId = null;
   let participantsActiveTab = "participants";
   let participantsWholesaleEnabled = false;
+  let participantsTotal = 0;
+  let participantsOffset = 0;
+  let participantsHasMore = false;
+  let participantsLoading = false;
+  let participantsReqId = 0;
+  let participantsSearchTimer = null;
+  const PARTICIPANTS_PAGE_SIZE = 120;
   const revealedPhones = new Set();
   let raffleSingleCheckTimer = null;
   let raffleSingleCheckReqId = 0;
@@ -147,11 +154,13 @@
     var nameEl = document.getElementById("raffle-buyer-name");
     var phoneEl = document.getElementById("raffle-buyer-phone");
     var emailEl = document.getElementById("raffle-buyer-email");
+    var localityEl = document.getElementById("raffle-buyer-locality");
     var chatBtn = document.getElementById("raffle-buyer-chat");
     if (title) title.textContent = "Номерок № " + String(ctx.ticket_number);
-    if (nameEl) nameEl.textContent = ctx.user_name || "—";
-    if (phoneEl) phoneEl.textContent = ctx.user_phone || "—";
-    if (emailEl) emailEl.textContent = ctx.user_email || "—";
+    if (nameEl) nameEl.textContent = ctx.user_name || "Не указано";
+    if (phoneEl) phoneEl.textContent = ctx.user_phone || "Не указано";
+    if (emailEl) emailEl.textContent = ctx.user_email || "Не указано";
+    if (localityEl) localityEl.textContent = ctx.user_locality || "Не указано";
     if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
     var chatUid = Number(ctx.user_id);
     if (chatBtn) {
@@ -186,19 +195,56 @@
     }
   }
 
-  async function refreshParticipantsBundle() {
+  function getParticipantsSearchDigits() {
+    return String((participantsSearch && participantsSearch.value) || "")
+      .trim()
+      .replace(/[^\d]/g, "");
+  }
+
+  async function loadParticipantsPage(opts) {
     if (!participantsRaffleId) return;
-    const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
-      headers: authHeaders(),
-      cache: "no-store",
-    });
-    if (participantsRaffleId) {
-      participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
-      wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
-      participantsWholesaleEnabled = !!bundle.wholesale_enabled;
-      renderWholesalersList();
-      renderParticipantsList();
+    var reset = !!(opts && opts.reset);
+    var includeWholesalers = !!(opts && opts.includeWholesalers);
+    if (participantsLoading) return;
+    participantsLoading = true;
+    const reqId = ++participantsReqId;
+    const searchDigits = getParticipantsSearchDigits();
+    const offset = reset ? 0 : participantsOffset;
+    if (reset && participantsList) {
+      participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
     }
+    try {
+      const qs = new URLSearchParams();
+      qs.set("offset", String(offset));
+      qs.set("limit", String(PARTICIPANTS_PAGE_SIZE));
+      if (searchDigits) qs.set("q", searchDigits);
+      qs.set("include_wholesalers", includeWholesalers ? "1" : "0");
+      const data = await apiJson(
+        "/api/admin/raffles/" + participantsRaffleId + "/participants?" + qs.toString(),
+        {
+          headers: authHeaders(),
+          cache: "no-store",
+        },
+      );
+      if (reqId !== participantsReqId || !participantsRaffleId) return;
+      const rows = Array.isArray(data.participants) ? data.participants : [];
+      participantsCache = reset ? rows : participantsCache.concat(rows);
+      participantsTotal = Math.max(0, Number(data.total) || 0);
+      participantsOffset = participantsCache.length;
+      participantsHasMore = !!data.has_more || participantsOffset < participantsTotal;
+      participantsWholesaleEnabled = !!data.wholesale_enabled;
+      if (includeWholesalers) {
+        wholesalersCache = Array.isArray(data.wholesalers) ? data.wholesalers : [];
+        renderWholesalersList();
+      }
+      renderParticipantsList();
+    } finally {
+      participantsLoading = false;
+    }
+  }
+
+  async function refreshParticipantsBundle() {
+    await loadParticipantsPage({ reset: true, includeWholesalers: true });
   }
 
   async function adminDetachParticipantTicketByNumber(ticketNum, opts) {
@@ -256,6 +302,13 @@
       " ₽ за билет · " +
       esc(String(r.ticket_count)) +
       " номерков" +
+      (r.cenopad_enabled && Number(r.cenopad_price_rub) > 0
+        ? " · ценопад " +
+          esc(String(r.cenopad_price_rub)) +
+          " ₽ (взято: " +
+          esc(String(Math.max(0, Number(r.cenopad_sold_count) || 0))) +
+          ")"
+        : "") +
       (r.wholesale_enabled ? " · оптовики вкл." : "") +
       (r.promo_5_plus_1_enabled
         ? " · 5+1 вкл. (бонусных: " +
@@ -464,6 +517,19 @@
     document.getElementById("raffle-title").value = edit ? edit.title : "";
     document.getElementById("raffle-cover-url").value = edit ? edit.cover_image_url || "" : "";
     document.getElementById("raffle-price").value = edit ? String(edit.price_rub) : "0";
+    var cenopadEnabledEl = document.getElementById("raffle-cenopad-enabled");
+    if (cenopadEnabledEl) cenopadEnabledEl.checked = edit ? !!edit.cenopad_enabled : false;
+    var cenopadPriceEl = document.getElementById("raffle-cenopad-price");
+    if (cenopadPriceEl) {
+      cenopadPriceEl.value =
+        edit && Number(edit.cenopad_price_rub) > 0 ? String(edit.cenopad_price_rub) : "";
+    }
+    var cenopadStatsEl = document.getElementById("raffle-cenopad-stats");
+    if (cenopadStatsEl) {
+      cenopadStatsEl.textContent =
+        "Подтверждено номерков по ценопаду: " +
+        String(edit ? Math.max(0, Number(edit.cenopad_sold_count) || 0) : 0);
+    }
     var rop = document.getElementById("raffle-old-price");
     if (rop) {
       rop.value =
@@ -477,6 +543,10 @@
     if (tbankUrlEl) tbankUrlEl.value = edit ? edit.tbank_collection_url || "" : "";
     var rulesEl = document.getElementById("raffle-rules-url");
     if (rulesEl) rulesEl.value = edit ? edit.rules_url || "" : "";
+    var liveNoteEl = document.getElementById("raffle-live-stream-note");
+    if (liveNoteEl) liveNoteEl.value = edit ? edit.live_stream_note || "" : "";
+    var liveUrlEl = document.getElementById("raffle-live-stream-url");
+    if (liveUrlEl) liveUrlEl.value = edit ? edit.live_stream_url || "" : "";
     var sberRecEl = document.getElementById("raffle-recipient-sber");
     if (sberRecEl)
       sberRecEl.value = edit
@@ -554,26 +624,11 @@
 
   function renderParticipantsList() {
     if (!participantsList) return;
-    /** Только цифры из поля: >6 — считаем телефоном, иначе — номерком. */
-    const digits = String((participantsSearch && participantsSearch.value) || "")
-      .trim()
-      .replace(/[^\d]/g, "");
-    const filtered = participantsCache.filter(function (x) {
-      if (!digits) return true;
-      const ticketStr = String(Math.floor(Number(x.ticket_number)) || 0);
-      const phoneDigits = String(x.user_phone || "").replace(/[^\d]/g, "");
-      if (digits.length > 6) {
-        if (!phoneDigits) return false;
-        return phoneDigits.indexOf(digits) !== -1;
-      }
-      if (!ticketStr || ticketStr === "0") return false;
-      return ticketStr === digits || ticketStr.indexOf(digits) === 0;
-    });
-    if (!filtered.length) {
+    if (!participantsCache.length) {
       participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Ничего не найдено.</p>';
       return;
     }
-    participantsList.innerHTML = filtered
+    participantsList.innerHTML = participantsCache
       .map(function (x) {
         const key = String(x.ticket_number) + "|" + String(x.user_phone || "");
         const revealed = revealedPhones.has(key);
@@ -595,6 +650,8 @@
             esc(String(x.user_name != null ? x.user_name : "")) +
             '" data-email="' +
             esc(String(x.user_email != null ? x.user_email : "")) +
+            '" data-locality="' +
+            esc(String(x.user_locality != null ? x.user_locality : "")) +
             '" data-phone="' +
             esc(String(x.user_phone || "")) +
             '">№ ' +
@@ -636,6 +693,12 @@
         );
       })
       .join("");
+    if (participantsHasMore) {
+      participantsList.insertAdjacentHTML(
+        "beforeend",
+        '<div class="admin-raffle-participants__more">Прокрутите ниже, чтобы подгрузить еще...</div>',
+      );
+    }
     participantsList.querySelectorAll(".admin-raffle-participant-card__phone").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const key = btn.getAttribute("data-key");
@@ -658,7 +721,7 @@
     if (!wholesalersCache.length) {
       el.innerHTML =
         '<p class="admin-raffle-participants__empty" style="margin:0;border-style:dashed">' +
-        "Пока нет. Номер оптовика присваивается за каждые 10 подтверждённых номерков по очереди.</p>";
+        "Пока нет. Номер оптовика присваивается за каждые 10 закреплённых номерков по очереди.</p>";
       return;
     }
     el.innerHTML = wholesalersCache
@@ -782,6 +845,10 @@
     participantsCache = [];
     wholesalersCache = [];
     participantsWholesaleEnabled = false;
+    participantsTotal = 0;
+    participantsOffset = 0;
+    participantsHasMore = false;
+    participantsReqId += 1;
     revealedPhones.clear();
     if (participantsSearch) participantsSearch.value = "";
     var bulkTa = document.getElementById("raffle-bulk-phones");
@@ -801,16 +868,7 @@
     modalParticipants.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     try {
-      const data = await apiJson("/api/admin/raffles/" + raffleId + "/participants", {
-        headers: authHeaders(),
-        cache: "no-store",
-      });
-      if (participantsRaffleId !== raffleId) return;
-      participantsCache = Array.isArray(data.participants) ? data.participants : [];
-      wholesalersCache = Array.isArray(data.wholesalers) ? data.wholesalers : [];
-      participantsWholesaleEnabled = !!data.wholesale_enabled;
-      renderWholesalersList();
-      renderParticipantsList();
+      await loadParticipantsPage({ reset: true, includeWholesalers: true });
     } catch (e) {
       participantsList.innerHTML =
         '<p class="admin-raffle-participants__empty">' +
@@ -826,6 +884,10 @@
     modalParticipants.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
     resetSingleAssignForm();
+    if (participantsSearchTimer) {
+      clearTimeout(participantsSearchTimer);
+      participantsSearchTimer = null;
+    }
     participantsRaffleId = null;
   }
 
@@ -879,7 +941,26 @@
    * Вызывается из admin.js после общей проверки admin-сессии (вкладка ?tab=raffles).
    * Отдельный «замок» на этой странице не показываем — тот же контекст, что и поддержка.
    */
+  function bindRafflesCatalogTabsOnce() {
+    if (window.__abRafflesCatalogTabsBound) return;
+    window.__abRafflesCatalogTabsBound = true;
+    document.querySelectorAll("[data-raffles-tab]").forEach(function (tabBtn) {
+      tabBtn.addEventListener("click", function () {
+        var t = tabBtn.getAttribute("data-raffles-tab");
+        if (t !== "active" && t !== "hidden") return;
+        rafflesListTab = t;
+        document.querySelectorAll("[data-raffles-tab]").forEach(function (b) {
+          var on = b.getAttribute("data-raffles-tab") === t;
+          b.classList.toggle("admin-raffles-tab--active", on);
+          b.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        renderList();
+      });
+    });
+  }
+
   window.abInitRaffles = function () {
+    bindRafflesCatalogTabsOnce();
     loadRaffles().catch(function (err) {
       var st = err && err.status;
       if (st === 401) {
@@ -898,20 +979,6 @@
     syncSessionFromServer();
   };
 
-  document.querySelectorAll("[data-raffles-tab]").forEach(function (tabBtn) {
-    tabBtn.addEventListener("click", function () {
-      var t = tabBtn.getAttribute("data-raffles-tab");
-      if (t !== "active" && t !== "hidden") return;
-      rafflesListTab = t;
-      document.querySelectorAll("[data-raffles-tab]").forEach(function (b) {
-        var on = b.getAttribute("data-raffles-tab") === t;
-        b.classList.toggle("admin-raffles-tab--active", on);
-        b.setAttribute("aria-selected", on ? "true" : "false");
-      });
-      renderList();
-    });
-  });
-
   document.getElementById("btn-raffle-new")?.addEventListener("click", function () {
     openForm(null);
   });
@@ -921,7 +988,28 @@
     .getElementById("modal-raffle-participants-close")
     ?.addEventListener("click", closeParticipants);
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
-  participantsSearch?.addEventListener("input", renderParticipantsList);
+  participantsSearch?.addEventListener("input", function () {
+    if (!participantsRaffleId) return;
+    if (participantsSearchTimer) clearTimeout(participantsSearchTimer);
+    participantsSearchTimer = setTimeout(function () {
+      participantsSearchTimer = null;
+      void loadParticipantsPage({ reset: true, includeWholesalers: false }).catch(function (err) {
+        if (!participantsList) return;
+        participantsList.innerHTML =
+          '<p class="admin-raffle-participants__empty">' +
+          esc((err && err.message) || "Не удалось загрузить участников") +
+          "</p>";
+      });
+    }, 250);
+  });
+  participantsList?.addEventListener("scroll", function () {
+    if (!participantsRaffleId || participantsActiveTab !== "participants") return;
+    if (!participantsHasMore || participantsLoading) return;
+    var nearBottom =
+      participantsList.scrollTop + participantsList.clientHeight >= participantsList.scrollHeight - 120;
+    if (!nearBottom) return;
+    void loadParticipantsPage({ reset: false, includeWholesalers: false }).catch(function () {});
+  });
   modalParticipants?.addEventListener("click", function (e) {
     var btn = e.target && e.target.closest && e.target.closest(".admin-raffle-participants-tab");
     if (!btn || !modalParticipants.contains(btn)) return;
@@ -969,17 +1057,7 @@
           }),
         });
         setSingleAssignStatus("Номерок успешно выдан.", "is-free");
-        const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
-          headers: authHeaders(),
-          cache: "no-store",
-        });
-        if (participantsRaffleId) {
-          participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
-          wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
-          participantsWholesaleEnabled = !!bundle.wholesale_enabled;
-          renderWholesalersList();
-          renderParticipantsList();
-        }
+        await refreshParticipantsBundle();
         raffleSingleTicketIsFree = false;
         if (raffleSingleTicket) raffleSingleTicket.value = "";
         updateSingleAssignSubmitState();
@@ -1039,17 +1117,7 @@
             }
             resultEl.textContent = msg;
           }
-          const bundle = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/participants", {
-            headers: authHeaders(),
-            cache: "no-store",
-          });
-          if (participantsRaffleId) {
-            participantsCache = Array.isArray(bundle.participants) ? bundle.participants : [];
-            wholesalersCache = Array.isArray(bundle.wholesalers) ? bundle.wholesalers : [];
-            participantsWholesaleEnabled = !!bundle.wholesale_enabled;
-            renderWholesalersList();
-            renderParticipantsList();
-          }
+          await refreshParticipantsBundle();
         } catch (err) {
           alert((err && err.message) || "Не удалось назначить");
         } finally {
@@ -1077,6 +1145,7 @@
       user_id: Number(btn.getAttribute("data-user-id")) || 0,
       user_name: btn.getAttribute("data-name") || "",
       user_email: btn.getAttribute("data-email") || "",
+          user_locality: btn.getAttribute("data-locality") || "",
       user_phone: btn.getAttribute("data-phone") || "",
     });
   });
@@ -1143,6 +1212,15 @@
       title: document.getElementById("raffle-title").value.trim(),
       cover_image_url: coverUrl,
       price_rub: Number(document.getElementById("raffle-price").value),
+      cenopad_enabled: (function () {
+        var el = document.getElementById("raffle-cenopad-enabled");
+        return el ? !!el.checked : false;
+      })(),
+      cenopad_price_rub: (function () {
+        var el = document.getElementById("raffle-cenopad-price");
+        var s = el && String(el.value || "").trim();
+        return s === "" ? 0 : Number(s);
+      })(),
       old_price_rub: (function () {
         var el = document.getElementById("raffle-old-price");
         var s = el && String(el.value || "").trim();
@@ -1156,6 +1234,14 @@
       })(),
       rules_url: (function () {
         var el = document.getElementById("raffle-rules-url");
+        return el ? String(el.value || "").trim() : "";
+      })(),
+      live_stream_note: (function () {
+        var el = document.getElementById("raffle-live-stream-note");
+        return el ? String(el.value || "").trim() : "";
+      })(),
+      live_stream_url: (function () {
+        var el = document.getElementById("raffle-live-stream-url");
         return el ? String(el.value || "").trim() : "";
       })(),
       collection_recipient: (function () {

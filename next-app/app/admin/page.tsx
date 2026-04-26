@@ -1,0 +1,23 @@
+import type { Metadata } from "next";
+import Script from "next/script";
+import AdminMarkup from "./AdminMarkup";
+import "../../../src/styles/admin-raffles.css";
+import "./admin-shell.css";
+
+export const metadata: Metadata = {
+  title: "Админка — поддержка",
+  description: "Панель администратора: обращения пользователей.",
+};
+
+export default function AdminPage() {
+  return (
+    <>
+      <AdminMarkup />
+      <Script src="/static-proxy/js/admin.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-raffles.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-payments.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-users.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-settings.js?v=20260425" strategy="afterInteractive" />
+    </>
+  );
+}

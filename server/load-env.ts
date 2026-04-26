@@ -2,7 +2,6 @@
  * Загрузка .env из корня репозитория (рядом с package.json), а не из process.cwd().
  * Иначе при запуске API из другой папки SMTP_* и SMTP_DEBUG не подхватываются.
  */
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -24,9 +23,5 @@ const debugBoot =
     .toLowerCase() === "true";
 
 if (debugBoot) {
-  console.log("[env] cwd=", process.cwd());
-  console.log("[env] projectRoot=", projectRoot);
-  console.log("[env] .env exists=", existsSync(envPath), envPath);
-  console.log("[env] .env.local exists=", existsSync(envLocalPath), envLocalPath);
-  console.log("[env] SMTP_HOST set=", Boolean(String(process.env.SMTP_HOST ?? "").trim()));
+  console.log("[env] debug mode enabled");
 }

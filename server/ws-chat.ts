@@ -3,12 +3,12 @@ import { WebSocket, WebSocketServer } from "ws";
 import {
   getSupportMessageById,
   getUserById,
-  getUserBySessionToken,
   insertSupportMessage,
   listSupportMessagesForUser,
   markThreadReadByStaff,
   messageToDto,
 } from "./db.js";
+import { getUserBySessionTokenPg } from "./db-auth-pg.js";
 import { parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import { notifyUserEmailStaffReply } from "./notify-email.js";
 import { setStaffTypingForUser, setUserTyping } from "./typing-state.js";
@@ -158,6 +158,45 @@ export function broadcastRafflesFeedUpdated() {
   broadcastJsonToPublicRaffleFeed({ type: "raffles_feed_updated" });
 }
 
+/** Уведомление всем клиентам: изменился флаг техработ на сайте */
+export function broadcastMaintenanceStatusUpdated(enabled: boolean) {
+  const payload = JSON.stringify({ type: "site_maintenance_updated", maintenance: Boolean(enabled) });
+  for (const ws of adminSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "site_maintenance_updated", maintenance: Boolean(enabled) });
+}
+
+/** Уведомление всем клиентам: изменилось количество онлайн в акции */
+export function broadcastRaffleViewersUpdated(raffleId: number) {
+  const rid = Math.floor(Number(raffleId));
+  if (!Number.isFinite(rid) || rid < 1) return;
+  const payload = JSON.stringify({ type: "raffle_viewers_updated", raffle_id: rid });
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "raffle_viewers_updated", raffle_id: rid });
+}
+
 /** Пользователь печатает → всем админам (видно в выбранном диалоге) */
 export function broadcastTypingUserToAdmins(userId: number, active: boolean) {
   const id = uid(userId);
@@ -202,7 +241,7 @@ function sendJson(ws: WebSocket, obj: unknown) {
   if (ws.readyState === OPEN) ws.send(JSON.stringify(obj));
 }
 
-function routeUserSocketMessage(userId: number, raw: string) {
+async function routeUserSocketMessage(userId: number, raw: string) {
   let msg: { type?: string; body?: string; active?: boolean; attachment?: unknown };
   try {
     msg = JSON.parse(raw) as { type?: string; body?: string; active?: boolean; attachment?: unknown };
@@ -219,14 +258,14 @@ function routeUserSocketMessage(userId: number, raw: string) {
   if (msg.attachment !== undefined && !att) return;
   if (!text && !att) return;
   if (text.length > 4000) return;
-  const id = insertSupportMessage(userId, text, false, att);
-  const row = getSupportMessageById(id);
+  const id = await insertSupportMessage(userId, text, false, att);
+  const row = await getSupportMessageById(id);
   if (!row) return;
   const dto = messageToDto(row);
   broadcastChatMessage(userId, dto);
 }
 
-function routeAdminSocketMessage(ws: WebSocket, raw: string) {
+async function routeAdminSocketMessage(ws: WebSocket, raw: string) {
   let msg: { type?: string; body?: string; userId?: number; active?: boolean; attachment?: unknown };
   try {
     msg = JSON.parse(raw) as {
@@ -242,7 +281,7 @@ function routeAdminSocketMessage(ws: WebSocket, raw: string) {
   if (msg.type === "typing") {
     const targetId = Number(msg.userId);
     if (!Number.isFinite(targetId)) return;
-    if (!getUserById(targetId)) return;
+    if (!(await getUserById(targetId))) return;
     broadcastTypingStaffToUser(targetId, Boolean(msg.active));
     return;
   }
@@ -254,11 +293,11 @@ function routeAdminSocketMessage(ws: WebSocket, raw: string) {
   if (msg.attachment !== undefined && !att) return;
   if (!text && !att) return;
   if (text.length > 4000) return;
-  if (!getUserById(userId)) return;
-  const id = insertSupportMessage(userId, text, true, att);
-  markThreadReadByStaff(userId);
+  if (!(await getUserById(userId))) return;
+  const id = await insertSupportMessage(userId, text, true, att);
+  await markThreadReadByStaff(userId);
   broadcastThreadReadByStaff(userId);
-  const row = getSupportMessageById(id);
+  const row = await getSupportMessageById(id);
   if (!row) return;
   const dto = messageToDto(row);
   broadcastChatMessage(userId, dto);
@@ -271,6 +310,7 @@ function routeAdminSocketMessage(ws: WebSocket, raw: string) {
 
 export function attachWebSocket(wss: WebSocketServer) {
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+    void (async () => {
     const host = req.headers.host ?? "localhost";
     let url: URL;
     try {
@@ -294,7 +334,7 @@ export function attachWebSocket(wss: WebSocketServer) {
       ws.close();
       return;
     }
-    const user = getUserBySessionToken(token);
+    const user = await getUserBySessionTokenPg(token);
     if (!user) {
       ws.close();
       return;
@@ -308,7 +348,7 @@ export function attachWebSocket(wss: WebSocketServer) {
       adminSockets.add(ws);
       sendJson(ws, { type: "ready", role: "admin" });
       ws.on("message", (data) => {
-        routeAdminSocketMessage(ws, data.toString());
+        void routeAdminSocketMessage(ws, data.toString());
       });
       ws.on("close", () => {
         adminSockets.delete(ws);
@@ -317,13 +357,20 @@ export function attachWebSocket(wss: WebSocketServer) {
     }
 
     addUserSocket(Number(user.id), ws);
-    const messages = listSupportMessagesForUser(user.id).map(messageToDto);
+    const messages = (await listSupportMessagesForUser(user.id)).map(messageToDto);
     sendJson(ws, { type: "ready", role: "user", messages });
     ws.on("message", (data) => {
-      routeUserSocketMessage(user.id, data.toString());
+      void routeUserSocketMessage(user.id, data.toString());
     });
     ws.on("close", () => {
       removeUserSocket(Number(user.id), ws);
+    });
+    })().catch(() => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
     });
   });
 }

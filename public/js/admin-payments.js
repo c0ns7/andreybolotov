@@ -153,6 +153,8 @@
   }
 
   var reservedUntilCountdownTimerId = null;
+  var paymentsHistoryObserver = null;
+  var paymentsHistoryLoading = false;
 
   function formatTimeLeftMs(leftMs) {
     var n = Number(leftMs);
@@ -190,7 +192,7 @@
   }
 
   function setPaymentsTab(tab, root) {
-    var t = tab === "pending" ? "pending" : "reserved";
+    var t = tab === "pending" || tab === "history" ? tab : "reserved";
     root.querySelectorAll("[data-payments-tab]").forEach(function (btn) {
       var on = btn.getAttribute("data-payments-tab") === t;
       btn.classList.toggle("is-active", on);
@@ -213,10 +215,15 @@
   function updatePaymentTabBadges(root) {
     var nRes = root.querySelectorAll('[data-payments-panel="reserved"] .admin-payment-card').length;
     var nPen = root.querySelectorAll('[data-payments-panel="pending"] .admin-payment-card').length;
+    var nHist = root.querySelectorAll('[data-payments-panel="history"] .admin-payment-card').length;
+    var nHistTotal = Number(root.getAttribute("data-history-total"));
+    var useHist = Number.isFinite(nHistTotal) && nHistTotal >= 0 ? Math.floor(nHistTotal) : nHist;
     var elR = root.querySelector('[data-payments-count="reserved"]');
     var elP = root.querySelector('[data-payments-count="pending"]');
+    var elH = root.querySelector('[data-payments-count="history"]');
     if (elR) elR.textContent = String(nRes);
     if (elP) elP.textContent = String(nPen);
+    if (elH) elH.textContent = String(useHist);
   }
 
   function bindChatHandlers(container, token) {
@@ -293,7 +300,7 @@
     btn.addEventListener("click", function () {
       if (
         !window.confirm(
-          "Отправить в чат поддержки всем с подтверждённой оплатой короткое приглашение в приватный чат MAX (без текста про номерки)? Повтор — не чаще раз в 2 минуты.",
+          "Отправить в чат поддержки всем с закреплённой оплатой короткое приглашение в приватный чат MAX (без текста про номерки)? Повтор — не чаще раз в 2 минуты.",
         )
       ) {
         return;
@@ -324,11 +331,99 @@
     });
   }
 
+  function unbindHistoryInfiniteScroll() {
+    if (paymentsHistoryObserver) {
+      try {
+        paymentsHistoryObserver.disconnect();
+      } catch {}
+      paymentsHistoryObserver = null;
+    }
+    paymentsHistoryLoading = false;
+  }
+
+  function bindHistoryInfiniteScroll(opts) {
+    var root = opts && opts.root ? opts.root : null;
+    var token = opts && opts.token ? String(opts.token) : "";
+    var initialHasMore = !!(opts && opts.hasMore);
+    var nextOffset = Number(opts && opts.nextOffset);
+    if (!root || !token) return;
+    var section = root.querySelector('[data-payments-section="history"]');
+    if (!section) return;
+    var panel = section.closest('[data-payments-panel="history"]');
+    if (!panel) panel = section.parentElement;
+    unbindHistoryInfiniteScroll();
+    if (!initialHasMore) return;
+    var offset = Number.isFinite(nextOffset) ? Math.max(0, Math.floor(nextOffset)) : section.querySelectorAll(".admin-payment-card").length;
+    var sentinel = document.createElement("div");
+    sentinel.className = "admin-payments-history-sentinel";
+    sentinel.setAttribute("data-history-sentinel", "1");
+    sentinel.textContent = "Прокрутите вниз, чтобы загрузить еще...";
+    panel.appendChild(sentinel);
+
+    var loadMore = function () {
+      if (paymentsHistoryLoading) return;
+      paymentsHistoryLoading = true;
+      sentinel.textContent = "Загружаем еще...";
+      fetch(
+        "/api/admin/raffle-payments/history?limit=10&offset=" + encodeURIComponent(String(offset)),
+        {
+          headers: { Authorization: "Bearer " + token },
+          cache: "no-store",
+        },
+      )
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { ok: res.ok, data: data };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok) throw new Error((x.data && x.data.error) || "Ошибка");
+          var rows = Array.isArray(x.data.history) ? x.data.history : [];
+          if (rows.length) {
+            section.insertAdjacentHTML("beforeend", rows.map(renderPaymentHistoryCard).join(""));
+            bindChatHandlers(section, token);
+          }
+          var nextOffsetRaw = Number(x.data.next_offset);
+          offset = Number.isFinite(nextOffsetRaw) ? nextOffsetRaw : offset + rows.length;
+          var hasMore = !!x.data.has_more;
+          if (!hasMore || rows.length === 0) {
+            sentinel.textContent = "Это вся история платежей.";
+            unbindHistoryInfiniteScroll();
+            return;
+          }
+          sentinel.textContent = "Прокрутите вниз, чтобы загрузить еще...";
+          var mainEl = document.getElementById("admin-payments-main");
+          if (mainEl) updatePaymentTabBadges(mainEl);
+        })
+        .catch(function () {
+          sentinel.textContent = "Не удалось загрузить. Прокрутите еще раз.";
+        })
+        .finally(function () {
+          paymentsHistoryLoading = false;
+        });
+    };
+
+    paymentsHistoryObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) loadMore();
+        });
+      },
+      {
+        root: null,
+        rootMargin: "220px 0px 220px 0px",
+        threshold: 0.01,
+      },
+    );
+    paymentsHistoryObserver.observe(sentinel);
+  }
+
   function loadList() {
     const listEl = document.getElementById("admin-payments-list");
     const tabsSlot = document.getElementById("admin-payments-tabs-slot");
     const mainEl = document.getElementById("admin-payments-main");
     if (!listEl) return;
+    unbindHistoryInfiniteScroll();
     const s = loadSession();
     if (!s || !s.token) {
       if (tabsSlot) tabsSlot.innerHTML = "";
@@ -355,10 +450,13 @@
         if (!x.ok) throw new Error(x.data.error || "Ошибка");
         const payments = x.data.payments || [];
         const active = x.data.active_orders || [];
+        const history = x.data.history || [];
+        const historyHasMore = !!x.data.history_has_more;
+        const historyNextOffset = Number(x.data.history_next_offset ?? history.length);
         const serverTimeMs = x.data.server_time_ms;
         const skewHtml = renderServerSkewNote(serverTimeMs);
 
-        if (!payments.length && !active.length) {
+        if (!payments.length && !active.length && !history.length) {
           if (tabsSlot) tabsSlot.innerHTML = "";
           listEl.innerHTML =
             skewHtml +
@@ -370,7 +468,7 @@
             "<p class=\"admin-payments-empty__hint\">Нет активных броней и заявок с чеками.</p>" +
             '<div class="admin-payments-empty__actions">' +
             '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
-            '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (подтверждённые)</button>' +
+            '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (закреплённые)</button>' +
             "</div>" +
             "</div>";
           bindPaymentsReloadButton(listEl);
@@ -380,7 +478,10 @@
 
         var nRes = active.length;
         var nPen = payments.length;
+        var historyTotalRaw = Number(x.data.history_total);
+        var nHist = Number.isFinite(historyTotalRaw) && historyTotalRaw >= 0 ? Math.floor(historyTotalRaw) : history.length;
         var initialTab = nRes > 0 ? "reserved" : "pending";
+        if (initialTab === "pending" && nPen === 0 && nHist > 0) initialTab = "history";
         var tabsHtml = "";
         tabsHtml += '<div class="admin-payments-tabs" role="tablist" aria-label="Тип заявок">';
         tabsHtml +=
@@ -399,12 +500,20 @@
           '">На подтверждение <span class="admin-payments-tab__badge" data-payments-count="pending">' +
           String(nPen) +
           "</span></button>";
+        tabsHtml +=
+          '<button type="button" class="admin-payments-tab' +
+          (initialTab === "history" ? " is-active" : "") +
+          '" data-payments-tab="history" role="tab" aria-selected="' +
+          (initialTab === "history" ? "true" : "false") +
+          '">История платежей <span class="admin-payments-tab__badge" data-payments-count="history">' +
+          String(nHist) +
+          "</span></button>";
         tabsHtml += "</div>";
         tabsHtml += '<div class="admin-payments-broadcast">';
         tabsHtml +=
-          '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (подтверждённые)</button>';
+          '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (закреплённые)</button>';
         tabsHtml +=
-          '<p class="admin-payments-broadcast__hint">Всем с подтверждённой оплатой — в чат уйдёт только приглашение в приватный MAX, без текста про номерки.</p>';
+          '<p class="admin-payments-broadcast__hint">Всем с закреплённой оплатой — в чат уйдёт только приглашение в приватный MAX, без текста про номерки.</p>';
         tabsHtml += "</div>";
 
         var panelsHtml = "";
@@ -433,14 +542,33 @@
           panelsHtml +=
             '<p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p>';
         }
+        panelsHtml += "</div></div>";
+        panelsHtml +=
+          '<div class="admin-payments-tabpanel" data-payments-panel="history" role="tabpanel"' +
+          (initialTab !== "history" ? " hidden" : "") +
+          ">";
+        panelsHtml +=
+          '<div class="admin-payments-section admin-payments-cards-grid" data-payments-section="history">';
+        if (history.length) {
+          panelsHtml += history.map(renderPaymentHistoryCard).join("");
+        } else {
+          panelsHtml += '<p class="admin-payments-section__empty-note">История платежей пока пуста.</p>';
+        }
         panelsHtml += "</div></div></div>";
 
         if (tabsSlot) tabsSlot.innerHTML = skewHtml + tabsHtml;
         listEl.innerHTML = panelsHtml;
         var rootForTabs = mainEl || listEl;
+        rootForTabs.setAttribute("data-history-total", String(nHist));
         bindPaymentsTabs(rootForTabs);
         bindChatHandlers(listEl, s.token);
         bindMaxInviteBroadcast(rootForTabs, s.token);
+        bindHistoryInfiniteScroll({
+          root: rootForTabs,
+          token: s.token,
+          hasMore: historyHasMore,
+          nextOffset: historyNextOffset,
+        });
         initReservedUntilCountdown(serverTimeMs);
       })
       .catch(function (e) {
@@ -692,6 +820,139 @@
       '">' +
       ICO.unlock +
       "<span>Снять бронь полностью</span></button>" +
+      "</div></div></article>"
+    );
+  }
+
+  function paymentStatusLabel(status) {
+    var s = String(status || "");
+    if (s === "confirmed") return "Закреплено";
+    if (s === "pending_review") return "На проверке";
+    if (s === "reserved") return "Бронь";
+    if (s === "rejected") return "Отклонено / отменено";
+    return s || "—";
+  }
+
+  function renderHistoryReceipts(items) {
+    var list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      return (
+        '<div class="admin-payment-rhist" role="region" aria-label="Чеки по заявке">' +
+        '<div class="admin-payment-rhist__head">' +
+        ICO.receipt +
+        '<span class="admin-payment-rhist__title">Чеки</span>' +
+        '<span class="admin-payment-rhist__hint">не загружались</span>' +
+        "</div></div>"
+      );
+    }
+    var rows = list
+      .map(function (it) {
+        var when = esc(formatReceiptHistoryLocal(it.at_ms));
+        var name = esc(String(it.name || "чек"));
+        var url = esc(String(it.url || "").trim());
+        if (!url) return "";
+        return (
+          '<li class="admin-payment-rhist__item">' +
+          '<span class="admin-payment-rhist__meta">' +
+          when +
+          "</span>" +
+          '<a class="admin-payment-rhist__link" href="' +
+          url +
+          '" target="_blank" rel="noopener noreferrer">' +
+          ICO.receipt +
+          '<span class="admin-payment-rhist__fname">' +
+          name +
+          "</span>" +
+          '<span class="admin-payment-rhist__go" aria-hidden="true">↗</span></a></li>'
+        );
+      })
+      .filter(Boolean)
+      .join("");
+    if (!rows) return "";
+    return (
+      '<div class="admin-payment-rhist" role="region" aria-label="Чеки по заявке">' +
+      '<div class="admin-payment-rhist__head">' +
+      ICO.receipt +
+      '<span class="admin-payment-rhist__title">Чеки по заявке</span>' +
+      '<span class="admin-payment-rhist__hint">все загрузки</span>' +
+      "</div>" +
+      '<ul class="admin-payment-rhist__list">' +
+      rows +
+      "</ul></div>"
+    );
+  }
+
+  function renderPaymentHistoryCard(p) {
+    const id = String(p.id);
+    var uid = p.user_id != null ? Number(p.user_id) : NaN;
+    var chatBtn =
+      Number.isFinite(uid) && uid > 0
+        ? '<button type="button" class="admin-payment-btn admin-payment-btn--chat" data-chat-user="' +
+          String(uid) +
+          '">' +
+          ICO.chat +
+          "<span>Написать в чат</span></button>"
+        : "";
+    var bankLabel = p.bank === "sber" ? "Сбербанк" : p.bank === "other" ? "Другой банк" : "—";
+    var nums = Array.isArray(p.ticket_numbers) ? p.ticket_numbers : [];
+    var numsLabel = nums.length ? esc(nums.join(", ")) : "—";
+    return (
+      '<article class="admin-payment-card" data-order-id="' +
+      id +
+      '">' +
+      '<div class="admin-payment-card__stripe" aria-hidden="true"></div>' +
+      '<div class="admin-payment-card__body">' +
+      '<header class="admin-payment-card__header">' +
+      '<div class="admin-payment-card__raffle">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--violet">' +
+      ICO.raffle +
+      "</span>" +
+      '<div class="admin-payment-card__raffle-text">' +
+      '<span class="admin-payment-card__eyebrow">Заявка A' +
+      esc(String(id)) +
+      "</span>" +
+      '<h3 class="admin-payment-card__title">' +
+      esc(String(p.raffle_title || "Без названия")) +
+      "</h3></div></div>" +
+      '<div class="admin-payment-card__sum-block">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--green">' +
+      ICO.rub +
+      "</span>" +
+      '<div><span class="admin-payment-card__eyebrow">Сумма</span>' +
+      '<p class="admin-payment-card__sum">' +
+      esc(String(p.amount_rub ?? 0)) +
+      ' <span class="admin-payment-card__currency">₽</span></p></div></div></header>' +
+      '<ul class="admin-payment-card__facts">' +
+      '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--teal">' +
+      ICO.time +
+      "</span><span><strong>Создано</strong> · " +
+      esc(formatOrderCreatedLocal(p.created_at)) +
+      ' <span class="admin-payment-card__tz-hint">(ваш часовой пояс)</span></span></li>' +
+      '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
+      ICO.user +
+      "</span><span>" +
+      esc(String(p.user_name || "—")) +
+      " · " +
+      esc(String(p.user_phone || "")) +
+      "</span></li>" +
+      '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+      ICO.tickets +
+      "</span><span><strong>" +
+      String(p.ticket_count ?? 0) +
+      "</strong> номерков · " +
+      numsLabel +
+      "</span></li>" +
+      '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--slate">' +
+      ICO.bank +
+      "</span><span>" +
+      esc(bankLabel) +
+      " · " +
+      esc(paymentStatusLabel(p.status)) +
+      "</span></li>" +
+      "</ul>" +
+      renderHistoryReceipts(p.receipt_history) +
+      '<div class="admin-payment-card__actions">' +
+      chatBtn +
       "</div></div></article>"
     );
   }

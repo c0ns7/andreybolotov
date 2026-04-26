@@ -41,9 +41,6 @@ function createTransporter(): Transporter {
         error: (msg: unknown) => console.error("[smtp]", msg),
       }
     : undefined;
-  if (smtpDebugEnabled()) {
-    console.log("[mail] createTransport", { host, port, secure: port === 465, user: user ? `${user.slice(0, 3)}…` : "" });
-  }
   const transportOpts = {
     host,
     port,
@@ -89,9 +86,6 @@ async function sendTransactionalMail(opts: {
   const maxAttempts = Math.min(Math.max(Number(process.env.SMTP_MAX_ATTEMPTS ?? "3"), 1), 5);
   let lastDetail = "";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (smtpDebugEnabled()) {
-      console.log("[mail] sendMail try", attempt, "→", opts.to, "subject:", String(opts.subject).slice(0, 60));
-    }
     try {
       await transporter.sendMail({
         from,

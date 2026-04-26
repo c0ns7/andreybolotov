@@ -192,7 +192,7 @@
     };
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function initNumbersPage() {
     root = document.getElementById("numbers-page");
     if (!root) return;
     statusEl = document.getElementById("numbers-status");
@@ -201,5 +201,11 @@
     metaEl = document.getElementById("numbers-page-meta");
     loadData();
     connectWs();
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initNumbersPage);
+  } else {
+    initNumbersPage();
+  }
 })();

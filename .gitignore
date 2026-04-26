@@ -6,3 +6,8 @@ data/
 .env
 .env.*
 !.env.example
+uploads/
+public/uploads/
+.next/
+*.tsbuildinfo
+*.log

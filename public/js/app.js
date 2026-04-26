@@ -105,14 +105,28 @@
     p = p.replace(/\/$/, "") || "/";
     return p;
   }
-  var routePath = normalizeAppPath(location.pathname);
-  var IS_GUEST_LANDING = routePath === "/";
-  var IS_HOME_APP = routePath === "/home";
-  var IS_RAFFLE_PURCHASE_PAGE = routePath === "/home/raffle";
-  var IS_RAFFLE_CONFIRM_PAGE = routePath === "/home/raffle/confirm";
-  var IS_MAINTENANCE_PAGE = routePath === "/maintenance";
-  var IS_HOME_RESET_PAGE = routePath === "/home/reset-password";
-  var IS_HOME_SETTINGS_PAGE = routePath === "/home/settings";
+  /** Флаги маршрута: при клиентской навигации Next нужно обновлять через syncRouteFromLocation (popstate / ab-route / bfcache). */
+  var routePath = "/";
+  var IS_GUEST_LANDING = true;
+  var IS_HOME_APP = false;
+  var IS_RAFFLE_PURCHASE_PAGE = false;
+  var IS_RAFFLE_CONFIRM_PAGE = false;
+  var IS_MAINTENANCE_PAGE = false;
+  var IS_HOME_RESET_PAGE = false;
+  var IS_HOME_SETTINGS_PAGE = false;
+
+  function syncRouteFromLocation() {
+    routePath = normalizeAppPath(location.pathname);
+    IS_GUEST_LANDING = routePath === "/";
+    IS_HOME_APP = routePath === "/home";
+    IS_RAFFLE_PURCHASE_PAGE = routePath === "/home/raffle";
+    IS_RAFFLE_CONFIRM_PAGE = routePath === "/home/raffle/confirm";
+    IS_MAINTENANCE_PAGE = routePath === "/maintenance";
+    IS_HOME_RESET_PAGE = routePath === "/home/reset-password";
+    IS_HOME_SETTINGS_PAGE = routePath === "/home/settings";
+  }
+
+  syncRouteFromLocation();
   var RESUME_PAYMENT_ORDER_KEY = "ab_resume_payment_order";
 
   function applyStoredAppearance() {
@@ -834,10 +848,17 @@
   }
 
   /**
-   * Тот же origin, что и страница — в dev Vite проксирует /ws на API :3000 (astro.config.mjs).
-   * Прямой ws://…:3000 в браузере часто не работает (файрвол, другой host).
+   * Тот же origin, что и страница — в dev Vite проксирует /ws на API (astro.config.mjs).
+   * Next.js: rewrites не проксируют WebSocket — задаётся window.__AB_WS_ORIGIN__ (Fastify, порт 8787).
    */
   function buildChatWebSocketUrl(token) {
+    try {
+      var fixed = typeof window !== "undefined" && window.__AB_WS_ORIGIN__;
+      if (fixed) {
+        var o = String(fixed).replace(/\/$/, "");
+        return o + "/ws?token=" + encodeURIComponent(token);
+      }
+    } catch (_) {}
     var proto = location.protocol === "https:" ? "wss:" : "ws:";
     return proto + "//" + location.host + "/ws?token=" + encodeURIComponent(token);
   }
@@ -2363,7 +2384,7 @@
           })
           .join(", ");
         if (nums.length > 20) ns += "…";
-        lines.push("По этой акции у вас уже есть подтверждённые номерки" + (ns ? ": " + ns + "." : "."));
+        lines.push("По этой акции у вас уже есть закреплённые номерки" + (ns ? ": " + ns + "." : "."));
       }
       if (ctx.current_order_reject_count > 0) {
         lines.push(
@@ -2788,7 +2809,7 @@
     return (
       '<div class="tickets-empty">' +
       '<h4 class="tickets-empty__title">Нет купленных билетов</h4>' +
-      '<p class="tickets-empty__text">После оплаты и подтверждения по акциям они появятся здесь.</p></div>'
+      '<p class="tickets-empty__text">После оплаты и закрепления по акциям они появятся здесь.</p></div>'
     );
   }
 
@@ -2997,12 +3018,12 @@
         html += "</section>";
       }
       if (pending.length) {
-        html += '<section class="tickets-section"><h3 class="tickets-section__title">На проверке</h3>';
+        html += '<section class="tickets-section tickets-section--pending"><h3 class="tickets-section__title">На проверке</h3>';
         html += buildTicketsPendingHtml(pending);
         html += "</section>";
       }
       if (confirmed.length) {
-        html += '<section class="tickets-section"><h3 class="tickets-section__title">Утвержденные</h3>';
+        html += '<section class="tickets-section tickets-section--confirmed"><h3 class="tickets-section__title">Закрепленные</h3>';
         html += buildTicketsConfirmedHtml(confirmed);
         html += "</section>";
       }
@@ -3469,8 +3490,8 @@
           "</span>" +
           "</div>" +
           historyNumbersLine("В брони", nums.reserved, "") +
-          historyNumbersLine("На проверке", nums.pending_review, "") +
-          historyNumbersLine("Подтверждено", nums.confirmed, "") +
+          historyNumbersLine("На проверке", nums.pending_review, "history-row--pending") +
+          historyNumbersLine("Закреплено", nums.confirmed, "history-row--confirmed") +
           historyNumbersLine("Бонус 5+1", nums.bonus_confirmed, "history-row--bonus") +
           "</article>"
         );
@@ -3965,12 +3986,12 @@
           '">Что за акция 5+1?</button>'
         : "";
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
-    var ctaLabel = st === "active" || st === "paused" || st === "closed" ? "Участвовать" : "Подробнее";
+    var ctaLabel = st === "closed" ? "Подробно" : st === "active" || st === "paused" ? "Участвовать" : "Подробнее";
     var ctaInner =
       ctaLabel === "Участвовать"
         ? '<span class="raffle-card__cta-label">Участвовать</span><span class="raffle-card__cta-arrow" aria-hidden="true">→</span>'
         : '<span class="raffle-card__cta-label">' + escapeHtml(ctaLabel) + "</span>";
-    var ctaDisabledAttr = st === "paused" || st === "closed" ? ' disabled aria-disabled="true"' : "";
+    var ctaDisabledAttr = st === "paused" ? ' disabled aria-disabled="true"' : "";
     var viewers = Math.max(0, Number(r.viewers_count) || 0);
     var total = Math.max(0, Number(r.ticket_count) || 0);
     var occupied = Math.max(0, Math.min(total, Number(r.occupied_count) || 0));
@@ -4092,7 +4113,10 @@
           var rst = String(r.status || "active");
           if (rst === "active") {
             location.href = "/home/raffle?id=" + encodeURIComponent(String(r.id));
-          } else if (rst === "paused" || rst === "closed") {
+          } else if (rst === "closed") {
+            openRaffleUnavailableModal(r);
+            return;
+          } else if (rst === "paused") {
             return;
           }
         }
@@ -5003,10 +5027,15 @@
       clearRaffleReservationCountdownAnchor();
     }
     if (IS_RAFFLE_PURCHASE_PAGE) {
-      restoreRaffleDraftSelectionFromStorage();
-      for (var si = 0; si < raffleDetailState.orderNumbers.length; si++) {
-        if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) break;
-        raffleDetailState.selected.add(raffleDetailState.orderNumbers[si]);
+      var orderStatus = raffleDetailState.order ? String(raffleDetailState.order.status || "") : "";
+      if (orderStatus === "reserved") {
+        restoreRaffleDraftSelectionFromStorage();
+        for (var si = 0; si < raffleDetailState.orderNumbers.length; si++) {
+          if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) break;
+          raffleDetailState.selected.add(raffleDetailState.orderNumbers[si]);
+        }
+      } else if (raffleDetailState.selected.size) {
+        raffleDetailState.selected.clear();
       }
       raffleDraftHydrated = true;
       persistRaffleDraftSelection();
@@ -5150,14 +5179,43 @@
     var icC = modalRaffleUnavailable.querySelector(".raffle-unavailable__icon--closed");
     if (icP) icP.hidden = st !== "paused";
     if (icC) icC.hidden = st !== "closed";
+    var svgP = modalRaffleUnavailable.querySelector(".raffle-unavailable__hero-icon-svg--paused");
+    var svgC = modalRaffleUnavailable.querySelector(".raffle-unavailable__hero-icon-svg--closed");
+    if (svgP) svgP.hidden = st !== "paused";
+    if (svgC) svgC.hidden = st !== "closed";
     var heading = document.getElementById("raffle-unavailable-heading");
     var text = document.getElementById("raffle-unavailable-text");
-    if (heading) heading.textContent = String(r.title || "");
+    var cover = document.getElementById("raffle-unavailable-cover");
+    var liveTime = document.getElementById("raffle-unavailable-live-time");
+    var cta = document.getElementById("raffle-unavailable-cta");
+    var ctaLabel = document.getElementById("raffle-unavailable-cta-label");
+    if (heading) heading.textContent = st === "paused" ? "Техническая пауза" : "Продажи закрыты";
     if (text) {
       text.textContent =
         st === "paused"
           ? "Техническая пауза. Продажи временно недоступны. Скоро вернёмся."
           : "Продажи закрыты: все номерки распроданы. Скоро назначим прямой эфир для награждения победителей — следите за новостями в чате и на сайте.";
+    }
+    if (cover && "src" in cover) {
+      var nextCover = String(r.cover_image_url || "").trim();
+      cover.src = nextCover || "/logo.png";
+      cover.alt = String(r.title || "Обложка акции");
+    }
+    if (liveTime) {
+      var customNote = String(r.live_stream_note || "").trim();
+      liveTime.textContent =
+        customNote ||
+        (st === "paused"
+          ? "Пауза в эфире. Скоро объявим новое время продолжения."
+          : "Эфир закончился, смотрите запись эфира по ссылке.");
+    }
+    var streamUrl = String(r.live_stream_url || "").trim();
+    if (cta) cta.hidden = st === "paused" || !streamUrl;
+    if (cta && st !== "paused" && streamUrl) {
+      cta.setAttribute("href", streamUrl);
+    }
+    if (ctaLabel) {
+      ctaLabel.textContent = st === "paused" ? "Ожидайте возобновления" : "Смотреть эфир в VK";
     }
     openModal(modalRaffleUnavailable);
   }
@@ -6671,6 +6729,50 @@
     if (grp && String(this.value || "").trim()) grp.classList.remove("form-group--email-skipped");
   });
 
+  function setRegisterStep(step) {
+    var s = Math.max(1, Math.min(3, Number(step) || 1));
+    var form = document.getElementById("form-register");
+    if (!form) return;
+    form.querySelectorAll(".reg-step").forEach(function (el) {
+      var n = Number(el.getAttribute("data-reg-step"));
+      el.classList.toggle("is-active", n === s);
+    });
+    var indicator = document.getElementById("reg-steps-indicator");
+    if (indicator) indicator.textContent = "Шаг " + String(s) + " из 3";
+  }
+
+  function initRegisterSteps() {
+    setRegisterStep(1);
+    document.getElementById("reg-step-next-1")?.addEventListener("click", function () {
+      const phone = phoneToNormalized((document.getElementById("phone-reg") || {}).value || "");
+      const name = String((document.getElementById("fio-reg") || {}).value || "").trim();
+      if (phone.length !== 11 || !isValidRuMobilePhone(phone)) {
+        showToast("Введите корректный номер телефона", "warning");
+        return;
+      }
+      if (!name) {
+        showToast("Укажите ФИО", "warning");
+        return;
+      }
+      setRegisterStep(2);
+    });
+    document.getElementById("reg-step-next-2")?.addEventListener("click", function () {
+      const email = String((document.getElementById("email-reg") || {}).value || "").trim();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showToast("Укажите корректный email или очистите поле", "warning");
+        return;
+      }
+      setRegisterStep(3);
+    });
+    document.getElementById("reg-step-back-2")?.addEventListener("click", function () {
+      setRegisterStep(1);
+    });
+    document.getElementById("reg-step-back-3")?.addEventListener("click", function () {
+      setRegisterStep(2);
+    });
+  }
+  initRegisterSteps();
+
   function clearBottomSheetDrag(overlay) {
     if (!overlay || !overlay.id) return;
     if (overlay.id === "modal-cart") {
@@ -7025,6 +7127,7 @@
   }
 
   function updateScreens() {
+    syncRouteFromLocation();
     session = loadSession();
     try {
       if (session && session.blocked) accountBlocked = true;
@@ -7170,6 +7273,7 @@
   const btnSplashLogin = document.getElementById("btn-splash-login");
   if (btnSplashReg) {
     btnSplashReg.addEventListener("click", function () {
+      setRegisterStep(1);
       openModal(modalRegister);
     });
   }
@@ -7233,6 +7337,7 @@
   document.getElementById("link-to-register")?.addEventListener("click", function (e) {
     e.preventDefault();
     closeModal(modalLogin);
+    setRegisterStep(1);
     openModal(modalRegister);
   });
 
@@ -7347,6 +7452,7 @@
         formRegister.reset();
         phoneReg.value = "";
         document.getElementById("email-reg-group")?.classList.remove("form-group--email-skipped");
+        setRegisterStep(1);
       })
       .catch(function (err) {
         showToast(err.message || "Ошибка регистрации", "error");
@@ -7727,4 +7833,36 @@
   if (IS_HOME_APP) {
     startHomeRafflesAutoRefresh();
   }
+
+  function onAppRouteChange() {
+    syncRouteFromLocation();
+    try {
+      if (IS_RAFFLE_PURCHASE_PAGE) {
+        document.documentElement.classList.add("raffle-purchase-page");
+      } else {
+        document.documentElement.classList.remove("raffle-purchase-page");
+      }
+    } catch (_) {}
+    updateScreens();
+    if (!IS_RAFFLE_PURCHASE_PAGE && !IS_RAFFLE_CONFIRM_PAGE && !IS_HOME_SETTINGS_PAGE) {
+      loadRafflesFeed();
+    }
+    if (IS_HOME_APP) {
+      startHomeRafflesAutoRefresh();
+    }
+    if (IS_RAFFLE_PURCHASE_PAGE && authVerified) {
+      initRafflePurchasePage().catch(function (e) {
+        console.error("Raffle page init failed:", e);
+      });
+    }
+    if (IS_RAFFLE_CONFIRM_PAGE && authVerified) {
+      initRaffleConfirmPage();
+    }
+  }
+
+  window.addEventListener("popstate", onAppRouteChange);
+  window.addEventListener("pageshow", function (ev) {
+    if (ev.persisted) onAppRouteChange();
+  });
+  window.addEventListener("ab-route", onAppRouteChange);
 })();

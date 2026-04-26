@@ -1,0 +1,31 @@
+@import "../../src/styles/global.css";
+
+html,
+body {
+  min-height: 100%;
+}
+
+/* Step-by-step registration */
+.reg-step {
+  display: none;
+}
+
+.reg-step.is-active {
+  display: block;
+}
+
+.reg-steps-indicator {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.form-actions--split {
+  display: flex;
+  gap: 10px;
+}
+
+.form-actions--split .btn {
+  flex: 1;
+}

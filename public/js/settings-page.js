@@ -100,17 +100,18 @@
     }
   }
 
-  function bindTabs() {
-    var tabs = document.querySelectorAll(".settings-tabs [role='tab']");
-    var panels = document.querySelectorAll(".settings-tab-panel");
+  function bindTabs(root) {
+    var tabs = root.querySelectorAll(".settings-tabs [role='tab']");
+    var panels = root.querySelectorAll(".settings-tab-panel");
     function activate(id) {
+      var safeId = id && String(id).trim() ? String(id).trim() : "password";
       tabs.forEach(function (t) {
-        var on = t.getAttribute("data-tab") === id;
+        var on = t.getAttribute("data-tab") === safeId;
         t.setAttribute("aria-selected", on ? "true" : "false");
         t.tabIndex = on ? 0 : -1;
       });
       panels.forEach(function (p) {
-        var on = p.id === "settings-panel-" + id;
+        var on = p.id === "settings-panel-" + safeId;
         p.hidden = !on;
       });
     }
@@ -133,12 +134,16 @@
         activate(list[next].getAttribute("data-tab"));
       });
     });
+    activate("password");
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
-    if (!document.getElementById("settings-page-root")) return;
+  function initSettingsPage() {
+    var root = document.getElementById("settings-page-root");
+    if (!root) return;
+    if (root.getAttribute("data-settings-js") === "1") return;
 
-    bindTabs();
+    bindTabs(root);
+    root.setAttribute("data-settings-js", "1");
 
     syncThemeButtons(readTheme());
     var tl = document.getElementById("settings-theme-light");
@@ -297,5 +302,11 @@
           });
       });
     }
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSettingsPage);
+  } else {
+    initSettingsPage();
+  }
 })();

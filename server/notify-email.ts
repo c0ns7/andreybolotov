@@ -47,7 +47,8 @@ export function notifyUserEmailStaffReply(
 ): void {
   warnIfNoSmtpOnce();
   if (!isSmtpReady()) return;
-  const u = getUserById(userId);
+  void (async () => {
+  const u = await getUserById(userId);
   if (!u || u.blocked === 1) return;
   if (Number(u.email_notify_chat ?? 1) === 0) return;
   const email = String(u.email || "").trim();
@@ -75,6 +76,7 @@ export function notifyUserEmailStaffReply(
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[notify] письмо с ответом поддержки user", userId, msg);
   });
+  })();
 }
 
 function raffleIsLaunched(r: RaffleRow): boolean {
@@ -82,9 +84,9 @@ function raffleIsLaunched(r: RaffleRow): boolean {
 }
 
 /** После сохранения акции: сбросить флаг рассылки, если акция не на сайте / не активна. */
-export function syncRaffleLaunchNotifyFlag(row: RaffleRow): void {
+export async function syncRaffleLaunchNotifyFlag(row: RaffleRow): Promise<void> {
   if (!raffleIsLaunched(row)) {
-    clearRaffleLaunchNotifySent(row.id);
+    await clearRaffleLaunchNotifySent(row.id);
   }
 }
 
@@ -92,10 +94,10 @@ export function syncRaffleLaunchNotifyFlag(row: RaffleRow): void {
  * Рассылка «акция на сайте», один раз на цикл «запуска» (пока снова не скроют или не снимут с активных).
  */
 export async function maybeSendRaffleLaunchEmails(raffleId: number): Promise<void> {
-  const next = getRaffleById(raffleId);
+  const next = await getRaffleById(raffleId);
   if (!next) return;
-  syncRaffleLaunchNotifyFlag(next);
-  const fresh = getRaffleById(raffleId);
+  await syncRaffleLaunchNotifyFlag(next);
+  const fresh = await getRaffleById(raffleId);
   if (!fresh) return;
   if (!raffleIsLaunched(fresh)) return;
   if (Number(fresh.launch_notify_sent_at ?? 0) > 0) return;
@@ -105,7 +107,7 @@ export async function maybeSendRaffleLaunchEmails(raffleId: number): Promise<voi
     return;
   }
   const now = Date.now();
-  const users = listUsersForRaffleLaunchEmail();
+  const users = await listUsersForRaffleLaunchEmail();
   const raffleUrl = `${appOrigin()}/home/raffle?id=${encodeURIComponent(String(fresh.id))}`;
   for (const u of users) {
     try {
@@ -115,31 +117,31 @@ export async function maybeSendRaffleLaunchEmails(raffleId: number): Promise<voi
       console.error("[notify] raffle launch email user", u.id, msg);
     }
   }
-  markRaffleLaunchNotifySent(fresh.id, now);
+  await markRaffleLaunchNotifySent(fresh.id, now);
 }
 
 /**
  * Периодически с сервера: письмо пользователю, если до конца брони осталось не больше
  * RAFFLE_RESERVE_REMINDER_MINUTES (по умол. 5), SMTP настроен, включены письма об акциях.
  */
-export function tickReserveExpiryEmailReminders(): void {
+export async function tickReserveExpiryEmailReminders(): Promise<void> {
   const lead = reserveReminderLeadMsFromEnv();
   if (lead <= 0) return;
   if (!isSmtpReady()) return;
   const now = Date.now();
-  const rows = listReservedOrdersForExpiryReminder(now, lead);
+  const rows = await listReservedOrdersForExpiryReminder(now, lead);
   if (rows.length === 0) return;
   for (const r of rows) {
-    const fresh = getOrderById(r.order_id);
+    const fresh = await getOrderById(r.order_id);
     if (!fresh || String(fresh.status) !== "reserved") {
       continue;
     }
-    const u = getUserById(r.user_id);
+    const u = await getUserById(r.user_id);
     if (!u || u.blocked === 1) continue;
     if (Number(u.email_notify_raffle_orders ?? 1) === 0) continue;
     const email = String(u.email || "").trim();
     if (!email) continue;
-    const raffle = getRaffleById(r.raffle_id);
+    const raffle = await getRaffleById(r.raffle_id);
     if (!raffle) continue;
     const openRaffleUrl = `${appOrigin()}/home/raffle?id=${encodeURIComponent(String(raffle.id))}`;
     const minutesLeft = Math.ceil((r.reserved_until - now) / 60_000);
@@ -162,10 +164,10 @@ export function tickReserveExpiryEmailReminders(): void {
       statusPageUrl,
       rulesUrl: rulesUrl || undefined,
     })
-      .then(() => {
-        const again = getOrderById(r.order_id);
+      .then(async () => {
+        const again = await getOrderById(r.order_id);
         if (again && String(again.status) === "reserved") {
-          markReserveReminderSent(r.order_id);
+          await markReserveReminderSent(r.order_id);
         }
       })
       .catch((e) => {
@@ -192,7 +194,8 @@ export function notifyUserReceiptRejectedRework(
 ): void {
   warnIfNoSmtpOnce();
   if (!isSmtpReady()) return;
-  const u = getUserById(userId);
+  void (async () => {
+  const u = await getUserById(userId);
   if (!u || u.blocked === 1) return;
   if (Number(u.email_notify_raffle_orders ?? 1) === 0) return;
   const email = String(u.email || "").trim();
@@ -213,6 +216,7 @@ export function notifyUserReceiptRejectedRework(
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[notify] receipt rejected email user", userId, msg);
   });
+  })();
 }
 
 export function notifyUserOrderFullyReleased(
@@ -229,7 +233,8 @@ export function notifyUserOrderFullyReleased(
 ): void {
   warnIfNoSmtpOnce();
   if (!isSmtpReady()) return;
-  const u = getUserById(userId);
+  void (async () => {
+  const u = await getUserById(userId);
   if (!u || u.blocked === 1) return;
   if (Number(u.email_notify_raffle_orders ?? 1) === 0) return;
   const email = String(u.email || "").trim();
@@ -248,4 +253,5 @@ export function notifyUserOrderFullyReleased(
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[notify] order released email user", userId, msg);
   });
+  })();
 }

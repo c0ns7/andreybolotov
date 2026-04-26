@@ -21,12 +21,8 @@
     return { Authorization: "Bearer " + x.token };
   }
 
-  window.abInitSettings = function () {
-    const toggle = document.getElementById("admin-settings-maintenance");
-    const statusEl = document.getElementById("admin-settings-status");
+  function fetchSettings(toggle, statusEl) {
     if (!toggle) return;
-    const s = loadSession();
-    if (!s || !s.token) return;
     toggle.disabled = true;
     fetch("/api/admin/settings", { headers: authHeaders(), cache: "no-store" })
       .then(function (r) {
@@ -47,6 +43,19 @@
         toggle.disabled = false;
         if (statusEl) statusEl.textContent = "Ошибка сети";
       });
+  }
+
+  window.abInitSettings = function () {
+    const toggle = document.getElementById("admin-settings-maintenance");
+    const statusEl = document.getElementById("admin-settings-status");
+    if (!toggle) return;
+    const s = loadSession();
+    if (!s || !s.token) return;
+
+    fetchSettings(toggle, statusEl);
+
+    if (toggle.dataset.abSettingsChangeBound === "1") return;
+    toggle.dataset.abSettingsChangeBound = "1";
 
     toggle.addEventListener("change", function () {
       const on = toggle.checked;

@@ -3,7 +3,7 @@
 
   const STORAGE_KEY = "ab_auth_v2";
 
-  /** @type {Array<{id:number;phone:string;name:string;email:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
+  /** @type {Array<{id:number;phone:string;name:string;email:string;locality?:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
   let allUsersCache = [];
   /** Строка поиска в сайдбаре «Диалоги» (телефон / текст); синхронизируется с полем с debounce */
   let supportThreadSearch = "";
@@ -84,6 +84,75 @@
     );
   }
 
+  function formatDateTime(ts) {
+    const d = new Date(Number(ts));
+    return (
+      String(d.getDate()).padStart(2, "0") +
+      "." +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      "." +
+      String(d.getFullYear()) +
+      " " +
+      String(d.getHours()).padStart(2, "0") +
+      ":" +
+      String(d.getMinutes()).padStart(2, "0")
+    );
+  }
+
+  function formatLastActive(ts) {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return "не был в сети";
+    const diffMs = Date.now() - n;
+    if (!Number.isFinite(diffMs) || diffMs < 0) return formatDateTime(n);
+    const min = Math.floor(diffMs / 60000);
+    if (min <= 1) return "только что";
+    if (min < 60) return min + " мин назад";
+    const h = Math.floor(min / 60);
+    if (h < 24) return h + " ч назад";
+    const d = new Date(n);
+    const now = new Date();
+    const isToday =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    if (isToday) {
+      return (
+        "сегодня в " +
+        String(d.getHours()).padStart(2, "0") +
+        ":" +
+        String(d.getMinutes()).padStart(2, "0")
+      );
+    }
+    const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const isYesterday =
+      d.getFullYear() === y.getFullYear() &&
+      d.getMonth() === y.getMonth() &&
+      d.getDate() === y.getDate();
+    if (isYesterday) {
+      return (
+        "вчера в " +
+        String(d.getHours()).padStart(2, "0") +
+        ":" +
+        String(d.getMinutes()).padStart(2, "0")
+      );
+    }
+    return formatDateTime(n);
+  }
+
+  function buildThreadMeta(user) {
+    const email = user && user.email ? String(user.email) : "Не указано";
+    const locality = user && user.locality ? String(user.locality) : "Не указано";
+    return (
+      formatRuPhone(user.phone) +
+      " · " +
+      email +
+      " · " +
+      locality +
+      " · Последний актив: " +
+      formatLastActive(user.last_active_at)
+    );
+  }
+
   function esc(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -138,32 +207,69 @@
     return out.join("<br/>");
   }
 
-  function messageBubbleInnerHtml(m) {
-    var att = attachmentHtml(m);
-    var body = String(m.body || "").trim();
-    var text = body
-      ? '<div class="admin-msg-bubble__body">' + formatAdminBodyWithMaxJoinLineAsButton(esc(m.body)) + "</div>"
-      : "";
-    return att + text;
+  function parseAdminActionCard(rawBody) {
+    var body = String(rawBody || "");
+    var m = body.match(/\[\[AB_CARD:([^\]]+)\]\]\s*$/);
+    if (!m) return { text: body, card: null };
+    var encoded = String(m[1] || "").trim();
+    var text = body.replace(/\n?\[\[AB_CARD:[^\]]+\]\]\s*$/, "").trim();
+    try {
+      var parsed = JSON.parse(decodeURIComponent(encoded));
+      if (!parsed || typeof parsed !== "object") return { text: text, card: null };
+      return { text: text, card: parsed };
+    } catch (_) {
+      return { text: text, card: null };
+    }
   }
 
-  const gate = document.getElementById("admin-gate");
-  const adminLoading = document.getElementById("admin-loading");
-  const adminRoot = document.getElementById("admin-root");
-  const app = document.getElementById("admin-app");
-  const rafflesApp = document.getElementById("admin-raffles-app");
-  const paymentsApp = document.getElementById("admin-payments-app");
-  const usersApp = document.getElementById("admin-users-app");
-  const settingsApp = document.getElementById("admin-settings-app");
-  const listEl = document.getElementById("admin-user-list");
-  const empty = document.getElementById("admin-empty");
-  const thread = document.getElementById("admin-thread");
-  const threadName = document.getElementById("admin-thread-name");
-  const threadMeta = document.getElementById("admin-thread-meta");
-  const messagesEl = document.getElementById("admin-messages");
-  const form = document.getElementById("admin-reply-form");
-  const input = document.getElementById("admin-reply-input");
-  const btnAdminSend = document.getElementById("btn-admin-reply-send");
+  function adminActionCardHtml(card) {
+    if (!card || card.kind !== "receipt_rejected") return "";
+    var reason = card.reason ? '<p class="chat-action-card__reason">' + esc(String(card.reason)) + "</p>" : "";
+    var href = String(card.retry_url || "").trim();
+    var cta = esc(String(card.cta || "Повторить оплату"));
+    var action = href
+      ? '<a class="chat-action-card__btn" href="' +
+        href.replace(/"/g, "&quot;") +
+        '" target="_blank" rel="noopener noreferrer">' +
+        cta +
+        "</a>"
+      : '<span class="chat-action-card__btn">' + cta + "</span>";
+    return (
+      '<div class="chat-action-card">' +
+      '<p class="chat-action-card__title">Оплата отклонена</p>' +
+      reason +
+      action +
+      "</div>"
+    );
+  }
+
+  function messageBubbleInnerHtml(m) {
+    var att = attachmentHtml(m);
+    var parsed = parseAdminActionCard(m.body);
+    var body = String(parsed.text || "").trim();
+    var text = body
+      ? '<div class="admin-msg-bubble__body">' + formatAdminBodyWithMaxJoinLineAsButton(esc(body)) + "</div>"
+      : "";
+    return att + text + adminActionCardHtml(parsed.card);
+  }
+
+  let gate = null;
+  let adminLoading = null;
+  let adminRoot = null;
+  let app = null;
+  let rafflesApp = null;
+  let paymentsApp = null;
+  let usersApp = null;
+  let settingsApp = null;
+  let listEl = null;
+  let empty = null;
+  let thread = null;
+  let threadName = null;
+  let threadMeta = null;
+  let messagesEl = null;
+  let form = null;
+  let input = null;
+  let btnAdminSend = null;
 
   const CANNED_ADMIN_REPLIES = {
     where_order:
@@ -175,15 +281,54 @@
   };
 
   let selectedId = null;
-  /** @type {{ id: number; phone: string; name: string; email: string; role: string } | null} */
+  /** @type {{ id: number; phone: string; name: string; email: string; locality?: string; role: string; last_active_at?: number | null } | null} */
   let selectedUserData = null;
   /** Пока грузится тред, не сбрасывать selectedId в loadUsers (иначе гонка с WS). */
   let threadLoadUserId = null;
+  let threadLastActiveTimer = null;
 
-  const modalEditUser = document.getElementById("modal-edit-user");
-  const modalUserTickets = document.getElementById("modal-admin-user-tickets");
-  const modalUserTicketsRaffle = document.getElementById("admin-user-tickets-raffle");
-  const modalUserTicketsContent = document.getElementById("admin-user-tickets-content");
+  let modalEditUser = null;
+  let modalUserTickets = null;
+  let modalUserTicketsRaffle = null;
+  let modalUserTicketsContent = null;
+
+  function refreshDomRefs() {
+    gate = document.getElementById("admin-gate");
+    adminLoading = document.getElementById("admin-loading");
+    adminRoot = document.getElementById("admin-root");
+    app = document.getElementById("admin-app");
+    rafflesApp = document.getElementById("admin-raffles-app");
+    paymentsApp = document.getElementById("admin-payments-app");
+    usersApp = document.getElementById("admin-users-app");
+    settingsApp = document.getElementById("admin-settings-app");
+    listEl = document.getElementById("admin-user-list");
+    empty = document.getElementById("admin-empty");
+    thread = document.getElementById("admin-thread");
+    threadName = document.getElementById("admin-thread-name");
+    threadMeta = document.getElementById("admin-thread-meta");
+    messagesEl = document.getElementById("admin-messages");
+    form = document.getElementById("admin-reply-form");
+    input = document.getElementById("admin-reply-input");
+    btnAdminSend = document.getElementById("btn-admin-reply-send");
+    modalEditUser = document.getElementById("modal-edit-user");
+    modalUserTickets = document.getElementById("modal-admin-user-tickets");
+    modalUserTicketsRaffle = document.getElementById("admin-user-tickets-raffle");
+    modalUserTicketsContent = document.getElementById("admin-user-tickets-content");
+  }
+
+  function waitForAdminDom(maxMs) {
+    var timeout = Number(maxMs) > 0 ? Number(maxMs) : 4000;
+    var startedAt = Date.now();
+    return new Promise(function (resolve) {
+      var check = function () {
+        refreshDomRefs();
+        if (adminLoading && adminRoot) return resolve(true);
+        if (Date.now() - startedAt >= timeout) return resolve(false);
+        setTimeout(check, 50);
+      };
+      check();
+    });
+  }
 
   function closeUserTicketsModal() {
     if (!modalUserTickets) return;
@@ -294,6 +439,7 @@
   }
 
   function showGate(msg) {
+    refreshDomRefs();
     try {
       document.documentElement.classList.remove("admin-mobile-chat-active");
     } catch (_) {}
@@ -346,6 +492,7 @@
   }
 
   function applyAdminTab() {
+    refreshDomRefs();
     var tab = getAdminTab();
     var heading = document.getElementById("admin-page-heading");
     var sub = document.getElementById("admin-page-sub");
@@ -408,6 +555,7 @@
   }
 
   function showApp() {
+    refreshDomRefs();
     if (adminLoading) adminLoading.hidden = true;
     if (gate) gate.hidden = true;
     if (adminRoot) adminRoot.hidden = false;
@@ -525,6 +673,7 @@
       phone: selectedUserData.phone,
       name: selectedUserData.name,
       email: selectedUserData.email,
+      locality: selectedUserData.locality || "",
       role: selectedUserData.role || "user",
       blocked: !!selectedUserData.blocked,
       last_body: null,
@@ -645,6 +794,28 @@
     }
   }
 
+  function stopThreadLastActiveTicker() {
+    if (threadLastActiveTimer != null) {
+      clearInterval(threadLastActiveTimer);
+      threadLastActiveTimer = null;
+    }
+  }
+
+  function renderThreadMetaFromSelectedUser() {
+    if (!threadMeta || !selectedUserData) return;
+    threadMeta.textContent = buildThreadMeta(selectedUserData);
+  }
+
+  function startThreadLastActiveTicker() {
+    stopThreadLastActiveTicker();
+    if (!selectedUserData || !thread || thread.hidden) return;
+    renderThreadMetaFromSelectedUser();
+    threadLastActiveTimer = window.setInterval(function () {
+      if (!selectedUserData || !thread || thread.hidden) return;
+      renderThreadMetaFromSelectedUser();
+    }, 30 * 1000);
+  }
+
   function startUserTypingPoll(userId) {
     stopUserTypingPoll();
     if (userId == null) return;
@@ -736,6 +907,7 @@
     const n = document.getElementById("edit-user-name");
     const p = document.getElementById("edit-user-phone");
     const em = document.getElementById("edit-user-email");
+    const loc = document.getElementById("edit-user-locality");
     const idLine = document.getElementById("edit-user-account-id");
     if (idLine) {
       idLine.textContent =
@@ -746,6 +918,7 @@
     if (n) n.value = selectedUserData.name || "";
     if (p) p.value = formatRuPhone(selectedUserData.phone);
     if (em) em.value = selectedUserData.email || "";
+    if (loc) loc.value = selectedUserData.locality || "";
     modalEditUser.classList.add("is-open");
     modalEditUser.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -767,6 +940,7 @@
       name: user.name || "",
       phone: user.phone || "",
       email: user.email || "",
+      locality: user.locality || "",
       role: user.role || "user",
       blocked: !!user.blocked,
     };
@@ -813,10 +987,8 @@
       });
       selectedUserData = data.user;
       if (threadName) threadName.textContent = data.user.name;
-      if (threadMeta) {
-        threadMeta.textContent =
-          formatRuPhone(data.user.phone) + " · " + data.user.email;
-      }
+      renderThreadMetaFromSelectedUser();
+      startThreadLastActiveTicker();
       renderMessages(data.messages);
       if (typeof data.user_typing === "boolean") {
         setUserTypingIndicatorVisible(data.user_typing);
@@ -940,6 +1112,30 @@
     });
   }
 
+  function bindAdminSectionNav() {
+    document.querySelectorAll(".admin-nav .admin-nav__link[href^='/admin']").forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        if (e.defaultPrevented) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (typeof e.button === "number" && e.button !== 0) return;
+        var href = String(a.getAttribute("href") || "/admin");
+        e.preventDefault();
+        try {
+          history.pushState({}, "", href);
+        } catch (_) {}
+        try {
+          window.dispatchEvent(new CustomEvent("ab-route"));
+        } catch (_) {}
+        applyAdminTab();
+        processAdminOpenUserQuery();
+      });
+    });
+    window.addEventListener("popstate", function () {
+      applyAdminTab();
+      processAdminOpenUserQuery();
+    });
+  }
+
   function isAdminRole(role) {
     return String(role == null ? "" : role)
       .trim()
@@ -947,6 +1143,7 @@
   }
 
   async function bootstrap() {
+    await waitForAdminDom(4000);
     const s = loadSession();
     if (!s || !s.token) {
       if (adminLoading) adminLoading.hidden = true;
@@ -978,12 +1175,16 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap);
+  } else {
     bootstrap();
-  });
+  }
 
   function init() {
+    refreshDomRefs();
     bindTabs();
+    bindAdminSectionNav();
     bindSupportThreadSearch();
     try {
       var mq = window.matchMedia("(max-width: 699px)");
@@ -1000,6 +1201,7 @@
     if (btnThreadBack) {
       btnThreadBack.addEventListener("click", function () {
         stopUserTypingPoll();
+        stopThreadLastActiveTicker();
         setUserTypingIndicatorVisible(false);
         sendAdminTyping(false);
         selectedId = null;
@@ -1265,18 +1467,17 @@
         const name = document.getElementById("edit-user-name").value.trim();
         const phone = document.getElementById("edit-user-phone").value.trim();
         const email = document.getElementById("edit-user-email").value.trim();
+        const locality = document.getElementById("edit-user-locality").value.trim();
         apiJson("/api/admin/users/" + selectedId, {
           method: "PATCH",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ name, phone, email }),
+          body: JSON.stringify({ name, phone, email, locality }),
         })
           .then(function (data) {
             selectedUserData = data.user;
             if (threadName) threadName.textContent = data.user.name;
-            if (threadMeta) {
-              threadMeta.textContent =
-                formatRuPhone(data.user.phone) + " · " + data.user.email;
-            }
+            renderThreadMetaFromSelectedUser();
+            startThreadLastActiveTicker();
             closeEditModal();
             loadUsers().catch(function () {});
           })
