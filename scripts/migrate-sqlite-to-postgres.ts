@@ -15,7 +15,20 @@ async function copyTable(
   columns: string[],
   sqlite: Database.Database,
 ): Promise<void> {
-  const selectSql = `SELECT ${columns.join(", ")} FROM ${tableName}`;
+  const pragmaRows = sqlite
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all() as Array<{ name?: string }>;
+  const sourceCols = new Set(
+    pragmaRows
+      .map((r) => String(r?.name ?? "").trim())
+      .filter((x) => x.length > 0),
+  );
+  const presentColumns = columns.filter((c) => sourceCols.has(c));
+  if (!presentColumns.length) {
+    console.log(`[migrate] ${tableName}: skipped (no matching columns in sqlite source)`);
+    return;
+  }
+  const selectSql = `SELECT ${presentColumns.join(", ")} FROM ${tableName}`;
   const rows = sqlite.prepare(selectSql).all() as Record<string, unknown>[];
   if (!rows.length) {
     console.log(`[migrate] ${tableName}: 0 rows`);
@@ -28,16 +41,23 @@ async function copyTable(
     const tuples: string[] = [];
     for (const row of chunk) {
       const tuple: string[] = [];
-      for (const col of columns) {
+      for (const col of presentColumns) {
         values.push(row[col]);
         tuple.push(`$${values.length}`);
       }
       tuples.push(`(${tuple.join(", ")})`);
     }
-    const upsertSql = `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES ${tuples.join(", ")} ON CONFLICT DO NOTHING`;
+    const upsertSql = `INSERT INTO ${tableName} (${presentColumns.join(", ")}) VALUES ${tuples.join(", ")} ON CONFLICT DO NOTHING`;
     await pgPool.query(upsertSql, values);
   }
-  console.log(`[migrate] ${tableName}: ${rows.length} rows`);
+  const missingColumns = columns.filter((c) => !sourceCols.has(c));
+  if (missingColumns.length) {
+    console.log(
+      `[migrate] ${tableName}: ${rows.length} rows (missing in sqlite, skipped columns: ${missingColumns.join(", ")})`,
+    );
+  } else {
+    console.log(`[migrate] ${tableName}: ${rows.length} rows`);
+  }
 }
 
 async function setIdentity(tableName: string): Promise<void> {
@@ -59,6 +79,7 @@ async function main() {
       "phone",
       "name",
       "email",
+      "locality",
       "password_hash",
       "created_at",
       "role",
