@@ -8,6 +8,27 @@ import { useAbSession } from "./AbSessionContext";
 
 const RESUME_PAYMENT_ORDER_KEY = "ab_resume_payment_order";
 
+function isNetworkFetchError(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message || "").toLowerCase();
+  return msg.includes("failed to fetch") || msg.includes("networkerror");
+}
+
+async function postReceiptWithSingleRetry(oid: number, payload: Record<string, unknown>) {
+  const submit = () =>
+    fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
+      method: "POST",
+      headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  try {
+    return await submit();
+  } catch (e) {
+    if (!isNetworkFetchError(e)) throw e;
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    return await submit();
+  }
+}
+
 function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
@@ -45,15 +66,11 @@ export default function RaffleConfirmClient() {
       const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
       const uploadData = (await up.json().catch(() => ({}))) as Record<string, unknown>;
       if (!up.ok) throw new Error(String(uploadData.error || "Ошибка загрузки"));
-      const res = await fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
-        method: "POST",
-        headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: uploadData.url,
-          name: uploadData.name,
-          mime: uploadData.mime,
-          sha256: uploadData.sha256,
-        }),
+      const res = await postReceiptWithSingleRetry(oid, {
+        url: uploadData.url,
+        name: uploadData.name,
+        mime: uploadData.mime,
+        sha256: uploadData.sha256,
       });
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) throw new Error(String(data.error || "Ошибка"));
@@ -72,6 +89,10 @@ export default function RaffleConfirmClient() {
       }
       router.push("/home");
     } catch (e) {
+      if (isNetworkFetchError(e)) {
+        toast("Сеть нестабильна. Чек не отправлен, попробуйте еще раз.", "warning");
+        return;
+      }
       toast(String((e as Error).message || "Ошибка"), "error");
     }
   }, [router, toast]);

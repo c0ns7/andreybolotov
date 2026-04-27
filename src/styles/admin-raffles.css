@@ -1426,23 +1426,83 @@
   flex-shrink: 0;
 }
 
-.admin-payments-broadcast {
+.admin-payments-history-tools {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 10px 16px;
   padding: 12px 0 2px;
   border-top: 1px solid rgba(226, 232, 240, 0.9);
   margin-top: 10px;
 }
 
-.admin-payments-broadcast__hint {
-  margin: 0;
-  flex: 1;
-  min-width: 200px;
-  font-size: 0.78rem;
-  color: #64748b;
-  line-height: 1.35;
+.admin-payments-history-tools[hidden] {
+  display: none !important;
+}
+
+.admin-payments-history-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  background: linear-gradient(180deg, #fff5f5 0%, #fee2e2 100%);
+  color: #991b1b;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.admin-payments-history-clear-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.2);
+  border-color: rgba(220, 38, 38, 0.44);
+}
+
+.admin-payments-history-clear-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.admin-payments-history-clear-btn__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.admin-settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(14, 116, 144, 0.25);
+  background: linear-gradient(180deg, #ecfeff 0%, #cffafe 100%);
+  color: #0f766e;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.admin-settings-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(14, 116, 144, 0.2);
+  border-color: rgba(14, 116, 144, 0.4);
+}
+
+.admin-settings-action-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.admin-settings-action-btn__ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .admin-payments-toolbar__text {

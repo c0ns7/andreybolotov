@@ -5701,16 +5701,29 @@
         return {};
       });
       if (!up.ok) throw new Error(uploadData.error || "Ошибка загрузки");
-      var res = await fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: uploadData.url,
-          name: uploadData.name,
-          mime: uploadData.mime,
-          sha256: uploadData.sha256,
-        }),
+      var receiptPayload = JSON.stringify({
+        url: uploadData.url,
+        name: uploadData.name,
+        mime: uploadData.mime,
+        sha256: uploadData.sha256,
       });
+      var res;
+      try {
+        res = await fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: receiptPayload,
+        });
+      } catch (err1) {
+        var m1 = String((err1 && err1.message) || "").toLowerCase();
+        if (m1.indexOf("failed to fetch") === -1 && m1.indexOf("networkerror") === -1) throw err1;
+        await new Promise(function (resolve) { return setTimeout(resolve, 1200); });
+        res = await fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: receiptPayload,
+        });
+      }
       if (res.status === 401) throw new Error("SESSION_EXPIRED");
       var data = await res.json().catch(function () {
         return {};
@@ -5739,6 +5752,9 @@
           openModal(modalLogin);
         });
       } else {
+        if (String(msg).toLowerCase().indexOf("failed to fetch") !== -1) {
+          msg = "Сеть нестабильна. Чек не отправлен, попробуйте еще раз.";
+        }
         showActionErrorModal("Не удалось загрузить чек", msg, function () {
           document.getElementById("raffle-confirm-send")?.click();
         });
@@ -5918,16 +5934,29 @@
         return {};
       });
       if (!up.ok) throw new Error(uploadData.error || "Ошибка загрузки");
-      var res = await fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/receipt", {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: uploadData.url,
-          name: uploadData.name,
-          mime: uploadData.mime,
-          sha256: uploadData.sha256,
-        }),
+      var reserveReceiptPayload = JSON.stringify({
+        url: uploadData.url,
+        name: uploadData.name,
+        mime: uploadData.mime,
+        sha256: uploadData.sha256,
       });
+      var res;
+      try {
+        res = await fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/receipt", {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: reserveReceiptPayload,
+        });
+      } catch (err1) {
+        var m1 = String((err1 && err1.message) || "").toLowerCase();
+        if (m1.indexOf("failed to fetch") === -1 && m1.indexOf("networkerror") === -1) throw err1;
+        await new Promise(function (resolve) { return setTimeout(resolve, 1200); });
+        res = await fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/receipt", {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: reserveReceiptPayload,
+        });
+      }
       if (res.status === 401) throw new Error("SESSION_EXPIRED");
       var data = await res.json().catch(function () {
         return {};
@@ -5967,6 +5996,9 @@
           },
         );
         return;
+      }
+      if (String(msg).toLowerCase().indexOf("failed to fetch") !== -1) {
+        msg = "Сеть нестабильна. Чек не отправлен, попробуйте еще раз.";
       }
       showActionErrorModal(
         "Не удалось загрузить чек",

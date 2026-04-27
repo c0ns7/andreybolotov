@@ -423,6 +423,22 @@ export default function AdminMarkup() {
             </label>
             <p className="admin-settings-card__status" id="admin-settings-status" role="status"></p>
           </div>
+          <div className="admin-settings-card">
+            <h2 className="admin-settings-card__title">Рассылка MAX</h2>
+            <p className="admin-settings-card__text">
+              Отправляет всем пользователям с закрепленной оплатой короткое приглашение в приватный чат MAX. Текст про номерки не добавляется.
+            </p>
+            <button type="button" className="admin-settings-action-btn" id="admin-settings-max-broadcast-btn">
+              <span className="admin-settings-action-btn__ico" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 2 11 13"></path>
+                  <path d="M22 2 15 22 11 13 2 9 22 2z"></path>
+                </svg>
+              </span>
+              <span>Рассылка в MAX (закрепленные)</span>
+            </button>
+            <p className="admin-settings-card__status" id="admin-settings-max-broadcast-status" role="status"></p>
+          </div>
         </div>
       </div>
     </div>

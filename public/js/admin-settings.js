@@ -45,6 +45,48 @@
       });
   }
 
+  function bindMaxBroadcast() {
+    const btn = document.getElementById("admin-settings-max-broadcast-btn");
+    const statusEl = document.getElementById("admin-settings-max-broadcast-status");
+    if (!btn) return;
+    if (btn.dataset.abMaxBroadcastBound === "1") return;
+    btn.dataset.abMaxBroadcastBound = "1";
+    btn.addEventListener("click", function () {
+      if (
+        !window.confirm(
+          "Отправить всем с закрепленной оплатой приглашение в приватный MAX? Повтор ограничен (не чаще одного раза в 2 минуты).",
+        )
+      ) {
+        return;
+      }
+      btn.disabled = true;
+      if (statusEl) statusEl.textContent = "Отправка...";
+      fetch("/api/admin/broadcast-max-chat-invite", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: "{}",
+        cache: "no-store",
+      })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            return { ok: r.ok, d: d };
+          });
+        })
+        .then(function (x) {
+          if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+          const sent = Number(x.d && x.d.sent) || 0;
+          const total = Number(x.d && x.d.total) || 0;
+          if (statusEl) statusEl.textContent = "Готово: " + String(sent) + " из " + String(total);
+        })
+        .catch(function (e) {
+          if (statusEl) statusEl.textContent = String((e && e.message) || "Ошибка");
+        })
+        .finally(function () {
+          btn.disabled = false;
+        });
+    });
+  }
+
   window.abInitSettings = function () {
     const toggle = document.getElementById("admin-settings-maintenance");
     const statusEl = document.getElementById("admin-settings-status");
@@ -53,6 +95,7 @@
     if (!s || !s.token) return;
 
     fetchSettings(toggle, statusEl);
+    bindMaxBroadcast();
 
     if (toggle.dataset.abSettingsChangeBound === "1") return;
     toggle.dataset.abSettingsChangeBound = "1";

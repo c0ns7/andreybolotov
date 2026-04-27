@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "ab_auth_v2";
+  const HISTORY_CLEARED_BEFORE_KEY = "ab_admin_payments_history_cleared_before_v1";
 
   /** Декоративные иконки (фиксированный SVG) */
   const ICO = {
@@ -156,6 +157,35 @@
   var paymentsHistoryObserver = null;
   var paymentsHistoryLoading = false;
 
+  function getHistoryClearedBeforeTs() {
+    try {
+      var raw = localStorage.getItem(HISTORY_CLEARED_BEFORE_KEY);
+      var n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function setHistoryClearedBeforeTs(ts) {
+    var n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return;
+    try {
+      localStorage.setItem(HISTORY_CLEARED_BEFORE_KEY, String(Math.floor(n)));
+    } catch {}
+  }
+
+  function filterHistoryRows(rows) {
+    var cutoff = getHistoryClearedBeforeTs();
+    var list = Array.isArray(rows) ? rows : [];
+    if (!cutoff) return list;
+    return list.filter(function (row) {
+      var createdAt = Number(row && row.created_at);
+      if (!Number.isFinite(createdAt) || createdAt <= 0) return true;
+      return createdAt > cutoff;
+    });
+  }
+
   function formatTimeLeftMs(leftMs) {
     var n = Number(leftMs);
     if (!Number.isFinite(n)) return "—";
@@ -201,6 +231,8 @@
     root.querySelectorAll("[data-payments-panel]").forEach(function (panel) {
       panel.hidden = panel.getAttribute("data-payments-panel") !== t;
     });
+    var historyTools = root.querySelector("[data-payments-history-tools]");
+    if (historyTools) historyTools.hidden = t !== "history";
   }
 
   function bindPaymentsTabs(root) {
@@ -292,43 +324,17 @@
     });
   }
 
-  function bindMaxInviteBroadcast(root, token) {
-    if (!root || !token) return;
-    var btn = root.querySelector("[data-admin-max-invite-broadcast]");
-    if (!btn || btn.getAttribute("data-bound-broadcast") === "1") return;
-    btn.setAttribute("data-bound-broadcast", "1");
-    btn.addEventListener("click", function () {
-      if (
-        !window.confirm(
-          "Отправить в чат поддержки всем с закреплённой оплатой короткое приглашение в приватный чат MAX (без текста про номерки)? Повтор — не чаще раз в 2 минуты.",
-        )
-      ) {
-        return;
-      }
-      btn.disabled = true;
-      fetch("/api/admin/broadcast-max-chat-invite", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: "{}",
-      })
-        .then(function (res) {
-          return res.json().then(function (data) {
-            return { ok: res.ok, data: data };
-          });
-        })
-        .then(function (x) {
-          if (!x.ok) throw new Error((x.data && x.data.error) || "Ошибка");
-          var sent = Number(x.data.sent) || 0;
-          var total = Number(x.data.total) || 0;
-          window.alert("Готово: сообщение отправлено " + String(sent) + " из " + String(total) + " пользователей.");
-        })
-        .catch(function (e) {
-          window.alert(String(e.message || "Ошибка"));
-        })
-        .finally(function () {
-          btn.disabled = false;
-        });
-    });
+  function bindHistoryClearActions(root) {
+    if (!root) return;
+    var clearBtn = root.querySelector("[data-admin-payments-history-clear]");
+    if (clearBtn && clearBtn.getAttribute("data-bound-history-clear") !== "1") {
+      clearBtn.setAttribute("data-bound-history-clear", "1");
+      clearBtn.addEventListener("click", function () {
+        if (!window.confirm("Очистить список в табе «История платежей»? Данные в базе не удаляются.")) return;
+        setHistoryClearedBeforeTs(Date.now());
+        loadList();
+      });
+    }
   }
 
   function unbindHistoryInfiniteScroll() {
@@ -378,7 +384,7 @@
         })
         .then(function (x) {
           if (!x.ok) throw new Error((x.data && x.data.error) || "Ошибка");
-          var rows = Array.isArray(x.data.history) ? x.data.history : [];
+          var rows = filterHistoryRows(Array.isArray(x.data.history) ? x.data.history : []);
           if (rows.length) {
             section.insertAdjacentHTML("beforeend", rows.map(renderPaymentHistoryCard).join(""));
             bindChatHandlers(section, token);
@@ -450,7 +456,7 @@
         if (!x.ok) throw new Error(x.data.error || "Ошибка");
         const payments = x.data.payments || [];
         const active = x.data.active_orders || [];
-        const history = x.data.history || [];
+        const history = filterHistoryRows(x.data.history || []);
         const historyHasMore = !!x.data.history_has_more;
         const historyNextOffset = Number(x.data.history_next_offset ?? history.length);
         const serverTimeMs = x.data.server_time_ms;
@@ -468,11 +474,9 @@
             "<p class=\"admin-payments-empty__hint\">Нет активных броней и заявок с чеками.</p>" +
             '<div class="admin-payments-empty__actions">' +
             '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
-            '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (закреплённые)</button>' +
             "</div>" +
             "</div>";
           bindPaymentsReloadButton(listEl);
-          bindMaxInviteBroadcast(listEl, s.token);
           return;
         }
 
@@ -509,11 +513,20 @@
           String(nHist) +
           "</span></button>";
         tabsHtml += "</div>";
-        tabsHtml += '<div class="admin-payments-broadcast">';
         tabsHtml +=
-          '<button type="button" class="btn btn--secondary" data-admin-max-invite-broadcast>Рассылка в MAX (закреплённые)</button>';
+          '<div class="admin-payments-history-tools"' +
+          ' data-payments-history-tools' +
+          (initialTab !== "history" ? " hidden" : "") +
+          ">";
         tabsHtml +=
-          '<p class="admin-payments-broadcast__hint">Всем с закреплённой оплатой — в чат уйдёт только приглашение в приватный MAX, без текста про номерки.</p>';
+          '<button type="button" class="admin-payments-history-clear-btn" data-admin-payments-history-clear>' +
+          '<span class="admin-payments-history-clear-btn__ico" aria-hidden="true">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          "<polyline points=\"3 6 5 6 21 6\"></polyline><path d=\"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6\"></path><path d=\"M10 11v6\"></path><path d=\"M14 11v6\"></path><path d=\"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2\"></path>" +
+          "</svg>" +
+          "</span>" +
+          "<span>Очистить все</span>" +
+          "</button>";
         tabsHtml += "</div>";
 
         var panelsHtml = "";
@@ -562,7 +575,7 @@
         rootForTabs.setAttribute("data-history-total", String(nHist));
         bindPaymentsTabs(rootForTabs);
         bindChatHandlers(listEl, s.token);
-        bindMaxInviteBroadcast(rootForTabs, s.token);
+        bindHistoryClearActions(rootForTabs);
         bindHistoryInfiniteScroll({
           root: rootForTabs,
           token: s.token,

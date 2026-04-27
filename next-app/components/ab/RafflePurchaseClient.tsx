@@ -52,6 +52,27 @@ function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+function isNetworkFetchError(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message || "").toLowerCase();
+  return msg.includes("failed to fetch") || msg.includes("networkerror");
+}
+
+async function postReceiptWithSingleRetry(orderId: number, payload: Record<string, unknown>) {
+  const submit = () =>
+    fetch("/api/raffles/orders/" + String(orderId) + "/receipt", {
+      method: "POST",
+      headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  try {
+    return await submit();
+  } catch (e) {
+    if (!isNetworkFetchError(e)) throw e;
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    return await submit();
+  }
+}
+
 function formatMmSs(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);
@@ -1481,6 +1502,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         void loadSliceRef.current();
         toastRef.current("Бронь отменена", "success");
       } catch (e) {
+        if (isNetworkFetchError(e)) {
+          toastRef.current("Сеть нестабильна. Чек не отправлен, попробуйте еще раз.", "warning");
+          return;
+        }
         toastRef.current(String((e as Error).message || "Ошибка"), "error");
       }
     };
@@ -1576,15 +1601,11 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
         const uploadData = (await up.json()) as Record<string, unknown>;
         if (!up.ok) throw new Error(String(uploadData.error || "Ошибка загрузки"));
-        const res = await fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
-          method: "POST",
-          headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: uploadData.url,
-            name: uploadData.name,
-            mime: uploadData.mime,
-            sha256: uploadData.sha256,
-          }),
+        const res = await postReceiptWithSingleRetry(oid, {
+          url: uploadData.url,
+          name: uploadData.name,
+          mime: uploadData.mime,
+          sha256: uploadData.sha256,
         });
         const data = (await res.json()) as { error?: string; order?: { receipt_review_eta_hint?: string } };
         if (!res.ok) throw new Error(data.error || "Ошибка");

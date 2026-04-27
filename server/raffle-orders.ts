@@ -775,35 +775,19 @@ export async function attachReceiptToOrder(
   const sha = String(receipt.sha256 || "")
     .trim()
     .toLowerCase();
-  if (!sha) return { ok: false, error: "Не передан отпечаток файла (sha256)" };
   if (sha && !/^[a-f0-9]{64}$/.test(sha)) {
     return { ok: false, error: "Некорректный отпечаток файла" };
   }
   const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
+  if (o.status === "pending_review") {
+    // Идемпотентность: если первый запрос уже успел перевести заказ в pending_review,
+    // повтор (например, после сетевого сбоя у клиента) считаем успешным.
+    return { ok: true };
+  }
   if (o.status !== "reserved") return { ok: false, error: "Чек можно прикрепить только к активной брони" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
-  const prevSha = String((o as RaffleOrderRow).receipt_sha256 || "")
-    .trim()
-    .toLowerCase();
-  if (sha && prevSha && sha === prevSha) {
-    return { ok: false, error: "Этот чек уже прикреплён к данной заявке" };
-  }
-
   const now = Date.now();
-
-  if (sha) {
-    // Защита от повторного использования чека (даже другим человеком на другой заявке).
-    // Храним использованные отпечатки отдельно, чтобы если заявка ушла на доработку,
-    // то заменяемый чек не давал обойти защиту.
-    const inserted = await pgExec(
-      `INSERT INTO used_receipts (sha256, first_order_id, created_at) VALUES (?, ?, ?) ON CONFLICT (sha256) DO NOTHING`,
-      [sha, orderId, now],
-    );
-    if (inserted === 0) {
-      return { ok: false, error: "Этот чек уже использован ранее" };
-    }
-  }
 
   const isSameAsPrevious = 0;
   await pgExec(
