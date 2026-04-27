@@ -220,6 +220,15 @@ function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: bo
   return html;
 }
 
+function renderRaffleGridLoaderHtml() {
+  return (
+    '<div class="raffle-ticket-grid__loader" role="status" aria-live="polite">' +
+    '<span class="raffle-ticket-grid__loader-ring" aria-hidden="true"></span>' +
+    '<span class="raffle-ticket-grid__loader-text">Загрузка</span>' +
+    "</div>"
+  );
+}
+
 type RafflePurchaseClientProps = {
   raffleHash?: string;
 };
@@ -255,6 +264,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const [rangeTo, setRangeTo] = useState(500);
   const [rangeParts, setRangeParts] = useState<{ from: number; to: number }[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
+  const [gridLoading, setGridLoading] = useState(false);
   const [onlyFreeView, setOnlyFreeView] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [order, setOrder] = useState<OrderDto | null>(null);
@@ -346,26 +356,49 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   rangeFromRef.current = rangeFrom;
   const rangeToRef = useRef(rangeTo);
   rangeToRef.current = rangeTo;
+  const sliceCacheRef = useRef(new Map<string, { ts: number; cells: Cell[] }>());
 
-  const loadSlice = useCallback(async () => {
+  const loadSlice = useCallback(async (opts?: { force?: boolean; showLoader?: boolean }) => {
     const r = raffleRef.current;
     if (!r?.id) return;
     const id = Number(r.id);
     const from = rangeFromRef.current;
     const to = rangeToRef.current;
-    const res = await fetch(
-      "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
-      { cache: "no-store", headers: abAuthHeaders() },
-    );
-    const data = (await res.json()) as { cells?: Cell[]; error?: string };
-    if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
-    const nextCells = Array.isArray(data.cells) ? data.cells : [];
-    setCells(nextCells);
-    const key = String(from) + "-" + String(to);
-    const hasFree = nextCells.some((c) => String(c.kind) === "free");
-    rangeHasFreeRef.current.set(key, hasFree);
-    const btn = document.querySelector(`.raffle-range-tab[data-from="${from}"][data-to="${to}"]`) as HTMLElement | null;
-    if (btn) btn.classList.toggle("raffle-range-tab--no-free", !hasFree);
+    const force = Boolean(opts?.force);
+    const showLoader = opts?.showLoader !== false;
+    const cacheKey = String(id) + ":" + String(from) + "-" + String(to);
+    if (!force) {
+      const cached = sliceCacheRef.current.get(cacheKey);
+      if (cached && Date.now() - cached.ts < 20_000) {
+        setCells(cached.cells);
+        setGridLoading(false);
+        return;
+      }
+    }
+    if (showLoader) {
+      setCells([]);
+      setGridLoading(true);
+    }
+    try {
+      const res = await fetch(
+        "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
+        { cache: "no-store", headers: abAuthHeaders() },
+      );
+      const data = (await res.json()) as { cells?: Cell[]; error?: string };
+      if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
+      const nextCells = Array.isArray(data.cells) ? data.cells : [];
+      setCells(nextCells);
+      setGridLoading(false);
+      sliceCacheRef.current.set(cacheKey, { ts: Date.now(), cells: nextCells });
+      const key = String(from) + "-" + String(to);
+      const hasFree = nextCells.some((c) => String(c.kind) === "free");
+      rangeHasFreeRef.current.set(key, hasFree);
+      const btn = document.querySelector(`.raffle-range-tab[data-from="${from}"][data-to="${to}"]`) as HTMLElement | null;
+      if (btn) btn.classList.toggle("raffle-range-tab--no-free", !hasFree);
+    } catch (e) {
+      setGridLoading(false);
+      throw e;
+    }
   }, []);
 
   const syncOrder = useCallback(async () => {
@@ -678,8 +711,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
   useEffect(() => {
     const grid = document.getElementById("raffle-page-grid");
-    if (grid) grid.innerHTML = renderRaffleGridHtml(cells, selectedSet, onlyFreeView);
-  }, [cells, selectedSet, onlyFreeView]);
+    if (!grid) return;
+    grid.classList.toggle("raffle-ticket-grid--loading", gridLoading);
+    if (gridLoading) {
+      grid.innerHTML = renderRaffleGridLoaderHtml();
+      return;
+    }
+    grid.innerHTML = renderRaffleGridHtml(cells, selectedSet, onlyFreeView);
+  }, [cells, selectedSet, onlyFreeView, gridLoading]);
 
   useEffect(() => {
     const rid = Number(raffle?.id || raffleId);
@@ -876,6 +915,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       document.querySelectorAll(".raffle-range-tab").forEach((b) => {
         b.classList.toggle("raffle-range-tab--active", b === t);
       });
+      setGridLoading(true);
+      setCells([]);
       setRangeFrom(from);
       setRangeTo(to);
     };
@@ -888,6 +929,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     if (!raffle?.id) return;
     void loadSliceRef.current().catch(() => {});
   }, [raffle?.id, rangeFrom, rangeTo]);
+
+  useEffect(() => {
+    sliceCacheRef.current.clear();
+  }, [raffle?.id]);
 
   const selectionSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushSelection = useCallback(async () => {
@@ -1293,12 +1338,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         }
         const rid = raffleIdRef.current;
         if (d.type === "raffle_grid_updated" && Number(d.raffle_id) === rid) {
-          void loadSliceRef.current();
+          sliceCacheRef.current.clear();
+          void loadSliceRef.current({ force: true, showLoader: false });
           void syncOrderRef.current();
         }
         if (d.type === "raffle_tickets_updated") {
           if (d.raffle_id != null && Number(d.raffle_id) !== rid) return;
-          void loadSliceRef.current();
+          sliceCacheRef.current.clear();
+          void loadSliceRef.current({ force: true, showLoader: false });
           void syncOrderRef.current();
         }
         if (d.type === "raffles_feed_updated") {

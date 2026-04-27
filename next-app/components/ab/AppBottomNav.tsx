@@ -309,7 +309,7 @@ export default function AppBottomNav({
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
   const hasConfirmedTickets = confirmed.some((it) => Array.isArray(it?.numbers) && it.numbers.length > 0);
-  const showTableTab = hasLatestVisibleRaffle && !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
+  const showTableTab = isHome && hasLatestVisibleRaffle && !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
   const confirmedNumbersFlat = useMemo(() => {
     const set = new Set<number>();
     for (const group of confirmed) {

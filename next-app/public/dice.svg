@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="504" viewBox="0 0 512 504" role="img" aria-label="C18:8">
+  <circle cx="252" cy="252" r="251" fill="#efefef"/>
+  <g fill="none" stroke="#1e6fcb" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="230" y="123" width="188" height="232" rx="28" transform="rotate(-33 230 123)"/>
+    <rect x="41" y="146" width="260" height="228" rx="20" transform="rotate(11 41 146)"/>
+  </g>
+  <g fill="none" stroke="#1e6fcb" stroke-width="10">
+    <circle cx="345" cy="188" r="14"/>
+    <circle cx="327" cy="272" r="14"/>
+    <circle cx="393" cy="292" r="14"/>
+    <circle cx="309" cy="357" r="14"/>
+    <circle cx="123" cy="200" r="14"/>
+    <circle cx="109" cy="262" r="14"/>
+    <circle cx="109" cy="321" r="14"/>
+    <circle cx="242" cy="224" r="14"/>
+    <circle cx="229" cy="286" r="14"/>
+    <circle cx="216" cy="348" r="14"/>
+  </g>
+</svg>

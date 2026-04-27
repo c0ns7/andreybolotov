@@ -6,7 +6,7 @@ import { adminSubApp } from "../../server/admin-subapp.js";
 import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { WebSocketServer } from "ws";
 import {
@@ -280,6 +280,46 @@ async function copyHonoResponseToFastify(reply: FastifyReply, res: Response): Pr
   return reply.send(buf);
 }
 
+async function readPublicAsset(assetName: string): Promise<Buffer | null> {
+  const safe = String(assetName || "").replace(/^\/+/, "");
+  if (!safe || safe.includes("..") || safe.includes("\\") || safe.includes("/")) return null;
+  const roots = [
+    path.resolve(process.cwd(), "next-app", "public"),
+    path.resolve(process.cwd(), "public"),
+  ];
+  for (const root of roots) {
+    const full = path.resolve(root, safe);
+    if (!full.startsWith(root)) continue;
+    if (!existsSync(full)) continue;
+    try {
+      return await readFile(full);
+    } catch {
+      /* try next root */
+    }
+  }
+  return null;
+}
+
+function mimeByAssetName(assetName: string): string {
+  const n = String(assetName || "").toLowerCase();
+  if (n.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".ico")) return "image/x-icon";
+  if (n.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
+  return "application/octet-stream";
+}
+
+async function sendPublicAsset(reply: FastifyReply, assetName: string): Promise<void> {
+  const buf = await readPublicAsset(assetName);
+  if (!buf) {
+    reply.code(404).send({ ok: false, error: "Not Found", asset: assetName });
+    return;
+  }
+  reply.header("Content-Type", mimeByAssetName(assetName));
+  reply.header("Cache-Control", "public, max-age=86400");
+  reply.send(buf);
+}
+
 await app.register(
   async function adminHonoBridge(f) {
     f.all("/*", async (request, reply) => {
@@ -319,6 +359,36 @@ await app.register(
   },
   { prefix: "/api/admin" },
 );
+
+app.get("/favicon.ico", async (request, reply) => {
+  const svg = await readPublicAsset("favicon.svg");
+  if (svg) {
+    reply.header("Content-Type", "image/svg+xml; charset=utf-8");
+    reply.header("Cache-Control", "public, max-age=86400");
+    return reply.send(svg);
+  }
+  return reply.redirect("/favicon.svg");
+});
+
+app.get("/favicon.svg", async (_request, reply) => {
+  await sendPublicAsset(reply, "favicon.svg");
+});
+
+app.get("/logo-ab.svg", async (_request, reply) => {
+  await sendPublicAsset(reply, "logo-ab.svg");
+});
+
+app.get("/og-cover.svg", async (_request, reply) => {
+  await sendPublicAsset(reply, "og-cover.svg");
+});
+
+app.get("/dice.svg", async (_request, reply) => {
+  await sendPublicAsset(reply, "dice.svg");
+});
+
+app.get("/dice.png", async (_request, reply) => {
+  return reply.redirect("/dice.svg");
+});
 
 const receiptUploadsDirs = [
   path.resolve(process.cwd(), "public", "uploads", "receipts"),
