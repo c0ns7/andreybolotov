@@ -73,6 +73,7 @@ import type {
 import {
   broadcastChatMessage,
   broadcastMaintenanceStatusUpdated,
+  broadcastRaffleLaunchNotified,
   broadcastRafflesFeedUpdated,
   broadcastRaffleGridUpdated,
   broadcastRaffleTicketsUpdated,
@@ -1078,6 +1079,17 @@ adminSubApp.patch("/raffles/:id", async (c) => {
   broadcastRafflesFeedUpdated();
   const row = await getRaffleById(id);
   return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
+});
+
+adminSubApp.post("/raffles/:id/notify-launch", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const row = await getRaffleById(id);
+  if (!row) return c.json({ error: "Акция не найдена" }, 404);
+  broadcastRaffleLaunchNotified(id);
+  return c.json({ ok: true });
 });
 
 adminSubApp.delete("/raffles/:id", async (c) => {

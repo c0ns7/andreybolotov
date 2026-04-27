@@ -158,6 +158,23 @@ export function broadcastRafflesFeedUpdated() {
   broadcastJsonToPublicRaffleFeed({ type: "raffles_feed_updated" });
 }
 
+/** Явное оповещение о запуске акции (только по кнопке администратора). */
+export function broadcastRaffleLaunchNotified(raffleId: number) {
+  const rid = Math.floor(Number(raffleId));
+  if (!Number.isFinite(rid) || rid < 1) return;
+  const payload = JSON.stringify({ type: "raffle_launch_notified", raffle_id: rid });
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "raffle_launch_notified", raffle_id: rid });
+}
+
 /** Уведомление всем клиентам: изменился флаг техработ на сайте */
 export function broadcastMaintenanceStatusUpdated(enabled: boolean) {
   const payload = JSON.stringify({ type: "site_maintenance_updated", maintenance: Boolean(enabled) });

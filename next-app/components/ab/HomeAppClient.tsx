@@ -185,8 +185,8 @@ export default function HomeAppClient() {
         if (d.type === "chat_message") {
           notify("Новое сообщение в чате", "Откройте чат, чтобы прочитать ответ.", "push_chat_message");
         }
-        if (d.type === "raffles_feed_updated") {
-          notify("Новая акция на сайте", "На главной появилась новая акция.", "push_raffles_feed", 90_000);
+        if (d.type === "raffle_launch_notified") {
+          notify("Новая акция на сайте", "Администратор открыл новую акцию.", "push_raffle_launch_notified", 90_000);
         }
         if (d.type === "raffle_viewers_updated") {
           notify("Старт эфира", "По одной из акций начался эфир.", "push_raffle_stream", 90_000);

@@ -122,6 +122,8 @@
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>',
     play:
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
+    bell:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>',
   };
 
   const listEl = document.getElementById("admin-raffles-list");
@@ -380,6 +382,13 @@
       ">" +
       BTN_ICO.play +
       "<span>В активные</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-notify" data-id="' +
+      r.id +
+      '"' +
+      (r.status !== "active" || r.hidden_from_public ? " disabled" : "") +
+      ">" +
+      BTN_ICO.bell +
+      "<span>ОПОВЕСТИТЬ</span></button>" +
       "</div></div></div></article>"
     );
   }
@@ -416,6 +425,11 @@
     listEl.querySelectorAll(".admin-raffle-delete").forEach(function (btn) {
       btn.addEventListener("click", function () {
         removeRaffle(Number(btn.getAttribute("data-id")));
+      });
+    });
+    listEl.querySelectorAll(".admin-raffle-notify").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        notifyLaunch(Number(btn.getAttribute("data-id")));
       });
     });
   }
@@ -515,6 +529,19 @@
       await loadRaffles();
     } catch (e) {
       alert(e.message || "Ошибка");
+    }
+  }
+
+  async function notifyLaunch(id) {
+    if (!Number.isFinite(id) || id < 1) return;
+    try {
+      await apiJson("/api/admin/raffles/" + id + "/notify-launch", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      alert("Пуш-оповещение отправлено.");
+    } catch (e) {
+      alert((e && e.message) || "Не удалось отправить оповещение");
     }
   }
 
