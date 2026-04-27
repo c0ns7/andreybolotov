@@ -528,7 +528,7 @@ export default function HomeAppClient() {
             <div className="raffle-unavailable__body">
               <h2 className="raffle-unavailable__heading">Продажи закрыты</h2>
               <p className="raffle-unavailable__text">
-                Розыгрыш перешел в стадию подведения итогов. Покупка новых билетов временно невозможна.
+                Акция перешла в стадию подведения итогов. Покупка новых билетов временно невозможна.
               </p>
               <div className="raffle-unavailable__info-card">
                 <div className="raffle-unavailable__info-item">

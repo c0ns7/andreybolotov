@@ -3,7 +3,7 @@ import HomeAppClient from "../../components/ab/HomeAppClient";
 
 export const metadata: Metadata = {
   title: "Главная",
-  description: "Лента акций и участие в розыгрышах.",
+  description: "Лента акций и участие в акциях.",
 };
 
 export default function HomePage() {

@@ -9,18 +9,18 @@ import AbToastHost from "../components/ab/AbToastHost";
 export const metadata: Metadata = {
   metadataBase: new URL("https://andreybolotov.ru"),
   title: {
-    default: "andreybolotov.ru — Розыгрыши и личный кабинет",
+    default: "andreybolotov.ru — Акции и личный кабинет",
     template: "%s | andreybolotov.ru",
   },
   description:
-    "Участие в розыгрышах на andreybolotov.ru: выбор номерков, оплата, история участия, уведомления и поддержка.",
+    "Участие в акциях на andreybolotov.ru: выбор номерков, оплата, история участия, уведомления и поддержка.",
   keywords: [
     "andreybolotov.ru",
-    "розыгрыши",
+    "акции",
     "номерки",
     "участие в акции",
     "личный кабинет",
-    "онлайн розыгрыш",
+    "онлайн акции",
   ],
   alternates: {
     canonical: "/",
@@ -30,9 +30,9 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "andreybolotov.ru",
     locale: "ru_RU",
-    title: "andreybolotov.ru — Розыгрыши и личный кабинет",
+    title: "andreybolotov.ru — Акции и личный кабинет",
     description:
-      "Онлайн-платформа для участия в розыгрышах: номерки, история участия, чат с поддержкой и личный кабинет.",
+      "Онлайн-платформа для участия в акциях: номерки, история участия, чат с поддержкой и личный кабинет.",
     images: [
       {
         url: "/og-cover.svg",
@@ -44,9 +44,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "andreybolotov.ru — Розыгрыши и личный кабинет",
+    title: "andreybolotov.ru — Акции и личный кабинет",
     description:
-      "Удобный личный кабинет для участия в розыгрышах: номерки, история, оплата и поддержка.",
+      "Удобный личный кабинет для участия в акциях: номерки, история, оплата и поддержка.",
     images: ["/og-cover.svg"],
   },
   robots: {

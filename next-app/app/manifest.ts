@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "andreybolotov.ru",
     short_name: "andreybolotov",
-    description: "Платформа розыгрышей: номерки, участие, история и личный кабинет.",
+    description: "Платформа акций: номерки, участие, история и личный кабинет.",
     start_url: "/",
     display: "standalone",
     background_color: "#0f172a",
