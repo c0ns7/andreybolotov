@@ -2,23 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Grid2X2, Phone, Search, Ticket } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
-type HistoryPayload = {
-  raffles?: Array<{
-    raffle?: { title?: string; status?: string };
-    numbers?: { reserved?: number[]; pending_review?: number[]; confirmed?: number[]; bonus_confirmed?: number[] };
-  }>;
-};
+type RaffleDto = { id?: number; title?: string; ticket_count?: number };
+type RafflesPayload = { raffles?: RaffleDto[]; error?: string };
+type SliceCell = { n?: number; kind?: string };
+type SlicePayload = { cells?: SliceCell[]; error?: string };
 
 type TicketCard = {
+  raffleId: number;
   ticket: number;
   phone: string;
   raffleTitle: string;
-  status: "reserved" | "pending_review" | "confirmed" | "bonus_confirmed";
+  status: "free" | "taken" | "self_reserved" | "self_pending" | "self_confirmed";
 };
 
 function normalizePhone(raw?: string) {
@@ -40,7 +39,9 @@ export default function HomeTableClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [onlyMine, setOnlyMine] = useState(false);
   const [cards, setCards] = useState<TicketCard[]>([]);
+  const [raffleTitle, setRaffleTitle] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -57,30 +58,78 @@ export default function HomeTableClient() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch("/api/raffles/participation-history", {
+        const rafflesRes = await fetch("/api/raffles", {
           cache: "no-store",
           headers: abAuthHeaders(),
         });
-        const data = (await res.json().catch(() => ({}))) as HistoryPayload & { error?: string };
-        if (!res.ok) throw new Error(String(data.error || "Не удалось загрузить таблицу"));
-        const phone = formatPhoneRu(session?.phone);
+        const rafflesData = (await rafflesRes.json().catch(() => ({}))) as RafflesPayload;
+        if (!rafflesRes.ok) throw new Error(String(rafflesData.error || "Не удалось загрузить акции"));
+        const raffleRows = Array.isArray(rafflesData.raffles) ? rafflesData.raffles : [];
+        const latestActive = raffleRows
+          .filter((r) => String((r as { status?: string }).status || "") === "active")
+          .sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
+        const raffleId = Math.floor(Number(latestActive?.id));
+        if (!Number.isFinite(raffleId) || raffleId <= 0) {
+          if (!disposed) {
+            setCards([]);
+            setRaffleTitle("");
+          }
+          return;
+        }
+
+        const raffleRes = await fetch("/api/raffles/" + String(raffleId), {
+          cache: "no-store",
+          headers: abAuthHeaders(),
+        });
+        const raffleData = (await raffleRes.json().catch(() => ({}))) as { raffle?: RaffleDto; error?: string };
+        if (!raffleRes.ok) throw new Error(String(raffleData.error || "Не удалось загрузить таблицу"));
+        const ticketCount = Math.max(0, Math.floor(Number(raffleData.raffle?.ticket_count) || 0));
+        const title = String(raffleData.raffle?.title || latestActive?.title || "Акция");
+        if (!disposed) setRaffleTitle(title);
+        if (!ticketCount) {
+          if (!disposed) setCards([]);
+          return;
+        }
+
+        const myPhone = formatPhoneRu(session?.phone);
         const next: TicketCard[] = [];
-        const rows = Array.isArray(data.raffles) ? data.raffles : [];
-        for (const item of rows) {
-          const title = String(item.raffle?.title || "Акция");
-          const numbers = item.numbers || {};
-          const pushNums = (list: number[] | undefined, status: TicketCard["status"]) => {
-            const arr = Array.isArray(list) ? list : [];
-            for (const n of arr) {
-              const x = Math.floor(Number(n));
-              if (!Number.isFinite(x) || x <= 0) continue;
-              next.push({ ticket: x, phone, raffleTitle: title, status });
-            }
-          };
-          pushNums(numbers.reserved, "reserved");
-          pushNums(numbers.pending_review, "pending_review");
-          pushNums(numbers.confirmed, "confirmed");
-          pushNums(numbers.bonus_confirmed, "bonus_confirmed");
+
+        const cellByNumber = new Map<number, string>();
+        for (let from = 1; from <= ticketCount; from += 500) {
+          const to = Math.min(from + 499, ticketCount);
+          const sliceRes = await fetch(
+            "/api/raffles/" + String(raffleId) + "/tickets?from=" + String(from) + "&to=" + String(to),
+            { cache: "no-store", headers: abAuthHeaders() },
+          );
+          const sliceData = (await sliceRes.json().catch(() => ({}))) as SlicePayload;
+          if (!sliceRes.ok) throw new Error(String(sliceData.error || "Не удалось загрузить таблицу"));
+          const cells = Array.isArray(sliceData.cells) ? sliceData.cells : [];
+          for (const c of cells) {
+            const n = Math.floor(Number(c.n));
+            if (!Number.isFinite(n) || n <= 0) continue;
+            cellByNumber.set(n, String(c.kind || "free"));
+          }
+        }
+
+        for (let n = 1; n <= ticketCount; n++) {
+          const kindRaw = String(cellByNumber.get(n) || "free");
+          const status: TicketCard["status"] =
+            kindRaw === "taken"
+              ? "taken"
+              : kindRaw === "self_pending"
+                ? "self_pending"
+                : kindRaw === "self_reserved"
+                  ? "self_reserved"
+                  : kindRaw === "self_confirmed"
+                    ? "self_confirmed"
+                    : "free";
+          next.push({
+            raffleId,
+            ticket: n,
+            phone: status.startsWith("self_") ? myPhone : "—",
+            raffleTitle: title,
+            status,
+          });
         }
         next.sort((a, b) => a.ticket - b.ticket);
         if (!disposed) setCards(next);
@@ -99,20 +148,22 @@ export default function HomeTableClient() {
   const queryDigits = useMemo(() => normalizePhone(query), [query]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return cards;
-    return cards.filter((item) => {
+    const base = onlyMine ? cards.filter((item) => item.status.startsWith("self_")) : cards;
+    if (!q) return base;
+    return base.filter((item) => {
       const byTicket = String(item.ticket).includes(queryDigits || q);
       const byPhone = normalizePhone(item.phone).includes(queryDigits);
-      return byTicket || byPhone;
+      const byRaffle = item.raffleTitle.toLowerCase().includes(q);
+      return byTicket || byPhone || byRaffle;
     });
-  }, [cards, query, queryDigits]);
+  }, [cards, onlyMine, query, queryDigits]);
 
   const profileLetter = useMemo(() => {
     const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
     return n.toUpperCase();
   }, [session?.name, session?.phone]);
 
-  const hasPurchased = cards.some((c) => c.status === "confirmed" || c.status === "bonus_confirmed");
+  const hasPurchased = cards.some((c) => c.status === "self_confirmed");
 
   return (
     <>
@@ -120,7 +171,9 @@ export default function HomeTableClient() {
         <div className="app-view home-inner table-page">
           <header className="table-page__header">
             <h1 className="table-page__title">Таблица номерков</h1>
-            <p className="table-page__subtitle">Поиск по номерку или номеру телефона</p>
+            <p className="table-page__subtitle">
+              {raffleTitle ? `Последняя активная акция: ${raffleTitle}` : "Поиск по номерку или номеру телефона"}
+            </p>
             <label className="table-page__search">
               <Search size={16} aria-hidden="true" />
               <input
@@ -131,26 +184,57 @@ export default function HomeTableClient() {
                 aria-label="Поиск по номерку или номеру телефона"
               />
             </label>
+            <button
+              type="button"
+              className={"table-page__mine-toggle" + (onlyMine ? " is-active" : "")}
+              onClick={() => setOnlyMine((v) => !v)}
+            >
+              {onlyMine ? "Показаны только мои" : "Показать только мои"}
+            </button>
           </header>
           <div className="table-page__cards">
             {loading ? <p className="table-page__empty">Загрузка...</p> : null}
             {!loading && error ? <p className="table-page__empty">{error}</p> : null}
-            {!loading && !error && !cards.length ? <p className="table-page__empty">У вас пока нет номерков.</p> : null}
+            {!loading && !error && !cards.length ? <p className="table-page__empty">Нет данных по акциям.</p> : null}
             {!loading && !error && cards.length && !filtered.length ? <p className="table-page__empty">Ничего не найдено.</p> : null}
             {!loading && !error
               ? filtered.map((card, idx) => (
-                  <article className="table-ticket-card" key={String(idx) + "_" + String(card.ticket)}>
-                    <div className="table-ticket-card__row">
-                      <span className="table-ticket-card__label">Номерок</span>
-                      <strong className="table-ticket-card__value">№ {card.ticket}</strong>
+                  <article
+                    className={
+                      "table-ticket-card table-ticket-card--" +
+                      card.status +
+                      (card.status.startsWith("self_") ? " table-ticket-card--mine" : "")
+                    }
+                    key={String(idx) + "_" + String(card.raffleId) + "_" + String(card.ticket)}
+                  >
+                    <div className="table-ticket-card__head">
+                      <span className="table-ticket-card__icon table-ticket-card__icon--ticket" aria-hidden="true">
+                        <Ticket size={13} />
+                      </span>
+                      <strong className="table-ticket-card__num">№ {card.ticket}</strong>
                     </div>
-                    <div className="table-ticket-card__row">
-                      <span className="table-ticket-card__label">Телефон</span>
-                      <span className="table-ticket-card__value">{card.phone}</span>
+                    <div className="table-ticket-card__line">
+                      <span className="table-ticket-card__icon" aria-hidden="true">
+                        <Phone size={12} />
+                      </span>
+                      <span className="table-ticket-card__tiny">{card.phone}</span>
                     </div>
-                    <div className="table-ticket-card__row">
-                      <span className="table-ticket-card__label">Таблица (акция)</span>
-                      <span className="table-ticket-card__value">{card.raffleTitle}</span>
+                    <div className="table-ticket-card__line">
+                      <span className="table-ticket-card__icon" aria-hidden="true">
+                        <Grid2X2 size={12} />
+                      </span>
+                      <span className="table-ticket-card__tiny">{card.raffleTitle}</span>
+                    </div>
+                    <div className="table-ticket-card__status">
+                      {card.status === "free"
+                        ? "Свободен"
+                        : card.status === "taken"
+                          ? "Занят"
+                          : card.status === "self_reserved"
+                            ? "Моя бронь"
+                            : card.status === "self_pending"
+                              ? "На проверке"
+                              : "Оплачен"}
                     </div>
                   </article>
                 ))
