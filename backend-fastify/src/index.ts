@@ -460,6 +460,7 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   const rows = await listRafflesPublic();
   const latest = rows
     .map((r) => r)
+    .filter((r) => Math.floor(Number(r.ticket_count) || 0) > 0)
     .sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
   if (!latest) {
     return { raffle: null, rows: [], server_time_ms: Date.now() };

@@ -232,7 +232,11 @@ export default function HomeTableClient() {
           <div className="table-page__cards">
             {loading ? <p className="table-page__empty">Загрузка...</p> : null}
             {!loading && error ? <p className="table-page__empty">{error}</p> : null}
-            {!loading && !error && !cards.length ? <p className="table-page__empty">Нет данных по акциям.</p> : null}
+            {!loading && !error && !cards.length ? (
+              <p className="table-page__empty">
+                Нет данных по акции. Попробуйте обновить страницу через несколько секунд.
+              </p>
+            ) : null}
             {!loading && !error && cards.length && !filtered.length ? <p className="table-page__empty">Ничего не найдено.</p> : null}
             {!loading && !error
               ? filtered.map((card, idx) => (
