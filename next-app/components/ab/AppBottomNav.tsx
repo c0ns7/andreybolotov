@@ -106,6 +106,7 @@ export default function AppBottomNav({
   const [history, setHistory] = useState<HistoryPayload>({});
   const [profileTicketsBadge, setProfileTicketsBadge] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
+  const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
   const isHome = pathname === "/home";
   const isTable = pathname === "/home/table";
   const isChat = pathname === "/home/chat";
@@ -193,6 +194,30 @@ export default function AppBottomNav({
     }
   }, [authVerified]);
 
+  const refreshLatestVisibleRaffle = useCallback(async () => {
+    const cur = loadAbSession();
+    if (!cur?.token || !authVerified) {
+      setHasLatestVisibleRaffle(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/raffles/latest-visible/table", {
+        cache: "no-store",
+        headers: abAuthHeaders(),
+      });
+      const data = (await res.json().catch(() => ({}))) as { raffle?: { id?: number; ticket_count?: number } | null };
+      if (!res.ok) {
+        setHasLatestVisibleRaffle(false);
+        return;
+      }
+      const id = Math.floor(Number(data?.raffle?.id) || 0);
+      const cnt = Math.floor(Number(data?.raffle?.ticket_count) || 0);
+      setHasLatestVisibleRaffle(Number.isFinite(id) && id > 0 && Number.isFinite(cnt) && cnt > 0);
+    } catch {
+      setHasLatestVisibleRaffle(false);
+    }
+  }, [authVerified]);
+
   useEffect(() => {
     if (!profileOpen) return;
     void refreshMyTickets(false);
@@ -209,6 +234,10 @@ export default function AppBottomNav({
   useEffect(() => {
     void refreshChatUnread();
   }, [refreshChatUnread]);
+
+  useEffect(() => {
+    void refreshLatestVisibleRaffle();
+  }, [refreshLatestVisibleRaffle]);
 
   useEffect(() => {
     const cur = loadAbSession();
@@ -235,7 +264,11 @@ export default function AppBottomNav({
           invalidateAbMyTicketsCache();
           void refreshMyTickets(true);
           void refreshHistorySummary();
+          void refreshLatestVisibleRaffle();
           if (historyOpen) void refreshHistory(true);
+        }
+        if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
+          void refreshLatestVisibleRaffle();
         }
         if (d.type === "chat_message") {
           invalidateAbChatUnreadCache();
@@ -255,7 +288,7 @@ export default function AppBottomNav({
         /* ignore */
       }
     };
-  }, [authVerified, refreshMyTickets, refreshHistory, refreshHistorySummary, refreshChatUnread, profileOpen, historyOpen]);
+  }, [authVerified, refreshMyTickets, refreshHistory, refreshHistorySummary, refreshChatUnread, refreshLatestVisibleRaffle, profileOpen, historyOpen]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -276,7 +309,7 @@ export default function AppBottomNav({
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
   const hasConfirmedTickets = confirmed.some((it) => Array.isArray(it?.numbers) && it.numbers.length > 0);
-  const showTableTab = !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
+  const showTableTab = hasLatestVisibleRaffle && !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
   const confirmedNumbersFlat = useMemo(() => {
     const set = new Set<number>();
     for (const group of confirmed) {

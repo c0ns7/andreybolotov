@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="andreybolotov.ru">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="70" y="70" width="140" height="140" rx="34" fill="#ffffff" fill-opacity="0.16"/>
+  <path d="M118 176 134 108h16l16 68h-14l-2.7-12h-14.8l-2.7 12h-14.8Zm20-24h8.8l-4.3-20.2h-.2L138 152Z" fill="#fff"/>
+  <text x="250" y="165" fill="#ffffff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="64" font-weight="700">andreybolotov.ru</text>
+  <text x="250" y="235" fill="#dbeafe" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34"> >7K3@KH8 8 CG0AB85 >=;09=</text>
+  <text x="250" y="290" fill="#bfdbfe" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="28">#4>1=K9 ;8G=K9 :018=5B, G0B 8 8AB>@8O CG0AB8O</text>
+</svg>
