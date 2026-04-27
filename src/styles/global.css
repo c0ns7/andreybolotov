@@ -868,6 +868,25 @@ html.js-intro-done #welcome-splash {
   white-space: nowrap;
 }
 
+.table-ticket-card__phone {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.table-ticket-card__phone.is-blurred {
+  filter: blur(4px);
+  transition: filter 0.15s ease;
+}
+
+.table-ticket-card__phone:not(.is-blurred) {
+  filter: none;
+}
+
 .table-ticket-card__status {
   margin-top: 2px;
   border-radius: 999px;
@@ -9769,6 +9788,10 @@ html.theme-dark .table-ticket-card--self_confirmed .table-ticket-card__status {
 
 html.theme-dark .table-ticket-card__tiny,
 html.theme-dark .table-ticket-card__num {
+  color: var(--text);
+}
+
+html.theme-dark .table-ticket-card__phone {
   color: var(--text);
 }
 

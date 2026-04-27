@@ -3,14 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Grid2X2, Phone, Search, Ticket } from "lucide-react";
-import { abAuthHeaders } from "../../lib/ab-api";
+import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { getAbLatestTableCached, invalidateAbLatestTableCache, type AbLatestTableRow } from "../../lib/ab-latest-table-cache";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
-
-type RaffleDto = { id?: number; title?: string; ticket_count?: number };
-type RafflesPayload = { raffles?: RaffleDto[]; error?: string };
-type SliceCell = { n?: number; kind?: string };
-type SlicePayload = { cells?: SliceCell[]; error?: string };
 
 type TicketCard = {
   raffleId: number;
@@ -42,6 +38,7 @@ export default function HomeTableClient() {
   const [onlyMine, setOnlyMine] = useState(false);
   const [cards, setCards] = useState<TicketCard[]>([]);
   const [raffleTitle, setRaffleTitle] = useState("");
+  const [revealedPhones, setRevealedPhones] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -54,65 +51,34 @@ export default function HomeTableClient() {
       return;
     }
     let disposed = false;
-    const load = async () => {
+    const load = async (force = false) => {
       setLoading(true);
       setError("");
       try {
-        const rafflesRes = await fetch("/api/raffles", {
-          cache: "no-store",
-          headers: abAuthHeaders(),
-        });
-        const rafflesData = (await rafflesRes.json().catch(() => ({}))) as RafflesPayload;
-        if (!rafflesRes.ok) throw new Error(String(rafflesData.error || "Не удалось загрузить акции"));
-        const raffleRows = Array.isArray(rafflesData.raffles) ? rafflesData.raffles : [];
-        const latestVisible = raffleRows.sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
-        const raffleId = Math.floor(Number(latestVisible?.id));
-        if (!Number.isFinite(raffleId) || raffleId <= 0) {
+        const payload = await getAbLatestTableCached({ force, ttlMs: 45_000 });
+        const raffle = payload.raffle;
+        const raffleId = Math.floor(Number(raffle?.id) || 0);
+        if (!Number.isFinite(raffleId) || raffleId <= 0 || !raffle) {
           if (!disposed) {
             setCards([]);
             setRaffleTitle("");
           }
           return;
         }
-
-        const raffleRes = await fetch("/api/raffles/" + String(raffleId), {
-          cache: "no-store",
-          headers: abAuthHeaders(),
-        });
-        const raffleData = (await raffleRes.json().catch(() => ({}))) as { raffle?: RaffleDto; error?: string };
-        if (!raffleRes.ok) throw new Error(String(raffleData.error || "Не удалось загрузить таблицу"));
-        const ticketCount = Math.max(0, Math.floor(Number(raffleData.raffle?.ticket_count) || 0));
-        const title = String(raffleData.raffle?.title || latestVisible?.title || "Акция");
+        const title = String(raffle.title || "Акция");
         if (!disposed) setRaffleTitle(title);
-        if (!ticketCount) {
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) {
           if (!disposed) setCards([]);
           return;
         }
 
-        const myPhone = formatPhoneRu(session?.phone);
         const next: TicketCard[] = [];
-
-        const cellByNumber = new Map<number, string>();
-        for (let from = 1; from <= ticketCount; from += 500) {
-          const to = Math.min(from + 499, ticketCount);
-          const sliceRes = await fetch(
-            "/api/raffles/" + String(raffleId) + "/tickets?from=" + String(from) + "&to=" + String(to),
-            { cache: "no-store", headers: abAuthHeaders() },
-          );
-          const sliceData = (await sliceRes.json().catch(() => ({}))) as SlicePayload;
-          if (!sliceRes.ok) throw new Error(String(sliceData.error || "Не удалось загрузить таблицу"));
-          const cells = Array.isArray(sliceData.cells) ? sliceData.cells : [];
-          for (const c of cells) {
-            const n = Math.floor(Number(c.n));
-            if (!Number.isFinite(n) || n <= 0) continue;
-            cellByNumber.set(n, String(c.kind || "free"));
-          }
-        }
-
-        for (let n = 1; n <= ticketCount; n++) {
-          const kindRaw = String(cellByNumber.get(n) || "free");
-          const status: TicketCard["status"] =
-            kindRaw === "taken"
+        for (const row of rows as AbLatestTableRow[]) {
+          const n = Math.floor(Number(row.n));
+          if (!Number.isFinite(n) || n <= 0) continue;
+          const kindRaw = String(row.status || "free");
+          const status: TicketCard["status"] = kindRaw === "taken"
               ? "taken"
               : kindRaw === "self_pending"
                 ? "self_pending"
@@ -121,10 +87,11 @@ export default function HomeTableClient() {
                   : kindRaw === "self_confirmed"
                     ? "self_confirmed"
                     : "free";
+          const phoneRaw = String(row.phone || "").trim();
           next.push({
             raffleId,
             ticket: n,
-            phone: status.startsWith("self_") ? myPhone : "—",
+            phone: phoneRaw ? formatPhoneRu(phoneRaw) : "—",
             raffleTitle: title,
             status,
           });
@@ -137,11 +104,83 @@ export default function HomeTableClient() {
         if (!disposed) setLoading(false);
       }
     };
-    void load();
+    void load(false);
     return () => {
       disposed = true;
     };
   }, [session?.token, session?.phone, authVerified, authCheckInFlight, router]);
+
+  useEffect(() => {
+    if (!session?.token || !authVerified) return;
+    const wsUrl = buildAbWebSocketUrl(session.token);
+    if (!wsUrl) return;
+    let ws: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const reconnect = () => {
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        retryTimer = setTimeout(reconnect, 2500);
+        return;
+      }
+      ws.onmessage = (ev) => {
+        let d: { type?: string };
+        try {
+          d = JSON.parse(String(ev.data || "{}"));
+        } catch {
+          return;
+        }
+        if (d.type === "raffle_tickets_updated" || d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
+          invalidateAbLatestTableCache();
+          setTimeout(() => {
+            void getAbLatestTableCached({ force: true, ttlMs: 0 }).then((payload) => {
+              const raffle = payload.raffle;
+              if (!raffle) return;
+              const rows = Array.isArray(payload.rows) ? payload.rows : [];
+              const mapped: TicketCard[] = rows
+                .map((row) => {
+                  const n = Math.floor(Number(row.n));
+                  if (!Number.isFinite(n) || n <= 0) return null;
+                  const kindRaw = String(row.status || "free");
+                  const status: TicketCard["status"] = kindRaw === "taken"
+                    ? "taken"
+                    : kindRaw === "self_pending"
+                      ? "self_pending"
+                      : kindRaw === "self_reserved"
+                        ? "self_reserved"
+                        : kindRaw === "self_confirmed"
+                          ? "self_confirmed"
+                          : "free";
+                  return {
+                    raffleId: Math.floor(Number(raffle.id) || 0),
+                    ticket: n,
+                    phone: row.phone ? formatPhoneRu(String(row.phone)) : "—",
+                    raffleTitle: String(raffle.title || "Акция"),
+                    status,
+                  };
+                })
+                .filter((x): x is TicketCard => x != null)
+                .sort((a, b) => a.ticket - b.ticket);
+              setRaffleTitle(String(raffle.title || "Акция"));
+              setCards(mapped);
+            }).catch(() => {});
+          }, 120);
+        }
+      };
+      ws.onclose = () => {
+        retryTimer = setTimeout(reconnect, 2500);
+      };
+    };
+    reconnect();
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [session?.token, authVerified]);
 
   const queryDigits = useMemo(() => normalizePhone(query), [query]);
   const filtered = useMemo(() => {
@@ -215,7 +254,20 @@ export default function HomeTableClient() {
                       <span className="table-ticket-card__icon" aria-hidden="true">
                         <Phone size={12} />
                       </span>
-                      <span className="table-ticket-card__tiny">{card.phone}</span>
+                      <button
+                        type="button"
+                        className={
+                          "table-ticket-card__tiny table-ticket-card__phone" +
+                          (card.phone !== "—" && !revealedPhones[card.ticket] ? " is-blurred" : "")
+                        }
+                        onClick={() => {
+                          if (card.phone === "—") return;
+                          setRevealedPhones((prev) => ({ ...prev, [card.ticket]: !prev[card.ticket] }));
+                        }}
+                        aria-label="Показать или скрыть телефон"
+                      >
+                        {card.phone}
+                      </button>
                     </div>
                     <div className="table-ticket-card__line">
                       <span className="table-ticket-card__icon" aria-hidden="true">

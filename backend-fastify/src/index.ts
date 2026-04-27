@@ -87,6 +87,16 @@ const paymentParticipationCache = new Map<
   string,
   { ts: number; data: Awaited<ReturnType<typeof buildRafflePaymentParticipationContext>> }
 >();
+const latestTableCache = new Map<
+  number,
+  {
+    ts: number;
+    payload: {
+      raffle: { id: number; title: string; ticket_count: number; status: string } | null;
+      rows: Array<{ n: number; status: "free" | "taken" | "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null }>;
+    };
+  }
+>();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
@@ -438,6 +448,131 @@ app.get("/api/raffles", async (request, reply) => {
       };
     }),
   };
+});
+
+app.get("/api/raffles/latest-visible/table", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (!rateLimitAllow(`get:latest-visible-table:${user.id}`, 30, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  reply.header("Cache-Control", "private, no-store");
+  const rows = await listRafflesPublic();
+  const latest = rows
+    .map((r) => r)
+    .sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
+  if (!latest) {
+    return { raffle: null, rows: [], server_time_ms: Date.now() };
+  }
+  const raffleId = Math.floor(Number(latest.id) || 0);
+  const ticketCount = Math.max(0, Math.floor(Number(latest.ticket_count) || 0));
+  const now = Date.now();
+  const cached = latestTableCache.get(raffleId);
+  if (cached && now - cached.ts < 15_000) {
+    return { ...cached.payload, server_time_ms: now };
+  }
+
+  const ownPhone = String(user.phone || "");
+  const ownByNumber = new Map<number, { status: "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null; prio: number }>();
+  const holdRows = await pgAll<{ n: number; order_status: string; order_user_id: number; phone: string | null; order_id: number }>(
+    `SELECT
+       h.ticket_number AS n,
+       o.status AS order_status,
+       o.user_id AS order_user_id,
+       u.phone AS phone,
+       o.id AS order_id
+     FROM raffle_ticket_holds h
+     INNER JOIN raffle_orders o ON o.id = h.order_id
+     INNER JOIN users u ON u.id = o.user_id
+     WHERE h.raffle_id = ? AND o.status IN ('reserved', 'pending_review', 'confirmed')`,
+    [raffleId],
+  );
+  const byNumber = new Map<number, { status: "taken" | "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null; prio: number; orderId: number }>();
+  const statusPrio = (status: string): number => {
+    if (status === "confirmed") return 5;
+    if (status === "pending_review") return 4;
+    if (status === "reserved") return 3;
+    return 1;
+  };
+  for (const row of holdRows) {
+    const n = Math.floor(Number(row.n));
+    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    const prio = statusPrio(String(row.order_status || ""));
+    const isSelf = Math.floor(Number(row.order_user_id) || 0) === user.id;
+    const phone = String(row.phone || "").trim() || null;
+    const status = isSelf
+      ? String(row.order_status || "") === "confirmed"
+        ? "self_confirmed"
+        : String(row.order_status || "") === "pending_review"
+          ? "self_pending"
+          : "self_reserved"
+      : "taken";
+    const prev = byNumber.get(n);
+    const orderId = Math.floor(Number(row.order_id) || 0);
+    if (!prev || prio > prev.prio || (prio === prev.prio && orderId > prev.orderId)) {
+      byNumber.set(n, { status, phone, prio, orderId });
+    }
+    if (isSelf) {
+      const prevOwn = ownByNumber.get(n);
+      if (!prevOwn || prio > prevOwn.prio) {
+        ownByNumber.set(n, { status: status as "self_reserved" | "self_pending" | "self_confirmed", phone, prio });
+      }
+    }
+  }
+
+  const preRows = await pgAll<{ n: number; phone: string }>(
+    `SELECT ticket_number AS n, phone AS phone
+     FROM raffle_phone_preassignments
+     WHERE raffle_id = ?`,
+    [raffleId],
+  );
+  for (const row of preRows) {
+    const n = Math.floor(Number(row.n));
+    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    const prePhone = String(row.phone || "").trim();
+    const isSelf = prePhone && prePhone === ownPhone;
+    const status = isSelf ? "self_confirmed" : "taken";
+    const prev = byNumber.get(n);
+    if (!prev || 6 > prev.prio) {
+      byNumber.set(n, { status, phone: prePhone || null, prio: 6, orderId: Number.MAX_SAFE_INTEGER });
+    }
+    if (isSelf) {
+      ownByNumber.set(n, { status: "self_confirmed", phone: prePhone || null, prio: 6 });
+    }
+  }
+
+  const tableRows: Array<{ n: number; status: "free" | "taken" | "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null }> = [];
+  for (let n = 1; n <= ticketCount; n++) {
+    const own = ownByNumber.get(n);
+    if (own) {
+      tableRows.push({ n, status: own.status, phone: own.phone });
+      continue;
+    }
+    const row = byNumber.get(n);
+    if (row) {
+      tableRows.push({ n, status: row.status, phone: row.phone });
+      continue;
+    }
+    tableRows.push({ n, status: "free", phone: null });
+  }
+
+  const payload = {
+    raffle: {
+      id: raffleId,
+      title: String(latest.title || "Акция"),
+      ticket_count: ticketCount,
+      status: String(latest.status || ""),
+    },
+    rows: tableRows,
+  };
+  latestTableCache.set(raffleId, { ts: now, payload });
+  if (latestTableCache.size > 20) {
+    const cutoff = now - 60_000;
+    for (const [key, value] of latestTableCache) {
+      if (value.ts < cutoff) latestTableCache.delete(key);
+    }
+  }
+  return { ...payload, server_time_ms: now };
 });
 
 app.get("/api/public/latest-raffle/free-numbers", async (_request, reply) => {
