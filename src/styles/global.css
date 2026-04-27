@@ -737,6 +737,73 @@ html.js-intro-done #welcome-splash {
   margin-top: 8px;
 }
 
+.home-push-permission {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.home-push-permission__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: #dbeafe;
+}
+
+.home-push-permission__body {
+  min-width: 0;
+}
+
+.home-push-permission__title {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.home-push-permission__text {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.home-push-permission__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-push-permission__btn {
+  border-radius: 10px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 0.77rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.home-push-permission__btn--primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.home-push-permission__btn--ghost {
+  background: #fff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
 .table-page {
   padding-bottom: 120px;
 }
@@ -9698,6 +9765,29 @@ html.theme-dark .home-sticky {
 
 html.theme-dark .home-brand-title {
   color: var(--text);
+}
+
+html.theme-dark .home-push-permission {
+  border-color: #1d4ed8;
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.24), rgba(15, 23, 42, 0.5));
+}
+
+html.theme-dark .home-push-permission__icon {
+  background: rgba(30, 64, 175, 0.5);
+}
+
+html.theme-dark .home-push-permission__title {
+  color: #dbeafe;
+}
+
+html.theme-dark .home-push-permission__text {
+  color: #bfdbfe;
+}
+
+html.theme-dark .home-push-permission__btn--ghost {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 html.theme-dark .table-page__header {

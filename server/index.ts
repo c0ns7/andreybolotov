@@ -646,7 +646,6 @@ app.get("/api/auth/me", async (c) => {
   }
   const row = await getUserByIdPg(user.id);
   const notifyChat = row ? Number(row.email_notify_chat ?? 1) !== 0 : true;
-  const notifyRaffles = row ? Number(row.email_notify_raffles ?? 1) !== 0 : true;
   const notifyRaffleOrders = row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true;
   return c.json({
     user: {
@@ -658,7 +657,7 @@ app.get("/api/auth/me", async (c) => {
       role: user.role ?? "user",
       blocked: Number(user.blocked) === 1,
       email_notify_chat: notifyChat,
-      email_notify_raffles: notifyRaffles,
+      email_notify_raffles: false,
       email_notify_raffle_orders: notifyRaffleOrders,
     },
   });
@@ -769,7 +768,6 @@ app.patch("/api/auth/email-notifications", async (c) => {
   if (u instanceof Response) return u;
   let body: {
     email_notify_chat?: unknown;
-    email_notify_raffles?: unknown;
     email_notify_raffle_orders?: unknown;
   };
   try {
@@ -779,19 +777,14 @@ app.patch("/api/auth/email-notifications", async (c) => {
   }
   const patch: {
     email_notify_chat?: boolean;
-    email_notify_raffles?: boolean;
     email_notify_raffle_orders?: boolean;
   } = {};
   if (typeof body.email_notify_chat === "boolean") patch.email_notify_chat = body.email_notify_chat;
-  if (typeof body.email_notify_raffles === "boolean") {
-    patch.email_notify_raffles = body.email_notify_raffles;
-  }
   if (typeof body.email_notify_raffle_orders === "boolean") {
     patch.email_notify_raffle_orders = body.email_notify_raffle_orders;
   }
   if (
     patch.email_notify_chat === undefined &&
-    patch.email_notify_raffles === undefined &&
     patch.email_notify_raffle_orders === undefined
   ) {
     return c.json({ error: "Нет полей для сохранения" }, 400);
@@ -801,7 +794,7 @@ app.patch("/api/auth/email-notifications", async (c) => {
   return c.json({
     ok: true,
     email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
-    email_notify_raffles: row ? Number(row.email_notify_raffles ?? 1) !== 0 : true,
+    email_notify_raffles: false,
     email_notify_raffle_orders: row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true,
   });
 });

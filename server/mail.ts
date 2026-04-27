@@ -357,8 +357,6 @@ export async function sendRaffleLaunchedEmail(
     "",
     "Подробности и участие:",
     raffleUrl,
-    "",
-    "Отключить рассылку: Настройки → Почта → «Новые акции».",
   ].join("\n");
 
   const inner =
@@ -368,14 +366,13 @@ export async function sendRaffleLaunchedEmail(
   <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#3b82f6;margin-bottom:6px;">Акция</div>
   <div style="font-size:18px;font-weight:700;color:#0f172a;line-height:1.35;">${escapeHtml(title)}</div>
 </div>` +
-    ctaButton(raffleUrl, "Открыть акцию") +
-    `<p style="margin:16px 0 0;font-size:13px;color:#64748b;">Отключить письма о новых акциях: <strong>Настройки</strong> → <strong>Почта</strong>.</p>`;
+    ctaButton(raffleUrl, "Открыть акцию");
 
   const html = emailLayout({
     preheader: `Новая акция на сайте: ${title}`,
     headline: "Новая акция",
     innerHtml: inner,
-    footerNote: "Рассылка отправлена один раз при появлении акции на главной. Настройки можно изменить в любой момент.",
+    footerNote: "Служебное уведомление.",
   });
 
   await sendTransactionalMail({ to, subject, text, html });

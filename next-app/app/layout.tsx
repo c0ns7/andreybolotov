@@ -90,7 +90,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </Script>
         <AbRouteHtmlClasses />
         <Script id="ab-api-ws" strategy="beforeInteractive">
-          {`try{window.__AB_WS_ORIGIN__=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "ws://127.0.0.1:8787")};}catch(_){}`}
+          {`try{var o=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "")};if(o){window.__AB_WS_ORIGIN__=String(o).replace(/\\/$/,"");}}catch(_){}`}
         </Script>
         <AbSessionProvider>
           <AbToastHost />

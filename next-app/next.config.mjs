@@ -16,7 +16,7 @@ const nextConfig = {
    * HTTP API: прокси в middleware → AB_UPSTREAM_ORIGIN (по умолчанию http://127.0.0.1:8787).
    */
   env: {
-    NEXT_PUBLIC_AB_WS_ORIGIN: (process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "ws://127.0.0.1:8787").replace(/\/$/, ""),
+    NEXT_PUBLIC_AB_WS_ORIGIN: (process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "").replace(/\/$/, ""),
   },
 };
 

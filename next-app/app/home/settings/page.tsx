@@ -205,7 +205,7 @@ export default function HomeSettingsPage() {
 
             <div id="settings-panel-notify" className="settings-tab-panel" role="tabpanel" aria-labelledby="tab-settings-notify" hidden>
               <div className="settings-card">
-                <h2 className="settings-card__title">Уведомления на почту</h2>
+                <h2 className="settings-card__title">Почтовые уведомления</h2>
                 <p className="settings-card__lead">Письма уходят на адрес из вашего профиля. Пароль и важные письма по безопасности приходят всегда.</p>
                 <p id="settings-notify-error" className="settings-msg settings-msg--err" hidden />
                 <label className="settings-option">
@@ -219,19 +219,6 @@ export default function HomeSettingsPage() {
                       <span id="settings-notify-chat-status" className="settings-option__status" aria-live="polite"></span>
                     </span>
                     <span className="settings-option__hint">Когда поддержка ответит в чате, на почту сразу придёт письмо с текстом этого ответа.</span>
-                  </span>
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" id="settings-notify-raffles" />
-                  <span className="settings-switch" aria-hidden="true">
-                    <span className="settings-switch__thumb"></span>
-                  </span>
-                  <span className="settings-option__text">
-                    <span className="settings-option__label-row">
-                      <span className="settings-option__label">Новые акции на сайте</span>
-                      <span id="settings-notify-raffles-status" className="settings-option__status" aria-live="polite"></span>
-                    </span>
-                    <span className="settings-option__hint">Одно письмо, когда акция становится доступна на главной.</span>
                   </span>
                 </label>
                 <label className="settings-option">

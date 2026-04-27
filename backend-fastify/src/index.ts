@@ -813,7 +813,7 @@ app.get("/api/auth/me", async (request, reply) => {
       role: user.role ?? "user",
       blocked: Number(user.blocked) === 1,
       email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
-      email_notify_raffles: row ? Number(row.email_notify_raffles ?? 1) !== 0 : true,
+      email_notify_raffles: false,
       email_notify_raffle_orders: row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true,
     },
   };
@@ -862,22 +862,18 @@ app.patch("/api/auth/email-notifications", async (request, reply) => {
   if (!user) return;
   const body = (request.body ?? {}) as {
     email_notify_chat?: unknown;
-    email_notify_raffles?: unknown;
     email_notify_raffle_orders?: unknown;
   };
   const patch: {
     email_notify_chat?: boolean;
-    email_notify_raffles?: boolean;
     email_notify_raffle_orders?: boolean;
   } = {};
   if (typeof body.email_notify_chat === "boolean") patch.email_notify_chat = body.email_notify_chat;
-  if (typeof body.email_notify_raffles === "boolean") patch.email_notify_raffles = body.email_notify_raffles;
   if (typeof body.email_notify_raffle_orders === "boolean") {
     patch.email_notify_raffle_orders = body.email_notify_raffle_orders;
   }
   if (
     patch.email_notify_chat === undefined &&
-    patch.email_notify_raffles === undefined &&
     patch.email_notify_raffle_orders === undefined
   ) {
     return reply.code(400).send({ error: "Нет полей для сохранения" });
@@ -887,7 +883,7 @@ app.patch("/api/auth/email-notifications", async (request, reply) => {
   return {
     ok: true,
     email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
-    email_notify_raffles: row ? Number(row.email_notify_raffles ?? 1) !== 0 : true,
+    email_notify_raffles: false,
     email_notify_raffle_orders: row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true,
   };
 });

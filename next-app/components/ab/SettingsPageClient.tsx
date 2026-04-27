@@ -199,7 +199,6 @@ export default function SettingsPageClient() {
     }
 
     const cbNotifyChat = document.getElementById("settings-notify-chat") as HTMLInputElement | null;
-    const cbNotifyRaffles = document.getElementById("settings-notify-raffles") as HTMLInputElement | null;
     const cbNotifyRaffleOrders = document.getElementById("settings-notify-raffle-orders") as HTMLInputElement | null;
     const sessNotify = loadAbSession();
     if (sessNotify?.token) {
@@ -207,13 +206,11 @@ export default function SettingsPageClient() {
         .then((data) => {
           const u = (data && data.user) || {};
           if (cbNotifyChat) cbNotifyChat.checked = u.email_notify_chat !== false;
-          if (cbNotifyRaffles) cbNotifyRaffles.checked = u.email_notify_raffles !== false;
           if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.checked = u.email_notify_raffle_orders !== false;
         })
         .catch(() => {});
     } else {
       if (cbNotifyChat) cbNotifyChat.disabled = true;
-      if (cbNotifyRaffles) cbNotifyRaffles.disabled = true;
       if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.disabled = true;
     }
     if (cbNotifyChat && sessNotify?.token) {
@@ -227,20 +224,6 @@ export default function SettingsPageClient() {
           .catch(() => {
             cbNotifyChat.checked = !want;
             setToggleStatus("settings-notify-chat-status", "Ошибка", "err");
-          });
-      });
-    }
-    if (cbNotifyRaffles && sessNotify?.token) {
-      cbNotifyRaffles.addEventListener("change", () => {
-        const want = cbNotifyRaffles.checked;
-        setToggleStatus("settings-notify-raffles-status", "Сохраняем...", "saving");
-        saveEmailNotify({ email_notify_raffles: want })
-          .then(() => {
-            setToggleStatus("settings-notify-raffles-status", "Сохранено", "ok");
-          })
-          .catch(() => {
-            cbNotifyRaffles.checked = !want;
-            setToggleStatus("settings-notify-raffles-status", "Ошибка", "err");
           });
       });
     }

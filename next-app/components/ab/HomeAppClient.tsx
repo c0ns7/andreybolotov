@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { buildAbWebSocketUrl } from "../../lib/ab-ws";
@@ -61,6 +61,10 @@ export default function HomeAppClient() {
   const [localityInput, setLocalityInput] = useState("");
   const [localitySaving, setLocalitySaving] = useState(false);
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const [pushPromptVisible, setPushPromptVisible] = useState(false);
+  const [pushRequesting, setPushRequesting] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const pushLastShownRef = useRef<Record<string, number>>({});
 
   const letter = useMemo(() => {
     const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
@@ -155,11 +159,37 @@ export default function HomeAppClient() {
         } catch {
           return;
         }
+        const canNotify = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+        const now = Date.now();
+        const onceIn = (key: string, ttlMs: number) => {
+          const prev = pushLastShownRef.current[key] ?? 0;
+          if (now - prev < ttlMs) return false;
+          pushLastShownRef.current[key] = now;
+          return true;
+        };
+        const notify = (title: string, body: string, key: string, ttlMs = 40_000) => {
+          if (!canNotify || !onceIn(key, ttlMs)) return;
+          try {
+            const n = new Notification(title, { body, tag: key });
+            window.setTimeout(() => n.close(), 9_000);
+          } catch {
+            /* ignore */
+          }
+        };
         if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated" || d.type === "raffle_viewers_updated") {
           void loadFeed();
         }
         if (d.type === "raffle_tickets_updated") {
           refreshTicketStrip();
+        }
+        if (d.type === "chat_message") {
+          notify("Новое сообщение в чате", "Откройте чат, чтобы прочитать ответ.", "push_chat_message");
+        }
+        if (d.type === "raffles_feed_updated") {
+          notify("Новая акция на сайте", "На главной появилась новая акция.", "push_raffles_feed", 90_000);
+        }
+        if (d.type === "raffle_viewers_updated") {
+          notify("Старт эфира", "По одной из акций начался эфир.", "push_raffle_stream", 90_000);
         }
       };
       ws.onclose = () => {
@@ -176,6 +206,39 @@ export default function HomeAppClient() {
       }
     };
   }, [session?.token, authVerified, loadFeed, refreshTicketStrip]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const perm = Notification.permission;
+    setPushPermission(perm);
+    if (!session?.token || !authVerified) {
+      setPushPromptVisible(false);
+      return;
+    }
+    const dismissed = localStorage.getItem("ab_push_prompt_dismissed") === "1";
+    setPushPromptVisible(perm === "default" && !dismissed);
+  }, [session?.token, authVerified]);
+
+  const onAllowPush = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    setPushRequesting(true);
+    try {
+      const perm = await Notification.requestPermission();
+      setPushPermission(perm);
+      setPushPromptVisible(false);
+      localStorage.setItem("ab_push_prompt_dismissed", "1");
+      if (perm === "granted") {
+        toast("Push-уведомления включены", "success");
+      }
+    } finally {
+      setPushRequesting(false);
+    }
+  }, [toast]);
+
+  const onLaterPush = useCallback(() => {
+    setPushPromptVisible(false);
+    if (typeof window !== "undefined") localStorage.setItem("ab_push_prompt_dismissed", "1");
+  }, []);
 
   useEffect(() => {
     refreshTicketStrip();
@@ -258,6 +321,25 @@ export default function HomeAppClient() {
               <h1 className="home-brand-title">Быть добру!</h1>
             </div>
           </header>
+          {pushPromptVisible && pushPermission === "default" ? (
+            <section className="home-push-permission" role="region" aria-label="Разрешение push уведомлений">
+              <div className="home-push-permission__icon" aria-hidden="true">🔔</div>
+              <div className="home-push-permission__body">
+                <h2 className="home-push-permission__title">Включите push-уведомления</h2>
+                <p className="home-push-permission__text">
+                  Будем присылать уведомления о новых сообщениях в чате, запуске акций и начале эфира.
+                </p>
+                <div className="home-push-permission__actions">
+                  <button type="button" className="home-push-permission__btn home-push-permission__btn--primary" onClick={() => void onAllowPush()} disabled={pushRequesting}>
+                    {pushRequesting ? "Запрашиваем..." : "Хорошо, разрешить"}
+                  </button>
+                  <button type="button" className="home-push-permission__btn home-push-permission__btn--ghost" onClick={onLaterPush}>
+                    Позже
+                  </button>
+                </div>
+              </div>
+            </section>
+          ) : null}
           <div className="home-cards" id="home-cards-app">
             {feedErr ? (
               <p className="home-feed-empty">Не удалось загрузить акции. Попробуйте обновить страницу.</p>

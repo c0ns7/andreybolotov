@@ -94,6 +94,10 @@ export async function syncRaffleLaunchNotifyFlag(row: RaffleRow): Promise<void> 
  * Рассылка «акция на сайте», один раз на цикл «запуска» (пока снова не скроют или не снимут с активных).
  */
 export async function maybeSendRaffleLaunchEmails(raffleId: number): Promise<void> {
+  // Рассылку о запуске акций полностью отключили по продуктовой договоренности.
+  void raffleId;
+  return;
+  /*
   const next = await getRaffleById(raffleId);
   if (!next) return;
   await syncRaffleLaunchNotifyFlag(next);
@@ -118,6 +122,7 @@ export async function maybeSendRaffleLaunchEmails(raffleId: number): Promise<voi
     }
   }
   await markRaffleLaunchNotifySent(fresh.id, now);
+  */
 }
 
 /**
