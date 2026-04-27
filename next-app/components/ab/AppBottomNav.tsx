@@ -23,6 +23,7 @@ type Props = {
   authVerified: boolean;
   showSearchSheet?: boolean;
   onSearchSheet?: () => void;
+  forceShowTableTab?: boolean;
 };
 
 type TicketsPayload = {
@@ -89,6 +90,7 @@ export default function AppBottomNav({
   authVerified,
   showSearchSheet,
   onSearchSheet,
+  forceShowTableTab,
 }: Props) {
   const { session } = useAbSession();
   const pathname = usePathname() || "";
@@ -105,6 +107,7 @@ export default function AppBottomNav({
   const [profileTicketsBadge, setProfileTicketsBadge] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const isHome = pathname === "/home";
+  const isTable = pathname === "/home/table";
   const isChat = pathname === "/home/chat";
   const isProfile = profileOpen || pathname === "/home/profile" || pathname === "/home/settings";
 
@@ -272,6 +275,8 @@ export default function AppBottomNav({
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
+  const hasConfirmedTickets = confirmed.some((it) => Array.isArray(it?.numbers) && it.numbers.length > 0);
+  const showTableTab = !!(forceShowTableTab || hasConfirmedTickets);
   const confirmedNumbersFlat = useMemo(() => {
     const set = new Set<number>();
     for (const group of confirmed) {
@@ -308,6 +313,19 @@ export default function AppBottomNav({
             </span>
             <span className="bottom-nav-btn__label">Главная</span>
           </Link>
+          {showTableTab ? (
+            <Link href="/home/table" className={"bottom-nav-btn" + (isTable ? " bottom-nav-btn--active" : "")} id="tab-table" aria-label="Таблица">
+              <span className="bottom-nav-btn__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M3 10h18" />
+                  <path d="M9 4v16" />
+                  <path d="M15 4v16" />
+                </svg>
+              </span>
+              <span className="bottom-nav-btn__label">Таблица</span>
+            </Link>
+          ) : null}
           {showSearchSheet ? (
             <button type="button" className="bottom-nav-btn bottom-nav-btn--dock-search" id="tab-ticket-search" aria-label="Поиск" onClick={onSearchSheet}>
               <span className="bottom-nav-btn__icon">
