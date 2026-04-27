@@ -25,9 +25,9 @@ export function proxy(request: NextRequest) {
   }
 
   if (STATIC_EXT_RE.test(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = `/static-proxy${pathname}`;
-    return NextResponse.rewrite(url);
+    // Serve static assets directly from Next/public.
+    // Rewriting to /static-proxy can trigger self-proxy over wrong scheme in some prod setups.
+    return NextResponse.next();
   }
 
   return NextResponse.next();
