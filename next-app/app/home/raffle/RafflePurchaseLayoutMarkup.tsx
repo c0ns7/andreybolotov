@@ -1,5 +1,5 @@
 function DiceIcon() {
-  return <img src="/dice.svg" alt="" width="28" height="28" loading="lazy" aria-hidden="true" />;
+  return <img src="/dice.png" alt="" width="28" height="28" loading="lazy" aria-hidden="true" />;
 }
 
 export default function RafflePurchaseLayoutMarkup() {

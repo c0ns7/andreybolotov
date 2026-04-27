@@ -236,7 +236,7 @@ export default function HomeAppClient() {
         <div className="home-boot-loader" role="status" aria-live="polite" aria-label="Загрузка">
           <div className="home-boot-loader__inner">
             <div className="home-boot-loader__logo" aria-hidden="true">
-              <img src="/logo-ab.svg" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
+              <img src="/logo.png" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
             </div>
             <div className="home-boot-loader__spinner" aria-hidden="true">
               <span className="home-boot-loader__ring"></span>
