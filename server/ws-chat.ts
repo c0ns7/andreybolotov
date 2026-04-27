@@ -71,6 +71,7 @@ export function broadcastChatMessage(userId: number, message: ReturnType<typeof 
   });
   const payloadUser = JSON.stringify({
     type: "chat_message",
+    userId: id,
     message,
   });
   for (const ws of adminSockets) {

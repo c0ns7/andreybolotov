@@ -153,7 +153,12 @@ export default function HomeAppClient() {
         return;
       }
       ws.onmessage = (ev) => {
-        let d: { type?: string; raffle_id?: number };
+        let d: {
+          type?: string;
+          raffle_id?: number;
+          userId?: number;
+          message?: { is_staff?: boolean };
+        };
         try {
           d = JSON.parse(String(ev.data || "{}"));
         } catch {
@@ -182,7 +187,12 @@ export default function HomeAppClient() {
         if (d.type === "raffle_tickets_updated") {
           refreshTicketStrip();
         }
-        if (d.type === "chat_message") {
+        if (
+          d.type === "chat_message" &&
+          session?.role !== "admin" &&
+          d.message?.is_staff === true &&
+          Number(d.userId) === Number(session?.id)
+        ) {
           notify("Новое сообщение в чате", "Откройте чат, чтобы прочитать ответ.", "push_chat_message");
         }
         if (d.type === "raffle_launch_notified") {
