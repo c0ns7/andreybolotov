@@ -502,6 +502,7 @@ app.post("/api/auth/register", async (c) => {
   return c.json({
     token,
     user: {
+      id: userId,
       phone,
       name,
       email: emailOut,
@@ -551,6 +552,7 @@ app.post("/api/auth/login", async (c) => {
   return c.json({
     token,
     user: {
+      id: user.id,
       phone: user.phone,
       name: user.name,
       email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
@@ -579,6 +581,7 @@ app.get("/api/auth/me", async (c) => {
   const notifyRaffleOrders = row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true;
   return c.json({
     user: {
+      id: user.id,
       phone: user.phone,
       name: user.name,
       email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",

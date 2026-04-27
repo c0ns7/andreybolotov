@@ -56,14 +56,16 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
     const ctrl = new AbortController();
     const abortTimer = window.setTimeout(() => ctrl.abort(), 10_000);
     try {
-      const data = await abApiJson<{ user: AbSession & { blocked?: boolean } }>("/api/auth/me", {
+      const data = await abApiJson<{ user: AbSession & { blocked?: boolean; id?: number } }>("/api/auth/me", {
         headers: { Authorization: `Bearer ${s.token}` },
         signal: ctrl.signal,
       });
       const u = data.user;
       const blocked = !!u.blocked;
+      const uid = Number((u as { id?: unknown }).id);
       const next: AbSession = {
         ...s,
+        id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : s.id,
         phone: u.phone,
         name: u.name,
         email: u.email,

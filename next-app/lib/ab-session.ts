@@ -3,6 +3,8 @@ export const AB_AUTH_STORAGE_KEY = "ab_auth_v2";
 export type AbSession = {
   token: string;
   phone: string;
+  /** Числовой id аккаунта в БД (для поддержки и админки) */
+  id?: number;
   name?: string;
   email?: string;
   locality?: string;

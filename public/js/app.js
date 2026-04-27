@@ -1219,6 +1219,8 @@
     const headingHero = document.getElementById("profile-modal-heading");
     const phoneHero = document.getElementById("profile-modal-phone-hero");
     const fieldEmail = document.getElementById("profile-field-email");
+    const fieldUserId = document.getElementById("profile-field-user-id");
+    const fieldLocality = document.getElementById("profile-field-locality");
     const letterEl = document.getElementById("bottom-nav-profile-letter");
     const guestBar = document.getElementById("guest-auth-bar");
     const adminWrap = document.getElementById("profile-admin-wrap");
@@ -1237,11 +1239,27 @@
       }
     }
     if (fieldEmail) {
-      if (s && s.token && s.email) {
+      if (authed && s && s.email) {
         var em = String(s.email).trim();
-        fieldEmail.textContent = em || "—";
+        fieldEmail.textContent = em || "Не указано";
       } else {
-        fieldEmail.textContent = "—";
+        fieldEmail.textContent = authed ? "Не указано" : "—";
+      }
+    }
+    if (fieldUserId) {
+      var uid = s && s.id != null ? Number(s.id) : NaN;
+      if (authed && Number.isFinite(uid) && uid > 0) {
+        fieldUserId.textContent = String(Math.floor(uid));
+      } else {
+        fieldUserId.textContent = "—";
+      }
+    }
+    if (fieldLocality) {
+      if (authed && s) {
+        var loc = s.locality != null ? String(s.locality).trim() : "";
+        fieldLocality.textContent = loc || "Не указано";
+      } else {
+        fieldLocality.textContent = "—";
       }
     }
     if (letterEl) {
@@ -7343,9 +7361,11 @@
       accountBlocked = !!data.user.blocked;
       saveSession({
         ...s,
+        id: data.user.id != null && Number(data.user.id) > 0 ? Math.floor(Number(data.user.id)) : s.id,
         phone: data.user.phone,
         name: data.user.name,
         email: data.user.email,
+        locality: data.user.locality != null ? String(data.user.locality).trim() : s.locality || "",
         role: data.user.role || "user",
         blocked: accountBlocked,
       });
@@ -7364,11 +7384,14 @@
   }
 
   function sessionPayload(data) {
+    var uid = data.user && data.user.id != null ? Number(data.user.id) : NaN;
     return {
       token: data.token,
+      id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : undefined,
       phone: data.user.phone,
       name: data.user.name,
       email: data.user.email,
+      locality: data.user.locality != null ? String(data.user.locality).trim() : "",
       role: data.user.role || "user",
       blocked: !!data.user.blocked,
     };

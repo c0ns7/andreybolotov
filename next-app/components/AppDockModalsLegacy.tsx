@@ -64,10 +64,44 @@ export default function AppDockModalsLegacy() {
               <p id="profile-modal-phone-hero" className="profile-modal__phone-sub" />
             </div>
 
-            <div className="profile-modal__card">
-              <div className="profile-modal__field profile-modal__field--solo">
-                <span className="profile-modal__label">Email</span>
-                <div id="profile-field-email" className="profile-modal__value" />
+            <div className="profile-modal__card profile-modal__kv-list">
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--id" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="4" y1="9" x2="20" y2="9" />
+                      <line x1="4" y1="15" x2="20" y2="15" />
+                      <line x1="10" y1="3" x2="8" y2="21" />
+                      <line x1="16" y1="3" x2="14" y2="21" />
+                    </svg>
+                  </span>
+                  <span className="profile-modal__kv-label">Идентификатор</span>
+                </div>
+                <div id="profile-field-user-id" className="profile-modal__kv-value profile-modal__value--mono" />
+              </div>
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--email" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="20" height="16" x="2" y="4" rx="2" />
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    </svg>
+                  </span>
+                  <span className="profile-modal__kv-label">EMAIL</span>
+                </div>
+                <div id="profile-field-email" className="profile-modal__kv-value" />
+              </div>
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--locality" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                  </span>
+                  <span className="profile-modal__kv-label">Населенный пункт</span>
+                </div>
+                <div id="profile-field-locality" className="profile-modal__kv-value" />
               </div>
             </div>
 

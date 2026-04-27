@@ -8,12 +8,22 @@ import { useAbSession } from "./AbSessionContext";
 
 type AuthResp = {
   token: string;
-  user: { phone: string; name: string; email?: string; locality?: string; role?: string; blocked?: boolean };
+  user: {
+    id?: number;
+    phone: string;
+    name: string;
+    email?: string;
+    locality?: string;
+    role?: string;
+    blocked?: boolean;
+  };
 };
 
 function sessionFromAuth(data: AuthResp) {
+  const uid = Number(data.user.id);
   return {
     token: data.token,
+    id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : undefined,
     phone: data.user.phone,
     name: data.user.name,
     email: data.user.email || "",

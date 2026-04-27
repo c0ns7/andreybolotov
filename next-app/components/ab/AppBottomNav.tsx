@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Clock3, Gift, Hourglass } from "lucide-react";
+import { BadgeCheck, Clock3, Gift, Hash, Hourglass, Mail, MapPin } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
 import { getAbMyTicketsCached, invalidateAbMyTicketsCache } from "../../lib/ab-my-tickets-cache";
@@ -13,6 +13,7 @@ import {
 } from "../../lib/ab-participation-history-cache";
 import { loadAbSession } from "../../lib/ab-session";
 import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { useAbSession } from "./AbSessionContext";
 
 type Props = {
   show: boolean;
@@ -89,6 +90,7 @@ export default function AppBottomNav({
   showSearchSheet,
   onSearchSheet,
 }: Props) {
+  const { session } = useAbSession();
   const pathname = usePathname() || "";
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -102,7 +104,6 @@ export default function AppBottomNav({
   const [history, setHistory] = useState<HistoryPayload>({});
   const [profileTicketsBadge, setProfileTicketsBadge] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
-  const s = useMemo(() => loadAbSession(), [profileOpen, pathname]);
   const isHome = pathname === "/home";
   const isChat = pathname === "/home/chat";
   const isProfile = profileOpen || pathname === "/home/profile" || pathname === "/home/settings";
@@ -267,7 +268,7 @@ export default function AppBottomNav({
     return () => window.clearInterval(t);
   }, [pathname, refreshChatUnread]);
 
-  const isAdmin = mounted && String(s?.role || "") === "admin";
+  const isAdmin = mounted && String(session?.role || "") === "admin";
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
@@ -282,9 +283,12 @@ export default function AppBottomNav({
     }
     return Array.from(set).sort((a, b) => a - b);
   }, [confirmed]);
-  const profilePhone = mounted ? formatPhoneRu(s?.phone) : "";
-  const profileEmail = mounted ? s?.email || "Не указано" : "Не указано";
-  const profileLocality = mounted ? (s?.locality?.trim() || "Не указано") : "Не указано";
+  const profilePhone = mounted ? formatPhoneRu(session?.phone) : "";
+  const profileEmail = mounted ? session?.email || "Не указано" : "Не указано";
+  const profileLocality = mounted ? (session?.locality?.trim() || "Не указано") : "Не указано";
+  const profileUserId =
+    mounted && session?.id != null && Number(session.id) > 0 ? String(Math.floor(Number(session.id))) : "";
+  const profileUserIdDisplay = profileUserId || (mounted ? "—" : "");
 
   useEffect(() => {
     setMounted(true);
@@ -397,14 +401,43 @@ export default function AppBottomNav({
               <h3 id="profile-modal-heading" className="profile-modal__title">Профиль</h3>
               <p id="profile-modal-phone-hero" className="profile-modal__phone-sub" suppressHydrationWarning>{profilePhone}</p>
             </div>
-            <div className="profile-modal__card">
-              <div className="profile-modal__field profile-modal__field--solo">
-                <span className="profile-modal__label">Email</span>
-                <div id="profile-field-email" className="profile-modal__value" suppressHydrationWarning>{profileEmail}</div>
+            <div className="profile-modal__card profile-modal__kv-list">
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--id" aria-hidden="true">
+                    <Hash size={18} strokeWidth={2.2} />
+                  </span>
+                  <span className="profile-modal__kv-label">Идентификатор</span>
+                </div>
+                <div
+                  id="profile-field-user-id"
+                  className="profile-modal__kv-value profile-modal__value--mono"
+                  suppressHydrationWarning
+                >
+                  {profileUserIdDisplay}
+                </div>
               </div>
-              <div className="profile-modal__field profile-modal__field--solo">
-                <span className="profile-modal__label">Населенный пункт</span>
-                <div id="profile-field-locality" className="profile-modal__value" suppressHydrationWarning>{profileLocality}</div>
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--email" aria-hidden="true">
+                    <Mail size={18} strokeWidth={2.2} />
+                  </span>
+                  <span className="profile-modal__kv-label">EMAIL</span>
+                </div>
+                <div id="profile-field-email" className="profile-modal__kv-value" suppressHydrationWarning>
+                  {profileEmail}
+                </div>
+              </div>
+              <div className="profile-modal__kv-row">
+                <div className="profile-modal__kv-left">
+                  <span className="profile-modal__kv-icon profile-modal__kv-icon--locality" aria-hidden="true">
+                    <MapPin size={18} strokeWidth={2.2} />
+                  </span>
+                  <span className="profile-modal__kv-label">Населенный пункт</span>
+                </div>
+                <div id="profile-field-locality" className="profile-modal__kv-value" suppressHydrationWarning>
+                  {profileLocality}
+                </div>
               </div>
             </div>
             <div className="profile-modal__tickets-card">

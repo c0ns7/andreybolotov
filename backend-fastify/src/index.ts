@@ -528,6 +528,7 @@ app.post("/api/auth/register", async (request, reply) => {
   return {
     token,
     user: {
+      id: userId,
       phone,
       name,
       email: row?.email != null && String(row.email).trim() ? String(row.email).trim().toLowerCase() : "",
@@ -561,6 +562,7 @@ app.post("/api/auth/login", async (request, reply) => {
   return {
     token,
     user: {
+      id: user.id,
       phone: user.phone,
       name: user.name,
       email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
@@ -577,6 +579,7 @@ app.get("/api/auth/me", async (request, reply) => {
   const row = await getUserByIdPg(user.id);
   return {
     user: {
+      id: user.id,
       phone: user.phone,
       name: user.name,
       email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",

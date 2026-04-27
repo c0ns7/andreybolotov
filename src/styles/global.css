@@ -5176,6 +5176,68 @@ html.theme-dark .auth-tabs__btn.is-active {
   gap: 10px;
 }
 
+.profile-modal__card.profile-modal__kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-modal__kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.profile-modal__kv-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.profile-modal__kv-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.profile-modal__kv-icon--id {
+  color: #6366f1;
+}
+
+.profile-modal__kv-icon--email {
+  color: #2563eb;
+}
+
+.profile-modal__kv-icon--locality {
+  color: #059669;
+}
+
+.profile-modal__kv-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.profile-modal__kv-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  text-align: right;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .profile-modal__field {
   margin-bottom: 16px;
 }
@@ -5337,6 +5399,12 @@ html.theme-dark .auth-tabs__btn.is-active {
   font-weight: 500;
   color: #111827;
   border-bottom: 1px solid #e5e7eb;
+}
+
+.profile-modal__value--mono {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0.02em;
 }
 
 .profile-modal__field:last-of-type .profile-modal__value {
@@ -5814,6 +5882,23 @@ html.theme-dark .auth-tabs__btn.is-active {
     padding: 10px 12px;
     margin-bottom: 8px;
     border-radius: 12px;
+  }
+
+  .profile-modal__card.profile-modal__kv-list {
+    gap: 10px;
+  }
+
+  .profile-modal__kv-row {
+    gap: 8px;
+  }
+
+  .profile-modal__kv-label {
+    font-size: 0.75rem;
+  }
+
+  .profile-modal__kv-value {
+    font-size: 0.8125rem;
+    max-width: 52%;
   }
 
   .profile-modal__field {
@@ -9165,6 +9250,30 @@ html.theme-dark .profile-modal__phone-sub {
 html.theme-dark .profile-modal__card {
   background: color-mix(in srgb, var(--bg) 70%, var(--surface));
   border-color: var(--border);
+}
+
+html.theme-dark .profile-modal__kv-label {
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-modal__kv-value {
+  color: var(--text);
+}
+
+html.theme-dark .profile-modal__kv-icon {
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-modal__kv-icon--id {
+  color: #a5b4fc;
+}
+
+html.theme-dark .profile-modal__kv-icon--email {
+  color: #93c5fd;
+}
+
+html.theme-dark .profile-modal__kv-icon--locality {
+  color: #6ee7b7;
 }
 
 html.theme-dark .profile-modal__label {
