@@ -304,15 +304,20 @@ async function handleReceiptFileUpload(c: Context): Promise<Response> {
 const app = new Hono();
 
 async function readStaticAsset(assetName: string): Promise<Buffer | null> {
-  const safe = String(assetName || "").replace(/^\/+/, "");
-  if (!safe || safe.includes("..") || safe.includes("\\") || safe.includes("/")) return null;
+  const safe = String(assetName || "").replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!safe || safe.includes("..")) return null;
   const roots = [
+    path.join(process.cwd(), "next-app", "public"),
+    path.join(process.cwd(), "public"),
     path.join(projectRoot, "next-app", "public"),
     path.join(projectRoot, "public"),
+    path.join(projectRoot, "..", "next-app", "public"),
+    path.join(projectRoot, "..", "public"),
   ];
   for (const root of roots) {
-    const full = path.resolve(root, safe);
-    if (!full.startsWith(path.resolve(root))) continue;
+    const rootAbs = path.resolve(root);
+    const full = path.resolve(rootAbs, safe);
+    if (!full.startsWith(rootAbs)) continue;
     if (!existsSync(full)) continue;
     try {
       return await readFile(full);
@@ -350,9 +355,22 @@ app.get("/favicon.ico", async (c) => {
   return c.redirect("/favicon.svg");
 });
 app.get("/logo-ab.svg", async (c) => serveStaticAsset(c, "logo-ab.svg"));
+app.get("/logo.png", async (c) => {
+  const png = await readStaticAsset("logo.png");
+  if (png) {
+    c.header("Content-Type", "image/png");
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.body(png);
+  }
+  return c.redirect("/logo-ab.svg");
+});
 app.get("/og-cover.svg", async (c) => serveStaticAsset(c, "og-cover.svg"));
 app.get("/dice.svg", async (c) => serveStaticAsset(c, "dice.svg"));
 app.get("/dice.png", async (c) => c.redirect("/dice.svg"));
+app.get("/img/*", async (c) => {
+  const reqPath = c.req.path.replace(/^\/+/, "");
+  return serveStaticAsset(c, reqPath);
+});
 
 app.use(
   "/*",

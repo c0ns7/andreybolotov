@@ -281,15 +281,18 @@ async function copyHonoResponseToFastify(reply: FastifyReply, res: Response): Pr
 }
 
 async function readPublicAsset(assetName: string): Promise<Buffer | null> {
-  const safe = String(assetName || "").replace(/^\/+/, "");
-  if (!safe || safe.includes("..") || safe.includes("\\") || safe.includes("/")) return null;
+  const safe = String(assetName || "").replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!safe || safe.includes("..")) return null;
   const roots = [
     path.resolve(process.cwd(), "next-app", "public"),
     path.resolve(process.cwd(), "public"),
+    path.resolve(process.cwd(), "..", "next-app", "public"),
+    path.resolve(process.cwd(), "..", "public"),
   ];
   for (const root of roots) {
-    const full = path.resolve(root, safe);
-    if (!full.startsWith(root)) continue;
+    const rootAbs = path.resolve(root);
+    const full = path.resolve(rootAbs, safe);
+    if (!full.startsWith(rootAbs)) continue;
     if (!existsSync(full)) continue;
     try {
       return await readFile(full);
@@ -378,6 +381,16 @@ app.get("/logo-ab.svg", async (_request, reply) => {
   await sendPublicAsset(reply, "logo-ab.svg");
 });
 
+app.get("/logo.png", async (_request, reply) => {
+  const png = await readPublicAsset("logo.png");
+  if (png) {
+    reply.header("Content-Type", "image/png");
+    reply.header("Cache-Control", "public, max-age=86400");
+    return reply.send(png);
+  }
+  return reply.redirect("/logo-ab.svg");
+});
+
 app.get("/og-cover.svg", async (_request, reply) => {
   await sendPublicAsset(reply, "og-cover.svg");
 });
@@ -388,6 +401,13 @@ app.get("/dice.svg", async (_request, reply) => {
 
 app.get("/dice.png", async (_request, reply) => {
   return reply.redirect("/dice.svg");
+});
+
+app.get("/img/*", async (request, reply) => {
+  const raw = String(request.url || "");
+  const clean = raw.split("?")[0] || "";
+  const asset = clean.replace(/^\/+/, "");
+  await sendPublicAsset(reply, asset);
 });
 
 const receiptUploadsDirs = [
