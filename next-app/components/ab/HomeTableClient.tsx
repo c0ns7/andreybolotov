@@ -65,10 +65,8 @@ export default function HomeTableClient() {
         const rafflesData = (await rafflesRes.json().catch(() => ({}))) as RafflesPayload;
         if (!rafflesRes.ok) throw new Error(String(rafflesData.error || "Не удалось загрузить акции"));
         const raffleRows = Array.isArray(rafflesData.raffles) ? rafflesData.raffles : [];
-        const latestActive = raffleRows
-          .filter((r) => String((r as { status?: string }).status || "") === "active")
-          .sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
-        const raffleId = Math.floor(Number(latestActive?.id));
+        const latestVisible = raffleRows.sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
+        const raffleId = Math.floor(Number(latestVisible?.id));
         if (!Number.isFinite(raffleId) || raffleId <= 0) {
           if (!disposed) {
             setCards([]);
@@ -84,7 +82,7 @@ export default function HomeTableClient() {
         const raffleData = (await raffleRes.json().catch(() => ({}))) as { raffle?: RaffleDto; error?: string };
         if (!raffleRes.ok) throw new Error(String(raffleData.error || "Не удалось загрузить таблицу"));
         const ticketCount = Math.max(0, Math.floor(Number(raffleData.raffle?.ticket_count) || 0));
-        const title = String(raffleData.raffle?.title || latestActive?.title || "Акция");
+        const title = String(raffleData.raffle?.title || latestVisible?.title || "Акция");
         if (!disposed) setRaffleTitle(title);
         if (!ticketCount) {
           if (!disposed) setCards([]);
