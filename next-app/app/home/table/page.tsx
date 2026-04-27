@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import HomeTableClient from "../../../../components/ab/HomeTableClient";
+import HomeTableClient from "../../../components/ab/HomeTableClient";
 
 export const metadata: Metadata = {
   title: "Таблица номерков",
