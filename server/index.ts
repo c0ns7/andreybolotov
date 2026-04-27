@@ -1,7 +1,7 @@
 import "./load-env";
 import { createServer } from "node:http";
 import { mkdirSync, existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getRequestListener } from "@hono/node-server";
@@ -302,6 +302,57 @@ async function handleReceiptFileUpload(c: Context): Promise<Response> {
 }
 
 const app = new Hono();
+
+async function readStaticAsset(assetName: string): Promise<Buffer | null> {
+  const safe = String(assetName || "").replace(/^\/+/, "");
+  if (!safe || safe.includes("..") || safe.includes("\\") || safe.includes("/")) return null;
+  const roots = [
+    path.join(projectRoot, "next-app", "public"),
+    path.join(projectRoot, "public"),
+  ];
+  for (const root of roots) {
+    const full = path.resolve(root, safe);
+    if (!full.startsWith(path.resolve(root))) continue;
+    if (!existsSync(full)) continue;
+    try {
+      return await readFile(full);
+    } catch {
+      /* ignore and fallback */
+    }
+  }
+  return null;
+}
+
+function staticMime(assetName: string): string {
+  const n = String(assetName || "").toLowerCase();
+  if (n.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".ico")) return "image/x-icon";
+  return "application/octet-stream";
+}
+
+async function serveStaticAsset(c: Context, assetName: string): Promise<Response> {
+  const buf = await readStaticAsset(assetName);
+  if (!buf) return c.json({ error: "Not Found", asset: assetName }, 404);
+  c.header("Content-Type", staticMime(assetName));
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(buf);
+}
+
+app.get("/favicon.svg", async (c) => serveStaticAsset(c, "favicon.svg"));
+app.get("/favicon.ico", async (c) => {
+  const svg = await readStaticAsset("favicon.svg");
+  if (svg) {
+    c.header("Content-Type", "image/svg+xml; charset=utf-8");
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.body(svg);
+  }
+  return c.redirect("/favicon.svg");
+});
+app.get("/logo-ab.svg", async (c) => serveStaticAsset(c, "logo-ab.svg"));
+app.get("/og-cover.svg", async (c) => serveStaticAsset(c, "og-cover.svg"));
+app.get("/dice.svg", async (c) => serveStaticAsset(c, "dice.svg"));
+app.get("/dice.png", async (c) => c.redirect("/dice.svg"));
 
 app.use(
   "/*",

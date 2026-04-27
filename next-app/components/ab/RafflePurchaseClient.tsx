@@ -912,6 +912,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const from = Number(t.getAttribute("data-from"));
       const to = Number(t.getAttribute("data-to"));
       if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+      if (from === rangeFromRef.current && to === rangeToRef.current) {
+        return;
+      }
       document.querySelectorAll(".raffle-range-tab").forEach((b) => {
         b.classList.toggle("raffle-range-tab--active", b === t);
       });
