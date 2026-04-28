@@ -291,6 +291,21 @@
   let modalUserTickets = null;
   let modalUserTicketsRaffle = null;
   let modalUserTicketsContent = null;
+  let adminDidInit = false;
+
+  function runWhenAdminDomReady(fn) {
+    var tries = 0;
+    var tick = function () {
+      refreshDomRefs();
+      if (adminLoading && adminRoot) {
+        fn();
+        return;
+      }
+      tries += 1;
+      window.setTimeout(tick, tries < 20 ? 120 : 350);
+    };
+    tick();
+  }
 
   function refreshDomRefs() {
     gate = document.getElementById("admin-gate");
@@ -1058,6 +1073,9 @@
     };
     ws.onclose = function () {
       if (adminWs === ws) adminWs = null;
+      window.setTimeout(function () {
+        if (!adminWs) connectAdminWs();
+      }, 2500);
     };
   }
 
@@ -1167,8 +1185,10 @@
         location.replace("/home");
         return;
       }
-      showApp();
-      init();
+      runWhenAdminDomReady(function () {
+        showApp();
+        init();
+      });
     } catch {
       if (adminLoading) adminLoading.hidden = true;
       location.replace("/");
@@ -1182,6 +1202,8 @@
   }
 
   function init() {
+    if (adminDidInit) return;
+    adminDidInit = true;
     refreshDomRefs();
     bindTabs();
     bindAdminSectionNav();
