@@ -666,6 +666,107 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   return { ...payload, server_time_ms: now };
 });
 
+app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`get:public-latest-visible-table:${ip}`, 30, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  reply.header("Cache-Control", "no-store");
+  const rows = await listRafflesPublic();
+  const latest = rows
+    .map((r) => r)
+    .filter((r) => Math.floor(Number(r.ticket_count) || 0) > 0)
+    .sort((a, b) => Math.floor(Number(b.id) || 0) - Math.floor(Number(a.id) || 0))[0];
+  if (!latest) {
+    return { raffle: null, rows: [], server_time_ms: Date.now() };
+  }
+
+  const raffleId = Math.floor(Number(latest.id) || 0);
+  const ticketCount = Math.max(0, Math.floor(Number(latest.ticket_count) || 0));
+
+  const byNumber = new Map<number, { status: "taken"; phone: string | null; prio: number; orderId: number }>();
+  const holdRows = await pgAll<{ n: number; order_status: string; phone: string | null; order_id: number }>(
+    `SELECT
+       h.ticket_number AS n,
+       o.status AS order_status,
+       u.phone AS phone,
+       o.id AS order_id
+     FROM raffle_ticket_holds h
+     INNER JOIN raffle_orders o ON o.id = h.order_id
+     INNER JOIN users u ON u.id = o.user_id
+     WHERE h.raffle_id = ? AND o.status IN ('reserved', 'pending_review', 'confirmed')`,
+    [raffleId],
+  );
+
+  const statusPrio = (status: string): number => {
+    if (status === "confirmed") return 5;
+    if (status === "pending_review") return 4;
+    if (status === "reserved") return 3;
+    return 1;
+  };
+
+  for (const row of holdRows) {
+    const n = Math.floor(Number(row.n));
+    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    const prio = statusPrio(String(row.order_status || ""));
+    const phone = String(row.phone || "").trim() || null;
+    const prev = byNumber.get(n);
+    const orderId = Math.floor(Number(row.order_id) || 0);
+    if (!prev || prio > prev.prio || (prio === prev.prio && orderId > prev.orderId)) {
+      byNumber.set(n, { status: "taken", phone, prio, orderId });
+    }
+  }
+
+  const preRows = await pgAll<{ n: number; phone: string }>(
+    `SELECT ticket_number AS n, phone AS phone
+     FROM raffle_phone_preassignments
+     WHERE raffle_id = ?`,
+    [raffleId],
+  );
+  for (const row of preRows) {
+    const n = Math.floor(Number(row.n));
+    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    const prePhone = String(row.phone || "").trim() || null;
+    const prev = byNumber.get(n);
+    if (!prev || 6 > prev.prio) {
+      byNumber.set(n, { status: "taken", phone: prePhone, prio: 6, orderId: Number.MAX_SAFE_INTEGER });
+    }
+  }
+
+  const tableRows: Array<{ n: number; status: "free" | "taken"; phone: string | null }> = [];
+  for (let n = 1; n <= ticketCount; n++) {
+    const row = byNumber.get(n);
+    if (row) {
+      tableRows.push({ n, status: "taken", phone: row.phone });
+      continue;
+    }
+    tableRows.push({ n, status: "free", phone: null });
+  }
+
+  return {
+    raffle: {
+      id: raffleId,
+      title: String(latest.title || "Акция"),
+      ticket_count: ticketCount,
+      status: String(latest.status || ""),
+      viewers_count: getRaffleViewerCount(raffleId),
+    },
+    rows: tableRows,
+    server_time_ms: Date.now(),
+  };
+});
+
+app.get("/api/public/raffles/:id/viewers-count", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`get:public-viewers-count:${ip}`, 60, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  reply.header("Cache-Control", "no-store");
+  const id = Math.floor(Number((request.params as { id?: string }).id || 0));
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: "Некорректный id" });
+  return { raffle_id: id, viewers_count: getRaffleViewerCount(id), server_time_ms: Date.now() };
+});
+
 app.get("/api/public/latest-raffle/free-numbers", async (_request, reply) => {
   reply.header("Cache-Control", "no-store");
   const row = await getLatestVisibleActiveRaffle();
