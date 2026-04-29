@@ -75,6 +75,7 @@ import { getStaffTypingForUser } from "../../server/typing-state.js";
 import {
   attachWebSocket,
   broadcastChatMessage,
+  getPublicTableViewerCount,
   broadcastRaffleGridUpdated,
   broadcastRaffleTicketsUpdated,
   broadcastRaffleViewersUpdated,
@@ -749,11 +750,20 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
       title: String(latest.title || "Акция"),
       ticket_count: ticketCount,
       status: String(latest.status || ""),
-      viewers_count: getRaffleViewerCount(raffleId),
+      viewers_count: getPublicTableViewerCount(),
     },
     rows: tableRows,
     server_time_ms: Date.now(),
   };
+});
+
+app.get("/api/public/table/viewers-count", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`get:public-table-viewers-count:${ip}`, 60, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  reply.header("Cache-Control", "no-store");
+  return { viewers_count: getPublicTableViewerCount(), server_time_ms: Date.now() };
 });
 
 app.get("/api/public/raffles/:id/viewers-count", async (request, reply) => {

@@ -19,6 +19,8 @@ const adminSockets = new Set<WebSocket>();
 const userSockets = new Map<number, Set<WebSocket>>();
 /** Анонимные клиенты (страница /numbers): только события сетки и ленты акций */
 const publicRaffleFeedSockets = new Set<WebSocket>();
+/** Анонимные клиенты публичной страницы /table */
+const publicTableSockets = new Set<WebSocket>();
 
 /** SQLite/JSON иногда дают id как number | string — Map ключи должны совпадать */
 function uid(userId: number): number {
@@ -118,6 +120,21 @@ function broadcastJsonToPublicRaffleFeed(payload: unknown) {
       /* ignore */
     }
   }
+}
+
+function broadcastJsonToPublicTable(payload: unknown) {
+  const raw = JSON.stringify(payload);
+  for (const ws of publicTableSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(raw);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export function getPublicTableViewerCount(): number {
+  return publicTableSockets.size;
 }
 
 /** Всем пользователям: занятость номерков в акции изменилась (корзина / сетка на клиенте). */
@@ -343,6 +360,16 @@ export function attachWebSocket(wss: WebSocketServer) {
       sendJson(ws, { type: "ready", role: "public_raffle_feed" });
       ws.on("close", () => {
         publicRaffleFeedSockets.delete(ws);
+      });
+      return;
+    }
+    if (scope === "public_table") {
+      publicTableSockets.add(ws);
+      sendJson(ws, { type: "ready", role: "public_table", viewers_count: getPublicTableViewerCount() });
+      broadcastJsonToPublicTable({ type: "public_table_viewers_updated", viewers_count: getPublicTableViewerCount() });
+      ws.on("close", () => {
+        publicTableSockets.delete(ws);
+        broadcastJsonToPublicTable({ type: "public_table_viewers_updated", viewers_count: getPublicTableViewerCount() });
       });
       return;
     }

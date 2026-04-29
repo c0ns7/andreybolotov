@@ -62,6 +62,7 @@ export default function PublicTableClient() {
   const [raffleId, setRaffleId] = useState(0);
   const [viewersCount, setViewersCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [revealedPhones, setRevealedPhones] = useState<Record<number, boolean>>({});
   const [activeRangeKey, setActiveRangeKey] = useState("all");
 
   async function loadTable(opts?: { silent?: boolean }) {
@@ -119,8 +120,7 @@ export default function PublicTableClient() {
   }, []);
 
   useEffect(() => {
-    if (!raffleId) return;
-    const wsUrl = buildAbPublicWebSocketUrl("public_raffle_feed");
+    const wsUrl = buildAbPublicWebSocketUrl("public_table");
     if (!wsUrl) return;
     let ws: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -132,19 +132,15 @@ export default function PublicTableClient() {
         return;
       }
       ws.onmessage = (ev) => {
-        let d: { type?: string; raffle_id?: number };
+        let d: { type?: string; viewers_count?: number };
         try {
           d = JSON.parse(String(ev.data || "{}"));
         } catch {
           return;
         }
-        if (d.type !== "raffle_viewers_updated" || Math.floor(Number(d.raffle_id) || 0) !== raffleId) return;
-        void fetch("/api/public/raffles/" + raffleId + "/viewers-count", { cache: "no-store" })
-          .then((r) => r.json())
-          .then((data) => {
-            setViewersCount(Math.max(0, Math.floor(Number(data?.viewers_count) || 0)));
-          })
-          .catch(() => {});
+        if (d.type === "public_table_viewers_updated" || d.type === "ready") {
+          setViewersCount(Math.max(0, Math.floor(Number(d.viewers_count) || 0)));
+        }
       };
       ws.onclose = () => {
         retryTimer = setTimeout(connect, 2500);
@@ -159,7 +155,7 @@ export default function PublicTableClient() {
         /* ignore */
       }
     };
-  }, [raffleId]);
+  }, []);
 
   const rangeTabs = useMemo(() => buildRangeTabs(ticketCount), [ticketCount]);
   const activeRange = useMemo(
@@ -168,6 +164,10 @@ export default function PublicTableClient() {
   );
   const phoneDigits = useMemo(() => normalizePhone(phoneQuery), [phoneQuery]);
   const ticketDigits = useMemo(() => String(ticketQuery || "").replace(/\D/g, ""), [ticketQuery]);
+  const totalCount = cards.length;
+  const freeCount = useMemo(() => cards.filter((c) => c.status === "free").length, [cards]);
+  const takenCount = Math.max(0, totalCount - freeCount);
+  const takenPercent = totalCount > 0 ? Math.min(100, Math.round((takenCount / totalCount) * 100)) : 0;
   const filtered = useMemo(() => {
     const inRange = cards.filter((item) => item.ticket >= activeRange.from && item.ticket <= activeRange.to);
     if (!phoneDigits && !ticketDigits) return inRange;
@@ -195,7 +195,13 @@ export default function PublicTableClient() {
             <button
               type="button"
               className={"table-page__refresh-btn" + (refreshing ? " is-loading" : "")}
-              onClick={() => void loadTable({ silent: true })}
+              onClick={() => {
+                void loadTable({ silent: true });
+                void fetch("/api/public/table/viewers-count", { cache: "no-store" })
+                  .then((r) => r.json())
+                  .then((d) => setViewersCount(Math.max(0, Math.floor(Number(d?.viewers_count) || 0))))
+                  .catch(() => {});
+              }}
               aria-label="Обновить таблицу"
               title="Обновить"
             >
@@ -203,6 +209,26 @@ export default function PublicTableClient() {
               <span>Обновить</span>
             </button>
           </div>
+          <section className="table-page__summary" aria-label="Статистика по номеркам">
+            <div className="table-page__summary-grid">
+              <div className="table-page__summary-item table-page__summary-item--free">
+                <span className="table-page__summary-label">Свободно</span>
+                <strong className="table-page__summary-value">{freeCount}</strong>
+              </div>
+              <div className="table-page__summary-item table-page__summary-item--taken">
+                <span className="table-page__summary-label">Занято</span>
+                <strong className="table-page__summary-value">{takenCount}</strong>
+              </div>
+              <div className="table-page__summary-item table-page__summary-item--total">
+                <span className="table-page__summary-label">Всего</span>
+                <strong className="table-page__summary-value">{totalCount}</strong>
+              </div>
+            </div>
+            <div className="table-page__progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={takenPercent}>
+              <span className="table-page__progress-bar" style={{ width: `${takenPercent}%` }} />
+            </div>
+            <p className="table-page__progress-caption">Заполнено: {takenPercent}%</p>
+          </section>
           <div className="table-page__filters-actions">
             <button
               type="button"
@@ -283,7 +309,20 @@ export default function PublicTableClient() {
                     <span className="table-ticket-card__icon" aria-hidden="true">
                       <Phone size={12} />
                     </span>
-                    <span className="table-ticket-card__tiny table-ticket-card__phone">{card.phone || "—"}</span>
+                    <button
+                      type="button"
+                      className={
+                        "table-ticket-card__tiny table-ticket-card__phone" +
+                        (card.phone && !revealedPhones[card.ticket] ? " is-blurred" : "")
+                      }
+                      onClick={() => {
+                        if (!card.phone) return;
+                        setRevealedPhones((prev) => ({ ...prev, [card.ticket]: !prev[card.ticket] }));
+                      }}
+                      aria-label="Показать или скрыть телефон"
+                    >
+                      {card.phone || "—"}
+                    </button>
                   </div>
                   <div className="table-ticket-card__line">
                     <span className="table-ticket-card__icon" aria-hidden="true">
