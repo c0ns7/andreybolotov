@@ -12,6 +12,10 @@ type PublicTicketCard = {
   status: "free" | "taken";
 };
 
+function statusLabel(status: PublicTicketCard["status"]): string {
+  return status === "free" ? "Свободен" : "Занят";
+}
+
 function normalizePhone(raw?: string) {
   return String(raw || "").replace(/\D/g, "");
 }
@@ -63,6 +67,7 @@ export default function PublicTableClient() {
   const [viewersCount, setViewersCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [revealedPhones, setRevealedPhones] = useState<Record<number, boolean>>({});
+  const [modalCard, setModalCard] = useState<PublicTicketCard | null>(null);
   const [activeRangeKey, setActiveRangeKey] = useState("all");
 
   async function loadTable(opts?: { silent?: boolean }) {
@@ -298,7 +303,17 @@ export default function PublicTableClient() {
           {!loading && !error && cards.length && !filtered.length ? <p className="table-page__empty">Ничего не найдено.</p> : null}
           {!loading && !error
             ? filtered.map((card) => (
-                <article className={"table-ticket-card table-ticket-card--" + card.status} key={String(card.raffleId) + "_" + String(card.ticket)}>
+                <article
+                  className={"table-ticket-card table-ticket-card--" + card.status}
+                  key={String(card.raffleId) + "_" + String(card.ticket)}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest(".table-ticket-card__phone")) return;
+                    if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) {
+                      setModalCard(card);
+                    }
+                  }}
+                >
                   <div className="table-ticket-card__head">
                     <span className="table-ticket-card__icon table-ticket-card__icon--ticket" aria-hidden="true">
                       <Ticket size={13} />
@@ -330,12 +345,34 @@ export default function PublicTableClient() {
                     </span>
                     <span className="table-ticket-card__tiny">{card.raffleTitle}</span>
                   </div>
-                  <div className="table-ticket-card__status">{card.status === "free" ? "Свободен" : "Занят"}</div>
+                  <div className="table-ticket-card__status">{statusLabel(card.status)}</div>
                 </article>
               ))
             : null}
         </div>
       </div>
+      {modalCard ? (
+        <div className="table-card-modal" role="dialog" aria-modal="true" aria-label="Информация по номерку" onClick={() => setModalCard(null)}>
+          <div className="table-card-modal__sheet" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="table-card-modal__close" onClick={() => setModalCard(null)} aria-label="Закрыть">
+              <X size={18} />
+            </button>
+            <h3 className="table-card-modal__title">Номерок № {modalCard.ticket}</h3>
+            <div className="table-card-modal__row">
+              <span>Телефон</span>
+              <strong>{modalCard.phone || "—"}</strong>
+            </div>
+            <div className="table-card-modal__row">
+              <span>Таблица</span>
+              <strong>{modalCard.raffleTitle}</strong>
+            </div>
+            <div className="table-card-modal__row">
+              <span>Статус</span>
+              <strong>{statusLabel(modalCard.status)}</strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
