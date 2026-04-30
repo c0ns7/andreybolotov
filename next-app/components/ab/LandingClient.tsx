@@ -37,7 +37,9 @@ export default function LandingClient() {
   const router = useRouter();
   const { setSessionFromLogin, toast, session, authVerified, authCheckInFlight } = useAbSession();
   const [modal, setModal] = useState<"none" | "auth" | "forgot">("none");
-  const [authTab, setAuthTab] = useState<"login" | "register">("login");
+  const [authStep, setAuthStep] = useState<"phone" | "login" | "register">("phone");
+  const [authCheckingPhone, setAuthCheckingPhone] = useState(false);
+  const [checkedPhone, setCheckedPhone] = useState("");
 
   const [regPhone, setRegPhone] = useState("");
   const [regName, setRegName] = useState("");
@@ -55,6 +57,21 @@ export default function LandingClient() {
   const [forgotEmail, setForgotEmail] = useState("");
 
   const showAuthedUi = !!(session?.token && session?.phone && (authVerified || authCheckInFlight));
+
+  const beginAuthFlow = useCallback(() => {
+    setModal("auth");
+    setAuthStep("phone");
+    setAuthCheckingPhone(false);
+    setCheckedPhone("");
+    setLoginPhone("");
+    setLoginPass("");
+    setRegPhone("");
+    setRegName("");
+    setRegEmail("");
+    setRegLocality("");
+    setRegPass("");
+    setRegPass2("");
+  }, []);
 
   useEffect(() => {
     const welcome = document.getElementById("welcome-splash");
@@ -76,9 +93,39 @@ export default function LandingClient() {
     }
   }, [authVerified, session, router]);
 
+  useEffect(() => {
+    if (modal !== "auth" || authStep !== "phone") return;
+    const phone = phoneToNormalized(loginPhone);
+    if (phone.length !== 11 || !isValidRuMobilePhone(phone)) return;
+    if (authCheckingPhone || checkedPhone === phone) return;
+    setAuthCheckingPhone(true);
+    setCheckedPhone(phone);
+    void abApiJson<{ exists: boolean; blocked?: boolean; name?: string }>("/api/auth/check-phone", {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    })
+      .then((resp) => {
+        if (resp.blocked) {
+          toast("Аккаунт заблокирован. Обратитесь в поддержку.", "error");
+          return;
+        }
+        if (resp.exists) {
+          setAuthStep("login");
+          return;
+        }
+        setRegPhone(formatRuPhoneInput(loginPhone));
+        setAuthStep("register");
+      })
+      .catch((err) => {
+        const msg = err instanceof AbApiError ? err.message : "Ошибка проверки номера";
+        toast(msg, "error");
+      })
+      .finally(() => setAuthCheckingPhone(false));
+  }, [modal, authStep, loginPhone, authCheckingPhone, checkedPhone, toast]);
+
   const onRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phone = phoneToNormalized(regPhone);
+    const phone = phoneToNormalized(regPhone || loginPhone);
     if (phone.length !== 11 || !isValidRuMobilePhone(phone)) {
       toast("Нужен мобильный номер России (+7 9XX …)", "warning");
       return;
@@ -158,7 +205,7 @@ export default function LandingClient() {
     try {
       await abApiJson("/api/auth/forgot", { method: "POST", body: JSON.stringify({ email }) });
       toast("Если email найден, мы отправим ссылку", "info");
-      setAuthTab("login");
+      setAuthStep("login");
       setModal("auth");
     } catch (err) {
       const msg = err instanceof AbApiError ? err.message : "Ошибка";
@@ -169,13 +216,7 @@ export default function LandingClient() {
   return (
     <>
       <div id="screen-welcome" className="screen home-screen">
-        <div
-          id="welcome-splash"
-          className="welcome-splash"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="welcome-splash-title"
-        >
+        <div id="welcome-splash" className="welcome-splash" role="dialog" aria-modal="true" aria-labelledby="welcome-splash-title">
           <div className="welcome-splash__inner">
             <div className="welcome-splash__mascot-wrap">
               <img className="welcome-splash__mascot" src="/mascot/mascot_wave.svg" alt="Степь" width={176} height={176} />
@@ -190,14 +231,7 @@ export default function LandingClient() {
               <p className="welcome-splash__sub">Участвуйте, выигрывайте и помогайте!</p>
             </div>
             <div className="welcome-splash__actions">
-              <button
-                type="button"
-                className="welcome-splash__btn welcome-splash__btn--primary"
-                onClick={() => {
-                  setAuthTab("login");
-                  setModal("auth");
-                }}
-              >
+              <button type="button" className="welcome-splash__btn welcome-splash__btn--primary" onClick={beginAuthFlow}>
                 Войти
               </button>
             </div>
@@ -215,12 +249,25 @@ export default function LandingClient() {
       >
         <div className="modal">
           <div className="modal__top">
-            <button type="button" className="modal__back" aria-label="Назад" onClick={() => setModal("none")}>
+            <button
+              type="button"
+              className="modal__back"
+              aria-label="Назад"
+              onClick={() => {
+                if (authStep === "phone") {
+                  setModal("none");
+                  return;
+                }
+                setAuthStep("phone");
+                setCheckedPhone("");
+                setLoginPass("");
+              }}
+            >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            <h2 className="modal__top-title">{authTab === "login" ? "Вход" : "Регистрация"}</h2>
+            <h2 className="modal__top-title">{authStep === "phone" ? "Вход" : authStep === "login" ? "Введите пароль" : "Регистрация"}</h2>
             <button type="button" className="modal__close" aria-label="Закрыть" onClick={() => setModal("none")}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
@@ -228,31 +275,15 @@ export default function LandingClient() {
             </button>
           </div>
           <div className="modal__body">
-            <div className="auth-tabs" role="tablist" aria-label="Авторизация">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={authTab === "login"}
-                className={"auth-tabs__btn" + (authTab === "login" ? " is-active" : "")}
-                onClick={() => setAuthTab("login")}
+            {authStep === "phone" ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                }}
+                noValidate
               >
-                Вход
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={authTab === "register"}
-                className={"auth-tabs__btn" + (authTab === "register" ? " is-active" : "")}
-                onClick={() => setAuthTab("register")}
-              >
-                Регистрация
-              </button>
-            </div>
-
-            {authTab === "login" ? (
-              <form onSubmit={onLogin} noValidate>
                 <div className="form-group">
-                  <label htmlFor="phone-login-native">Номер телефона</label>
+                  <label htmlFor="phone-auth-flow">Номер телефона</label>
                   <div className="input-wrap input-wrap--with-icon">
                     <span className="auth-input-icon" aria-hidden="true">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -261,15 +292,26 @@ export default function LandingClient() {
                     </span>
                     <input
                       className="input input--phone"
-                      id="phone-login-native"
+                      id="phone-auth-flow"
                       type="tel"
                       inputMode="numeric"
                       autoComplete="tel"
                       placeholder="+7 (___) ___-__-__"
                       value={loginPhone}
-                      onChange={(e) => setLoginPhone(formatRuPhoneInput(e.target.value))}
+                      onChange={(e) => {
+                        setCheckedPhone("");
+                        setLoginPhone(formatRuPhoneInput(e.target.value));
+                      }}
                     />
                   </div>
+                </div>
+                <p className="form-links">{authCheckingPhone ? "Проверяем номер..." : "После ввода последней цифры продолжим автоматически"}</p>
+              </form>
+            ) : authStep === "login" ? (
+              <form onSubmit={onLogin} noValidate>
+                <div className="form-group">
+                  <label htmlFor="phone-login-native">Номер телефона</label>
+                  <input className="input input--readonly" id="phone-login-native" type="text" value={formatRuPhoneInput(loginPhone)} readOnly />
                 </div>
                 <div className="form-group">
                   <label htmlFor="pass-login-native">Пароль</label>
@@ -280,20 +322,8 @@ export default function LandingClient() {
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
                     </span>
-                    <input
-                      className="input"
-                      id="pass-login-native"
-                      type={showLoginPass ? "text" : "password"}
-                      autoComplete="current-password"
-                      value={loginPass}
-                      onChange={(e) => setLoginPass(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="toggle-pass"
-                      aria-label={showLoginPass ? "Скрыть пароль" : "Показать пароль"}
-                      onClick={() => setShowLoginPass((v) => !v)}
-                    >
+                    <input className="input" id="pass-login-native" type={showLoginPass ? "text" : "password"} autoComplete="current-password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+                    <button type="button" className="toggle-pass" aria-label={showLoginPass ? "Скрыть пароль" : "Показать пароль"} onClick={() => setShowLoginPass((v) => !v)}>
                       {showLoginPass ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="m3 3 18 18" />
@@ -325,23 +355,7 @@ export default function LandingClient() {
               <form onSubmit={onRegister} noValidate>
                 <div className="form-group">
                   <label htmlFor="phone-reg-native">Номер телефона</label>
-                  <div className="input-wrap input-wrap--with-icon">
-                    <span className="auth-input-icon" aria-hidden="true">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L8 9.89a16 16 0 0 0 6.11 6.11l1.44-1.29a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92z" />
-                      </svg>
-                    </span>
-                    <input
-                      className="input input--phone"
-                      id="phone-reg-native"
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel"
-                      placeholder="+7 (___) ___-__-__"
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(formatRuPhoneInput(e.target.value))}
-                    />
-                  </div>
+                  <input className="input input--readonly" id="phone-reg-native" type="text" value={formatRuPhoneInput(regPhone || loginPhone)} readOnly />
                 </div>
                 <div className="form-group">
                   <label htmlFor="fio-reg-native">ФИО</label>
@@ -377,14 +391,7 @@ export default function LandingClient() {
                         <path d="M9 20v-6h6v6" />
                       </svg>
                     </span>
-                    <input
-                      className="input"
-                      id="locality-reg-native"
-                      type="text"
-                      autoComplete="address-level2"
-                      value={regLocality}
-                      onChange={(e) => setRegLocality(e.target.value)}
-                    />
+                    <input className="input" id="locality-reg-native" type="text" autoComplete="address-level2" value={regLocality} onChange={(e) => setRegLocality(e.target.value)} />
                   </div>
                 </div>
                 <div className="form-group">
@@ -396,20 +403,8 @@ export default function LandingClient() {
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
                     </span>
-                    <input
-                      className="input"
-                      id="pass-reg-native"
-                      type={showRegPass ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={regPass}
-                      onChange={(e) => setRegPass(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="toggle-pass"
-                      aria-label={showRegPass ? "Скрыть пароль" : "Показать пароль"}
-                      onClick={() => setShowRegPass((v) => !v)}
-                    >
+                    <input className="input" id="pass-reg-native" type={showRegPass ? "text" : "password"} autoComplete="new-password" value={regPass} onChange={(e) => setRegPass(e.target.value)} />
+                    <button type="button" className="toggle-pass" aria-label={showRegPass ? "Скрыть пароль" : "Показать пароль"} onClick={() => setShowRegPass((v) => !v)}>
                       {showRegPass ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="m3 3 18 18" />
@@ -435,20 +430,8 @@ export default function LandingClient() {
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
                     </span>
-                    <input
-                      className="input"
-                      id="pass-reg2-native"
-                      type={showRegPass2 ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={regPass2}
-                      onChange={(e) => setRegPass2(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="toggle-pass"
-                      aria-label={showRegPass2 ? "Скрыть пароль" : "Показать пароль"}
-                      onClick={() => setShowRegPass2((v) => !v)}
-                    >
+                    <input className="input" id="pass-reg2-native" type={showRegPass2 ? "text" : "password"} autoComplete="new-password" value={regPass2} onChange={(e) => setRegPass2(e.target.value)} />
+                    <button type="button" className="toggle-pass" aria-label={showRegPass2 ? "Скрыть пароль" : "Показать пароль"} onClick={() => setShowRegPass2((v) => !v)}>
                       {showRegPass2 ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="m3 3 18 18" />
@@ -490,7 +473,7 @@ export default function LandingClient() {
               className="modal__back"
               aria-label="Назад"
               onClick={() => {
-                setAuthTab("login");
+                setAuthStep("login");
                 setModal("auth");
               }}
             >

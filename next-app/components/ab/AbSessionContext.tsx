@@ -83,8 +83,10 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
         setAuthVerified(false);
         return;
       }
-      setAuthVerified(false);
-      toast("Не удалось проверить сессию. Попробуйте войти снова.", "warning");
+      // Сетевой/временный сбой не должен выбрасывать пользователя из локальной сессии.
+      setSession(s);
+      setAuthVerified(true);
+      toast("Связь с сервером нестабильна. Работаем с текущей сессией.", "warning");
     } finally {
       window.clearTimeout(abortTimer);
       setAuthCheckInFlight(false);
