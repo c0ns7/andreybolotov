@@ -978,6 +978,15 @@ export default function AdminMarkup() {
               <label htmlFor="edit-user-locality">Населенный пункт</label>
               <input id="edit-user-locality" className="input" type="text" autoComplete="address-level2" maxLength={200} />
             </div>
+            <div className="form-group">
+              <label htmlFor="edit-user-password-new">Новый пароль</label>
+              <input id="edit-user-password-new" className="input" type="password" autoComplete="new-password" />
+              <p className="admin-edit-password-hint">Оставьте пустым, чтобы не менять. Не короче 6 символов.</p>
+            </div>
+            <div className="form-group">
+              <label htmlFor="edit-user-password-confirm">Повторите пароль</label>
+              <input id="edit-user-password-confirm" className="input" type="password" autoComplete="new-password" />
+            </div>
             <div className="form-actions">
               <button type="submit" className="btn btn--primary">Сохранить</button>
             </div>

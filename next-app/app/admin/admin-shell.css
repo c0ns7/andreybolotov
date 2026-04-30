@@ -616,6 +616,12 @@
   .admin-edit-user-id:empty {
     display: none;
   }
+  .admin-edit-password-hint {
+    margin: 6px 0 0;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: #64748b;
+  }
   .admin-sidebar {
     background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
     border: 1px solid rgba(226, 232, 240, 0.95);
