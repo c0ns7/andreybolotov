@@ -110,6 +110,7 @@ export default function AppBottomNav({
   const [profileTicketsBadge, setProfileTicketsBadge] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
+  const [latestVisibleRaffleId, setLatestVisibleRaffleId] = useState(0);
   const isHome = pathname === "/home";
   const isTable = pathname === "/home/table";
   const isChat = pathname === "/home/chat";
@@ -202,6 +203,7 @@ export default function AppBottomNav({
     const cur = loadAbSession();
     if (!cur?.token || !authVerified) {
       setHasLatestVisibleRaffle(false);
+      setLatestVisibleRaffleId(0);
       return;
     }
     try {
@@ -212,13 +214,17 @@ export default function AppBottomNav({
       const data = (await res.json().catch(() => ({}))) as { raffle?: { id?: number; ticket_count?: number } | null };
       if (!res.ok) {
         setHasLatestVisibleRaffle(false);
+        setLatestVisibleRaffleId(0);
         return;
       }
       const id = Math.floor(Number(data?.raffle?.id) || 0);
       const cnt = Math.floor(Number(data?.raffle?.ticket_count) || 0);
-      setHasLatestVisibleRaffle(Number.isFinite(id) && id > 0 && Number.isFinite(cnt) && cnt > 0);
+      const ok = Number.isFinite(id) && id > 0 && Number.isFinite(cnt) && cnt > 0;
+      setHasLatestVisibleRaffle(ok);
+      setLatestVisibleRaffleId(ok ? id : 0);
     } catch {
       setHasLatestVisibleRaffle(false);
+      setLatestVisibleRaffleId(0);
     }
   }, [authVerified]);
 
@@ -312,7 +318,23 @@ export default function AppBottomNav({
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
-  const wholesaleSlots = Array.isArray(tickets.wholesale_slots) ? tickets.wholesale_slots : [];
+  const wholesaleSlotsAll = Array.isArray(tickets.wholesale_slots) ? tickets.wholesale_slots : [];
+  const wholesaleSlots =
+    latestVisibleRaffleId > 0
+      ? wholesaleSlotsAll.filter((s) => Math.floor(Number(s?.raffle_id) || 0) === latestVisibleRaffleId)
+      : [];
+  const profileReserved =
+    latestVisibleRaffleId > 0
+      ? reserved.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
+      : [];
+  const profilePending =
+    latestVisibleRaffleId > 0
+      ? pending.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
+      : [];
+  const profileConfirmed =
+    latestVisibleRaffleId > 0
+      ? confirmed.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
+      : [];
   const hasWholesaleNumbers = wholesaleSlots.some(
     (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
   );
@@ -547,7 +569,7 @@ export default function AppBottomNav({
                   <p className="history-empty">Загрузка...</p>
                 ) : ticketsError ? (
                   <p className="profile-modal__tickets-err">{ticketsError}</p>
-                ) : !reserved.length && !pending.length && !confirmed.length && !hasWholesaleNumbers ? (
+                ) : !profileReserved.length && !profilePending.length && !profileConfirmed.length && !hasWholesaleNumbers ? (
                   <div className="profile-tickets-empty" role="status">
                     <p className="profile-tickets-empty__title">Билетов пока нет</p>
                     <p className="profile-tickets-empty__sub">Участвуйте в акциях!</p>
@@ -578,13 +600,13 @@ export default function AppBottomNav({
                         })}
                       </section>
                     ) : null}
-                    {reserved.length ? (
+                    {profileReserved.length ? (
                       <section className="tickets-section">
                         <h3 className="tickets-section__title">
                           <Clock3 className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
                           <span>Забронированные</span>
                         </h3>
-                        {reserved.map((it, i) => (
+                        {profileReserved.map((it, i) => (
                           <section className="tickets-group tickets-group--reserved-pending" key={"r_" + String(i)}>
                             <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
                             {numChips(it.numbers)}
@@ -592,13 +614,13 @@ export default function AppBottomNav({
                         ))}
                       </section>
                     ) : null}
-                    {pending.length ? (
+                    {profilePending.length ? (
                       <section className="tickets-section tickets-section--pending">
                         <h3 className="tickets-section__title">
                           <Hourglass className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
                           <span>На проверке</span>
                         </h3>
-                        {pending.map((it, i) => (
+                        {profilePending.map((it, i) => (
                           <section className="tickets-group tickets-group--reserved-pending" key={"p_" + String(i)}>
                             <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
                             {numChips(it.numbers)}
@@ -606,13 +628,13 @@ export default function AppBottomNav({
                         ))}
                       </section>
                     ) : null}
-                    {confirmed.length ? (
+                    {profileConfirmed.length ? (
                       <section className="tickets-section tickets-section--confirmed">
                         <h3 className="tickets-section__title">
                           <BadgeCheck className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
                           <span>Закрепленные</span>
                         </h3>
-                        {confirmed.map((it, i) => (
+                        {profileConfirmed.map((it, i) => (
                           <section className="tickets-group tickets-group--confirmed" key={"c_" + String(i)}>
                             <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
                             {numChips(it.numbers, false)}
