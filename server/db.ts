@@ -4,6 +4,7 @@ import {
   cleanupExpiredPasswordResetTokensPg,
   consumePasswordResetTokenPg,
   createSessionPg,
+  deletePasswordResetTokensForUserPg,
   deleteSessionPg,
   getUserByEmailPg,
   getUserByIdPg,
@@ -376,6 +377,10 @@ export async function markRaffleLaunchNotifySent(raffleId: number, ts: number): 
 
 export async function updateUserPasswordHash(userId: number, passwordHash: string): Promise<void> {
   return updateUserPasswordHashPg(userId, passwordHash);
+}
+
+export async function deletePasswordResetTokensForUser(userId: number): Promise<void> {
+  return deletePasswordResetTokensForUserPg(userId);
 }
 
 export async function cleanupExpiredPasswordResetTokens(): Promise<void> {

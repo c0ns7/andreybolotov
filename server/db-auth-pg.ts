@@ -115,6 +115,10 @@ export async function updateUserPasswordHashPg(userId: number, passwordHash: str
   await pgPool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
 }
 
+export async function deletePasswordResetTokensForUserPg(userId: number): Promise<void> {
+  await pgPool.query("DELETE FROM password_reset_tokens WHERE user_id = $1", [userId]);
+}
+
 export async function updateUserLocalityPg(userId: number, locality: string): Promise<void> {
   const loc = String(locality).trim().slice(0, 120);
   await pgPool.query("UPDATE users SET locality = $1 WHERE id = $2", [loc || null, userId]);

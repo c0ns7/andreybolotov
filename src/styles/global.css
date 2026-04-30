@@ -1670,6 +1670,20 @@ html.js-intro-done #welcome-splash {
   color: #9f1239;
 }
 
+.raffle-card--promo-5plus1 {
+  box-shadow:
+    0 20px 40px rgba(217, 119, 6, 0.2),
+    0 0 0 1px rgba(245, 158, 11, 0.24);
+}
+
+.raffle-card--promo-5plus1 .raffle-card__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(245, 158, 11, 0.08), transparent 40%, rgba(251, 191, 36, 0.2));
+}
+
 @keyframes rafflePromoBadgePulse {
   0%,
   100% {
@@ -3440,6 +3454,16 @@ html.bottom-nav-hidden-by-fast-input .cart-action-strip {
   color: #1d4ed8;
 }
 
+.tickets-section--wholesale .tickets-section__title {
+  color: #b45309;
+}
+
+.tickets-section--wholesale .tickets-chip {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
 .tickets-section--confirmed .tickets-section__title {
   color: #15803d;
 }
@@ -4934,6 +4958,17 @@ a.raffle-pay__btn {
 .reserve-payment-modal__upload:hover { border-color: #3b82f6; background: #eff6ff; }
 .reserve-payment-modal__upload-title { display: block; font-weight: 800; color: #1e293b; }
 .reserve-payment-modal__upload-sub { display: block; margin-top: 4px; color: #475569; font-size: 0.84rem; }
+
+.reserve-payment-modal__upload-hint {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+html.theme-dark .reserve-payment-modal__upload-hint {
+  color: #94a3b8;
+}
 .reserve-payment-modal__back-link {
   width: 100%;
   margin-top: 8px;
@@ -5305,6 +5340,11 @@ a.raffle-pay__btn {
 .input--phone {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+.input--readonly {
+  background: #f8fafc;
+  color: #334155;
 }
 
 .toggle-pass {
@@ -8104,6 +8144,53 @@ html.raffle-confirm-page body {
   border-radius: 14px;
 }
 
+.raffle-confirm-network-sheet {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 10050;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 16px 18px 18px;
+  border-radius: 16px;
+  background: var(--surface-elevated, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+}
+
+.raffle-confirm-network-sheet__title {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text, #0f172a);
+}
+
+.raffle-confirm-network-sheet__text {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text-muted, #64748b);
+}
+
+.raffle-confirm-network-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.raffle-confirm-network-sheet__retry,
+.raffle-confirm-network-sheet__dismiss {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+html.theme-dark .raffle-confirm-network-sheet {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
 .raffle-purchase-root {
   width: 100%;
 }
@@ -10425,6 +10512,12 @@ html.theme-dark .raffle-card--cenopad .raffle-card__price-current {
   text-shadow: 0 0 12px rgba(244, 114, 182, 0.5);
 }
 
+html.theme-dark .raffle-card--promo-5plus1 {
+  box-shadow:
+    0 24px 48px rgba(9, 9, 11, 0.75),
+    0 0 0 1px rgba(251, 191, 36, 0.34);
+}
+
 html.theme-dark .raffle-card__promo-info-btn {
   border-color: #7c2d12;
   background: linear-gradient(135deg, rgba(154, 52, 18, 0.24), rgba(146, 64, 14, 0.18));
@@ -10664,6 +10757,16 @@ html.theme-dark .tickets-section--pending .tickets-chip {
   background: color-mix(in srgb, #3b82f6 16%, var(--surface));
   border-color: color-mix(in srgb, #60a5fa 45%, var(--border));
   color: #93c5fd;
+}
+
+html.theme-dark .tickets-section--wholesale .tickets-section__title {
+  color: #fbbf24;
+}
+
+html.theme-dark .tickets-section--wholesale .tickets-chip {
+  background: color-mix(in srgb, #f59e0b 14%, var(--surface));
+  border-color: color-mix(in srgb, #fbbf24 40%, var(--border));
+  color: #fcd34d;
 }
 
 html.theme-dark .tickets-section--confirmed .tickets-section__title {

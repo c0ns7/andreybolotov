@@ -876,6 +876,20 @@ app.post("/api/auth/register", async (request, reply) => {
   };
 });
 
+app.post("/api/auth/check-phone", async (request, reply) => {
+  const body = (request.body ?? {}) as { phone?: string };
+  const phone = normalizePhone(String(body.phone ?? ""));
+  if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
+  if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
+  const user = await getUserByPhonePg(phone);
+  if (!user) return { exists: false };
+  return {
+    exists: true,
+    blocked: Number(user.blocked) === 1,
+    name: String(user.name || ""),
+  };
+});
+
 app.post("/api/auth/login", async (request, reply) => {
   const body = (request.body ?? {}) as { phone?: string; password?: string };
   const phone = normalizePhone(String(body.phone ?? ""));
@@ -1404,32 +1418,49 @@ app.get("/api/raffles/orders/:orderId", async (request, reply) => {
 app.post("/api/raffles/receipt-upload", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
-  const part = await request.file();
-  if (!part) return reply.code(400).send({ error: "Нет файла" });
-  const mime = String(part.mimetype || "application/octet-stream").toLowerCase().split(";")[0].trim();
-  const ext = extForReceiptMime(mime);
-  if (!ext) return reply.code(400).send({ error: "Допустимы изображения или PDF" });
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of part.file) {
-    const b = Buffer.from(chunk);
-    total += b.length;
-    if (total > 10 * 1024 * 1024) {
-      return reply.code(400).send({ error: "Файл не больше 10 МБ" });
+  request.log.info({ route: "receipt-upload", userId: user.id }, "receipt_upload_start");
+  try {
+    const part = await request.file();
+    if (!part) {
+      request.log.warn({ route: "receipt-upload", userId: user.id }, "receipt_upload_no_file");
+      return reply.code(400).send({ error: "Нет файла" });
     }
-    chunks.push(b);
+    const mime = String(part.mimetype || "application/octet-stream").toLowerCase().split(";")[0].trim();
+    const ext = extForReceiptMime(mime);
+    if (!ext) {
+      request.log.warn({ route: "receipt-upload", userId: user.id, mime }, "receipt_upload_bad_mime");
+      return reply.code(400).send({ error: "Допустимы изображения или PDF" });
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of part.file) {
+      const b = Buffer.from(chunk);
+      total += b.length;
+      if (total > 10 * 1024 * 1024) {
+        request.log.warn({ route: "receipt-upload", userId: user.id, bytes: total }, "receipt_upload_too_large");
+        return reply.code(400).send({ error: "Файл не больше 10 МБ" });
+      }
+      chunks.push(b);
+    }
+    const buffer = Buffer.concat(chunks);
+    const fileName = `${randomUUID()}${ext}`;
+    await writeUploadToDirs(fileName, buffer);
+    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const originalName = String(part.filename || "чек").replace(/[<>\"]/g, "").slice(0, 255) || "чек";
+    request.log.info(
+      { route: "receipt-upload", userId: user.id, bytes: buffer.length, mime, fileName },
+      "receipt_upload_ok",
+    );
+    return {
+      url: `/uploads/receipts/${fileName}`,
+      name: originalName,
+      mime,
+      sha256,
+    };
+  } catch (err) {
+    request.log.error({ err, route: "receipt-upload", userId: user.id }, "receipt_upload_exception");
+    return reply.code(500).send({ error: "Не удалось сохранить файл. Попробуйте позже." });
   }
-  const buffer = Buffer.concat(chunks);
-  const fileName = `${randomUUID()}${ext}`;
-  await writeUploadToDirs(fileName, buffer);
-  const sha256 = createHash("sha256").update(buffer).digest("hex");
-  const originalName = String(part.filename || "чек").replace(/[<>\"]/g, "").slice(0, 255) || "чек";
-  return {
-    url: `/uploads/receipts/${fileName}`,
-    name: originalName,
-    mime,
-    sha256,
-  };
 });
 
 app.post("/api/raffles/orders/:orderId/receipt", async (request, reply) => {

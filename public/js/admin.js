@@ -934,6 +934,10 @@
     if (p) p.value = formatRuPhone(selectedUserData.phone);
     if (em) em.value = selectedUserData.email || "";
     if (loc) loc.value = selectedUserData.locality || "";
+    var pn = document.getElementById("edit-user-password-new");
+    var pc = document.getElementById("edit-user-password-confirm");
+    if (pn) pn.value = "";
+    if (pc) pc.value = "";
     modalEditUser.classList.add("is-open");
     modalEditUser.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -1490,16 +1494,34 @@
         const phone = document.getElementById("edit-user-phone").value.trim();
         const email = document.getElementById("edit-user-email").value.trim();
         const locality = document.getElementById("edit-user-locality").value.trim();
+        const pwNewEl = document.getElementById("edit-user-password-new");
+        const pwConfEl = document.getElementById("edit-user-password-confirm");
+        const pwNew = pwNewEl ? String(pwNewEl.value || "").trim() : "";
+        const pwConf = pwConfEl ? String(pwConfEl.value || "").trim() : "";
+        if (pwNew || pwConf) {
+          if (pwNew !== pwConf) {
+            alert("Пароли не совпадают");
+            return;
+          }
+          if (pwNew.length < 6) {
+            alert("Пароль не короче 6 символов");
+            return;
+          }
+        }
+        const payload = { name, phone, email, locality };
+        if (pwNew) payload.new_password = pwNew;
         apiJson("/api/admin/users/" + selectedId, {
           method: "PATCH",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ name, phone, email, locality }),
+          body: JSON.stringify(payload),
         })
           .then(function (data) {
             selectedUserData = data.user;
             if (threadName) threadName.textContent = data.user.name;
             renderThreadMetaFromSelectedUser();
             startThreadLastActiveTicker();
+            if (pwNewEl) pwNewEl.value = "";
+            if (pwConfEl) pwConfEl.value = "";
             closeEditModal();
             loadUsers().catch(function () {});
           })

@@ -386,6 +386,7 @@ function maintenanceBypassPath(path: string): boolean {
   if (path === "/api/health" || path === "/api/site/status") return true;
   return (
     path === "/api/auth/register" ||
+    path === "/api/auth/check-phone" ||
     path === "/api/auth/login" ||
     path === "/api/auth/me" ||
     path === "/api/auth/change-password" ||
@@ -579,6 +580,27 @@ app.post("/api/auth/register", async (c) => {
       role: row?.role ?? "user",
       blocked: false,
     },
+  });
+});
+
+app.post("/api/auth/check-phone", async (c) => {
+  let body: { phone?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const phone = normalizePhone(String(body.phone ?? ""));
+  if (!phone) return c.json({ error: "Введите полный номер телефона" }, 400);
+  if (!isValidRuMobile(phone)) {
+    return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
+  }
+  const user = await getUserByPhonePg(phone);
+  if (!user) return c.json({ exists: false });
+  return c.json({
+    exists: true,
+    blocked: Number(user.blocked) === 1,
+    name: String(user.name || ""),
   });
 });
 

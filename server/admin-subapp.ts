@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import bcrypt from "bcryptjs";
 import type { SessionUser } from "./db.js";
 import { getUserBySessionTokenPg } from "./db-auth-pg.js";
 import {
@@ -29,6 +30,7 @@ import {
   countUsersForAdminBySearch,
   countConfirmedTicketsSoldByCenopad,
   getRaffleSalesAccounting,
+  deletePasswordResetTokensForUser,
   deleteUserAccountByAdmin,
   markThreadReadByStaff,
   messageToDto,
@@ -36,6 +38,7 @@ import {
   setMaintenanceEnabled,
   updateRaffle,
   updateUserBlocked,
+  updateUserPasswordHash,
   updateUserProfile,
   updateUserRole,
   raffleToDto,
@@ -1233,7 +1236,15 @@ adminSubApp.patch("/users/:userId", async (c) => {
   if (!Number.isFinite(userId)) return c.json({ error: "Некорректный id" }, 400);
   const target = await getUserById(userId);
   if (!target) return c.json({ error: "Пользователь не найден" }, 404);
-  let body: { name?: string; phone?: string; email?: string; locality?: string; role?: string; blocked?: boolean };
+  let body: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    locality?: string;
+    role?: string;
+    blocked?: boolean;
+    new_password?: string;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -1287,6 +1298,18 @@ adminSubApp.patch("/users/:userId", async (c) => {
     }
 
     await updateUserProfile(userId, { name, phone, email: emailFinal, locality });
+  }
+
+  if (body.new_password !== undefined) {
+    const raw = String(body.new_password ?? "").trim();
+    if (raw.length > 0) {
+      if (raw.length < 6) {
+        return c.json({ error: "Пароль не короче 6 символов" }, 400);
+      }
+      const passwordHash = bcrypt.hashSync(raw, 10);
+      await updateUserPasswordHash(userId, passwordHash);
+      await deletePasswordResetTokensForUser(userId);
+    }
   }
 
   if (body.role !== undefined) {
