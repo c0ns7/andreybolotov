@@ -26,10 +26,13 @@ type Props = {
   forceShowTableTab?: boolean;
 };
 
+type WholesaleSlotRow = { raffle_id?: number; wholesale_numbers?: number[] };
+
 type TicketsPayload = {
   reserved?: TicketGroup[];
   pending_review?: TicketGroup[];
   confirmed?: TicketGroup[];
+  wholesale_slots?: WholesaleSlotRow[];
 };
 
 type TicketGroup = {
@@ -125,10 +128,11 @@ export default function AppBottomNav({
           invalidateAbMyTicketsCache();
         }
         const data = await getAbMyTicketsCached({ force: withLoading });
-        const next = {
+        const next: TicketsPayload = {
           reserved: Array.isArray(data.reserved) ? data.reserved : [],
           pending_review: Array.isArray(data.pending_review) ? data.pending_review : [],
           confirmed: Array.isArray(data.confirmed) ? data.confirmed : [],
+          wholesale_slots: Array.isArray(data.wholesale_slots) ? data.wholesale_slots : [],
         };
         setTickets(next);
         const reservedCount = next.reserved.reduce((acc, it) => acc + (Array.isArray(it?.numbers) ? it.numbers.length : 0), 0);
@@ -308,19 +312,26 @@ export default function AppBottomNav({
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
+  const wholesaleSlots = Array.isArray(tickets.wholesale_slots) ? tickets.wholesale_slots : [];
+  const hasWholesaleNumbers = wholesaleSlots.some(
+    (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
+  );
   const hasConfirmedTickets = confirmed.some((it) => Array.isArray(it?.numbers) && it.numbers.length > 0);
   const showTableTab = isHome && hasLatestVisibleRaffle && !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
-  const confirmedNumbersFlat = useMemo(() => {
-    const set = new Set<number>();
-    for (const group of confirmed) {
-      const nums = Array.isArray(group?.numbers) ? group.numbers : [];
-      for (const n of nums) {
-        const x = Math.floor(Number(n));
-        if (Number.isFinite(x) && x > 0) set.add(x);
+  const raffleTitleById = useMemo(() => {
+    const m = new Map<number, string>();
+    const ingest = (groups: TicketGroup[]) => {
+      for (const g of groups) {
+        const id = Math.floor(Number(g?.raffle?.id) || 0);
+        const t = String(g?.raffle?.title || "").trim();
+        if (id > 0 && t) m.set(id, t);
       }
-    }
-    return Array.from(set).sort((a, b) => a - b);
-  }, [confirmed]);
+    };
+    ingest(reserved);
+    ingest(pending);
+    ingest(confirmed);
+    return m;
+  }, [reserved, pending, confirmed]);
   const profilePhone = mounted ? formatPhoneRu(session?.phone) : "";
   const profileEmail = mounted ? session?.email || "Не указано" : "Не указано";
   const profileLocality = mounted ? (session?.locality?.trim() || "Не указано") : "Не указано";
@@ -536,13 +547,37 @@ export default function AppBottomNav({
                   <p className="history-empty">Загрузка...</p>
                 ) : ticketsError ? (
                   <p className="profile-modal__tickets-err">{ticketsError}</p>
-                ) : !reserved.length && !pending.length && !confirmed.length ? (
+                ) : !reserved.length && !pending.length && !confirmed.length && !hasWholesaleNumbers ? (
                   <div className="profile-tickets-empty" role="status">
                     <p className="profile-tickets-empty__title">Билетов пока нет</p>
                     <p className="profile-tickets-empty__sub">Участвуйте в акциях!</p>
                   </div>
                 ) : (
                   <>
+                    {hasWholesaleNumbers ? (
+                      <section className="tickets-section tickets-section--wholesale">
+                        <h3 className="tickets-section__title">
+                          <Hash className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
+                          <span>Оптовик</span>
+                        </h3>
+                        {wholesaleSlots.map((slot, i) => {
+                          const nums = Array.isArray(slot?.wholesale_numbers) ? slot.wholesale_numbers : [];
+                          if (!nums.length) return null;
+                          const rid = Math.floor(Number(slot?.raffle_id) || 0);
+                          const title =
+                            rid > 0 ? raffleTitleById.get(rid) || `Акция №${rid}` : String(slot?.raffle_id || "Акция");
+                          return (
+                            <section className="tickets-group tickets-group--wholesale" key={"w_" + String(i) + "_" + String(rid)}>
+                              <h3 className="tickets-group__title">{title}</h3>
+                              <div className="tickets-group__wholesale">
+                                <strong>Номер оптовика</strong>
+                                {numChips(nums)}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </section>
+                    ) : null}
                     {reserved.length ? (
                       <section className="tickets-section">
                         <h3 className="tickets-section__title">
@@ -577,7 +612,12 @@ export default function AppBottomNav({
                           <BadgeCheck className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
                           <span>Закрепленные</span>
                         </h3>
-                        {numChips(confirmedNumbersFlat, false)}
+                        {confirmed.map((it, i) => (
+                          <section className="tickets-group tickets-group--confirmed" key={"c_" + String(i)}>
+                            <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
+                            {numChips(it.numbers, false)}
+                          </section>
+                        ))}
                       </section>
                     ) : null}
                   </>

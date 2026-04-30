@@ -380,6 +380,7 @@ export default function HomeAppClient() {
                 const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
                 const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? currentPrice)));
                 const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
+                const hasPromoFivePlusOne = Boolean(Number(r.promo_5_plus_1_enabled) || r.promo_5_plus_1_enabled === true);
                 const secondPriceEndAt = Math.floor(
                   Number((r as { second_price_end_at?: number; cenopad_end_at?: number }).second_price_end_at ??
                     (r as { cenopad_end_at?: number }).cenopad_end_at ??
@@ -406,7 +407,8 @@ export default function HomeAppClient() {
                     className={
                       "raffle-card" +
                       (st === "active" ? " raffle-card--active" : "") +
-                      (hasSecondPriceActive ? " raffle-card--cenopad" : "")
+                      (hasSecondPriceActive ? " raffle-card--cenopad" : "") +
+                      (hasPromoFivePlusOne ? " raffle-card--promo-5plus1" : "")
                     }
                     data-status={st}
                     role={st === "active" ? "link" : undefined}
@@ -424,6 +426,7 @@ export default function HomeAppClient() {
                         <img src={String(r.cover_image_url)} alt="" width={480} height={160} loading={idx < 2 ? "eager" : "lazy"} />
                       ) : null}
                       <div className="raffle-card__grad" />
+                      {hasPromoFivePlusOne ? <div className="raffle-card__promo-badge">5+1</div> : null}
                       {hasSecondPriceActive ? (
                         <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
                           <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>
