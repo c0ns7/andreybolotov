@@ -259,7 +259,9 @@ export default function LandingClient() {
                   return;
                 }
                 setAuthStep("phone");
-                setCheckedPhone("");
+                // Не триггерим мгновенную повторную проверку того же номера после "назад".
+                setCheckedPhone(phoneToNormalized(loginPhone));
+                setAuthCheckingPhone(false);
                 setLoginPass("");
               }}
             >
