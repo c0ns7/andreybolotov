@@ -167,7 +167,7 @@ export default function AbRafflePurchaseShellMarkup() {
     </div>
     <h3 id="reserve-success-title" className="reserve-success-modal__title">Забронировано</h3>
     <p className="reserve-success-modal__sub">
-      Номерки временно закреплены за вами. Дальше — перевод и загрузка чека. Этапы ниже подскажут, где вы сейчас.
+      Номерки закреплены за вами. Дальше: оплата и один файл чека. Нажмите кнопку ниже — откроются реквизиты и таймер брони.
     </p>
     <p id="reserve-success-deadline" className="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
     <nav id="reserve-success-steps" className="payment-flow-steps" aria-label="Этапы оплаты">
@@ -275,13 +275,18 @@ export default function AbRafflePurchaseShellMarkup() {
 
     <div id="reserve-payment-step-requisites">
       <section className="reserve-payment-modal__info">
-        <h4>Что сделать сейчас</h4>
+        <h4>Три шага</h4>
         <ol>
-          <li>Нажмите <strong>«Перейти к оплате»</strong> — откроется сбор (Сбер) или оплатите по QR, если он есть у акции.</li>
-          <li>Переведите ровно <strong id="reserve-payment-amount-inline">0 ₽</strong> — сумма должна совпадать с заказом.</li>
-          <li>В комментарии к переводу укажите <strong>«Оплата услуг»</strong> (как в назначении ниже).</li>
-          <li>Сохраните подтверждение: скрин или PDF из банка.</li>
-          <li>Вернитесь сюда и нажмите <strong>«Я перевёл»</strong> — откроется загрузка чека (шаг 3).</li>
+          <li>
+            Нажмите зелёную кнопку <strong>«Перейти к оплате»</strong> (или оплатите по QR). Если банк просит комментарий —{" "}
+            <strong>«Оплата услуг»</strong>.
+          </li>
+          <li>
+            Переведите ровно <strong id="reserve-payment-amount-inline">0 ₽</strong> — как в блоке «К переводу» выше.
+          </li>
+          <li>
+            Вернитесь сюда → <strong>«Я перевёл — загрузить чек»</strong> → прикрепите <strong>фото или PDF</strong> из банка.
+          </li>
         </ol>
       </section>
       <div id="reserve-payment-methods" className="reserve-payment-modal__methods" role="tablist" aria-label="Способ оплаты">
@@ -316,7 +321,7 @@ export default function AbRafflePurchaseShellMarkup() {
           <span className="reserve-payment-modal__method-sub">Любой банк</span>
         </button>
       </div>
-      <p className="reserve-payment-modal__methods-tip">Выберите удобный способ оплаты. После перевода прикрепите чек на шаге 3.</p>
+      <p className="reserve-payment-modal__methods-tip">Способ можно сменить вкладками. После оплаты не закрывайте это окно — сразу приложите чек.</p>
 
       <section id="reserve-payment-collect" className="reserve-payment-modal__collect">
         <div className="reserve-payment-modal__collect-head">
@@ -370,22 +375,24 @@ export default function AbRafflePurchaseShellMarkup() {
 
     <div id="reserve-payment-step-confirm" hidden>
       <section className="reserve-payment-modal__info reserve-payment-modal__info--confirm">
-        <h4>Проверьте чек перед отправкой</h4>
+        <h4>Быстрая проверка</h4>
         <ul>
-          <li>Видна <strong>дата и время</strong> операции</li>
-          <li>Сумма совпадает с заказом: <strong id="reserve-payment-amount-check">0 ₽</strong></li>
-          <li>Понятно, <strong>кому</strong> ушёл перевод (или последние цифры карты получателя)</li>
+          <li>
+            Видны <strong>дата</strong> и <strong>сумма</strong> — как в заказе: <strong id="reserve-payment-amount-check">0 ₽</strong>
+          </li>
+          <li>
+            Понятно, <strong>кому</strong> ушёл перевод (или QR-оплата видна на скрине)
+          </li>
         </ul>
-        <p className="reserve-payment-modal__info-note">
-          После отправки статус сменится на «на проверке». Обычно это занимает немного времени.
-        </p>
+        <p className="reserve-payment-modal__info-note">Отправили — заявка уйдёт на проверку. При сбое связи нажмите отправку ещё раз.</p>
       </section>
+      <p className="reserve-payment-modal__upload-hint">Скрин из банка или PDF, до 10 МБ. Крупные фото страница попробует сжать перед отправкой.</p>
       <label className="reserve-payment-modal__upload" htmlFor="reserve-payment-file">
         <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden />
-        <span className="reserve-payment-modal__upload-title">Загрузить чек</span>
-        <span id="reserve-payment-file-name" className="reserve-payment-modal__upload-sub">Фото или PDF перевода</span>
+        <span className="reserve-payment-modal__upload-title">Выбрать файл чека</span>
+        <span id="reserve-payment-file-name" className="reserve-payment-modal__upload-sub">Фото или PDF (до 10 МБ)</span>
       </label>
-      <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить чек на проверку</button>
+      <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить чек</button>
       <button type="button" className="reserve-payment-modal__back-link" id="reserve-payment-back-link">Ой, я ещё не оплатил (вернуться к реквизитам)</button>
     </div>
   </div>
@@ -432,8 +439,10 @@ export default function AbRafflePurchaseShellMarkup() {
         </svg>
       </div>
     </div>
-    <h3 id="action-error-title" className="reserve-expired-modal__title">Не удалось выполнить действие</h3>
-    <p id="action-error-text" className="reserve-expired-modal__sub">Проверьте соединение и попробуйте снова.</p>
+    <h3 id="action-error-title" className="reserve-expired-modal__title">Нет связи с сервером</h3>
+    <p id="action-error-text" className="reserve-expired-modal__sub">
+      Проверьте интернет или отключите VPN. Это не ошибка банка — запрос не дошёл до сайта. Нажмите «Повторить».
+    </p>
     <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="action-error-retry">Повторить</button>
   </div>
 </div>
@@ -473,7 +482,7 @@ export default function AbRafflePurchaseShellMarkup() {
       </ol>
     </nav>
     <p className="wait-receipt-modal__sub">
-      Вы отметили перевод, но чек ещё не прикреплён. Без чека заявку сложно подтвердить, а время брони ограничено — приложите файл ниже.
+      Остался шаг с чеком: без файла мы не подтвердим оплату, а бронь ограничена по времени. Нажмите кнопку ниже и приложите скрин или PDF.
     </p>
     <div id="wait-receipt-repeat-wrap" className="reserve-pay-repeat reserve-pay-repeat--wait" hidden>
       <p id="wait-receipt-repeat-text" className="reserve-pay-repeat__text"></p>
@@ -483,7 +492,7 @@ export default function AbRafflePurchaseShellMarkup() {
       <ul id="wait-receipt-repeat-list" className="reserve-pay-repeat__list" hidden></ul>
     </div>
     <p id="wait-receipt-amount" className="wait-receipt-modal__amount">0 ₽</p>
-    <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Прикрепить чек (шаг 3)</button>
+    <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="wait-receipt-upload">Прикрепить чек</button>
     <p id="wait-receipt-left" className="wait-receipt-modal__left">Бронь держится 00:00</p>
     <p id="wait-receipt-deadline" className="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
     <p id="wait-receipt-rules-wrap" className="wait-receipt-modal__rules" hidden>

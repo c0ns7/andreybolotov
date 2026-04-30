@@ -36,10 +36,10 @@ export default function HomeRaffleConfirmPage() {
             <input type="file" id="raffle-confirm-file" className="raffle-confirm-file-input" accept="image/*,application/pdf" />
           </div>
           <p className="raffle-confirm-hint">
-            На чеке должны быть видны дата, сумма, получатель и назначение платежа (при оплате по QR).
+            Скрин из банка: дата, сумма и получатель. До 10 МБ; большие фото страница попробует сжать перед отправкой.
           </p>
           <button type="button" className="btn btn--primary raffle-confirm-submit" id="raffle-confirm-send">
-            Отправить на проверку
+            Отправить чек
           </button>
         </main>
       </div>

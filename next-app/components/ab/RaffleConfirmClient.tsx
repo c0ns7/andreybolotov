@@ -4,30 +4,16 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { loadAbSession } from "../../lib/ab-session";
+import {
+  isNetworkFetchError,
+  postReceiptWithRetries,
+  RECEIPT_NETWORK_MODAL_TEXT,
+  RECEIPT_NETWORK_MODAL_TITLE,
+  uploadReceiptFile,
+} from "../../lib/receipt-client";
 import { useAbSession } from "./AbSessionContext";
 
 const RESUME_PAYMENT_ORDER_KEY = "ab_resume_payment_order";
-
-function isNetworkFetchError(err: unknown): boolean {
-  const msg = String((err as { message?: unknown })?.message || "").toLowerCase();
-  return msg.includes("failed to fetch") || msg.includes("networkerror");
-}
-
-async function postReceiptWithSingleRetry(oid: number, payload: Record<string, unknown>) {
-  const submit = () =>
-    fetch("/api/raffles/orders/" + String(oid) + "/receipt", {
-      method: "POST",
-      headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  try {
-    return await submit();
-  } catch (e) {
-    if (!isNetworkFetchError(e)) throw e;
-    await new Promise((resolve) => window.setTimeout(resolve, 1200));
-    return await submit();
-  }
-}
 
 function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -37,6 +23,7 @@ export default function RaffleConfirmClient() {
   const router = useRouter();
   const { toast } = useAbSession();
   const [lead, setLead] = useState("");
+  const [networkRetryOpen, setNetworkRetryOpen] = useState(false);
   const orderIdRef = useRef(0);
 
   const onBack = useCallback(() => {
@@ -56,17 +43,14 @@ export default function RaffleConfirmClient() {
     const file = input?.files?.[0];
     const oid = orderIdRef.current;
     if (!file) {
-      toast("Выберите файл чека", "warning");
+      toast("Нажмите «Прикрепить чек» и выберите фото или PDF", "warning");
       return;
     }
     if (!oid) return;
+    setNetworkRetryOpen(false);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
-      const uploadData = (await up.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!up.ok) throw new Error(String(uploadData.error || "Ошибка загрузки"));
-      const res = await postReceiptWithSingleRetry(oid, {
+      const uploadData = await uploadReceiptFile(file);
+      const res = await postReceiptWithRetries(oid, {
         url: uploadData.url,
         name: uploadData.name,
         mime: uploadData.mime,
@@ -90,10 +74,10 @@ export default function RaffleConfirmClient() {
       router.push("/home");
     } catch (e) {
       if (isNetworkFetchError(e)) {
-        toast("Сеть нестабильна. Чек не отправлен, попробуйте еще раз.", "warning");
+        setNetworkRetryOpen(true);
         return;
       }
-      toast(String((e as Error).message || "Ошибка"), "error");
+      toast(String((e as Error).message || "Не получилось отправить чек"), "error");
     }
   }, [router, toast]);
 
@@ -162,5 +146,21 @@ export default function RaffleConfirmClient() {
     };
   }, [onBack, onSend]);
 
-  return null;
+  if (!networkRetryOpen) return null;
+  return (
+    <div className="raffle-confirm-network-sheet" role="alertdialog" aria-modal="true" aria-labelledby="raffle-confirm-net-title">
+      <h2 id="raffle-confirm-net-title" className="raffle-confirm-network-sheet__title">
+        {RECEIPT_NETWORK_MODAL_TITLE}
+      </h2>
+      <p className="raffle-confirm-network-sheet__text">{RECEIPT_NETWORK_MODAL_TEXT}</p>
+      <div className="raffle-confirm-network-sheet__actions">
+        <button type="button" className="btn btn--primary raffle-confirm-network-sheet__retry" onClick={() => void onSend()}>
+          Повторить
+        </button>
+        <button type="button" className="btn btn--secondary raffle-confirm-network-sheet__dismiss" onClick={() => setNetworkRetryOpen(false)}>
+          Закрыть
+        </button>
+      </div>
+    </div>
+  );
 }

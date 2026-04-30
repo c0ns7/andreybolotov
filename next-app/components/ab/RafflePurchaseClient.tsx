@@ -4,6 +4,13 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { loadAbSession } from "../../lib/ab-session";
+import {
+  isNetworkFetchError,
+  postReceiptWithRetries,
+  RECEIPT_NETWORK_MODAL_TEXT,
+  RECEIPT_NETWORK_MODAL_TITLE,
+  uploadReceiptFile,
+} from "../../lib/receipt-client";
 import { buildAbWebSocketUrl } from "../../lib/ab-ws";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import AppBottomNav from "./AppBottomNav";
@@ -50,27 +57,6 @@ function esc(s: string) {
 
 function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
-function isNetworkFetchError(err: unknown): boolean {
-  const msg = String((err as { message?: unknown })?.message || "").toLowerCase();
-  return msg.includes("failed to fetch") || msg.includes("networkerror");
-}
-
-async function postReceiptWithSingleRetry(orderId: number, payload: Record<string, unknown>) {
-  const submit = () =>
-    fetch("/api/raffles/orders/" + String(orderId) + "/receipt", {
-      method: "POST",
-      headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  try {
-    return await submit();
-  } catch (e) {
-    if (!isNetworkFetchError(e)) throw e;
-    await new Promise((resolve) => window.setTimeout(resolve, 1200));
-    return await submit();
-  }
 }
 
 function formatMmSs(ms: number) {
@@ -1477,8 +1463,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (title) title.textContent = isC ? "Чек по переводу" : "Реквизиты для перевода";
       if (hint) {
         hint.textContent = isC
-          ? "Шаг 3 из 3: прикрепите чек (фото или PDF). После отправки заявка уйдёт на проверку."
-          : "Шаг 2 из 3: переведите сумму снизу, затем нажмите «Я перевёл — загрузить чек».";
+          ? "Шаг 3: нажмите «Загрузить чек», выберите фото или PDF и отправьте."
+          : "Шаг 2: оплатите сумму ниже, затем нажмите «Я перевёл — загрузить чек».";
       }
       paintFlowSteps("reserve-payment-steps", isC ? "confirm" : "requisites");
     };
@@ -1553,7 +1539,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toastRef.current("Бронь отменена", "success");
       } catch (e) {
         if (isNetworkFetchError(e)) {
-          toastRef.current("Сеть нестабильна. Чек не отправлен, попробуйте еще раз.", "warning");
+          toastRef.current("Нет связи с сервером. Проверьте интернет и попробуйте снова.", "warning");
           return;
         }
         toastRef.current(String((e as Error).message || "Ошибка"), "error");
@@ -1632,32 +1618,28 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const onFileChange = (e: Event) => {
       const f = (e.target as HTMLInputElement).files?.[0];
       const el = document.getElementById("reserve-payment-file-name");
-      if (el) el.textContent = f ? f.name : "Фото или PDF перевода";
+      if (el) el.textContent = f ? f.name : "Фото или PDF (до 10 МБ)";
     };
     const elFile = document.getElementById("reserve-payment-file");
     elFile?.addEventListener("change", onFileChange);
 
-    const onSendReceipt = async () => {
+    const sendReceiptFromModal = async () => {
       const input = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
       const file = input?.files?.[0];
       const oid = reserveDraftRef.current?.orderId;
       if (!file || !oid) {
-        toastRef.current("Выберите файл чека", "warning");
+        toastRef.current("Сначала нажмите «Загрузить чек» и выберите файл", "warning");
         return;
       }
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
-        const uploadData = (await up.json()) as Record<string, unknown>;
-        if (!up.ok) throw new Error(String(uploadData.error || "Ошибка загрузки"));
-        const res = await postReceiptWithSingleRetry(oid, {
+        const uploadData = await uploadReceiptFile(file);
+        const res = await postReceiptWithRetries(oid, {
           url: uploadData.url,
           name: uploadData.name,
           mime: uploadData.mime,
           sha256: uploadData.sha256,
         });
-        const data = (await res.json()) as { error?: string; order?: { receipt_review_eta_hint?: string } };
+        const data = (await res.json().catch(() => ({}))) as { error?: string; order?: { receipt_review_eta_hint?: string } };
         if (!res.ok) throw new Error(data.error || "Ошибка");
         clearPayTimer();
         closeOverlay(document.getElementById("modal-reserve-payment"));
@@ -1668,11 +1650,31 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         void loadSliceRef.current();
         router.replace("/home");
       } catch (e) {
-        toastRef.current(String((e as Error).message || "Ошибка"), "error");
+        if (isNetworkFetchError(e)) {
+          const titleEl = document.getElementById("action-error-title");
+          const textEl = document.getElementById("action-error-text");
+          if (titleEl) titleEl.textContent = RECEIPT_NETWORK_MODAL_TITLE;
+          if (textEl) textEl.textContent = RECEIPT_NETWORK_MODAL_TEXT;
+          openOverlay(document.getElementById("modal-action-error"));
+          return;
+        }
+        toastRef.current(String((e as Error).message || "Не получилось отправить чек"), "error");
       }
+    };
+    const onSendReceipt = () => void sendReceiptFromModal();
+    const onActionErrorRetry = () => {
+      closeOverlay(document.getElementById("modal-action-error"));
+      void sendReceiptFromModal();
     };
     const elSend = document.getElementById("reserve-payment-send");
     elSend?.addEventListener("click", onSendReceipt);
+    const elActionErrRetry = document.getElementById("action-error-retry");
+    elActionErrRetry?.addEventListener("click", onActionErrorRetry);
+    const elModalActionErr = document.getElementById("modal-action-error");
+    const onModalActionErrBackdrop = (e: MouseEvent) => {
+      if (e.target === elModalActionErr) closeOverlay(document.getElementById("modal-action-error"));
+    };
+    elModalActionErr?.addEventListener("click", onModalActionErrBackdrop);
 
     const onExpiredClose = () => closeOverlay(document.getElementById("modal-reserve-expired"));
     const elExpiredClose = document.getElementById("reserve-expired-close");
@@ -1705,6 +1707,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elSupport?.removeEventListener("click", onSupport);
       elFile?.removeEventListener("change", onFileChange);
       elSend?.removeEventListener("click", onSendReceipt);
+      elActionErrRetry?.removeEventListener("click", onActionErrorRetry);
+      elModalActionErr?.removeEventListener("click", onModalActionErrBackdrop);
       elExpiredClose?.removeEventListener("click", onExpiredClose);
       elModalExpired?.removeEventListener("click", onModalExpiredBackdrop);
       elModalSuccess?.removeEventListener("click", onModalSuccessBackdrop);
