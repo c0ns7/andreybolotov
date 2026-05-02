@@ -7357,12 +7357,14 @@ html.theme-dark .auth-tabs__btn.is-active {
     color 0.15s ease;
 }
 
-.raffle-cell--free:hover {
-  border-color: rgba(0, 113, 227, 0.4);
+.raffle-cell--free:hover:not(.raffle-cell--selected):not(.raffle-cell--mine) {
+  border-color: #e5e7eb;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.07);
 }
 
-.raffle-cell--free.raffle-cell--mine:hover {
+.raffle-cell--free.raffle-cell--mine:hover:not(.raffle-cell--selected) {
   border-color: transparent;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.38);
 }
 
 .raffle-cell--free:active {
@@ -9066,26 +9068,72 @@ html.raffle-grid-page .raffle-range-tab--no-free,
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar {
-  padding: 4px 8px 6px;
+  padding: 0;
   background: transparent;
   border: none;
+}
+
+/* Строка табов в шапке: w-max mx-auto px-2 pb-1, gap как space-x-2 */
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar--strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 8px 4px;
+  box-sizing: border-box;
+}
+
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar__divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: #d1d5db;
+  border-radius: 1px;
+}
+
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar .raffle-range-tabs::before {
+  display: none;
+}
+
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar .raffle-range-tabs {
+  flex: 0 1 auto;
+  padding-left: 0;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-start;
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye {
   width: auto;
   height: auto;
   min-height: 34px;
+  min-width: 34px;
   padding: 6px 10px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   color: #1f2937;
+  outline: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye:hover {
   background: rgba(255, 255, 255, 0.7);
+}
+
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.45);
+  outline-offset: 2px;
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye--active {
@@ -9095,6 +9143,7 @@ html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye--active {
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab {
+  position: relative;
   min-height: 0;
   padding: 6px 16px;
   font-size: 0.75rem;
@@ -9105,8 +9154,18 @@ html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab {
   background: rgba(255, 255, 255, 0.5);
   color: #1f2937;
   opacity: 1;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+  outline: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    opacity 0.15s ease,
+    filter 0.15s ease;
 }
 
 @media (min-width: 640px) {
@@ -9117,6 +9176,11 @@ html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab {
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab:hover {
   background: rgba(255, 255, 255, 0.7);
+}
+
+html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab:focus-visible {
+  outline: 2px solid rgba(0, 113, 227, 0.45);
+  outline-offset: 2px;
 }
 
 html.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab--active {
@@ -9400,6 +9464,10 @@ html.raffle-purchase-page .raffle-cell--taken {
 html.raffle-purchase-page .raffle-range-tabs {
   margin-bottom: 8px;
   justify-content: center;
+}
+
+html.raffle-purchase-page .raffle-range-toolbar-scroll .raffle-range-tabs {
+  margin-bottom: 0;
 }
 
 html.raffle-grid-page #raffle-page-legend,
@@ -10495,18 +10563,30 @@ html.theme-dark.raffle-grid-page .raffle-purchase-hero--no-cover .raffle-purchas
   background: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 88%, transparent) 0%, var(--bg) 100%);
 }
 
+html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-toolbar__divider {
+  background: color-mix(in srgb, var(--border) 92%, transparent);
+}
+
 html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye,
 html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab {
-  border-color: var(--border);
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
   color: var(--text);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-eye:hover,
+html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab:hover {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
 }
 
 html.theme-dark.raffle-grid-page .raffle-range-toolbar-scroll .raffle-range-tab--active {
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  transform: scale(1.02);
 }
 
 html.theme-dark.raffle-grid-page .raffle-legend-island-wrap--in-hero .raffle-legend--island {
@@ -11434,6 +11514,15 @@ html.theme-dark .raffle-cell--free {
   background: var(--surface);
   color: var(--text);
   border-color: var(--border);
+}
+
+html.theme-dark .raffle-cell--free:hover:not(.raffle-cell--selected):not(.raffle-cell--mine) {
+  border-color: var(--border);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+}
+
+html.theme-dark .raffle-cell--free.raffle-cell--mine:hover:not(.raffle-cell--selected) {
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.35);
 }
 
 html.theme-dark .raffle-cell--taken {
