@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, Clock3, Gift, Hash, Hourglass, Mail, MapPin } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
@@ -12,7 +12,7 @@ import {
   invalidateAbParticipationHistoryCache,
 } from "../../lib/ab-participation-history-cache";
 import { loadAbSession } from "../../lib/ab-session";
-import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 import { useAbSession } from "./AbSessionContext";
 
 type Props = {
@@ -44,7 +44,14 @@ type TicketGroup = {
 type HistoryPayload = {
   raffles?: Array<{
     raffle?: { title?: string; status?: string };
-    numbers?: { reserved?: number[]; pending_review?: number[]; confirmed?: number[]; bonus_confirmed?: number[] };
+    numbers?: {
+      reserved?: number[];
+      pending_review?: number[];
+      confirmed?: number[];
+      bonus_confirmed?: number[];
+      bonus_5plus1_confirmed?: number[];
+      bonus_5plus2_confirmed?: number[];
+    };
     last_activity_at?: number;
   }>;
 };
@@ -69,6 +76,19 @@ function numChips(nums?: number[], readonly = true) {
       ))}
     </div>
   );
+}
+
+function blurIfFocusInsideModalRoot(rootId: string) {
+  if (typeof document === "undefined") return;
+  const root = document.getElementById(rootId);
+  const ae = document.activeElement;
+  if (root && ae instanceof HTMLElement && root.contains(ae)) {
+    try {
+      ae.blur();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function numChipsForHistory(nums?: number[], className = "", readonly = true) {
@@ -111,6 +131,24 @@ export default function AppBottomNav({
   const [chatUnread, setChatUnread] = useState(0);
   const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
   const [latestVisibleRaffleId, setLatestVisibleRaffleId] = useState(0);
+  const historyOpenRef = useRef(false);
+  historyOpenRef.current = historyOpen;
+
+  const closeProfileModal = useCallback(() => {
+    blurIfFocusInsideModalRoot("modal-profile");
+    setProfileOpen(false);
+  }, []);
+
+  const closeHistoryModal = useCallback(() => {
+    blurIfFocusInsideModalRoot("modal-participation-history");
+    setHistoryOpen(false);
+  }, []);
+
+  const openHistoryFromProfile = useCallback(() => {
+    blurIfFocusInsideModalRoot("modal-profile");
+    setProfileOpen(false);
+    setHistoryOpen(true);
+  }, []);
   const isHome = pathname === "/home";
   const isTable = pathname === "/home/table";
   const isChat = pathname === "/home/chat";
@@ -250,6 +288,13 @@ export default function AppBottomNav({
   }, [refreshLatestVisibleRaffle]);
 
   useEffect(() => {
+    blurIfFocusInsideModalRoot("modal-profile");
+    blurIfFocusInsideModalRoot("modal-participation-history");
+    setProfileOpen(false);
+    setHistoryOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
     const cur = loadAbSession();
     if (!cur?.token || !authVerified) return;
     const wsUrl = buildAbWebSocketUrl(cur.token);
@@ -275,7 +320,7 @@ export default function AppBottomNav({
           void refreshMyTickets(true);
           void refreshHistorySummary();
           void refreshLatestVisibleRaffle();
-          if (historyOpen) void refreshHistory(true);
+          if (historyOpenRef.current) void refreshHistory(true);
         }
         if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
           void refreshLatestVisibleRaffle();
@@ -292,13 +337,9 @@ export default function AppBottomNav({
     connect();
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
-  }, [authVerified, refreshMyTickets, refreshHistory, refreshHistorySummary, refreshChatUnread, refreshLatestVisibleRaffle, profileOpen, historyOpen]);
+  }, [authVerified, refreshMyTickets, refreshHistory, refreshHistorySummary, refreshChatUnread, refreshLatestVisibleRaffle]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -439,6 +480,7 @@ export default function AppBottomNav({
             id="tab-profile"
             aria-label="Профиль"
             onClick={() => {
+              blurIfFocusInsideModalRoot("modal-participation-history");
               setHistoryOpen(false);
               setProfileOpen(true);
             }}
@@ -464,14 +506,14 @@ export default function AppBottomNav({
         aria-modal="true"
         aria-labelledby="profile-modal-heading"
         onClick={(e) => {
-          if (e.target === e.currentTarget) setProfileOpen(false);
+          if (e.target === e.currentTarget) closeProfileModal();
         }}
       >
         <div className="profile-modal">
           <div className="profile-modal__sheet-handle" aria-hidden="true">
             <div className="cart-sheet__grabber"></div>
           </div>
-          <button type="button" className="profile-modal__close" id="profile-modal-close" aria-label="Закрыть" onClick={() => setProfileOpen(false)}>
+          <button type="button" className="profile-modal__close" id="profile-modal-close" aria-label="Закрыть" onClick={closeProfileModal}>
             ✕
           </button>
           <div className="profile-modal__body">
@@ -551,10 +593,7 @@ export default function AppBottomNav({
                   type="button"
                   className="profile-modal__tickets-history-btn"
                   id="profile-open-history"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    setHistoryOpen(true);
-                  }}
+                  onClick={openHistoryFromProfile}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path d="M3 3v5h5"></path>
@@ -655,7 +694,7 @@ export default function AppBottomNav({
                   id="link-admin"
                   aria-label="Панель администратора"
                   title="Панель администратора"
-                  onClick={() => setProfileOpen(false)}
+                  onClick={closeProfileModal}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4z"></path>
@@ -670,7 +709,7 @@ export default function AppBottomNav({
                 aria-label="Настройки"
                 title="Настройки"
                 onClick={() => {
-                  setProfileOpen(false);
+                  closeProfileModal();
                   router.push("/home/settings");
                 }}
               >
@@ -679,7 +718,7 @@ export default function AppBottomNav({
                   <circle cx="12" cy="12" r="3"></circle>
                 </svg>
               </button>
-              <button type="button" className="profile-modal__btn-back profile-modal__btn-back--row" id="profile-modal-dismiss" onClick={() => setProfileOpen(false)}>
+              <button type="button" className="profile-modal__btn-back profile-modal__btn-back--row" id="profile-modal-dismiss" onClick={closeProfileModal}>
                 Вернуться
               </button>
             </div>
@@ -695,7 +734,7 @@ export default function AppBottomNav({
         aria-modal="true"
         aria-labelledby="modal-participation-history-title"
         onClick={(e) => {
-          if (e.target === e.currentTarget) setHistoryOpen(false);
+          if (e.target === e.currentTarget) closeHistoryModal();
         }}
       >
         <div className="modal modal--tickets-sheet">
@@ -707,7 +746,7 @@ export default function AppBottomNav({
               </h2>
               <p className="tickets-sheet__subtitle">Все акции и ваши номерки по ним</p>
             </div>
-            <button type="button" className="tickets-sheet__close" id="modal-participation-history-close" aria-label="Закрыть" onClick={() => setHistoryOpen(false)}>
+            <button type="button" className="tickets-sheet__close" id="modal-participation-history-close" aria-label="Закрыть" onClick={closeHistoryModal}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12"></path>
               </svg>
@@ -753,11 +792,31 @@ export default function AppBottomNav({
                       {numChipsForHistory(it.numbers.confirmed, "history-row__chips--confirmed", false)}
                     </div>
                   ) : null}
-                  {it.numbers?.bonus_confirmed?.length ? (
+                  {it.numbers?.bonus_5plus1_confirmed?.length ? (
                     <div className="history-row history-row--bonus">
                       <strong className="history-row__label">
                         <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
                         <span>Бонус 5+1:</span>
+                      </strong>
+                      {numChipsForHistory(it.numbers.bonus_5plus1_confirmed, "history-row__chips--bonus", true)}
+                    </div>
+                  ) : null}
+                  {it.numbers?.bonus_5plus2_confirmed?.length ? (
+                    <div className="history-row history-row--bonus">
+                      <strong className="history-row__label">
+                        <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
+                        <span>Бонус 5+2:</span>
+                      </strong>
+                      {numChipsForHistory(it.numbers.bonus_5plus2_confirmed, "history-row__chips--bonus", true)}
+                    </div>
+                  ) : null}
+                  {!it.numbers?.bonus_5plus1_confirmed?.length &&
+                  !it.numbers?.bonus_5plus2_confirmed?.length &&
+                  it.numbers?.bonus_confirmed?.length ? (
+                    <div className="history-row history-row--bonus">
+                      <strong className="history-row__label">
+                        <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
+                        <span>Бонус по акции:</span>
                       </strong>
                       {numChipsForHistory(it.numbers.bonus_confirmed, "history-row__chips--bonus", true)}
                     </div>

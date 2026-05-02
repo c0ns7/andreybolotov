@@ -3530,7 +3530,19 @@
           historyNumbersLine("В брони", nums.reserved, "") +
           historyNumbersLine("На проверке", nums.pending_review, "history-row--pending") +
           historyNumbersLine("Закреплено", nums.confirmed, "history-row--confirmed") +
-          historyNumbersLine("Бонус 5+1", nums.bonus_confirmed, "history-row--bonus") +
+          (function () {
+            var b1 = nums.bonus_5plus1_confirmed;
+            var b2 = nums.bonus_5plus2_confirmed;
+            var hasSplit =
+              (Array.isArray(b1) && b1.length) || (Array.isArray(b2) && b2.length);
+            if (hasSplit) {
+              return (
+                historyNumbersLine("Бонус 5+1", Array.isArray(b1) ? b1 : [], "history-row--bonus") +
+                historyNumbersLine("Бонус 5+2", Array.isArray(b2) ? b2 : [], "history-row--bonus")
+              );
+            }
+            return historyNumbersLine("Бонус по акции", nums.bonus_confirmed || [], "history-row--bonus");
+          })() +
           "</article>"
         );
       })
@@ -3592,6 +3604,11 @@
     var input = document.getElementById("promo-5-plus-1-input");
     var result = document.getElementById("promo-5-plus-1-result");
     if (!result) return;
+    var mult = 1;
+    if (modalPromo5Plus1) {
+      var m = Number(modalPromo5Plus1.getAttribute("data-promo-per-five") || "1");
+      mult = Number.isFinite(m) && m > 0 ? m : 1;
+    }
     var raw = input ? String(input.value || "") : "";
     var clean = raw.replace(/[^\d]/g, "");
     if (input && clean !== raw) input.value = clean;
@@ -3600,7 +3617,7 @@
       result.textContent = "В подарок: 0 номерков";
       return;
     }
-    var bonus = Math.floor(paid / 5);
+    var bonus = Math.floor(paid / 5) * mult;
     result.textContent =
       "В подарок: " +
       String(bonus) +
@@ -3612,18 +3629,35 @@
           : "номерков");
   }
 
-  function openPromo5Plus1Modal() {
+  function openPromoPackModal(kind) {
     closeProfileModal();
     closeCartModal();
     closeTicketsModal();
     closeParticipationHistoryModal();
     closeTicketSearchModal();
     if (!modalPromo5Plus1) return;
+    var mult = kind === "5plus2" ? 2 : 1;
+    modalPromo5Plus1.setAttribute("data-promo-per-five", String(mult));
+    var titleEl = document.getElementById("modal-promo-5-plus-1-title");
+    if (titleEl) titleEl.textContent = mult === 2 ? "Что за акция 5+2?" : "Что за акция 5+1?";
+    var badgeEl = document.getElementById("promo-sheet-hero-badge");
+    if (badgeEl) badgeEl.textContent = mult === 2 ? "АКЦИЯ 5+2" : "АКЦИЯ 5+1";
+    var heroEl = document.getElementById("promo-sheet-hero-text");
+    if (heroEl) {
+      heroEl.innerHTML =
+        mult === 2
+          ? "Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляются <strong>2 случайных номерка в подарок</strong>. Если покупаете <strong>10</strong>, получите <strong>+4</strong>, и так далее."
+          : "Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляется <strong>1 случайный номерок в подарок</strong>. Если покупаете <strong>10</strong>, получите <strong>+2</strong>, и так далее.";
+    }
     var input = document.getElementById("promo-5-plus-1-input");
     if (input) input.value = "";
     updatePromo5Plus1Calc();
     openModal(modalPromo5Plus1);
     setBottomNavActive();
+  }
+
+  function openPromo5Plus1Modal() {
+    openPromoPackModal("5plus1");
   }
 
   function closePromo5Plus1Modal() {
@@ -4039,6 +4073,9 @@
         closedSub +
         "</div>";
     }
+    var pr = Number(r.price_rub ?? 0);
+    var basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? pr)));
+    var hasSecondPrice = basePrice > pr && pr > 0;
     var cover = "";
     if (r.cover_image_url && String(r.cover_image_url).trim()) {
       cover =
@@ -4046,16 +4083,23 @@
         escapeHtml(String(r.cover_image_url)) +
         '" alt="" width="480" height="160" loading="lazy" />';
     }
-    var promoBadge =
-      !hasSecondPrice && (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true)
-        ? '<div class="raffle-card__promo-badge">АКЦИЯ 5+1</div>'
-        : "";
-    var promoInfoBtn =
-      Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true
-        ? '<button type="button" class="raffle-card__promo-info-btn" data-promo-info-open="1" data-raffle-idx="' +
-          idx +
-          '">Что за акция 5+1?</button>'
-        : "";
+    var hasPromo5plus1 = Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true;
+    var hasPromo5plus2 = Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true;
+    var hasPromoPack = !hasSecondPrice && (hasPromo5plus1 || hasPromo5plus2);
+    var promoPackKind = hasPromo5plus2 ? "5plus2" : "5plus1";
+    var promoPackLabel = hasPromo5plus2 ? "5+2" : "5+1";
+    var promoBadge = hasPromoPack
+      ? '<div class="raffle-card__promo-badge">АКЦИЯ ' + escapeHtml(promoPackLabel) + "</div>"
+      : "";
+    var promoInfoBtn = hasPromoPack
+      ? '<button type="button" class="raffle-card__promo-info-btn" data-promo-info-open="1" data-promo-pack="' +
+        escapeHtml(promoPackKind) +
+        '" data-raffle-idx="' +
+        idx +
+        '">Что за акция ' +
+        escapeHtml(promoPackLabel) +
+        "?</button>"
+      : "";
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
     var ctaLabel = st === "closed" ? "Подробно" : st === "active" || st === "paused" ? "Участвовать" : "Подробнее";
     var ctaInner =
@@ -4077,9 +4121,6 @@
           : "raffle-card__progress-fill--ok";
     var prevFreePct = Number(raffleCardPrevFreePct[String(r.id)]);
     var startPct = Number.isFinite(prevFreePct) ? prevFreePct : freePct;
-    var pr = Number(r.price_rub ?? 0);
-    var basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? pr)));
-    var hasSecondPrice = basePrice > pr && pr > 0;
     var secondPriceEndAt = Math.floor(Number(r.second_price_end_at ?? r.cenopad_end_at ?? 0));
     var specialPromoBadge = "";
     if (hasSecondPrice) {
@@ -4223,7 +4264,8 @@
       node.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        openPromo5Plus1Modal();
+        var k = String(node.getAttribute("data-promo-pack") || "5plus1");
+        openPromoPackModal(k === "5plus2" ? "5plus2" : "5plus1");
       });
     });
     el.querySelectorAll(".raffle-card__stream-cta").forEach(function (node) {
@@ -7017,6 +7059,12 @@
     if (!overlay) return;
     if (overlay.id === "modal-wait-receipt") stopWaitReceiptModalTimer();
     clearBottomSheetDrag(overlay);
+    var ae = document.activeElement;
+    if (ae && overlay.contains(ae) && typeof ae.blur === "function") {
+      try {
+        ae.blur();
+      } catch (_) {}
+    }
     overlay.classList.remove("is-open");
     overlay.setAttribute("aria-hidden", "true");
     if (overlay.id === "modal-cart") {

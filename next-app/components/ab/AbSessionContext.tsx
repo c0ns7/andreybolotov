@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { usePathname, useRouter } from "next/navigation";
 import { abApiJson, AbApiError } from "../../lib/ab-api";
 import { clearAbSession, loadAbSession, saveAbSession, type AbSession } from "../../lib/ab-session";
-import { buildAbPublicWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbPublicWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 type AbSessionContextValue = {
   session: AbSession | null;
@@ -160,11 +160,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       ws = null;
     }
     return () => {
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, [pathname, router]);
 

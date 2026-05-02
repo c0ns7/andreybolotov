@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
-import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
@@ -24,6 +24,7 @@ type RaffleRow = {
   viewers_count?: number;
   my_order_status?: string;
   promo_5_plus_1_enabled?: number | boolean;
+  promo_5_plus_2_enabled?: number | boolean;
   live_stream_note?: string | null;
   live_stream_url?: string | null;
   live_stream_at?: number | null;
@@ -224,11 +225,7 @@ export default function HomeAppClient() {
     connect();
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, [session?.token, authVerified, loadFeed, refreshTicketStrip]);
 
@@ -372,7 +369,10 @@ export default function HomeAppClient() {
                 const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
                 const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? currentPrice)));
                 const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
-                const hasPromoFivePlusOne = Boolean(Number(r.promo_5_plus_1_enabled) || r.promo_5_plus_1_enabled === true);
+                const hasPromo5plus2 = Boolean(Number(r.promo_5_plus_2_enabled) || r.promo_5_plus_2_enabled === true);
+                const hasPromo5plus1 = Boolean(Number(r.promo_5_plus_1_enabled) || r.promo_5_plus_1_enabled === true);
+                const hasPromoPack = hasPromo5plus1 || hasPromo5plus2;
+                const promoPackLabel = hasPromo5plus2 ? "5+2" : "5+1";
                 const secondPriceEndAt = Math.floor(
                   Number((r as { second_price_end_at?: number; cenopad_end_at?: number }).second_price_end_at ??
                     (r as { cenopad_end_at?: number }).cenopad_end_at ??
@@ -399,7 +399,7 @@ export default function HomeAppClient() {
                       "raffle-card" +
                       (st === "active" ? " raffle-card--active" : "") +
                       (hasSecondPriceActive ? " raffle-card--cenopad" : "") +
-                      (hasPromoFivePlusOne ? " raffle-card--promo-5plus1" : "")
+                      (hasPromoPack ? " raffle-card--promo-5plus1" : "")
                     }
                     data-status={st}
                     role={st === "active" ? "link" : undefined}
@@ -417,7 +417,7 @@ export default function HomeAppClient() {
                         <img src={String(r.cover_image_url)} alt="" width={480} height={160} loading={idx < 2 ? "eager" : "lazy"} />
                       ) : null}
                       <div className="raffle-card__grad" />
-                      {hasPromoFivePlusOne ? <div className="raffle-card__promo-badge">5+1</div> : null}
+                      {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}
                       {hasSecondPriceActive ? (
                         <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
                           <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>

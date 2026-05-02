@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { detachWebSocket } from "../../lib/ab-ws";
 const BAND = 500;
 const MAX_CHIPS_PER_BAND = 2000;
 
@@ -205,11 +206,9 @@ export default function NumbersPageClient() {
     connectWs();
     return () => {
       if (wsReconnect.current) clearTimeout(wsReconnect.current);
-      try {
-        wsRef.current?.close();
-      } catch {
-        /* ignore */
-      }
+      wsReconnect.current = null;
+      detachWebSocket(wsRef.current);
+      wsRef.current = null;
     };
   }, [scheduleRefetch]);
 

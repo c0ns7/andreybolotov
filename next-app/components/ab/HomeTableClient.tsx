@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Grid2X2, Phone, Search, Ticket } from "lucide-react";
-import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 import { getAbLatestTableCached, invalidateAbLatestTableCache, type AbLatestTableRow } from "../../lib/ab-latest-table-cache";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
@@ -174,11 +174,7 @@ export default function HomeTableClient() {
     reconnect();
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, [session?.token, authVerified]);
 

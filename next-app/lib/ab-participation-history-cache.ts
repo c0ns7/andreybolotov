@@ -6,7 +6,14 @@ import { loadAbSession } from "./ab-session";
 export type AbParticipationHistoryPayload = {
   raffles?: Array<{
     raffle?: { title?: string; status?: string };
-    numbers?: { reserved?: number[]; pending_review?: number[]; confirmed?: number[]; bonus_confirmed?: number[] };
+    numbers?: {
+      reserved?: number[];
+      pending_review?: number[];
+      confirmed?: number[];
+      bonus_confirmed?: number[];
+      bonus_5plus1_confirmed?: number[];
+      bonus_5plus2_confirmed?: number[];
+    };
     last_activity_at?: number;
   }>;
 };

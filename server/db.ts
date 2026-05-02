@@ -449,6 +449,8 @@ export type RaffleRow = {
   wholesale_enabled: number;
   promo_5_plus_1_enabled?: number;
   promo_5_plus_1_locked_free_count?: number;
+  promo_5_plus_2_enabled?: number;
+  promo_5_plus_2_locked_free_count?: number;
   hidden_from_public?: number;
   launch_notify_sent_at?: number | null;
   created_at: number;
@@ -491,6 +493,8 @@ export type RaffleDto = {
   wholesale_enabled: boolean;
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_1_locked_free_count: number;
+  promo_5_plus_2_enabled: boolean;
+  promo_5_plus_2_locked_free_count: number;
   hidden_from_public?: boolean;
 };
 
@@ -559,6 +563,11 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     promo_5_plus_1_locked_free_count: Math.max(
       0,
       Math.floor(Number((r as RaffleRow).promo_5_plus_1_locked_free_count ?? 0)),
+    ),
+    promo_5_plus_2_enabled: Boolean(Number((r as RaffleRow).promo_5_plus_2_enabled ?? 0)),
+    promo_5_plus_2_locked_free_count: Math.max(
+      0,
+      Math.floor(Number((r as RaffleRow).promo_5_plus_2_locked_free_count ?? 0)),
     ),
   };
   if (opts?.forAdmin) {
@@ -706,6 +715,7 @@ export async function insertRaffle(data: {
   sort_order: number;
   wholesale_enabled: number;
   promo_5_plus_1_enabled: number;
+  promo_5_plus_2_enabled: number;
   hidden_from_public: number;
 }): Promise<number> {
   const now = Date.now();
@@ -715,8 +725,8 @@ export async function insertRaffle(data: {
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
       sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
-      status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, hidden_from_public, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, sort_order, wholesale_enabled, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -749,6 +759,7 @@ export async function insertRaffle(data: {
       data.sort_order,
       data.wholesale_enabled,
       data.promo_5_plus_1_enabled,
+      data.promo_5_plus_2_enabled,
       data.hidden_from_public,
       now,
       now,
@@ -789,6 +800,7 @@ export async function updateRaffle(
     sort_order: number;
     wholesale_enabled: number;
     promo_5_plus_1_enabled: number;
+    promo_5_plus_2_enabled: number;
     hidden_from_public: number;
   },
 ): Promise<void> {
@@ -800,7 +812,7 @@ export async function updateRaffle(
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
       live_stream_at = ?, live_stream_status = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, promo_5_plus_1_enabled = ?, hidden_from_public = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
     [
       data.title,
@@ -832,6 +844,7 @@ export async function updateRaffle(
       data.sort_order,
       data.wholesale_enabled,
       data.promo_5_plus_1_enabled,
+      data.promo_5_plus_2_enabled,
       data.hidden_from_public,
       Date.now(),
       id,
@@ -839,13 +852,17 @@ export async function updateRaffle(
   );
 }
 
-export async function setRafflePromoGiftLockedCount(raffleId: number, lockedCount: number): Promise<void> {
-  const c = Math.max(0, Math.floor(Number(lockedCount) || 0));
-  await pgExec(`UPDATE raffles SET promo_5_plus_1_locked_free_count = ?, updated_at = ? WHERE id = ?`, [
-    c,
-    Date.now(),
-    raffleId,
-  ]);
+export async function setRafflePromoGiftLockedCounts(
+  raffleId: number,
+  locked5plus1: number,
+  locked5plus2: number,
+): Promise<void> {
+  const c1 = Math.max(0, Math.floor(Number(locked5plus1) || 0));
+  const c2 = Math.max(0, Math.floor(Number(locked5plus2) || 0));
+  await pgExec(
+    `UPDATE raffles SET promo_5_plus_1_locked_free_count = ?, promo_5_plus_2_locked_free_count = ?, updated_at = ? WHERE id = ?`,
+    [c1, c2, Date.now(), raffleId],
+  );
 }
 
 export async function getSiteSettings(): Promise<{ maintenance_enabled: boolean }> {

@@ -96,6 +96,7 @@ function buildStaffRaffleReceiptConfirmedChatBody(
   raffleTitle: string,
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
+  bonusPromoLabel: "5+1" | "5+2" = "5+1",
 ): string {
   const paidUniq = [
     ...new Set(paidTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
@@ -113,7 +114,7 @@ function buildStaffRaffleReceiptConfirmedChatBody(
     .trim()
     .slice(0, 180);
   const bonusBlock = bonusUniq.length
-    ? `\n\n🎁 По акции 5+1 дополнительно закреплены бонусные номерки: ${bonusHuman}.`
+    ? `\n\n🎁 По акции ${bonusPromoLabel} дополнительно закреплены бонусные номерки: ${bonusHuman}.`
     : "";
   return (
     `Поздравляем! Чек по акции «${safeTitle}» закреплён.\n` +

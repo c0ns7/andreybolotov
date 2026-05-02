@@ -11,7 +11,7 @@ import {
   RECEIPT_NETWORK_MODAL_TITLE,
   uploadReceiptFile,
 } from "../../lib/receipt-client";
-import { buildAbWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
@@ -1658,11 +1658,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     connect();
     return () => {
       if (t) clearTimeout(t);
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, [session?.token, authVerified, ensureRaffleActive]);
 

@@ -142,6 +142,7 @@ function buildStaffRaffleReceiptConfirmedChatBody(
   raffleTitle: string,
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
+  bonusPromoLabel: "5+1" | "5+2" = "5+1",
 ): string {
   const paidUniq = [
     ...new Set(paidTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
@@ -159,7 +160,7 @@ function buildStaffRaffleReceiptConfirmedChatBody(
     .trim()
     .slice(0, 180);
   const bonusBlock = bonusUniq.length
-    ? `\n\n🎁 По акции 5+1 дополнительно закреплены бонусные номерки: ${bonusHuman}.`
+    ? `\n\n🎁 По акции ${bonusPromoLabel} дополнительно закреплены бонусные номерки: ${bonusHuman}.`
     : "";
   return (
     `Поздравляем! Чек по акции «${safeTitle}» закреплён.\n` +
@@ -331,6 +332,7 @@ type RaffleInput = {
   sort_order: number;
   wholesale_enabled: boolean;
   promo_5_plus_1_enabled: boolean;
+  promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
 };
 
@@ -429,6 +431,10 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
 
   const wholesale_enabled = Boolean(body.wholesale_enabled);
   const promo_5_plus_1_enabled = Boolean(body.promo_5_plus_1_enabled);
+  const promo_5_plus_2_enabled = Boolean(body.promo_5_plus_2_enabled);
+  if (promo_5_plus_1_enabled && promo_5_plus_2_enabled) {
+    return { ok: false, error: "Включите только одну акцию: 5+1 или 5+2." };
+  }
   const hidden_from_public = Boolean(body.hidden_from_public);
 
   let rules_url = String(body.rules_url ?? "").trim();
@@ -490,6 +496,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       sort_order,
       wholesale_enabled,
       promo_5_plus_1_enabled,
+      promo_5_plus_2_enabled,
       hidden_from_public,
     },
   };
@@ -784,7 +791,10 @@ adminSubApp.post("/raffle-payments/:orderId/confirm", async (c) => {
     const uid = Number(owner.user_id);
     try {
       const title = String(owner.raffle_title ?? "").trim() || "Акция";
-      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums);
+      const raffleRow = await getRaffleById(Number(owner.raffle_id));
+      const bonusPromoLabel =
+        bonusNums.length > 0 && Number(raffleRow?.promo_5_plus_2_enabled) === 1 ? "5+2" : "5+1";
+      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums, bonusPromoLabel);
       const msgId = await insertSupportMessage(uid, body, true, null);
       await markThreadReadByStaff(uid);
       broadcastThreadReadByStaff(uid);
@@ -1015,6 +1025,7 @@ adminSubApp.post("/raffles", async (c) => {
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
+    promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
@@ -1073,6 +1084,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
+    promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
   await recalculateRaffleDerivedStatsForRaffle(id);

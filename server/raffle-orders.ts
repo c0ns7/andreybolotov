@@ -9,7 +9,7 @@ import {
   isRaffleVisibleOnSite,
   getLatestVisibleActiveRaffle,
   listRafflesPublic,
-  setRafflePromoGiftLockedCount,
+  setRafflePromoGiftLockedCounts,
 } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { pgPool } from "./pg.js";
@@ -832,8 +832,15 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
   const now = Date.now();
   const raffleId = o.raffle_id;
   const paidCount = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
+  const bonusPerFive =
+    Number(raffle.promo_5_plus_2_enabled) === 1
+      ? 2
+      : Number(raffle.promo_5_plus_1_enabled) === 1
+        ? 1
+        : 0;
   const giftWant =
-    Number(raffle.promo_5_plus_1_enabled) === 1 && paidCount >= 5 ? Math.floor(paidCount / 5) : 0;
+    bonusPerFive > 0 && paidCount >= 5 ? Math.floor(paidCount / 5) * bonusPerFive : 0;
+  const bonusPromoKind = bonusPerFive === 2 ? "5plus2" : bonusPerFive === 1 ? "5plus1" : null;
   const giftedNumbers: number[] = [];
   const client = await pgPool.connect();
   try {
@@ -856,9 +863,9 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
       if (picked.length > 0) {
         for (const n of picked) {
           await pgExec(
-            `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, hold_status, expires_at, created_at)
-           VALUES (?, ?, ?, ?, 1, 'confirmed', NULL, ?)`,
-            [raffleId, orderId, o.user_id, n, now],
+            `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, bonus_promo_kind, hold_status, expires_at, created_at)
+           VALUES (?, ?, ?, ?, 1, ?, 'confirmed', NULL, ?)`,
+            [raffleId, orderId, o.user_id, n, bonusPromoKind, now],
             client,
           );
           giftedNumbers.push(n);
@@ -867,7 +874,7 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
     }
     const eventDetail = giftedNumbers.length
       ? JSON.stringify({
-          promo: "5+1",
+          promo: bonusPerFive === 2 ? "5+2" : "5+1",
           gift_count: giftedNumbers.length,
           gift_numbers: giftedNumbers,
         })
@@ -1464,6 +1471,8 @@ export type ParticipationHistoryRaffle = {
     pending_review: number[];
     confirmed: number[];
     bonus_confirmed: number[];
+    bonus_5plus1_confirmed: number[];
+    bonus_5plus2_confirmed: number[];
   };
 };
 
@@ -1477,6 +1486,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     ord_updated_at: number;
     ticket_number: number;
     is_bonus: number;
+    bonus_promo_kind: string | null;
   };
   const rows = await pgAll<Row>(
     `SELECT
@@ -1486,7 +1496,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
          o.status AS order_status,
          o.updated_at AS ord_updated_at,
          h.ticket_number AS ticket_number,
-         COALESCE(h.is_bonus, 0) AS is_bonus
+         COALESCE(h.is_bonus, 0) AS is_bonus,
+         h.bonus_promo_kind AS bonus_promo_kind
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        INNER JOIN raffle_ticket_holds h ON h.order_id = o.id
@@ -1513,6 +1524,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
           pending_review: [],
           confirmed: [],
           bonus_confirmed: [],
+          bonus_5plus1_confirmed: [],
+          bonus_5plus2_confirmed: [],
         },
       };
       map.set(rid, entry);
@@ -1533,6 +1546,12 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     if (st === "confirmed") {
       if (Number(row.is_bonus) === 1) {
         if (!entry.numbers.bonus_confirmed.includes(n)) entry.numbers.bonus_confirmed.push(n);
+        const kind = String(row.bonus_promo_kind || "").trim();
+        if (kind === "5plus2") {
+          if (!entry.numbers.bonus_5plus2_confirmed.includes(n)) entry.numbers.bonus_5plus2_confirmed.push(n);
+        } else {
+          if (!entry.numbers.bonus_5plus1_confirmed.includes(n)) entry.numbers.bonus_5plus1_confirmed.push(n);
+        }
       } else if (!entry.numbers.confirmed.includes(n)) {
         entry.numbers.confirmed.push(n);
       }
@@ -1545,6 +1564,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     it.numbers.pending_review.sort((a, b) => a - b);
     it.numbers.confirmed.sort((a, b) => a - b);
     it.numbers.bonus_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_5plus1_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_5plus2_confirmed.sort((a, b) => a - b);
   }
   out.sort((a, b) => b.last_activity_at - a.last_activity_at);
   return out;
@@ -1915,18 +1936,23 @@ export async function recalculateWholesaleForRaffle(raffleId: number): Promise<v
   }
 }
 
-/** Сколько бонусных номерков 5+1 закреплено подтверждёнными заказами по акции. */
+/** Сколько бонусных номерков по акциям 5+1 и 5+2 закреплено подтверждёнными заказами. */
 export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Promise<void> {
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
-  const row = await pgGet<{ c: number }>(
-    `SELECT COUNT(*) AS c
+  const row = await pgGet<{ c1: number; c2: number }>(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE COALESCE(h.is_bonus, 0) = 1
+           AND (h.bonus_promo_kind IS NULL OR h.bonus_promo_kind = '5plus1')
+       )::bigint AS c1,
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '5plus2')::bigint AS c2
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
-       WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 1`,
+       WHERE h.raffle_id = ? AND o.status = 'confirmed'`,
     [raffleId],
   );
-  await setRafflePromoGiftLockedCount(raffleId, Number(row?.c ?? 0));
+  await setRafflePromoGiftLockedCounts(raffleId, Number(row?.c1 ?? 0), Number(row?.c2 ?? 0));
 }
 
 export async function recalculateRaffleDerivedStatsForRaffle(raffleId: number): Promise<void> {

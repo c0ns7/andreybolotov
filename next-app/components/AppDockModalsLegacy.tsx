@@ -257,8 +257,10 @@ export default function AppDockModalsLegacy() {
           </div>
           <div className="tickets-sheet__body custom-scrollbar promo-5-plus-1-sheet__body">
             <div className="promo-5-plus-1-sheet__hero">
-              <span className="promo-5-plus-1-sheet__hero-badge">АКЦИЯ 5+1</span>
-              <p className="promo-5-plus-1-sheet__hero-text">
+              <span id="promo-sheet-hero-badge" className="promo-5-plus-1-sheet__hero-badge">
+                АКЦИЯ 5+1
+              </span>
+              <p id="promo-sheet-hero-text" className="promo-5-plus-1-sheet__hero-text">
                 Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляется{" "}
                 <strong>1 случайный номерок в подарок</strong>. Если покупаете <strong>10</strong>, получите{" "}
                 <strong>+2</strong>, и так далее.

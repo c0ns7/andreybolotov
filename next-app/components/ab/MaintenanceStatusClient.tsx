@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { buildAbPublicWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbPublicWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 type SiteStatusResponse = {
   maintenance?: boolean;
@@ -61,11 +61,7 @@ export default function MaintenanceStatusClient() {
       ws = null;
     }
     return () => {
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, [redirectHome]);
 

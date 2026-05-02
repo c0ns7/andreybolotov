@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Grid2X2, Phone, RefreshCw, Search, SlidersHorizontal, Ticket, Users, X } from "lucide-react";
-import { buildAbPublicWebSocketUrl } from "../../lib/ab-ws";
+import { buildAbPublicWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 type PublicTicketCard = {
   raffleId: number;
@@ -156,11 +156,7 @@ export default function PublicTableClient() {
     connect();
     return () => {
       if (retryTimer) clearTimeout(retryTimer);
-      try {
-        ws?.close();
-      } catch {
-        /* ignore */
-      }
+      detachWebSocket(ws);
     };
   }, []);
 

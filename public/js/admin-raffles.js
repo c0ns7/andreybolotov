@@ -336,9 +336,13 @@
         ? " · вторая цена " + esc(String(r.cenopad_price_rub)) + " ₽"
         : "") +
       (r.wholesale_enabled ? " · оптовики вкл." : "") +
-      (r.promo_5_plus_1_enabled
-        ? " · 5+1 вкл. (бонусных: " +
+      (r.promo_5_plus_1_enabled || r.promo_5_plus_2_enabled
+        ? " · акция " +
+          (r.promo_5_plus_2_enabled ? "5+2" : "5+1") +
+          " (бонус 5+1: " +
           esc(String(Math.max(0, Number(r.promo_5_plus_1_locked_free_count) || 0))) +
+          ", 5+2: " +
+          esc(String(Math.max(0, Number(r.promo_5_plus_2_locked_free_count) || 0))) +
           ")"
         : "") +
       "</p>" +
@@ -663,12 +667,22 @@
         );
     var whEl = document.getElementById("raffle-wholesale-enabled");
     if (whEl) whEl.checked = edit ? !!edit.wholesale_enabled : false;
-    var promoEl = document.getElementById("raffle-promo-5-plus-1-enabled");
-    if (promoEl) promoEl.checked = edit ? !!edit.promo_5_plus_1_enabled : false;
+    var pack =
+      edit && edit.promo_5_plus_2_enabled
+        ? "5plus2"
+        : edit && edit.promo_5_plus_1_enabled
+          ? "5plus1"
+          : "none";
+    ["none", "5plus1", "5plus2"].forEach(function (v) {
+      var el = document.getElementById("raffle-promo-pack-" + v);
+      if (el) el.checked = pack === v;
+    });
     var promoStatsEl = document.getElementById("raffle-promo-5-plus-1-stats");
     if (promoStatsEl) {
-      var locked = edit ? Math.max(0, Number(edit.promo_5_plus_1_locked_free_count) || 0) : 0;
-      promoStatsEl.textContent = "Закреплено бесплатных номерков: " + String(locked);
+      var c1 = edit ? Math.max(0, Number(edit.promo_5_plus_1_locked_free_count) || 0) : 0;
+      var c2 = edit ? Math.max(0, Number(edit.promo_5_plus_2_locked_free_count) || 0) : 0;
+      promoStatsEl.textContent =
+        "Закреплено бонусных номерков: по акции 5+1 — " + String(c1) + ", по акции 5+2 — " + String(c2);
     }
     var hidEl = document.getElementById("raffle-hidden-from-public");
     if (hidEl) hidEl.checked = edit ? !!edit.hidden_from_public : false;
@@ -1368,8 +1382,12 @@
         return w ? !!w.checked : false;
       })(),
       promo_5_plus_1_enabled: (function () {
-        var x = document.getElementById("raffle-promo-5-plus-1-enabled");
-        return x ? !!x.checked : false;
+        var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
+        return el && el.value === "5plus1";
+      })(),
+      promo_5_plus_2_enabled: (function () {
+        var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
+        return el && el.value === "5plus2";
       })(),
       hidden_from_public: (function () {
         var h = document.getElementById("raffle-hidden-from-public");
