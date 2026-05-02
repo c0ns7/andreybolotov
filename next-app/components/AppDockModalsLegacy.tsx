@@ -456,14 +456,12 @@ export default function AppDockModalsLegacy() {
           <div id="reserve-payment-collect-tbank" hidden></div>
           <div id="reserve-payment-qr" hidden></div>
           <button type="button" id="reserve-payment-done" />
-          <button type="button" id="reserve-payment-support" />
           <input id="reserve-payment-file" type="file" />
           <span id="reserve-payment-file-name"></span>
           <button type="button" id="reserve-payment-send" />
           <button type="button" id="reserve-payment-back-link" />
           <button type="button" id="reserve-payment-cancel-dismiss" />
           <button type="button" id="reserve-payment-cancel-confirm" />
-          <p id="reserve-payment-deadline"></p>
         </div>
       </div>
 

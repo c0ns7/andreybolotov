@@ -1436,6 +1436,10 @@
   var raffleDraftHydrated = false;
   var reservePaymentTimerId = null;
   var waitReceiptModalTimerId = null;
+  var payCopyBtnHtmlCache = new WeakMap();
+  var payCopyBtnTimers = new WeakMap();
+  var payCopyCheckSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
   var reserveFlowState = {
     orderId: 0,
     raffleId: 0,
@@ -2070,9 +2074,7 @@
     var dl = formatReserveDeadlineMoscow(untilTs);
     var text = dl ? "Крайний срок брони (МСК): " + dl : "";
     var a = document.getElementById("reserve-success-deadline");
-    var b = document.getElementById("reserve-payment-deadline");
     if (a) a.textContent = text;
-    if (b) b.textContent = text;
   }
 
   function renderReserveFlowModals() {
@@ -2139,6 +2141,17 @@
     if (payAmount) payAmount.textContent = amountText;
     if (payAmountInline) payAmountInline.textContent = amountText;
     if (payAmountCheck) payAmountCheck.textContent = amountText;
+    var instrAmts = document.querySelectorAll(".pay-sheet-instr-amt");
+    for (var ia = 0; ia < instrAmts.length; ia++) {
+      instrAmts[ia].textContent = amountText;
+    }
+    var elStep2Col = document.getElementById("reserve-pay-instr-step2-collection");
+    var elStep2Oth = document.getElementById("reserve-pay-instr-step2-other");
+    if (elStep2Col && elStep2Oth) {
+      var isSberCol = chosenMethod === "collection";
+      elStep2Col.hidden = !isSberCol;
+      elStep2Oth.hidden = isSberCol;
+    }
     var purposeText = String(reserveFlowState.qrPaymentPurpose || "Оплата услуг").trim() || "Оплата услуг";
     if (payPurpose) payPurpose.textContent = purposeText;
     if (payPurposeTbank) payPurposeTbank.textContent = purposeText;
@@ -4631,28 +4644,22 @@
         url
           ? '<a class="raffle-pay-steps__link btn btn--secondary btn--sm" href="' +
               escapeHtml(url) +
-              '" target="_blank" rel="noopener noreferrer">Открыть сбор</a><p class="raffle-pay-steps__txt">Нажмите на кнопку «Открыть сбор» и перейдите в приложение банка.</p>'
-          : '<p class="raffle-pay-steps__txt">Нажмите на кнопку «Открыть сбор» в приложении Сбербанка (ссылка на сбор будет в чате поддержки, если не настроена).</p>',
+              '" target="_blank" rel="noopener noreferrer">Открыть сбор</a><p class="raffle-pay-steps__txt">Перейдите в приложение банка и переведите средства.</p>'
+          : '<p class="raffle-pay-steps__txt">Откройте сбор в приложении Сбербанка (ссылка будет в чате поддержки, если не настроена).</p>',
       );
-      html += rafflePayStepItem(2, "<p class=\"raffle-pay-steps__txt\">Присоединитесь к сбору.</p>");
-      html += rafflePayStepItem(3, "<p class=\"raffle-pay-steps__txt\">Сдайте деньги через интерфейс сбора.</p>");
+      html += rafflePayStepItem(
+        2,
+        '<p class="raffle-pay-steps__txt">Переведите <strong>' +
+          escapeHtml(formatRubleAmount(amountRub)) +
+          " ₽</strong>. Назначение платежа указывать не нужно.</p>",
+      );
+      html += rafflePayStepItem(
+        3,
+        "<p class=\"raffle-pay-steps__txt\">Сделайте скриншот перевода.</p>",
+      );
       html += rafflePayStepItem(
         4,
-        '<p class="raffle-pay-steps__txt">Введите сумму <strong>' +
-          escapeHtml(formatRubleAmount(amountRub)) +
-          " ₽</strong> и подтвердите оплату.</p>",
-      );
-      html += rafflePayStepItem(
-        5,
-        "<p class=\"raffle-pay-steps__txt\">Сохраните чек в формате PDF или сделайте скриншот.</p>",
-      );
-      html += rafflePayStepItem(
-        6,
-        "<p class=\"raffle-pay-steps__txt\">Нажмите кнопку <strong>«Я оплатил»</strong> ниже на этой странице.</p>",
-      );
-      html += rafflePayStepItem(
-        7,
-        "<p class=\"raffle-pay-steps__txt\">На следующем экране прикрепите чек и отправьте на проверку.</p>",
+        "<p class=\"raffle-pay-steps__txt\">Нажмите <strong>«Я оплатил»</strong> ниже. На следующем шаге прикрепите чек к переводу.</p>",
       );
       html += "</ol>";
     } else if (bank === "sber" && sberMethod === "qr") {
@@ -4713,7 +4720,6 @@
       html += rafflePayStepItem(5, "<p class=\"raffle-pay-steps__txt\">Нажмите «Я оплатил» и прикрепите чек далее.</p>");
       html += "</ol>";
     }
-    var payOrderId = Number(o && o.id ? o.id : 0);
     var rulesPay = String((raffleDetailState.raffle && raffleDetailState.raffle.rules_url) || "").trim();
     if (rulesPay) {
       html +=
@@ -4721,12 +4727,6 @@
         escapeHtml(rulesPay) +
         '" target="_blank" rel="noopener noreferrer">Краткие правила акции</a></p>';
     }
-    html +=
-      '<button type="button" class="raffle-pay-support" id="raffle-pay-support" data-order-id="' +
-      String(payOrderId) +
-      '" data-amount="' +
-      String(amountRub) +
-      '">Проблема с оплатой</button>';
     payBody.innerHTML = html;
   }
 
@@ -5548,24 +5548,6 @@
       if (!o || !o.id) return;
       location.href = "/home/raffle/confirm?orderId=" + encodeURIComponent(String(o.id));
     });
-    document.getElementById("raffle-page-step-pay")?.addEventListener("click", function (e) {
-      var btn = e.target.closest("#raffle-pay-support");
-      if (!btn) return;
-      var orderId = Number(btn.getAttribute("data-order-id"));
-      var amount = Number(btn.getAttribute("data-amount"));
-      openChatPanel();
-      setTimeout(function () {
-        var input = document.getElementById("chat-input");
-        if (!input) return;
-        input.value =
-          "Проблема с оплатой. Заказ: " +
-          (orderId > 0 ? "A" + String(orderId) : "—") +
-          ", сумма: " +
-          formatRubleAmount(amount) +
-          " ₽.";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      }, 120);
-    });
   }
 
   async function initRafflePurchasePage() {
@@ -5819,6 +5801,41 @@
     requestCloseReservePaymentModal();
   });
   modalReservePayment?.addEventListener("click", function (e) {
+    var tg = e.target;
+    if (tg && tg.closest) {
+      var copyBtn = tg.closest("[data-copy-target]");
+      if (copyBtn && modalReservePayment && modalReservePayment.contains(copyBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        var tid = copyBtn.getAttribute("data-copy-target");
+        if (!tid) return;
+        var cel = document.getElementById(tid);
+        var txt = cel && cel.textContent ? String(cel.textContent).trim() : "";
+        if (!txt) return;
+        var prevTimer = payCopyBtnTimers.get(copyBtn);
+        if (prevTimer) clearTimeout(prevTimer);
+        navigator.clipboard.writeText(txt).then(
+          function () {
+            if (!payCopyBtnHtmlCache.has(copyBtn)) payCopyBtnHtmlCache.set(copyBtn, copyBtn.innerHTML);
+            copyBtn.classList.add("pay-sheet-copy-btn--copied");
+            copyBtn.innerHTML = payCopyCheckSvg;
+            payCopyBtnTimers.set(
+              copyBtn,
+              setTimeout(function () {
+                copyBtn.classList.remove("pay-sheet-copy-btn--copied");
+                var orig = payCopyBtnHtmlCache.get(copyBtn);
+                if (orig) copyBtn.innerHTML = orig;
+                payCopyBtnTimers.delete(copyBtn);
+              }, 3000),
+            );
+          },
+          function () {
+            showToast("Не удалось скопировать", "warning");
+          },
+        );
+        return;
+      }
+    }
     if (e.target === modalReservePayment) requestCloseReservePaymentModal();
   });
   document.getElementById("reserve-payment-cancel-dismiss")?.addEventListener("click", function () {
@@ -5922,20 +5939,6 @@
   });
   document.getElementById("reserve-payment-back-link")?.addEventListener("click", function () {
     switchReservePaymentStep("requisites");
-  });
-  document.getElementById("reserve-payment-support")?.addEventListener("click", function () {
-    openChatPanel();
-    setTimeout(function () {
-      var input = document.getElementById("chat-input");
-      if (!input) return;
-      input.value =
-        "Проблема с оплатой. Заказ: " +
-        (reserveFlowState.orderId > 0 ? "A" + String(reserveFlowState.orderId) : "—") +
-        ", сумма: " +
-        formatRubleAmount(Number(reserveFlowState.amountRub || 0)) +
-        " ₽.";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    }, 120);
   });
   document.getElementById("reserve-payment-file")?.addEventListener("change", function () {
     var f = this.files && this.files[0];

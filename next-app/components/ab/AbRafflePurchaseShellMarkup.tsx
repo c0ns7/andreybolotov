@@ -360,7 +360,6 @@ export default function AbRafflePurchaseShellMarkup() {
           </div>
         </div>
 
-        <p id="reserve-payment-deadline" className="pay-sheet-deadline" role="status" aria-live="polite"></p>
         <p id="reserve-payment-rules-wrap" className="pay-sheet-rules" hidden>
           <a id="reserve-payment-rules-link" className="reserve-payment-modal__rules-link" href="#" target="_blank" rel="noopener noreferrer">
             Краткие правила акции
@@ -374,8 +373,11 @@ export default function AbRafflePurchaseShellMarkup() {
               <li>
                 Нажмите «<b>Перейти к оплате</b>» ниже
               </li>
-              <li>
-                Оплатите: <b id="reserve-pay-instr-amount">0 ₽</b>
+              <li id="reserve-pay-instr-step2-collection" hidden>
+                Переведите <b className="pay-sheet-instr-amt">0 ₽</b> через сбор Сбербанка по кнопке ниже. Назначение платежа указывать не нужно — просто переведите сумму.
+              </li>
+              <li id="reserve-pay-instr-step2-other">
+                Оплатите: <b className="pay-sheet-instr-amt">0 ₽</b>
                 <br />
                 <span className="pay-sheet-instr__warn">
                   ⚠ Укажите сообщение «<b id="reserve-pay-instr-purpose">—</b>»
@@ -539,9 +541,6 @@ export default function AbRafflePurchaseShellMarkup() {
           </p>
           <button type="button" className="pay-sheet-alt-req" id="reserve-payment-alt-requisites">
             🔄 Дайте другие реквизиты
-          </button>
-          <button type="button" className="raffle-pay-support pay-sheet-support" id="reserve-payment-support">
-            Проблема с оплатой
           </button>
         </div>
 

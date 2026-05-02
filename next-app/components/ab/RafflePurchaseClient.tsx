@@ -67,23 +67,6 @@ function formatMmSs(ms: number) {
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
 
-function formatDeadlineMoscow(ms: number) {
-  try {
-    const d = new Date(Number(ms));
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleString("ru-RU", {
-      timeZone: "Europe/Moscow",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
 function buildRangeParts(ticketCount: number) {
   const maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
   const chunk = 500;
@@ -256,6 +239,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const routeParams = useParams<{ hash?: string | string[] }>();
   const { session, authVerified, authCheckInFlight, toast } = useAbSession();
   const toastRef = useRef(toast);
+  const payCopyBtnOriginalHtmlRef = useRef(new WeakMap<HTMLButtonElement, string>());
+  const payCopyBtnTimerRef = useRef(new WeakMap<HTMLButtonElement, number>());
   toastRef.current = toast;
 
   const raffleId = useMemo(() => {
@@ -1725,14 +1710,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (elPurT) elPurT.textContent = purpose;
       if (elQrPur) elQrPur.textContent = purpose;
       if (elQrHint) elQrHint.textContent = "«" + purpose + "»";
-      const elPurposeSber = document.getElementById("reserve-payment-purpose-sber");
-      if (elPurposeSber) elPurposeSber.textContent = purpose;
       const elInstrPur = document.getElementById("reserve-pay-instr-purpose");
       if (elInstrPur) elInstrPur.textContent = purpose;
       const dAmt = reserveDraftRef.current?.amountRub;
       if (typeof dAmt === "number") {
-        const elInstrAmt = document.getElementById("reserve-pay-instr-amount");
-        if (elInstrAmt) elInstrAmt.textContent = formatRub(dAmt) + " ₽";
+        document.querySelectorAll(".pay-sheet-instr-amt").forEach((el) => {
+          el.textContent = formatRub(dAmt) + " ₽";
+        });
       }
       const hasCol =
         (r.sber_enabled != null ? Boolean(Number(r.sber_enabled) === 1 || r.sber_enabled === true) : Boolean(String(r.collection_url || "").trim())) &&
@@ -1813,6 +1797,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         rw.hidden = !rules;
         if (rules) rl.href = rules;
       }
+      const elStep2Col = document.getElementById("reserve-pay-instr-step2-collection");
+      const elStep2Oth = document.getElementById("reserve-pay-instr-step2-other");
+      if (elStep2Col && elStep2Oth) {
+        const isSberCollection = m === "collection";
+        elStep2Col.hidden = !isSberCollection;
+        elStep2Oth.hidden = isSberCollection;
+      }
     };
 
     const switchPayStep = (step: "requisites" | "confirm") => {
@@ -1877,8 +1868,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       document.getElementById("reserve-payment-amount")!.textContent = formatRub(amt);
       document.getElementById("reserve-payment-amount-inline")!.textContent = formatRub(amt) + " ₽";
       document.getElementById("reserve-payment-amount-check")!.textContent = formatRub(amt) + " ₽";
-      const elInstrAmtTop = document.getElementById("reserve-pay-instr-amount");
-      if (elInstrAmtTop) elInstrAmtTop.textContent = formatRub(amt) + " ₽";
       const stampEl = document.getElementById("reserve-payment-order-stamp");
       if (stampEl) {
         const idn = Math.max(0, Math.floor(Number(d.orderId) || 0));
@@ -1886,8 +1875,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       const fullOrd = document.getElementById("reserve-payment-order-id");
       if (fullOrd) fullOrd.textContent = "Заказ A" + String(d.orderId);
-      const dl = document.getElementById("reserve-payment-deadline");
-      if (dl) dl.textContent = d.reservedUntil ? "Крайний срок брони (МСК): " + formatDeadlineMoscow(d.reservedUntil) : "";
       paintReservePayment(r, d.paymentMethod);
       switchPayStep("requisites");
       openOverlay(document.getElementById("modal-reserve-payment"));
@@ -1942,17 +1929,37 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const elPayClose = document.getElementById("reserve-payment-close");
     elPayClose?.addEventListener("click", onPayClose);
     const elModalPay = document.getElementById("modal-reserve-payment");
+    const CHECK_COPY_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
     const onModalPayClick = (e: MouseEvent) => {
-      const copyBtn = (e.target as HTMLElement).closest?.("[data-copy-target]") as HTMLElement | null;
+      const copyBtn = (e.target as HTMLElement).closest?.("[data-copy-target]") as HTMLButtonElement | null;
       if (copyBtn) {
         e.preventDefault();
+        e.stopPropagation();
         const id = copyBtn.getAttribute("data-copy-target");
         if (!id) return;
         const cel = document.getElementById(id);
         const text = cel?.textContent?.trim() || "";
         if (!text) return;
+        const originals = payCopyBtnOriginalHtmlRef.current;
+        const timers = payCopyBtnTimerRef.current;
+        const prevT = timers.get(copyBtn);
+        if (prevT != null) window.clearTimeout(prevT);
         void navigator.clipboard.writeText(text).then(
-          () => toastRef.current("Скопировано", "success"),
+          () => {
+            if (!originals.has(copyBtn)) originals.set(copyBtn, copyBtn.innerHTML);
+            copyBtn.classList.add("pay-sheet-copy-btn--copied");
+            copyBtn.innerHTML = CHECK_COPY_SVG;
+            timers.set(
+              copyBtn,
+              window.setTimeout(() => {
+                copyBtn.classList.remove("pay-sheet-copy-btn--copied");
+                copyBtn.innerHTML = originals.get(copyBtn) ?? copyBtn.innerHTML;
+                timers.delete(copyBtn);
+              }, 3000),
+            );
+          },
           () => toastRef.current("Не удалось скопировать", "warning"),
         );
         return;
@@ -2007,12 +2014,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (rf) paintReservePayment(rf, "qr");
     };
     elAltReq?.addEventListener("click", onAltReq);
-
-    const onSupport = () => {
-      toastRef.current("Напишите в чат с «Главной»: укажите заказ A" + String(reserveDraftRef.current?.orderId || ""), "info");
-    };
-    const elSupport = document.getElementById("reserve-payment-support");
-    elSupport?.addEventListener("click", onSupport);
 
     const onFileChange = (e: Event) => {
       const f = (e.target as HTMLInputElement).files?.[0];
@@ -2104,7 +2105,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elPayBack?.removeEventListener("click", onPayBack);
       elPayBackLink?.removeEventListener("click", onPayBack);
       for (const { el, fn } of methodHandlers) el.removeEventListener("click", fn);
-      elSupport?.removeEventListener("click", onSupport);
       elFile?.removeEventListener("change", onFileChange);
       elSend?.removeEventListener("click", onSendReceipt);
       elActionErrRetry?.removeEventListener("click", onActionErrorRetry);
