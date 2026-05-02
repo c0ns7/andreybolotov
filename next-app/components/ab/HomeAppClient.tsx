@@ -66,6 +66,7 @@ export default function HomeAppClient() {
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const pushLastShownRef = useRef<Record<string, number>>({});
   const [socialModalOpen, setSocialModalOpen] = useState(false);
+  const [handbookModalOpen, setHandbookModalOpen] = useState(false);
 
   const letter = useMemo(() => {
     const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
@@ -87,18 +88,20 @@ export default function HomeAppClient() {
   }, [session?.token, authVerified, authCheckInFlight, router]);
 
   useEffect(() => {
-    if (!socialModalOpen) return;
+    if (!socialModalOpen && !handbookModalOpen) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSocialModalOpen(false);
+      if (e.key !== "Escape") return;
+      if (handbookModalOpen) setHandbookModalOpen(false);
+      else setSocialModalOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prevOverflow;
       document.removeEventListener("keydown", onKey);
     };
-  }, [socialModalOpen]);
+  }, [socialModalOpen, handbookModalOpen]);
 
   const loadFeed = useCallback(async () => {
     if (!session?.token || !authVerified) {
@@ -530,26 +533,47 @@ export default function HomeAppClient() {
             )}
           </div>
 
-          <section className="home-social-banner" aria-label="Ссылки на социальные сети">
-            <button type="button" className="home-social-banner__btn" onClick={() => setSocialModalOpen(true)}>
-              <span className="home-social-banner__icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                </svg>
-              </span>
-              <span className="home-social-banner__text">
-                <span className="home-social-banner__title">Наши социальные сети</span>
-                <span className="home-social-banner__sub">VK · Telegram · MAX</span>
-              </span>
-              <span className="home-social-banner__chev" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9 18 6-6-6-6"></path>
-                </svg>
-              </span>
-            </button>
+          <section className="home-action-strip" aria-label="Соцсети и справочник">
+            <div className="home-action-strip__row">
+              <button type="button" className="home-action-strip__btn home-action-strip__btn--social" onClick={() => setSocialModalOpen(true)}>
+                <span className="home-action-strip__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </span>
+                <span className="home-action-strip__text">
+                  <span className="home-action-strip__title">Соцсети</span>
+                  <span className="home-action-strip__sub">VK · Telegram · MAX</span>
+                </span>
+                <span className="home-action-strip__chev" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                  </svg>
+                </span>
+              </button>
+              <button type="button" className="home-action-strip__btn home-action-strip__btn--handbook" onClick={() => setHandbookModalOpen(true)}>
+                <span className="home-action-strip__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    <path d="M8 7h8"></path>
+                    <path d="M8 11h8"></path>
+                  </svg>
+                </span>
+                <span className="home-action-strip__text">
+                  <span className="home-action-strip__title">Справочник</span>
+                  <span className="home-action-strip__sub">Частые вопросы</span>
+                </span>
+                <span className="home-action-strip__chev" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                  </svg>
+                </span>
+              </button>
+            </div>
           </section>
         </div>
       </div>
@@ -852,6 +876,64 @@ export default function HomeAppClient() {
                 </a>
               </li>
             </ul>
+          </div>
+        </div>
+      ) : null}
+
+      {handbookModalOpen ? (
+        <div
+          className="modal-overlay modal-overlay--handbook is-open"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-handbook-modal-title"
+          aria-hidden="false"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setHandbookModalOpen(false);
+          }}
+        >
+          <div className="modal home-handbook-modal">
+            <button type="button" className="home-handbook-modal__close" onClick={() => setHandbookModalOpen(false)} aria-label="Закрыть">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
+            <div className="home-handbook-modal__head">
+              <div className="home-handbook-modal__head-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                  <path d="M8 7h8"></path>
+                  <path d="M8 11h6"></path>
+                </svg>
+              </div>
+              <h2 id="home-handbook-modal-title" className="home-handbook-modal__title">
+                Справочник
+              </h2>
+              <p className="home-handbook-modal__intro">Короткие ответы на частые вопросы об участии и оплате.</p>
+            </div>
+            <div className="home-handbook-modal__faq">
+              <article className="home-faq-item">
+                <h3 className="home-faq-item__q">Что делать, если заблокировали платёж?</h3>
+                <p className="home-faq-item__a">Оплатите другим банком по QR-коду, который указан в окне оплаты.</p>
+              </article>
+              <article className="home-faq-item">
+                <h3 className="home-faq-item__q">Где снова открыть оплату?</h3>
+                <p className="home-faq-item__a">
+                  На главной нажмите «Завершить оплату» внизу экрана или откройте нужную акцию — там будет переход к окну с реквизитами и QR.
+                </p>
+              </article>
+              <article className="home-faq-item">
+                <h3 className="home-faq-item__q">Не успел прикрепить чек, а оплату уже внёс — что делать?</h3>
+                <p className="home-faq-item__a">
+                  Забронируйте номерки ещё раз, нажмите «К оплате» и дойдите до шага с прикреплением чека: загрузите тот же перевод, повторно оплачивать не нужно — вы уже оплатили.
+                </p>
+              </article>
+              <article className="home-faq-item">
+                <h3 className="home-faq-item__q">Как написать в поддержку?</h3>
+                <p className="home-faq-item__a">Откройте чат через вкладку «Сообщения» в нижней панели.</p>
+              </article>
+            </div>
           </div>
         </div>
       ) : null}
