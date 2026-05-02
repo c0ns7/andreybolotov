@@ -349,6 +349,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   rangeFromRef.current = rangeFrom;
   const rangeToRef = useRef(rangeTo);
   rangeToRef.current = rangeTo;
+  const rangePartsRef = useRef<{ from: number; to: number }[]>([]);
+  rangePartsRef.current = rangeParts;
+  const mainStepRef = useRef(mainStep);
+  mainStepRef.current = mainStep;
+  const gridLoadingRef = useRef(gridLoading);
+  gridLoadingRef.current = gridLoading;
+  const syncRaffleSwipeHintsRef = useRef<() => void>(() => {});
   const sliceCacheRef = useRef(new Map<string, { ts: number; cells: Cell[] }>());
 
   const loadSlice = useCallback(async (opts?: { force?: boolean; showLoader?: boolean }) => {
@@ -1169,6 +1176,166 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     if (g) g.hidden = mainStep !== "grid";
     if (w) w.hidden = mainStep !== "wait";
   }, [mainStep]);
+
+  useEffect(() => {
+    const EDGE = 14;
+    const PULL_TRIGGER = 56;
+    const COOLDOWN_MS = 550;
+
+    let cooldownUntil = 0;
+    let touchStartY = 0;
+    let maxPullDown = 0;
+    let maxPullUp = 0;
+    let rafHints = false;
+
+    function scrollTopNow() {
+      return window.scrollY || document.documentElement.scrollTop;
+    }
+
+    function docMetrics() {
+      const doc = document.documentElement;
+      const st = scrollTopNow();
+      const vh = window.innerHeight;
+      const sh = doc.scrollHeight;
+      const maxScroll = Math.max(0, sh - vh);
+      const fitsOneScreen = maxScroll <= EDGE;
+      const atTop = st <= EDGE;
+      const atBottom = fitsOneScreen ? false : st >= maxScroll - EDGE;
+      return { st, vh, sh, maxScroll, atTop, atBottom };
+    }
+
+    function getAdjacentParts() {
+      const parts = rangePartsRef.current;
+      const from = rangeFromRef.current;
+      const to = rangeToRef.current;
+      const idx = parts.findIndex((p) => p.from === from && p.to === to);
+      const prevPart = idx > 0 ? parts[idx - 1] : null;
+      const nextPart = idx >= 0 && idx < parts.length - 1 ? parts[idx + 1] : null;
+      return { prevPart, nextPart };
+    }
+
+    function updateHints() {
+      const topEl = document.getElementById("raffle-range-hint-top");
+      const bottomEl = document.getElementById("raffle-range-hint-bottom");
+      const textTop = document.getElementById("raffle-range-hint-top-text");
+      const textBottom = document.getElementById("raffle-range-hint-bottom-text");
+      if (!topEl || !bottomEl) return;
+
+      if (mainStepRef.current !== "grid" || gridLoadingRef.current) {
+        topEl.classList.remove("raffle-range-swipe-hint--visible");
+        bottomEl.classList.remove("raffle-range-swipe-hint--visible");
+        topEl.setAttribute("aria-hidden", "true");
+        bottomEl.setAttribute("aria-hidden", "true");
+        return;
+      }
+
+      const { prevPart, nextPart } = getAdjacentParts();
+      const { atTop, atBottom } = docMetrics();
+
+      if (textTop && prevPart) {
+        textTop.textContent =
+          "👆 Потяните вниз (свайп), чтобы открыть " + String(prevPart.from) + "–" + String(prevPart.to);
+      }
+      if (textBottom && nextPart) {
+        textBottom.textContent =
+          "Потяните вверх (свайп), чтобы открыть " + String(nextPart.from) + "–" + String(nextPart.to) + " 👇";
+      }
+
+      const showTop = atTop && !!prevPart;
+      const showBottom = atBottom && !!nextPart;
+      topEl.classList.toggle("raffle-range-swipe-hint--visible", showTop);
+      bottomEl.classList.toggle("raffle-range-swipe-hint--visible", showBottom);
+      topEl.setAttribute("aria-hidden", showTop ? "false" : "true");
+      bottomEl.setAttribute("aria-hidden", showBottom ? "false" : "true");
+    }
+
+    function scheduleHints() {
+      if (rafHints) return;
+      rafHints = true;
+      requestAnimationFrame(() => {
+        rafHints = false;
+        updateHints();
+      });
+    }
+
+    syncRaffleSwipeHintsRef.current = updateHints;
+
+    function goAdjacent(dir: "prev" | "next") {
+      if (Date.now() < cooldownUntil || gridLoadingRef.current || mainStepRef.current !== "grid") return;
+      const { prevPart, nextPart } = getAdjacentParts();
+      const target = dir === "prev" ? prevPart : nextPart;
+      if (!target) return;
+      const btn = document.querySelector(
+        `.raffle-range-tab[data-from="${target.from}"][data-to="${target.to}"]`,
+      ) as HTMLElement | null;
+      if (!btn) return;
+      cooldownUntil = Date.now() + COOLDOWN_MS;
+      btn.click();
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) return;
+      touchStartY = e.touches[0].clientY;
+      maxPullDown = 0;
+      maxPullUp = 0;
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (e.touches.length !== 1) return;
+      const y = e.touches[0].clientY;
+      const { atTop, atBottom } = docMetrics();
+      if (atTop && y > touchStartY) {
+        maxPullDown = Math.max(maxPullDown, y - touchStartY);
+      }
+      if (atBottom && y < touchStartY) {
+        maxPullUp = Math.max(maxPullUp, touchStartY - y);
+      }
+    }
+
+    function onTouchEnd() {
+      if (Date.now() < cooldownUntil || gridLoadingRef.current) {
+        maxPullDown = 0;
+        maxPullUp = 0;
+        return;
+      }
+      const { atTop, atBottom } = docMetrics();
+      const { prevPart, nextPart } = getAdjacentParts();
+      const pulledDown = maxPullDown >= PULL_TRIGGER;
+      const pulledUp = maxPullUp >= PULL_TRIGGER;
+      maxPullDown = 0;
+      maxPullUp = 0;
+      if (atTop && pulledDown && prevPart) {
+        goAdjacent("prev");
+      } else if (atBottom && pulledUp && nextPart) {
+        goAdjacent("next");
+      }
+      scheduleHints();
+    }
+
+    window.addEventListener("scroll", scheduleHints, { passive: true });
+    window.addEventListener("resize", scheduleHints, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    scheduleHints();
+
+    return () => {
+      window.removeEventListener("scroll", scheduleHints);
+      window.removeEventListener("resize", scheduleHints);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      syncRaffleSwipeHintsRef.current = () => {};
+    };
+  }, []);
+
+  useEffect(() => {
+    syncRaffleSwipeHintsRef.current();
+  }, [rangeFrom, rangeTo, rangeParts, mainStep, gridLoading]);
 
   useEffect(() => {
     const btn = document.getElementById("cart-action-strip-btn");

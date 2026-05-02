@@ -118,7 +118,17 @@ export default function RafflePurchaseLayoutMarkup() {
           <div id="raffle-page-root" className="raffle-purchase-root raffle-purchase-panel" data-raffle-ui="raffle-page">
             <div id="raffle-page-flow">
               <div id="raffle-page-step-grid">
+                <div id="raffle-range-hint-top" className="raffle-range-swipe-hint raffle-range-swipe-hint--top" aria-hidden="true">
+                  <span id="raffle-range-hint-top-text" className="raffle-range-swipe-hint__pill">
+                    👆 Потяните вниз (свайп), чтобы открыть другой диапазон
+                  </span>
+                </div>
                 <div id="raffle-page-grid" className="raffle-ticket-grid"></div>
+                <div id="raffle-range-hint-bottom" className="raffle-range-swipe-hint raffle-range-swipe-hint--bottom" aria-hidden="true">
+                  <span id="raffle-range-hint-bottom-text" className="raffle-range-swipe-hint__pill raffle-range-swipe-hint__pill--elevated">
+                    Потяните вверх (свайп), чтобы открыть другой диапазон 👇
+                  </span>
+                </div>
               </div>
               <div id="raffle-page-step-wait" className="raffle-detail__step raffle-detail__wait" hidden>
                 <div className="raffle-wait-card" role="status" aria-live="polite">

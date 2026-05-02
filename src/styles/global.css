@@ -7324,9 +7324,9 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .raffle-cell--taken {
-  background: #f3f4f6;
-  color: #9ca3af;
-  border: 1px solid #e5e7eb;
+  background: #9ca3af;
+  color: #ffffff80;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
   cursor: not-allowed;
   pointer-events: none;
@@ -9390,9 +9390,9 @@ html.raffle-purchase-page .raffle-range-tab {
 }
 
 html.raffle-purchase-page .raffle-cell--taken {
-  background: #f3f4f6;
-  color: #9ca3af;
-  border: 1px solid #e5e7eb;
+  background: #9ca3af;
+  color: #ffffff80;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -11437,9 +11437,9 @@ html.theme-dark .raffle-cell--free {
 }
 
 html.theme-dark .raffle-cell--taken {
-  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
-  color: var(--text-muted);
-  border-color: var(--border);
+  background: #9ca3af;
+  color: #ffffff80;
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 html.theme-dark .toast {
@@ -12115,4 +12115,69 @@ html.theme-dark .locality-modal__input {
   background: #0f172a;
   border-color: #334155;
   color: #f8fafc;
+}
+
+@keyframes raffle-range-swipe-hint-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.raffle-range-swipe-hint {
+  display: none;
+  text-align: center;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.raffle-range-swipe-hint--visible {
+  display: block;
+}
+
+.raffle-range-swipe-hint--top {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.raffle-range-swipe-hint--bottom {
+  margin-top: 2rem;
+  margin-bottom: 6rem;
+  padding-bottom: 3rem;
+}
+
+.raffle-range-swipe-hint__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.05);
+  color: #6b7280;
+  border-radius: 9999px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  animation: raffle-range-swipe-hint-bounce 1.4s ease-in-out infinite;
+}
+
+.raffle-range-swipe-hint__pill--elevated {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+html.theme-dark .raffle-range-swipe-hint__pill {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+}
+
+html.theme-dark .raffle-range-swipe-hint__pill--elevated {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
