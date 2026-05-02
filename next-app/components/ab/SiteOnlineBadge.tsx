@@ -45,7 +45,7 @@ export default function SiteOnlineBadge() {
     return () => window.removeEventListener("ab-site-online", onEv as EventListener);
   }, [pathname]);
 
-  if (!shouldShowSiteOnline(pathname) || count === null) return null;
+  if (!shouldShowSiteOnline(pathname) || count === null || count < 1) return null;
 
   return (
     <div
