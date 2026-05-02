@@ -264,7 +264,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const orderRef = useRef(order);
   orderRef.current = order;
   const [orderNumbers, setOrderNumbers] = useState<number[]>([]);
-  const [viewers, setViewers] = useState(0);
   const rangeHasFreeRef = useRef(new Map<string, boolean>());
   const [serverSkewMs, setServerSkewMs] = useState(0);
   const reserveMono = useRef<{ budgetMs: number | null; anchorPerf: number | null }>({ budgetMs: null, anchorPerf: null });
@@ -659,7 +658,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           badge.textContent = "БИЛЕТ: " + formatRub(pr) + " ₽";
           badge.hidden = false;
         }
-        setViewers(Math.max(0, Number(r.viewers_count) || 0));
         const tabs = document.getElementById("raffle-page-tabs");
         if (tabs) {
           tabs.innerHTML = parts
@@ -738,50 +736,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     if (!rid) return;
     persistDraft(rid, selected);
   }, [selected, raffle?.id, raffleId, persistDraft]);
-
-  useEffect(() => {
-    if (!raffle?.id || !session?.token) return;
-    const id = Number(raffle.id);
-    const t = window.setInterval(() => {
-      fetch("/api/raffles", { cache: "no-store", headers: abAuthHeaders() })
-        .then((r) => r.json())
-        .then((data: { raffles?: { id?: number; viewers_count?: number }[] }) => {
-          const list = Array.isArray(data.raffles) ? data.raffles : [];
-          const f = list.find((x) => Number(x.id) === id);
-          if (f) setViewers(Math.max(0, Number(f.viewers_count) || 0));
-        })
-        .catch(() => {});
-    }, 60_000);
-    return () => clearInterval(t);
-  }, [raffle?.id, session?.token]);
-
-  useEffect(() => {
-    if (!raffle?.id || !session?.token || !authVerified) return;
-    const id = Number(raffle.id);
-    const ping = () => {
-      if (document.visibilityState !== "visible") return;
-      void fetch("/api/raffles/" + String(id) + "/viewing", { method: "POST", headers: abAuthHeaders(), cache: "no-store" })
-        .then((r) => r.json().catch(() => ({})))
-        .then((d: { viewers_count?: number }) => {
-          if (d && d.viewers_count != null) setViewers(Math.max(0, Number(d.viewers_count) || 0));
-        })
-        .catch(() => {});
-    };
-    ping();
-    const iv = window.setInterval(ping, 50_000);
-    return () => clearInterval(iv);
-  }, [raffle?.id, session?.token, authVerified]);
-
-  useEffect(() => {
-    const elV = document.getElementById("raffle-page-viewers");
-    const elT = document.getElementById("raffle-page-viewers-text");
-    if (elT) {
-      if (viewers <= 0) elT.textContent = "Онлайн: 0";
-      else if (viewers === 1) elT.textContent = "Онлайн: ВЫ";
-      else elT.textContent = "Онлайн: " + String(viewers);
-    }
-    if (elV) elV.hidden = viewers <= 0;
-  }, [viewers]);
 
   const renderCartBody = useCallback(() => {
     const root = document.getElementById("modal-cart-numbers-root");
@@ -1200,6 +1154,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     let lastHintBottomText = "";
     let lastHintShowTop = false;
     let lastHintShowBottom = false;
+    let rangeSwipeAlreadyFired = false;
 
     function wheelDeltaPixels(e: WheelEvent): number {
       const y = e.deltaY;
@@ -1313,20 +1268,52 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
     syncRaffleSwipeHintsRef.current = updateHints;
 
-    function goAdjacent(dir: "prev" | "next") {
-      if (Date.now() < cooldownUntil || gridLoadingRef.current || mainStepRef.current !== "grid") return;
+    function goAdjacent(dir: "prev" | "next"): boolean {
+      if (Date.now() < cooldownUntil || gridLoadingRef.current || mainStepRef.current !== "grid") return false;
       const { prevPart, nextPart } = getAdjacentParts();
       const target = dir === "prev" ? prevPart : nextPart;
-      if (!target) return;
+      if (!target) return false;
       const btn = document.querySelector(
         `.raffle-range-tab[data-from="${target.from}"][data-to="${target.to}"]`,
       ) as HTMLElement | null;
-      if (!btn) return;
+      if (!btn) return false;
       cooldownUntil = Date.now() + COOLDOWN_MS;
       btn.click();
       window.requestAnimationFrame(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
+      return true;
+    }
+
+    function resetPullUi() {
+      const topHint = document.getElementById("raffle-range-hint-top");
+      const bottomHint = document.getElementById("raffle-range-hint-bottom");
+      const fillTop = document.getElementById("raffle-range-pull-fill-top");
+      const fillBottom = document.getElementById("raffle-range-pull-fill-bottom");
+      if (fillTop) fillTop.style.transform = "scaleX(0)";
+      if (fillBottom) fillBottom.style.transform = "scaleX(0)";
+      topHint?.classList.remove("raffle-range-swipe-hint--pull-active");
+      bottomHint?.classList.remove("raffle-range-swipe-hint--pull-active");
+    }
+
+    function setPullUi(which: "top" | "bottom" | "none", ratio: number) {
+      const topHint = document.getElementById("raffle-range-hint-top");
+      const bottomHint = document.getElementById("raffle-range-hint-bottom");
+      const fillTop = document.getElementById("raffle-range-pull-fill-top");
+      const fillBottom = document.getElementById("raffle-range-pull-fill-bottom");
+      const r = Math.min(1.08, Math.max(0, ratio));
+      if (which !== "top" && fillTop) fillTop.style.transform = "scaleX(0)";
+      if (which !== "bottom" && fillBottom) fillBottom.style.transform = "scaleX(0)";
+      if (which !== "top") topHint?.classList.remove("raffle-range-swipe-hint--pull-active");
+      if (which !== "bottom") bottomHint?.classList.remove("raffle-range-swipe-hint--pull-active");
+      if (which === "top" && fillTop && topHint) {
+        fillTop.style.transform = `scaleX(${r})`;
+        if (r > 0.02) topHint.classList.add("raffle-range-swipe-hint--pull-active");
+      }
+      if (which === "bottom" && fillBottom && bottomHint) {
+        fillBottom.style.transform = `scaleX(${r})`;
+        if (r > 0.02) bottomHint.classList.add("raffle-range-swipe-hint--pull-active");
+      }
     }
 
     function onTouchStart(e: TouchEvent) {
@@ -1334,37 +1321,88 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       touchStartY = e.touches[0].clientY;
       maxPullDown = 0;
       maxPullUp = 0;
+      rangeSwipeAlreadyFired = false;
+      resetPullUi();
     }
 
     function onTouchMove(e: TouchEvent) {
       if (e.touches.length !== 1) return;
+      if (rangeSwipeAlreadyFired) return;
+      if (Date.now() < cooldownUntil || gridLoadingRef.current || mainStepRef.current !== "grid") {
+        setPullUi("none", 0);
+        return;
+      }
       const y = e.touches[0].clientY;
       const { atTop, atBottom } = docMetrics();
-      if (atTop && y > touchStartY) {
-        maxPullDown = Math.max(maxPullDown, y - touchStartY);
+      const { prevPart, nextPart } = getAdjacentParts();
+
+      if (atTop && prevPart && y > touchStartY) {
+        const d = y - touchStartY;
+        maxPullDown = Math.max(maxPullDown, d);
+        const ratio = d / PULL_TRIGGER;
+        setPullUi("top", ratio);
+        if (ratio >= 1) {
+          if (goAdjacent("prev")) {
+            rangeSwipeAlreadyFired = true;
+            resetPullUi();
+          }
+        }
+        return;
       }
-      if (atBottom && y < touchStartY) {
-        maxPullUp = Math.max(maxPullUp, touchStartY - y);
+
+      if (atBottom && nextPart && y < touchStartY) {
+        const d = touchStartY - y;
+        maxPullUp = Math.max(maxPullUp, d);
+        const ratio = d / PULL_TRIGGER;
+        setPullUi("bottom", ratio);
+        if (ratio >= 1) {
+          if (goAdjacent("next")) {
+            rangeSwipeAlreadyFired = true;
+            resetPullUi();
+          }
+        }
+        return;
       }
+
+      maxPullDown = 0;
+      maxPullUp = 0;
+      setPullUi("none", 0);
     }
 
     function onTouchEnd() {
-      if (Date.now() < cooldownUntil || gridLoadingRef.current) {
-        maxPullDown = 0;
-        maxPullUp = 0;
-        return;
-      }
-      const { atTop, atBottom } = docMetrics();
-      const { prevPart, nextPart } = getAdjacentParts();
-      const pulledDown = maxPullDown >= PULL_TRIGGER;
-      const pulledUp = maxPullUp >= PULL_TRIGGER;
+      const savedPullDown = maxPullDown;
+      const savedPullUp = maxPullUp;
+      resetPullUi();
       maxPullDown = 0;
       maxPullUp = 0;
-      if (atTop && pulledDown && prevPart) {
+
+      if (Date.now() < cooldownUntil || gridLoadingRef.current) {
+        rangeSwipeAlreadyFired = false;
+        scheduleHints();
+        return;
+      }
+
+      if (rangeSwipeAlreadyFired) {
+        rangeSwipeAlreadyFired = false;
+        scheduleHints();
+        return;
+      }
+
+      const { atTop, atBottom } = docMetrics();
+      const { prevPart, nextPart } = getAdjacentParts();
+      if (atTop && savedPullDown >= PULL_TRIGGER && prevPart) {
         goAdjacent("prev");
-      } else if (atBottom && pulledUp && nextPart) {
+      } else if (atBottom && savedPullUp >= PULL_TRIGGER && nextPart) {
         goAdjacent("next");
       }
+      scheduleHints();
+    }
+
+    function onTouchCancel() {
+      resetPullUi();
+      maxPullDown = 0;
+      maxPullUp = 0;
+      rangeSwipeAlreadyFired = false;
       scheduleHints();
     }
 
@@ -1385,7 +1423,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           wheelAccBottom = 0;
           if (wheelAccTop >= WHEEL_ACC_TRIGGER) {
             wheelAccTop = 0;
-            goAdjacent("prev");
+            void goAdjacent("prev");
           }
         } else {
           wheelAccTop = 0;
@@ -1399,7 +1437,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           wheelAccBottom += dy;
           if (wheelAccBottom >= WHEEL_ACC_TRIGGER) {
             wheelAccBottom = 0;
-            goAdjacent("next");
+            void goAdjacent("next");
           }
         } else {
           wheelAccBottom = 0;
@@ -1416,6 +1454,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchCancel, { passive: true });
     window.addEventListener("wheel", onWheel, { passive: true });
 
     scheduleHints();
@@ -1426,6 +1465,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchCancel);
       window.removeEventListener("wheel", onWheel);
       syncRaffleSwipeHintsRef.current = () => {};
     };
@@ -1624,15 +1664,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         }
         if (d.type === "raffles_feed_updated") {
           void ensureRaffleActive();
-        }
-        if (d.type === "raffle_viewers_updated" && Number(d.raffle_id) === rid) {
-          void fetch("/api/raffles/" + String(rid), { cache: "no-store", headers: abAuthHeaders() })
-            .then((r) => r.json().catch(() => ({})))
-            .then((x: { raffle?: { viewers_count?: number } }) => {
-              const v = Number(x?.raffle?.viewers_count);
-              if (Number.isFinite(v)) setViewers(Math.max(0, v));
-            })
-            .catch(() => {});
         }
       };
       ws.onclose = () => {

@@ -22,11 +22,6 @@ export default function RafflePurchaseLayoutMarkup() {
             <div className="raffle-purchase-hero__layer raffle-purchase-hero__veil"></div>
           </div>
 
-          <div className="raffle-purchase-hero-viewers raffle-purchase-hero-viewers--viewport" id="raffle-page-viewers" hidden aria-live="polite">
-            <span className="raffle-purchase-hero-viewers__dot" aria-hidden="true"></span>
-            <span id="raffle-page-viewers-text">Онлайн: 0</span>
-          </div>
-
           <div className="raffle-purchase-hero__shell">
             <div className="raffle-purchase-hero__bar">
               <button type="button" className="raffle-purchase-back raffle-purchase-back--hero" id="raffle-page-back" aria-label="Назад на главную">
@@ -120,6 +115,11 @@ export default function RafflePurchaseLayoutMarkup() {
             <div id="raffle-page-flow">
               <div id="raffle-page-step-grid">
                 <div id="raffle-range-hint-top" className="raffle-range-swipe-hint raffle-range-swipe-hint--top" aria-hidden="true">
+                  <div className="raffle-range-swipe-hint__pull-row" aria-hidden="true">
+                    <div className="raffle-range-swipe-hint__pull-track">
+                      <div id="raffle-range-pull-fill-top" className="raffle-range-swipe-hint__pull-fill"></div>
+                    </div>
+                  </div>
                   <span id="raffle-range-hint-top-text" className="raffle-range-swipe-hint__pill">
                     👆 Потяните вниз (свайп), чтобы открыть другой диапазон
                   </span>
@@ -129,6 +129,11 @@ export default function RafflePurchaseLayoutMarkup() {
                   <span id="raffle-range-hint-bottom-text" className="raffle-range-swipe-hint__pill raffle-range-swipe-hint__pill--elevated">
                     Потяните вверх (свайп), чтобы открыть другой диапазон 👇
                   </span>
+                  <div className="raffle-range-swipe-hint__pull-row raffle-range-swipe-hint__pull-row--bottom" aria-hidden="true">
+                    <div className="raffle-range-swipe-hint__pull-track">
+                      <div id="raffle-range-pull-fill-bottom" className="raffle-range-swipe-hint__pull-fill raffle-range-swipe-hint__pull-fill--from-right"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div id="raffle-page-step-wait" className="raffle-detail__step raffle-detail__wait" hidden>

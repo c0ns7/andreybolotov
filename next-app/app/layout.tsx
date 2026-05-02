@@ -5,6 +5,7 @@ import Script from "next/script";
 import AbRouteHtmlClasses from "../components/ab/AbRouteHtmlClasses";
 import { AbSessionProvider } from "../components/ab/AbSessionContext";
 import AbToastHost from "../components/ab/AbToastHost";
+import SiteOnlineBadge from "../components/ab/SiteOnlineBadge";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://andreybolotov.ru"),
@@ -94,6 +95,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </Script>
         <AbSessionProvider>
           <AbToastHost />
+          <SiteOnlineBadge />
           {children}
         </AbSessionProvider>
       </body>

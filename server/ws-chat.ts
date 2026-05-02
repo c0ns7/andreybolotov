@@ -137,6 +137,33 @@ export function getPublicTableViewerCount(): number {
   return publicTableSockets.size;
 }
 
+/** Подключения ленты акций + публичной таблицы номеров ≈ «на сайте» (без дубля user/chat-сокетов). */
+export function getSiteOnlineCount(): number {
+  return publicRaffleFeedSockets.size + publicTableSockets.size;
+}
+
+let siteOnlineBroadcastTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSiteOnlineBroadcast = -1;
+
+function broadcastSiteOnlineUpdated() {
+  const n = getSiteOnlineCount();
+  const payload = { type: "site_online_updated" as const, site_online_count: n };
+  broadcastJsonToPublicRaffleFeed(payload);
+  broadcastJsonToPublicTable(payload);
+}
+
+function scheduleSiteOnlineBroadcast() {
+  if (siteOnlineBroadcastTimer != null) return;
+  siteOnlineBroadcastTimer = setTimeout(() => {
+    siteOnlineBroadcastTimer = null;
+    const n = getSiteOnlineCount();
+    if (n !== lastSiteOnlineBroadcast) {
+      lastSiteOnlineBroadcast = n;
+      broadcastSiteOnlineUpdated();
+    }
+  }, 50);
+}
+
 /** Всем пользователям: занятость номерков в акции изменилась (корзина / сетка на клиенте). */
 export function broadcastRaffleGridUpdated(raffleId: number) {
   const rid = Math.floor(Number(raffleId));
@@ -357,19 +384,32 @@ export function attachWebSocket(wss: WebSocketServer) {
     const scope = url.searchParams.get("scope");
     if (scope === "public_raffle_feed") {
       publicRaffleFeedSockets.add(ws);
-      sendJson(ws, { type: "ready", role: "public_raffle_feed" });
+      sendJson(ws, {
+        type: "ready",
+        role: "public_raffle_feed",
+        site_online_count: getSiteOnlineCount(),
+      });
+      scheduleSiteOnlineBroadcast();
       ws.on("close", () => {
         publicRaffleFeedSockets.delete(ws);
+        scheduleSiteOnlineBroadcast();
       });
       return;
     }
     if (scope === "public_table") {
       publicTableSockets.add(ws);
-      sendJson(ws, { type: "ready", role: "public_table", viewers_count: getPublicTableViewerCount() });
+      sendJson(ws, {
+        type: "ready",
+        role: "public_table",
+        viewers_count: getPublicTableViewerCount(),
+        site_online_count: getSiteOnlineCount(),
+      });
       broadcastJsonToPublicTable({ type: "public_table_viewers_updated", viewers_count: getPublicTableViewerCount() });
+      scheduleSiteOnlineBroadcast();
       ws.on("close", () => {
         publicTableSockets.delete(ws);
         broadcastJsonToPublicTable({ type: "public_table_viewers_updated", viewers_count: getPublicTableViewerCount() });
+        scheduleSiteOnlineBroadcast();
       });
       return;
     }

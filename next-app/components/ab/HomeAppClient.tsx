@@ -181,7 +181,7 @@ export default function HomeAppClient() {
             /* ignore */
           }
         };
-        if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated" || d.type === "raffle_viewers_updated") {
+        if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
           void loadFeed();
         }
         if (d.type === "raffle_tickets_updated") {
@@ -197,9 +197,6 @@ export default function HomeAppClient() {
         }
         if (d.type === "raffle_launch_notified") {
           notify("Новая акция на сайте", "Администратор открыл новую акцию.", "push_raffle_launch_notified", 90_000);
-        }
-        if (d.type === "raffle_viewers_updated") {
-          notify("Старт эфира", "По одной из акций начался эфир.", "push_raffle_stream", 90_000);
         }
       };
       ws.onclose = () => {
@@ -331,25 +328,6 @@ export default function HomeAppClient() {
               <h1 className="home-brand-title">Быть добру!</h1>
             </div>
           </header>
-          {pushPromptVisible && pushPermission === "default" ? (
-            <section className="home-push-permission" role="region" aria-label="Разрешение push уведомлений">
-              <div className="home-push-permission__icon" aria-hidden="true">🔔</div>
-              <div className="home-push-permission__body">
-                <h2 className="home-push-permission__title">Включите push-уведомления</h2>
-                <p className="home-push-permission__text">
-                  Будем присылать уведомления о новых сообщениях в чате, запуске акций и начале эфира.
-                </p>
-                <div className="home-push-permission__actions">
-                  <button type="button" className="home-push-permission__btn home-push-permission__btn--primary" onClick={() => void onAllowPush()} disabled={pushRequesting}>
-                    {pushRequesting ? "Запрашиваем..." : "Хорошо, разрешить"}
-                  </button>
-                  <button type="button" className="home-push-permission__btn home-push-permission__btn--ghost" onClick={onLaterPush}>
-                    Позже
-                  </button>
-                </div>
-              </div>
-            </section>
-          ) : null}
           <div className="home-cards" id="home-cards-app">
             {feedErr ? (
               <p className="home-feed-empty">Не удалось загрузить акции. Попробуйте обновить страницу.</p>
@@ -388,7 +366,6 @@ export default function HomeAppClient() {
                 );
                 const secondPriceCountdown =
                   hasSecondPriceActive && secondPriceEndAt > nowTs ? formatCountdown(secondPriceEndAt, nowTs) : "";
-                const viewers = Math.max(0, Number(r.viewers_count) || 0);
                 const go = () => {
                   if (st === "active") {
                     const hash = String(r.raffle_hash || "").trim();
@@ -433,12 +410,6 @@ export default function HomeAppClient() {
                           <div className="raffle-card__promo-special-timer">
                             {secondPriceCountdown || "Скоро завершится"}
                           </div>
-                        </div>
-                      ) : null}
-                      {!(isPaused || isClosed) && viewers > 0 ? (
-                        <div className="raffle-card__viewers" aria-label="Смотрят акцию сейчас">
-                          <span className="raffle-card__viewers-dot" aria-hidden="true"></span>
-                          <span>Онлайн: {viewers}</span>
                         </div>
                       ) : null}
                       {isWaitCheck ? (
@@ -706,6 +677,42 @@ export default function HomeAppClient() {
               </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {pushPromptVisible && pushPermission === "default" && showApp && !showHomeBootLoader ? (
+        <div className="home-push-permission" role="dialog" aria-modal="false" aria-labelledby="home-push-permission-title">
+          <div className="home-push-permission__icon-wrap" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.268 21a2 2 0 0 0 3.464 0"></path>
+              <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>
+            </svg>
+          </div>
+          <div className="home-push-permission__main">
+            <h4 id="home-push-permission-title" className="home-push-permission__title">
+              Уведомления
+            </h4>
+            <p className="home-push-permission__text">Включите Push, чтобы узнавать о сообщениях и выигрышах.</p>
+            <div className="home-push-permission__actions">
+              <button
+                type="button"
+                className="home-push-permission__btn home-push-permission__btn--primary"
+                onClick={() => void onAllowPush()}
+                disabled={pushRequesting}
+              >
+                {pushRequesting ? "Включаем..." : "Включить"}
+              </button>
+              <button type="button" className="home-push-permission__btn home-push-permission__btn--ghost" onClick={onLaterPush} disabled={pushRequesting}>
+                Позже
+              </button>
+            </div>
+          </div>
+          <button type="button" className="home-push-permission__close" onClick={onLaterPush} disabled={pushRequesting} aria-label="Закрыть">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </button>
         </div>
       ) : null}
 

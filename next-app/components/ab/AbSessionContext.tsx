@@ -134,10 +134,21 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
     try {
       ws = new WebSocket(buildAbPublicWebSocketUrl("public_raffle_feed"));
       ws.onmessage = (evt) => {
-        let msg: { type?: string; maintenance?: boolean };
+        let msg: { type?: string; maintenance?: boolean; site_online_count?: number };
         try {
-          msg = JSON.parse(String(evt.data)) as { type?: string; maintenance?: boolean };
+          msg = JSON.parse(String(evt.data)) as { type?: string; maintenance?: boolean; site_online_count?: number };
         } catch {
+          return;
+        }
+        if (
+          (msg.type === "site_online_updated" || msg.type === "ready") &&
+          typeof msg.site_online_count === "number"
+        ) {
+          try {
+            window.dispatchEvent(new CustomEvent("ab-site-online", { detail: { count: msg.site_online_count } }));
+          } catch {
+            /* ignore */
+          }
           return;
         }
         if (msg.type !== "site_maintenance_updated" || !msg.maintenance) return;
