@@ -7324,9 +7324,9 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .raffle-cell--taken {
-  background: #9ca3af;
+  background: rgb(142 142 147);
   color: #ffffff80;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: none;
   border-radius: 12px;
   cursor: not-allowed;
   pointer-events: none;
@@ -9390,9 +9390,9 @@ html.raffle-purchase-page .raffle-range-tab {
 }
 
 html.raffle-purchase-page .raffle-cell--taken {
-  background: #9ca3af;
+  background: rgb(142 142 147);
   color: #ffffff80;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: none;
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -9548,7 +9548,7 @@ html.raffle-purchase-page .raffle-detail__step {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background: #9ca3af;
+  background: rgb(142 142 147);
   border: none;
 }
 
@@ -11437,9 +11437,9 @@ html.theme-dark .raffle-cell--free {
 }
 
 html.theme-dark .raffle-cell--taken {
-  background: #9ca3af;
+  background: rgb(142 142 147);
   color: #ffffff80;
-  border-color: rgba(0, 0, 0, 0.12);
+  border: none;
 }
 
 html.theme-dark .toast {

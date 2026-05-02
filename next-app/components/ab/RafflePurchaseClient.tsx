@@ -1181,12 +1181,22 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const EDGE = 14;
     const PULL_TRIGGER = 56;
     const COOLDOWN_MS = 550;
+    const WHEEL_ACC_TRIGGER = 96;
 
     let cooldownUntil = 0;
     let touchStartY = 0;
     let maxPullDown = 0;
     let maxPullUp = 0;
     let rafHints = false;
+    let wheelAccTop = 0;
+    let wheelAccBottom = 0;
+
+    function wheelDeltaPixels(e: WheelEvent): number {
+      const y = e.deltaY;
+      if (e.deltaMode === 1) return Math.abs(y) * 16;
+      if (e.deltaMode === 2) return Math.abs(y) * (window.innerHeight || 600);
+      return Math.abs(y);
+    }
 
     function scrollTopNow() {
       return window.scrollY || document.documentElement.scrollTop;
@@ -1315,11 +1325,53 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       scheduleHints();
     }
 
+    function onWheel(e: WheelEvent) {
+      if (Date.now() < cooldownUntil || gridLoadingRef.current || mainStepRef.current !== "grid") return;
+
+      const { atTop, atBottom } = docMetrics();
+      const { prevPart, nextPart } = getAdjacentParts();
+      const dy = wheelDeltaPixels(e);
+      const sign = e.deltaY === 0 ? 0 : e.deltaY > 0 ? 1 : -1;
+
+      if (!atTop) wheelAccTop = 0;
+      if (!atBottom) wheelAccBottom = 0;
+
+      if (atTop && prevPart) {
+        if (sign < 0) {
+          wheelAccTop += dy;
+          wheelAccBottom = 0;
+          if (wheelAccTop >= WHEEL_ACC_TRIGGER) {
+            wheelAccTop = 0;
+            goAdjacent("prev");
+          }
+        } else {
+          wheelAccTop = 0;
+        }
+      } else {
+        wheelAccTop = 0;
+      }
+
+      if (atBottom && nextPart) {
+        if (sign > 0) {
+          wheelAccBottom += dy;
+          if (wheelAccBottom >= WHEEL_ACC_TRIGGER) {
+            wheelAccBottom = 0;
+            goAdjacent("next");
+          }
+        } else {
+          wheelAccBottom = 0;
+        }
+      } else {
+        wheelAccBottom = 0;
+      }
+    }
+
     window.addEventListener("scroll", scheduleHints, { passive: true });
     window.addEventListener("resize", scheduleHints, { passive: true });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: true });
 
     scheduleHints();
 
@@ -1329,6 +1381,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("wheel", onWheel);
       syncRaffleSwipeHintsRef.current = () => {};
     };
   }, []);
