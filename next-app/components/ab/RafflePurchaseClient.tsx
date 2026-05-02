@@ -144,7 +144,13 @@ function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: bo
     const n = cell.n;
     const kind = String(cell.kind || "free");
     if (kind === "taken") {
-      html += '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято"><span class="raffle-cell__dot"></span></div>';
+      const labelTaken = String(n);
+      html +=
+        '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято, номер ' +
+        esc(labelTaken) +
+        '">' +
+        esc(labelTaken) +
+        "</div>";
       continue;
     }
     const label = String(n);

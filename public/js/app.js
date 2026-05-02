@@ -4818,10 +4818,15 @@
       var cell = drawCells[i];
       var n = cell.n;
       var kind = String(cell.kind || "free");
-      /* Чужие занятые — серая точка без номера. Свои бронь / ожидание / подтверждено — оранжевые с номером. */
+      /* Чужие занятые — серый номер (не кликабельно). Свои бронь / ожидание / подтверждено — с номером. */
       if (kind === "taken") {
+        var takenLabel = String(n);
         html +=
-          '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято"><span class="raffle-cell__dot"></span></div>';
+          '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято, номер ' +
+          escapeHtml(takenLabel) +
+          '">' +
+          escapeHtml(takenLabel) +
+          "</div>";
         continue;
       }
       var label = String(n);

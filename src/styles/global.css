@@ -7324,10 +7324,14 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .raffle-cell--taken {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   cursor: not-allowed;
+  pointer-events: none;
+  font-weight: 600;
+  box-shadow: none;
 }
 
 .raffle-cell__dot {
@@ -7609,6 +7613,7 @@ html.theme-dark .auth-tabs__btn.is-active {
 html.raffle-grid-page {
   --app-safe-top: env(safe-area-inset-top, 0px);
   background: var(--bg);
+  overflow-x: clip;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -7633,6 +7638,7 @@ html.raffle-grid-page body {
   margin: 0;
   min-height: 100dvh;
   background: var(--bg);
+  overflow-x: clip;
 }
 
 html.raffle-grid-page .app-shell {
@@ -8504,8 +8510,10 @@ html.raffle-grid-page .raffle-purchase-hero.raffle-purchase-hero--sticky {
 html.raffle-grid-page .raffle-purchase-hero__hairline {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  left: 50%;
+  right: auto;
+  width: 100vw;
+  transform: translateX(-50%);
   height: 3rem;
   margin-top: -1px;
   z-index: -1;
@@ -8515,7 +8523,13 @@ html.raffle-grid-page .raffle-purchase-hero__hairline {
 
 html.raffle-grid-page .raffle-purchase-hero__layers {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  right: auto;
+  width: 100vw;
+  max-width: none;
+  transform: translateX(-50%);
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
@@ -8565,7 +8579,7 @@ html.raffle-grid-page .raffle-purchase-hero__shell {
 
 html.raffle-grid-page .raffle-purchase-hero__bar {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
   gap: 10px 12px;
   width: 100%;
@@ -8576,10 +8590,15 @@ html.raffle-grid-page .raffle-purchase-hero__bar {
   box-sizing: border-box;
 }
 
-@media (min-width: 768px) {
-  html.raffle-grid-page .raffle-purchase-hero-viewers {
-    display: inline-flex;
-  }
+html.raffle-grid-page .raffle-purchase-hero-viewers.raffle-purchase-hero-viewers--viewport:not([hidden]) {
+  position: fixed;
+  top: calc(var(--app-safe-top) + 0.75rem);
+  right: max(12px, env(safe-area-inset-right));
+  left: auto;
+  z-index: 70;
+  display: inline-flex !important;
+  align-items: center;
+  margin: 0;
 }
 
 html.raffle-grid-page .raffle-purchase-hero:not(.raffle-purchase-hero--no-cover) .raffle-purchase-title--hero {
@@ -8654,9 +8673,17 @@ html.raffle-grid-page .raffle-purchase-hero--no-cover .raffle-purchase-back--her
 }
 
 html.raffle-grid-page .raffle-purchase-hero:not(.raffle-purchase-hero--no-cover) .raffle-purchase-hero-viewers {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #1f2937;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+html.raffle-grid-page .raffle-purchase-hero--no-cover .raffle-purchase-hero-viewers {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-color: var(--border);
+  color: var(--text-muted);
+  box-shadow: 0 4px 14px color-mix(in srgb, #0f172a 12%, transparent);
 }
 
 html.raffle-grid-page .raffle-purchase-hero__controls {
@@ -9192,11 +9219,11 @@ html.raffle-grid-page .raffle-purchase-panel {
   box-shadow: none;
 }
 
-/* Сетка на странице акции — плотнее ячейки, без лишней пустоты */
+/* Сетка на странице акции — свободные 72×72, занятые 50×50 по центру ячейки */
 html.raffle-purchase-page .raffle-ticket-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 100px);
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
   min-height: 0;
   padding: 8px 8px;
   border-radius: 16px;
@@ -9204,6 +9231,31 @@ html.raffle-purchase-page .raffle-ticket-grid {
   background: transparent;
   box-shadow: none;
   justify-content: start;
+  align-items: center;
+}
+
+html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  justify-self: center;
+}
+
+html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  min-height: 50px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  justify-self: center;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Пока сетка пустая, min-height: 0 схлопывает блок — лоадер с inset:0 почти не виден */
@@ -9214,25 +9266,29 @@ html.raffle-purchase-page .raffle-ticket-grid.raffle-ticket-grid--loading {
 @media (min-width: 1024px) {
   html.raffle-grid-page .raffle-ticket-grid {
     grid-template-columns: repeat(10, minmax(0, 1fr));
-    gap: 7px;
+    gap: 8px;
     padding: 8px 0;
   }
 
-  html.raffle-grid-page .raffle-ticket-grid .raffle-cell {
-    width: 100%;
-    height: auto;
-    min-width: 0;
-    min-height: 0;
-    aspect-ratio: 1 / 1;
-    font-size: 1.06rem;
+  html.raffle-grid-page .raffle-ticket-grid .raffle-cell--free {
+    width: 72px;
+    height: 72px;
+    min-width: 72px;
+    min-height: 72px;
+    font-size: 1rem;
     border-radius: 14px;
+    justify-self: center;
   }
-}
 
-html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
-  min-width: 54px;
-  min-height: 54px;
-  font-size: 0.9rem;
+  html.raffle-grid-page .raffle-ticket-grid .raffle-cell--taken {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    font-size: 0.72rem;
+    justify-self: center;
+    align-self: center;
+  }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
@@ -9242,35 +9298,57 @@ html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
 
   html.raffle-purchase-page .raffle-ticket-grid {
     grid-template-columns: repeat(10, minmax(0, 1fr));
-    gap: 6px;
+    gap: 8px;
     padding: 8px 2px;
   }
 
-  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
-    width: 100%;
-    height: auto;
-    min-width: 0;
-    min-height: 0;
-    aspect-ratio: 1 / 1;
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
+    width: 72px;
+    height: 72px;
+    min-width: 72px;
+    min-height: 72px;
     border-radius: 12px;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
+    justify-self: center;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    font-size: 0.68rem;
+    justify-self: center;
+    align-self: center;
   }
 }
 
 @media (max-width: 767px) {
   html.raffle-purchase-page .raffle-ticket-grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
-    gap: 5px;
+    gap: 6px;
     padding: 6px 0;
   }
 
-  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
-    width: 100%;
-    height: auto;
-    min-width: 0;
-    min-height: 0;
-    aspect-ratio: 1 / 1;
-    font-size: 0.8rem;
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
+    width: min(72px, 100%);
+    height: min(72px, 100%);
+    max-width: 72px;
+    max-height: 72px;
+    aspect-ratio: 1;
+    font-size: 0.82rem;
+    justify-self: center;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
+    width: min(50px, 100%);
+    height: min(50px, 100%);
+    max-width: 50px;
+    max-height: 50px;
+    aspect-ratio: 1;
+    font-size: 0.65rem;
+    justify-self: center;
+    align-self: center;
   }
 }
 
@@ -9280,8 +9358,12 @@ html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
     gap: 6px;
   }
 
-  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell {
-    font-size: 0.88rem;
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
+    font-size: 0.8rem;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
+    font-size: 0.62rem;
   }
 }
 
@@ -9308,15 +9390,11 @@ html.raffle-purchase-page .raffle-range-tab {
 }
 
 html.raffle-purchase-page .raffle-cell--taken {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px solid #e5e7eb;
   cursor: not-allowed;
-}
-
-html.raffle-purchase-page .raffle-cell--taken .raffle-cell__dot {
-  background: #9ca3af;
+  pointer-events: none;
 }
 
 html.raffle-purchase-page .raffle-range-tabs {
@@ -9460,7 +9538,7 @@ html.raffle-purchase-page .raffle-detail__step {
 .raffle-legend__swatch--free {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: #fff;
   border: 1px solid #e5e7eb;
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04);
@@ -9469,7 +9547,7 @@ html.raffle-purchase-page .raffle-detail__step {
 .raffle-legend__swatch--taken {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: #9ca3af;
   border: none;
 }
@@ -9477,7 +9555,7 @@ html.raffle-purchase-page .raffle-detail__step {
 .raffle-legend__swatch--sel {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: 4px;
   background: linear-gradient(165deg, #38bdf8 0%, #0071e3 100%);
   border: none;
 }
@@ -10437,6 +10515,13 @@ html.theme-dark.raffle-grid-page .raffle-legend-island-wrap--in-hero .raffle-leg
   border-color: var(--border);
 }
 
+html.theme-dark.raffle-grid-page .raffle-purchase-hero:not(.raffle-purchase-hero--no-cover) .raffle-purchase-hero-viewers {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 html.theme-dark .modal-overlay {
   background: rgba(0, 0, 0, 0.62);
 }
@@ -11348,6 +11433,12 @@ html.theme-dark .raffle-cell__dot {
 html.theme-dark .raffle-cell--free {
   background: var(--surface);
   color: var(--text);
+  border-color: var(--border);
+}
+
+html.theme-dark .raffle-cell--taken {
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  color: var(--text-muted);
   border-color: var(--border);
 }
 

@@ -22,6 +22,11 @@ export default function RafflePurchaseLayoutMarkup() {
             <div className="raffle-purchase-hero__layer raffle-purchase-hero__veil"></div>
           </div>
 
+          <div className="raffle-purchase-hero-viewers raffle-purchase-hero-viewers--viewport" id="raffle-page-viewers" hidden aria-live="polite">
+            <span className="raffle-purchase-hero-viewers__dot" aria-hidden="true"></span>
+            <span id="raffle-page-viewers-text">Онлайн: 0</span>
+          </div>
+
           <div className="raffle-purchase-hero__shell">
             <div className="raffle-purchase-hero__bar">
               <button type="button" className="raffle-purchase-back raffle-purchase-back--hero" id="raffle-page-back" aria-label="Назад на главную">
@@ -56,10 +61,6 @@ export default function RafflePurchaseLayoutMarkup() {
                     Продлить на 10 мин
                   </button>
                 </div>
-              </div>
-              <div className="raffle-purchase-hero-viewers" id="raffle-page-viewers" hidden aria-live="polite">
-                <span className="raffle-purchase-hero-viewers__dot" aria-hidden="true"></span>
-                <span id="raffle-page-viewers-text">Онлайн: 0</span>
               </div>
             </div>
 
