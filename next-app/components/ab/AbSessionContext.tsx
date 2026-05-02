@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { abApiJson, AbApiError } from "../../lib/ab-api";
 import { clearAbSession, loadAbSession, saveAbSession, type AbSession } from "../../lib/ab-session";
-import { buildAbPublicWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
+import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
+import { buildAbPublicWebSocketUrl, buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 type AbSessionContextValue = {
   session: AbSession | null;
@@ -30,6 +31,9 @@ function syncHtmlAuthClasses(hasToken: boolean, pathname: string, authVerified: 
 export function AbSessionProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() || "/";
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const publicWsRef = useRef<WebSocket | null>(null);
   const [session, setSession] = useState<AbSession | null>(() => loadAbSession());
   const [authVerified, setAuthVerified] = useState(false);
   const [authCheckInFlight, setAuthCheckInFlight] = useState(true);
@@ -128,41 +132,93 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, [pathname, router]);
 
+  const isMaintenanceRoute = pathname === "/maintenance";
+
   useEffect(() => {
-    if (pathname === "/maintenance") return;
+    if (isMaintenanceRoute) {
+      detachWebSocket(publicWsRef.current);
+      publicWsRef.current = null;
+      return;
+    }
     let ws: WebSocket | null = null;
     try {
       ws = new WebSocket(buildAbPublicWebSocketUrl("public_raffle_feed"));
-      ws.onmessage = (evt) => {
-        let msg: { type?: string; maintenance?: boolean; site_online_count?: number };
+    } catch {
+      return;
+    }
+    publicWsRef.current = ws;
+    ws.onmessage = (evt) => {
+      let msg: { type?: string; maintenance?: boolean; site_online_count?: number };
+      try {
+        msg = JSON.parse(String(evt.data)) as { type?: string; maintenance?: boolean; site_online_count?: number };
+      } catch {
+        return;
+      }
+      if (
+        (msg.type === "site_online_updated" || msg.type === "ready") &&
+        typeof msg.site_online_count === "number"
+      ) {
         try {
-          msg = JSON.parse(String(evt.data)) as { type?: string; maintenance?: boolean; site_online_count?: number };
+          window.dispatchEvent(new CustomEvent("ab-site-online", { detail: { count: msg.site_online_count } }));
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      if (msg.type !== "site_maintenance_updated" || !msg.maintenance) return;
+      const s = loadAbSession();
+      if (s?.role === "admin") return;
+      try {
+        routerRef.current.replace("/maintenance");
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onclose = () => {
+      if (publicWsRef.current === ws) publicWsRef.current = null;
+    };
+    return () => {
+      detachWebSocket(ws);
+      if (publicWsRef.current === ws) publicWsRef.current = null;
+    };
+  }, [isMaintenanceRoute]);
+
+  useEffect(() => {
+    if (!session?.token || !authVerified) return;
+    const token = session.token;
+    let ws: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      const wsUrl = buildAbWebSocketUrl(token);
+      if (!wsUrl) return;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        return;
+      }
+      ws.onmessage = (ev) => {
+        let detail: unknown;
+        try {
+          detail = JSON.parse(String(ev.data || "{}"));
         } catch {
           return;
         }
-        if (
-          (msg.type === "site_online_updated" || msg.type === "ready") &&
-          typeof msg.site_online_count === "number"
-        ) {
-          try {
-            window.dispatchEvent(new CustomEvent("ab-site-online", { detail: { count: msg.site_online_count } }));
-          } catch {
-            /* ignore */
-          }
-          return;
+        try {
+          window.dispatchEvent(new CustomEvent(AB_USER_WS_EVENT, { detail }));
+        } catch {
+          /* ignore */
         }
-        if (msg.type !== "site_maintenance_updated" || !msg.maintenance) return;
-        const s = loadAbSession();
-        if (s?.role === "admin") return;
-        router.replace("/maintenance");
       };
-    } catch {
-      ws = null;
-    }
+      ws.onclose = () => {
+        retryTimer = window.setTimeout(connect, 2500);
+      };
+    };
+    connect();
     return () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
       detachWebSocket(ws);
     };
-  }, [pathname, router]);
+  }, [session?.token, authVerified]);
 
   const setSessionFromLogin = useCallback((s: AbSession) => {
     saveAbSession(s);

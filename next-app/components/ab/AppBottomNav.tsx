@@ -12,7 +12,7 @@ import {
   invalidateAbParticipationHistoryCache,
 } from "../../lib/ab-participation-history-cache";
 import { loadAbSession } from "../../lib/ab-session";
-import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
+import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { useAbSession } from "./AbSessionContext";
 
 type Props = {
@@ -294,52 +294,42 @@ export default function AppBottomNav({
     setHistoryOpen(false);
   }, [pathname]);
 
+  const refreshMyTicketsRef = useRef(refreshMyTickets);
+  refreshMyTicketsRef.current = refreshMyTickets;
+  const refreshHistoryRef = useRef(refreshHistory);
+  refreshHistoryRef.current = refreshHistory;
+  const refreshHistorySummaryRef = useRef(refreshHistorySummary);
+  refreshHistorySummaryRef.current = refreshHistorySummary;
+  const refreshChatUnreadRef = useRef(refreshChatUnread);
+  refreshChatUnreadRef.current = refreshChatUnread;
+  const refreshLatestVisibleRaffleRef = useRef(refreshLatestVisibleRaffle);
+  refreshLatestVisibleRaffleRef.current = refreshLatestVisibleRaffle;
+
   useEffect(() => {
     const cur = loadAbSession();
     if (!cur?.token || !authVerified) return;
-    const wsUrl = buildAbWebSocketUrl(cur.token);
-    if (!wsUrl) return;
-    let ws: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch {
-        return;
+    const onUserWs = (ev: Event) => {
+      const d = (ev as CustomEvent<{ type?: string }>).detail;
+      if (!d || typeof d !== "object") return;
+      if (d.type === "raffle_tickets_updated") {
+        invalidateAbParticipationHistoryCache();
+        invalidateAbMyTicketsCache();
+        void refreshMyTicketsRef.current(true);
+        void refreshHistorySummaryRef.current();
+        void refreshLatestVisibleRaffleRef.current();
+        if (historyOpenRef.current) void refreshHistoryRef.current(true);
       }
-      ws.onmessage = (ev) => {
-        let d: { type?: string };
-        try {
-          d = JSON.parse(String(ev.data || "{}"));
-        } catch {
-          return;
-        }
-        if (d.type === "raffle_tickets_updated") {
-          invalidateAbParticipationHistoryCache();
-          invalidateAbMyTicketsCache();
-          void refreshMyTickets(true);
-          void refreshHistorySummary();
-          void refreshLatestVisibleRaffle();
-          if (historyOpenRef.current) void refreshHistory(true);
-        }
-        if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
-          void refreshLatestVisibleRaffle();
-        }
-        if (d.type === "chat_message") {
-          invalidateAbChatUnreadCache();
-          void refreshChatUnread();
-        }
-      };
-      ws.onclose = () => {
-        retryTimer = setTimeout(connect, 2500);
-      };
+      if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
+        void refreshLatestVisibleRaffleRef.current();
+      }
+      if (d.type === "chat_message") {
+        invalidateAbChatUnreadCache();
+        void refreshChatUnreadRef.current();
+      }
     };
-    connect();
-    return () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      detachWebSocket(ws);
-    };
-  }, [authVerified, refreshMyTickets, refreshHistory, refreshHistorySummary, refreshChatUnread, refreshLatestVisibleRaffle]);
+    window.addEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+    return () => window.removeEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+  }, [authVerified]);
 
   useEffect(() => {
     if (!historyOpen) return;

@@ -11,7 +11,7 @@ import {
   RECEIPT_NETWORK_MODAL_TITLE,
   uploadReceiptFile,
 } from "../../lib/receipt-client";
-import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
+import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
@@ -468,6 +468,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       /* ignore transient ws checks */
     }
   }, [onHashRoute, router]);
+
+  const ensureRaffleActiveRef = useRef(ensureRaffleActive);
+  ensureRaffleActiveRef.current = ensureRaffleActive;
 
   function getFastInputN(): number {
     const inp = document.getElementById("raffle-fast-number") as HTMLInputElement | null;
@@ -1618,49 +1621,29 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const armPaymentRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
-    const wsUrl = session?.token && authVerified ? buildAbWebSocketUrl(session.token) : "";
-    if (!wsUrl) return;
-    let ws: WebSocket | null = null;
-    let t: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch {
-        return;
+    if (!session?.token || !authVerified) return;
+    const onUserWs = (ev: Event) => {
+      const d = (ev as CustomEvent<{ type?: string; raffle_id?: number }>).detail;
+      if (!d || typeof d !== "object") return;
+      const rid = raffleIdRef.current;
+      if (d.type === "raffle_grid_updated" && Number(d.raffle_id) === rid) {
+        sliceCacheRef.current.clear();
+        void loadSliceRef.current({ force: true, showLoader: false });
+        void syncOrderRef.current();
       }
-      ws.onmessage = (ev) => {
-        let d: { type?: string; raffle_id?: number };
-        try {
-          d = JSON.parse(ev.data);
-        } catch {
-          return;
-        }
-        const rid = raffleIdRef.current;
-        if (d.type === "raffle_grid_updated" && Number(d.raffle_id) === rid) {
-          sliceCacheRef.current.clear();
-          void loadSliceRef.current({ force: true, showLoader: false });
-          void syncOrderRef.current();
-        }
-        if (d.type === "raffle_tickets_updated") {
-          if (d.raffle_id != null && Number(d.raffle_id) !== rid) return;
-          sliceCacheRef.current.clear();
-          void loadSliceRef.current({ force: true, showLoader: false });
-          void syncOrderRef.current();
-        }
-        if (d.type === "raffles_feed_updated") {
-          void ensureRaffleActive();
-        }
-      };
-      ws.onclose = () => {
-        t = setTimeout(connect, 2500);
-      };
+      if (d.type === "raffle_tickets_updated") {
+        if (d.raffle_id != null && Number(d.raffle_id) !== rid) return;
+        sliceCacheRef.current.clear();
+        void loadSliceRef.current({ force: true, showLoader: false });
+        void syncOrderRef.current();
+      }
+      if (d.type === "raffles_feed_updated") {
+        void ensureRaffleActiveRef.current();
+      }
     };
-    connect();
-    return () => {
-      if (t) clearTimeout(t);
-      detachWebSocket(ws);
-    };
-  }, [session?.token, authVerified, ensureRaffleActive]);
+    window.addEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+    return () => window.removeEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+  }, [session?.token, authVerified]);
 
   useEffect(() => {
     if (!authVerified && authCheckInFlight) return;

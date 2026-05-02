@@ -448,6 +448,7 @@ async function requireUser(c: Context): Promise<SessionUser | Response> {
 const rateLimitBuckets = new Map<string, { win: number; n: number }>();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
+  if (process.env.AB_ENABLE_RATE_LIMIT !== "1") return true;
   const now = Date.now();
   let b = rateLimitBuckets.get(key);
   if (!b || now - b.win > windowMs) {

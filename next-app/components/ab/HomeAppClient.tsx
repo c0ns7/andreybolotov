@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
-import { buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
+import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
@@ -159,75 +159,62 @@ export default function HomeAppClient() {
       .catch(() => {});
   }, [session?.token, authVerified]);
 
+  const loadFeedRef = useRef(loadFeed);
+  loadFeedRef.current = loadFeed;
+  const refreshTicketStripRef = useRef(refreshTicketStrip);
+  refreshTicketStripRef.current = refreshTicketStrip;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
   useEffect(() => {
     if (!session?.token || !authVerified) return;
-    const wsUrl = buildAbWebSocketUrl(session.token);
-    if (!wsUrl) return;
-    let ws: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    const connect = () => {
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch {
-        return;
-      }
-      ws.onmessage = (ev) => {
-        let d: {
-          type?: string;
-          raffle_id?: number;
-          userId?: number;
-          message?: { is_staff?: boolean };
-        };
+    const onUserWs = (ev: Event) => {
+      const d = (ev as CustomEvent<{
+        type?: string;
+        raffle_id?: number;
+        userId?: number;
+        message?: { is_staff?: boolean };
+      }>).detail;
+      if (!d || typeof d !== "object") return;
+      const canNotify = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+      const now = Date.now();
+      const onceIn = (key: string, ttlMs: number) => {
+        const prev = pushLastShownRef.current[key] ?? 0;
+        if (now - prev < ttlMs) return false;
+        pushLastShownRef.current[key] = now;
+        return true;
+      };
+      const notify = (title: string, body: string, key: string, ttlMs = 40_000) => {
+        if (!canNotify || !onceIn(key, ttlMs)) return;
         try {
-          d = JSON.parse(String(ev.data || "{}"));
+          const n = new Notification(title, { body, tag: key });
+          window.setTimeout(() => n.close(), 9_000);
         } catch {
-          return;
-        }
-        const canNotify = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
-        const now = Date.now();
-        const onceIn = (key: string, ttlMs: number) => {
-          const prev = pushLastShownRef.current[key] ?? 0;
-          if (now - prev < ttlMs) return false;
-          pushLastShownRef.current[key] = now;
-          return true;
-        };
-        const notify = (title: string, body: string, key: string, ttlMs = 40_000) => {
-          if (!canNotify || !onceIn(key, ttlMs)) return;
-          try {
-            const n = new Notification(title, { body, tag: key });
-            window.setTimeout(() => n.close(), 9_000);
-          } catch {
-            /* ignore */
-          }
-        };
-        if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
-          void loadFeed();
-        }
-        if (d.type === "raffle_tickets_updated") {
-          refreshTicketStrip();
-        }
-        if (
-          d.type === "chat_message" &&
-          session?.role !== "admin" &&
-          d.message?.is_staff === true &&
-          Number(d.userId) === Number(session?.id)
-        ) {
-          notify("Новое сообщение в чате", "Откройте чат, чтобы прочитать ответ.", "push_chat_message");
-        }
-        if (d.type === "raffle_launch_notified") {
-          notify("Новая акция на сайте", "Администратор открыл новую акцию.", "push_raffle_launch_notified", 90_000);
+          /* ignore */
         }
       };
-      ws.onclose = () => {
-        retryTimer = setTimeout(connect, 2500);
-      };
+      const s = sessionRef.current;
+      if (d.type === "raffles_feed_updated" || d.type === "raffle_grid_updated") {
+        void loadFeedRef.current();
+      }
+      if (d.type === "raffle_tickets_updated") {
+        refreshTicketStripRef.current();
+      }
+      if (
+        d.type === "chat_message" &&
+        s?.role !== "admin" &&
+        d.message?.is_staff === true &&
+        Number(d.userId) === Number(s?.id)
+      ) {
+        notify("Новое сообщение в чате", "Откройте чат, чтобы прочитать ответ.", "push_chat_message");
+      }
+      if (d.type === "raffle_launch_notified") {
+        notify("Новая акция на сайте", "Администратор открыл новую акцию.", "push_raffle_launch_notified", 90_000);
+      }
     };
-    connect();
-    return () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      detachWebSocket(ws);
-    };
-  }, [session?.token, authVerified, loadFeed, refreshTicketStrip]);
+    window.addEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+    return () => window.removeEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
+  }, [session?.token, authVerified]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
