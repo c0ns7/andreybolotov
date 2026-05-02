@@ -65,6 +65,7 @@ export default function HomeAppClient() {
   const [pushRequesting, setPushRequesting] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const pushLastShownRef = useRef<Record<string, number>>({});
+  const [socialModalOpen, setSocialModalOpen] = useState(false);
 
   const letter = useMemo(() => {
     const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
@@ -84,6 +85,20 @@ export default function HomeAppClient() {
       router.replace("/");
     }
   }, [session?.token, authVerified, authCheckInFlight, router]);
+
+  useEffect(() => {
+    if (!socialModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSocialModalOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [socialModalOpen]);
 
   const loadFeed = useCallback(async () => {
     if (!session?.token || !authVerified) {
@@ -514,6 +529,28 @@ export default function HomeAppClient() {
               })
             )}
           </div>
+
+          <section className="home-social-banner" aria-label="Ссылки на социальные сети">
+            <button type="button" className="home-social-banner__btn" onClick={() => setSocialModalOpen(true)}>
+              <span className="home-social-banner__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </span>
+              <span className="home-social-banner__text">
+                <span className="home-social-banner__title">Наши социальные сети</span>
+                <span className="home-social-banner__sub">VK · Telegram · MAX</span>
+              </span>
+              <span className="home-social-banner__chev" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m9 18 6-6-6-6"></path>
+                </svg>
+              </span>
+            </button>
+          </section>
         </div>
       </div>
 
@@ -709,6 +746,113 @@ export default function HomeAppClient() {
               <path d="m6 6 12 12"></path>
             </svg>
           </button>
+        </div>
+      ) : null}
+
+      {socialModalOpen ? (
+        <div
+          className="modal-overlay modal-overlay--social is-open"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-social-modal-title"
+          aria-hidden="false"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSocialModalOpen(false);
+          }}
+        >
+          <div className="modal home-social-modal">
+            <button type="button" className="home-social-modal__close" onClick={() => setSocialModalOpen(false)} aria-label="Закрыть">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
+            <div className="home-social-modal__head">
+              <div className="home-social-modal__head-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 16v-4"></path>
+                  <path d="M12 8h.01"></path>
+                </svg>
+              </div>
+              <h2 id="home-social-modal-title" className="home-social-modal__title">
+                Мы на связи
+              </h2>
+              <p className="home-social-modal__intro">Подпишитесь, чтобы не пропускать новости, эфиры и объявления.</p>
+            </div>
+            <ul className="home-social-modal__list">
+              <li className="home-social-modal__item" style={{ animationDelay: "0.05s" }}>
+                <a
+                  href="https://vk.com/bolotovandrey80"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="home-social-card home-social-card--vk"
+                >
+                  <span className="home-social-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+                      <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.862-.525-2.05-1.727-1.033-1-1.49-1.135-1.744-1.135-.356 0-.458.102-.458.593v1.575c0 .424-.135.678-1.253.678-1.846 0-3.942-1.186-5.408-3.396-2.102-3.119-2.68-5.475-2.68-5.956 0-.254.102-.491.678-.491h1.744c.508 0 .593.229.762.678.847 2.458 2.34 4.62 2.948 4.62.254 0 .373-.118.373-.779V9.721c-.068-1.186-.695-1.287-.695-1.71 0-.203.17-.407.508-.407h2.744c.423 0 .576.254.576.643v4.267c0 .423.186.576.305.576.254 0 .474-.153.948-.627 1.465-1.643 2.507-4.178 2.507-4.178.145-.305.373-.491.949-.491h1.744c.593 0 .729.305.593.847-.254 1.186-2.56 4.62-2.56 4.62-.406.645-.542.949 0 1.643.406.542 1.736 1.676 1.991 2.102.593.847.678 1.423.678 1.847-.017.508-.423.593-1.016.593z" />
+                    </svg>
+                  </span>
+                  <span className="home-social-card__body">
+                    <span className="home-social-card__name">ВКонтакте</span>
+                    <span className="home-social-card__desc">Сообщество Андрея Болотова — новости и обсуждения</span>
+                  </span>
+                  <span className="home-social-card__go" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 17 17 7"></path>
+                      <path d="M7 7h10v10"></path>
+                    </svg>
+                  </span>
+                </a>
+              </li>
+              <li className="home-social-modal__item" style={{ animationDelay: "0.12s" }}>
+                <a
+                  href="https://t.me/Andrey_Bolotovv"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="home-social-card home-social-card--tg"
+                >
+                  <span className="home-social-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">
+                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                    </svg>
+                  </span>
+                  <span className="home-social-card__body">
+                    <span className="home-social-card__name">Telegram</span>
+                    <span className="home-social-card__desc">Канал с анонсами и полезными материалами</span>
+                  </span>
+                  <span className="home-social-card__go" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 17 17 7"></path>
+                      <path d="M7 7h10v10"></path>
+                    </svg>
+                  </span>
+                </a>
+              </li>
+              <li className="home-social-modal__item" style={{ animationDelay: "0.19s" }}>
+                <a
+                  href="https://max.ru/join/Xfy4YvDujQD09ESpzRLrDvoxVXm0LmgdSyEJjD-I3fM"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="home-social-card home-social-card--max"
+                >
+                  <span className="home-social-card__icon home-social-card__icon--text" aria-hidden="true">
+                    M
+                  </span>
+                  <span className="home-social-card__body">
+                    <span className="home-social-card__name">MAX</span>
+                    <span className="home-social-card__desc">Канал в мессенджере MAX — быстрые обновления</span>
+                  </span>
+                  <span className="home-social-card__go" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M7 17 17 7"></path>
+                      <path d="M7 7h10v10"></path>
+                    </svg>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
       ) : null}
 

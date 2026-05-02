@@ -227,32 +227,14 @@ export default function AbRafflePurchaseShellMarkup() {
 
 <div
   id="modal-reserve-payment"
-  className="modal-overlay modal-overlay--reserve-flow"
+  className="modal-overlay modal-overlay--reserve-flow pay-sheet-overlay"
   aria-hidden="true"
   role="dialog"
   aria-modal="true"
   aria-labelledby="reserve-payment-title"
 >
-  <div className="modal reserve-flow-modal reserve-payment-modal">
-    <header className="reserve-payment-modal__head">
-      <button type="button" className="reserve-payment-modal__back" id="reserve-payment-back" aria-label="Назад" hidden>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 18l-6-6 6-6"></path>
-        </svg>
-      </button>
-      <div className="reserve-payment-modal__title-wrap">
-        <h3 id="reserve-payment-title" className="reserve-payment-modal__title">Реквизиты для перевода</h3>
-        <p id="reserve-payment-order-id" className="reserve-payment-modal__order-id">—</p>
-      </div>
-      <button type="button" className="reserve-payment-modal__close" id="reserve-payment-close" aria-label="Закрыть">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 6 6 18"></path>
-          <path d="m6 6 12 12"></path>
-        </svg>
-      </button>
-    </header>
-
-    <nav id="reserve-payment-steps" className="payment-flow-steps payment-flow-steps--compact" aria-label="Этапы оплаты">
+  <div className="modal reserve-flow-modal reserve-payment-modal pay-sheet-dialog">
+    <nav id="reserve-payment-steps" className="payment-flow-steps payment-flow-steps--compact pay-sheet-steps-legacy" aria-label="Этапы оплаты (служебно)" hidden>
       <ol className="payment-flow-steps__list">
         <li className="payment-flow-steps__step">
           <span className="payment-flow-steps__num" aria-hidden="true">1</span>
@@ -268,175 +250,368 @@ export default function AbRafflePurchaseShellMarkup() {
         </li>
       </ol>
     </nav>
-    <p id="reserve-payment-phase-hint" className="reserve-payment-modal__phase-hint" role="status"></p>
 
-    <div id="reserve-payment-repeat-wrap" className="reserve-pay-repeat" hidden>
-      <p id="reserve-payment-repeat-text" className="reserve-pay-repeat__text"></p>
-      <button type="button" id="reserve-payment-repeat-toggle" className="reserve-pay-repeat__toggle" hidden>
-        Показать ранее отправленные чеки
-      </button>
-      <ul id="reserve-payment-repeat-list" className="reserve-pay-repeat__list" hidden></ul>
-    </div>
-
-    <div className="reserve-payment-modal__progress-track">
-      <div id="reserve-payment-progress" className="reserve-payment-modal__progress-fill"></div>
-    </div>
-
-    <div className="reserve-payment-modal__timer-row">
-      <div className="reserve-payment-modal__timer" id="reserve-payment-timer">15:00</div>
-      <div className="reserve-payment-modal__amount-wrap">
-        <span className="reserve-payment-modal__amount-label">К ПЕРЕВОДУ</span>
-        <strong id="reserve-payment-amount" className="reserve-payment-modal__amount" aria-live="polite">0 ₽</strong>
-      </div>
-    </div>
-    <p id="reserve-payment-deadline" className="reserve-flow-modal__deadline" role="status" aria-live="polite"></p>
-    <p id="reserve-payment-rules-wrap" className="reserve-payment-modal__rules" hidden>
-      <a id="reserve-payment-rules-link" className="reserve-payment-modal__rules-link" href="#" target="_blank" rel="noopener noreferrer">Краткие правила акции</a>
-    </p>
-
-    <div id="reserve-payment-step-requisites">
-      <section className="reserve-payment-modal__info">
-        <h4>Три шага</h4>
-        <ol>
-          <li>
-            Нажмите зелёную кнопку <strong>«Перейти к оплате»</strong> (или оплатите по QR). Если банк просит комментарий —{" "}
-            <strong>«Оплата услуг»</strong>.
-          </li>
-          <li>
-            Переведите ровно <strong id="reserve-payment-amount-inline">0 ₽</strong> — как в блоке «К переводу» выше.
-          </li>
-          <li>
-            Вернитесь сюда → <strong>«Я перевёл — загрузить чек»</strong> → прикрепите <strong>фото или PDF</strong> из банка.
-          </li>
-        </ol>
-      </section>
-      <div id="reserve-payment-methods" className="reserve-payment-modal__methods" role="tablist" aria-label="Способ оплаты">
-        <button
-          type="button"
-          id="reserve-payment-method-collection"
-          className="reserve-payment-modal__method-btn is-active"
-          role="tab"
-          aria-selected="true"
-        >
-          <span className="reserve-payment-modal__method-title">Сбер</span>
-          <span className="reserve-payment-modal__method-sub">Быстрый сбор</span>
-        </button>
-        <button
-          type="button"
-          id="reserve-payment-method-tbank"
-          className="reserve-payment-modal__method-btn"
-          role="tab"
-          aria-selected="false"
-        >
-          <span className="reserve-payment-modal__method-title">Тинькофф</span>
-          <span className="reserve-payment-modal__method-sub">Сбор по ссылке</span>
-        </button>
-        <button
-          type="button"
-          id="reserve-payment-method-qr"
-          className="reserve-payment-modal__method-btn"
-          role="tab"
-          aria-selected="false"
-        >
-          <span className="reserve-payment-modal__method-title">QR-код</span>
-          <span className="reserve-payment-modal__method-sub">Любой банк</span>
+    <div className="pay-sheet-card">
+      <div className="pay-sheet-card__header">
+        <div className="pay-sheet-card__header-main">
+          <button type="button" className="pay-sheet-header-back" id="reserve-payment-back" aria-label="Назад к реквизитам" hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m12 19-7-7 7-7"></path>
+              <path d="M19 12H5"></path>
+            </svg>
+          </button>
+          <div className="pay-sheet-card__titles">
+            <h2 id="reserve-payment-title" className="pay-sheet-card__title">
+              Реквизиты для перевода
+            </h2>
+            <p id="reserve-payment-order-stamp" className="pay-sheet-card__stamp" aria-hidden="true">
+              —
+            </p>
+            <span id="reserve-payment-order-id" className="pay-sheet-sr-only">
+              —
+            </span>
+          </div>
+        </div>
+        <button type="button" className="pay-sheet-close" id="reserve-payment-close" aria-label="Закрыть">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M18 6 6 18"></path>
+            <path d="m6 6 12 12"></path>
+          </svg>
         </button>
       </div>
-      <p className="reserve-payment-modal__methods-tip">Способ можно сменить вкладками. После оплаты не закрывайте это окно — сразу приложите чек.</p>
 
-      <section id="reserve-payment-collect" className="reserve-payment-modal__collect">
-        <div className="reserve-payment-modal__collect-head">
-          <span>СБОР СРЕДСТВ</span>
-          <span id="reserve-payment-collect-bank">СБЕР</span>
+      <div className="pay-sheet-card__body custom-scrollbar">
+        <p id="reserve-payment-phase-hint" className="pay-sheet-phase-hint" role="status" hidden></p>
+
+        <div id="reserve-payment-repeat-wrap" className="reserve-pay-repeat" hidden>
+          <p id="reserve-payment-repeat-text" className="reserve-pay-repeat__text"></p>
+          <button type="button" id="reserve-payment-repeat-toggle" className="reserve-pay-repeat__toggle" hidden>
+            Показать ранее отправленные чеки
+          </button>
+          <ul id="reserve-payment-repeat-list" className="reserve-pay-repeat__list" hidden></ul>
         </div>
-        <div className="reserve-payment-modal__collect-item">
-          <span>ПОЛУЧАТЕЛЬ</span>
-          <strong id="reserve-payment-recipient">—</strong>
+
+        <div className="pay-sheet-progress-wrap">
+          <div className="pay-sheet-progress-track">
+            <div id="reserve-payment-progress" className="pay-sheet-progress-fill"></div>
+          </div>
         </div>
-        <a id="reserve-payment-link" className="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
-      </section>
-      <section id="reserve-payment-collect-tbank" className="reserve-payment-modal__collect" hidden>
-        <div className="reserve-payment-modal__collect-head">
-          <span>СБОР СРЕДСТВ</span>
-          <span>ТИНЬКОФФ</span>
+
+        <nav id="pay-sheet-flow-rail" className="pay-sheet-flow-rail pay-sheet-flow-rail--payment" aria-label="Этапы оплаты">
+          <div className="pay-sheet-flow-rail__row">
+            <div className="pay-sheet-flow-rail__step is-done" data-pay-flow-step="pick">
+              <div className="pay-sheet-flow-rail__bubble" aria-hidden="true">
+                ✓
+              </div>
+              <span className="pay-sheet-flow-rail__label">Номерок</span>
+            </div>
+            <div className="pay-sheet-flow-rail__connector is-filled" data-pay-flow-connector="0" aria-hidden="true">
+              <div className="pay-sheet-flow-rail__connector-track">
+                <div className="pay-sheet-flow-rail__connector-fill"></div>
+              </div>
+            </div>
+            <div className="pay-sheet-flow-rail__step is-done" data-pay-flow-step="cart">
+              <div className="pay-sheet-flow-rail__bubble" aria-hidden="true">
+                ✓
+              </div>
+              <span className="pay-sheet-flow-rail__label">Корзина</span>
+            </div>
+            <div className="pay-sheet-flow-rail__connector is-filled" data-pay-flow-connector="1" aria-hidden="true">
+              <div className="pay-sheet-flow-rail__connector-track">
+                <div className="pay-sheet-flow-rail__connector-fill"></div>
+              </div>
+            </div>
+            <div className="pay-sheet-flow-rail__step is-current" data-pay-flow-step="pay">
+              <div className="pay-sheet-flow-rail__bubble" aria-hidden="true">
+                💳
+              </div>
+              <span className="pay-sheet-flow-rail__label">Оплата</span>
+            </div>
+            <div className="pay-sheet-flow-rail__connector" data-pay-flow-connector="2" aria-hidden="true">
+              <div className="pay-sheet-flow-rail__connector-track">
+                <div className="pay-sheet-flow-rail__connector-fill"></div>
+              </div>
+            </div>
+            <div className="pay-sheet-flow-rail__step is-upcoming" data-pay-flow-step="receipt">
+              <div className="pay-sheet-flow-rail__bubble" aria-hidden="true">
+                ✅
+              </div>
+              <span className="pay-sheet-flow-rail__label">Чек</span>
+            </div>
+          </div>
+        </nav>
+
+        <div className="pay-sheet-timer-amount">
+          <div className="pay-sheet-timer-badge">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pay-sheet-timer-icon" aria-hidden="true">
+              <path d="M12 6v6l4 2"></path>
+              <circle cx="12" cy="12" r="10"></circle>
+            </svg>
+            <span className="pay-sheet-timer-value" id="reserve-payment-timer">
+              15:00
+            </span>
+          </div>
+          <div className="pay-sheet-amount-block">
+            <p className="pay-sheet-amount-label">К переводу</p>
+            <p className="pay-sheet-amount-main">
+              <span id="reserve-payment-amount">0</span>
+              <span className="pay-sheet-amount-curr"> ₽</span>
+            </p>
+          </div>
         </div>
-        <div className="reserve-payment-modal__collect-item">
-          <span>ПОЛУЧАТЕЛЬ</span>
-          <strong id="reserve-payment-recipient-tbank">—</strong>
-        </div>
-        <div className="reserve-payment-modal__collect-item">
-          <span>НАЗНАЧЕНИЕ</span>
-          <strong id="reserve-payment-purpose-tbank">Оплата услуг</strong>
-        </div>
-        <a id="reserve-payment-link-tbank" className="reserve-flow-btn reserve-flow-btn--green" href="#" target="_blank" rel="noopener">ПЕРЕЙТИ К ОПЛАТЕ</a>
-      </section>
-      <section id="reserve-payment-qr" className="reserve-payment-modal__collect reserve-payment-modal__collect--qr" hidden>
-        <div className="reserve-payment-modal__collect-head">
-          <span>ОПЛАТА ПО QR</span>
-          <span>ЛЮБОЙ БАНК</span>
-        </div>
-        <div className="reserve-payment-modal__collect-item">
-          <span>ПОЛУЧАТЕЛЬ</span>
-          <strong id="reserve-payment-qr-recipient">—</strong>
-        </div>
-        <div className="reserve-payment-modal__collect-item">
-          <span>НАЗНАЧЕНИЕ</span>
-          <strong id="reserve-payment-qr-purpose">Оплата услуг</strong>
-        </div>
-        <div className="reserve-payment-modal__qr-wrap">
-          <img id="reserve-payment-qr-image" alt="QR-код для оплаты" loading="lazy" decoding="async" />
-        </div>
-        <p className="reserve-payment-modal__qr-hint">
-          Откройте приложение банка, выберите оплату по QR и укажите назначение <strong id="reserve-payment-qr-purpose-hint">«Оплата услуг»</strong>.
+
+        <p id="reserve-payment-deadline" className="pay-sheet-deadline" role="status" aria-live="polite"></p>
+        <p id="reserve-payment-rules-wrap" className="pay-sheet-rules" hidden>
+          <a id="reserve-payment-rules-link" className="reserve-payment-modal__rules-link" href="#" target="_blank" rel="noopener noreferrer">
+            Краткие правила акции
+          </a>
         </p>
-      </section>
-      <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-done">Я перевёл — загрузить чек</button>
-      <button type="button" className="raffle-pay-support" id="reserve-payment-support">Проблема с оплатой</button>
-    </div>
 
-    <div id="reserve-payment-step-confirm" hidden>
-      <section className="reserve-payment-modal__info reserve-payment-modal__info--confirm">
-        <h4>Быстрая проверка</h4>
-        <ul>
-          <li>
-            Видны <strong>дата</strong> и <strong>сумма</strong> — как в заказе: <strong id="reserve-payment-amount-check">0 ₽</strong>
-          </li>
-          <li>
-            Понятно, <strong>кому</strong> ушёл перевод (или QR-оплата видна на скрине)
-          </li>
-        </ul>
-        <p className="reserve-payment-modal__info-note">Отправили — заявка уйдёт на проверку. При сбое связи нажмите отправку ещё раз.</p>
-      </section>
-      <p className="reserve-payment-modal__upload-hint">Скрин из банка или PDF, до 10 МБ. Крупные фото страница попробует сжать перед отправкой.</p>
-      <label className="reserve-payment-modal__upload" htmlFor="reserve-payment-file">
-        <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden />
-        <span className="reserve-payment-modal__upload-title">Выбрать файл чека</span>
-        <span id="reserve-payment-file-name" className="reserve-payment-modal__upload-sub">Фото или PDF (до 10 МБ)</span>
-      </label>
-      <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-send">Отправить чек</button>
-      <button type="button" className="reserve-payment-modal__back-link" id="reserve-payment-back-link">Ой, я ещё не оплатил (вернуться к реквизитам)</button>
+        <div id="reserve-payment-step-requisites">
+          <div className="pay-sheet-instr">
+            <p className="pay-sheet-instr__title">📋 Инструкция:</p>
+            <ol className="pay-sheet-instr__list">
+              <li>
+                Нажмите «<b>Перейти к оплате</b>» ниже
+              </li>
+              <li>
+                Оплатите: <b id="reserve-pay-instr-amount">0 ₽</b>
+                <br />
+                <span className="pay-sheet-instr__warn">
+                  ⚠ Укажите сообщение «<b id="reserve-pay-instr-purpose">—</b>»
+                </span>
+              </li>
+              <li>
+                Сделайте <b>скриншот</b> перевода
+              </li>
+              <li>
+                Нажмите кнопку «Я перевёл» в самом низу
+              </li>
+            </ol>
+          </div>
+
+          <div id="reserve-payment-methods" className="reserve-payment-modal__methods" role="tablist" aria-label="Способ оплаты" hidden>
+            <button type="button" id="reserve-payment-method-collection" className="reserve-payment-modal__method-btn is-active" role="tab" aria-selected="true">
+              <span className="reserve-payment-modal__method-title">Сбер</span>
+              <span className="reserve-payment-modal__method-sub">Быстрый сбор</span>
+            </button>
+            <button type="button" id="reserve-payment-method-tbank" className="reserve-payment-modal__method-btn" role="tab" aria-selected="false">
+              <span className="reserve-payment-modal__method-title">Тинькофф</span>
+              <span className="reserve-payment-modal__method-sub">Сбор по ссылке</span>
+            </button>
+            <button type="button" id="reserve-payment-method-qr" className="reserve-payment-modal__method-btn" role="tab" aria-selected="false">
+              <span className="reserve-payment-modal__method-title">QR-код</span>
+              <span className="reserve-payment-modal__method-sub">Любой банк</span>
+            </button>
+          </div>
+
+          <section id="reserve-payment-collect" className="pay-sheet-dark-card">
+            <div className="pay-sheet-dark-card__head">
+              <span className="pay-sheet-dark-card__tag">Сбор средств</span>
+              <span id="reserve-payment-collect-bank" className="pay-sheet-dark-card__bank">
+                Сбербанк
+              </span>
+            </div>
+            <div className="pay-sheet-dark-card__divider"></div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Получатель</p>
+                <p id="reserve-payment-recipient" className="pay-sheet-v">—</p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-recipient" aria-label="Копировать получателя">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Назначение</p>
+                <p id="reserve-payment-purpose-sber" className="pay-sheet-v pay-sheet-v--purpose">
+                  —
+                </p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-purpose-sber" aria-label="Копировать назначение">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <a id="reserve-payment-link" className="pay-sheet-pay-link" href="#" target="_blank" rel="noopener">
+              Перейти к оплате 🔗
+            </a>
+          </section>
+
+          <section id="reserve-payment-collect-tbank" className="pay-sheet-dark-card" hidden>
+            <div className="pay-sheet-dark-card__head">
+              <span className="pay-sheet-dark-card__tag">Сбор средств</span>
+              <span className="pay-sheet-dark-card__bank">Тинькофф</span>
+            </div>
+            <div className="pay-sheet-dark-card__divider"></div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Получатель</p>
+                <p id="reserve-payment-recipient-tbank" className="pay-sheet-v">
+                  —
+                </p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-recipient-tbank" aria-label="Копировать получателя">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Назначение</p>
+                <p id="reserve-payment-purpose-tbank" className="pay-sheet-v pay-sheet-v--purpose">
+                  Оплата услуг
+                </p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-purpose-tbank" aria-label="Копировать назначение">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <a id="reserve-payment-link-tbank" className="pay-sheet-pay-link" href="#" target="_blank" rel="noopener">
+              Перейти к оплате 🔗
+            </a>
+          </section>
+
+          <section id="reserve-payment-qr" className="pay-sheet-qr-card" hidden>
+            <div className="pay-sheet-dark-card__head">
+              <span className="pay-sheet-dark-card__tag">Оплата по QR</span>
+              <span className="pay-sheet-dark-card__bank">Любой банк</span>
+            </div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Получатель</p>
+                <p id="reserve-payment-qr-recipient" className="pay-sheet-v">
+                  —
+                </p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-qr-recipient" aria-label="Копировать получателя">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Назначение</p>
+                <p id="reserve-payment-qr-purpose" className="pay-sheet-v pay-sheet-v--purpose">
+                  Оплата услуг
+                </p>
+              </div>
+              <button type="button" className="pay-sheet-copy-btn" data-copy-target="reserve-payment-qr-purpose" aria-label="Копировать назначение">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <div className="reserve-payment-modal__qr-wrap pay-sheet-qr-img">
+              <img id="reserve-payment-qr-image" alt="QR-код для оплаты" loading="lazy" decoding="async" />
+            </div>
+            <p className="reserve-payment-modal__qr-hint pay-sheet-qr-hint">
+              Откройте приложение банка, выберите оплату по QR и укажите назначение <strong id="reserve-payment-qr-purpose-hint">«Оплата услуг»</strong>.
+            </p>
+          </section>
+
+          <p id="reserve-payment-amount-inline" className="pay-sheet-sr-only" aria-hidden="true">
+            0 ₽
+          </p>
+
+          <button type="button" className="pay-sheet-btn-transferred" id="reserve-payment-done">
+            Я перевёл
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"></path>
+            </svg>
+          </button>
+          <p className="pay-sheet-warn-foot">
+            ⚠️ Нажмите эту кнопку ПОСЛЕ перевода, иначе бронь сгорит
+          </p>
+          <button type="button" className="pay-sheet-alt-req" id="reserve-payment-alt-requisites">
+            🔄 Дайте другие реквизиты
+          </button>
+          <button type="button" className="raffle-pay-support pay-sheet-support" id="reserve-payment-support">
+            Проблема с оплатой
+          </button>
+        </div>
+
+        <div id="reserve-payment-step-confirm" className="pay-sheet-confirm-step" hidden>
+          <div className="pay-sheet-receipt-checklist">
+            <p className="pay-sheet-receipt-checklist__title">✅ Что должно быть на чеке:</p>
+            <ul className="pay-sheet-receipt-checklist__list">
+              <li>Дата перевода</li>
+              <li>
+                Сумма: <b id="reserve-payment-amount-check">0 ₽</b>
+              </li>
+              <li>Последние 4 цифры карты получателя</li>
+            </ul>
+          </div>
+          <div className="pay-sheet-receipt-upload-wrap">
+            <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/*,application/pdf" className="pay-sheet-receipt-input" hidden />
+            <label htmlFor="reserve-payment-file" className="pay-sheet-receipt-drop">
+              <div className="pay-sheet-receipt-drop__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12"></path>
+                  <path d="m17 8-5-5-5 5"></path>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                </svg>
+              </div>
+              <div className="pay-sheet-receipt-drop__text">
+                <p className="pay-sheet-receipt-drop__title">Загрузить чек</p>
+                <p id="reserve-payment-file-name" className="pay-sheet-receipt-drop__sub">
+                  Фото или PDF перевода
+                </p>
+              </div>
+            </label>
+          </div>
+          <button type="button" className="pay-sheet-receipt-send" id="reserve-payment-send">
+            Отправить чек
+          </button>
+          <button type="button" className="pay-sheet-receipt-back-link" id="reserve-payment-back-link">
+            Ой, я ещё не оплатил (вернуться к реквизитам)
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <div
   id="modal-reserve-payment-cancel-confirm"
-  className="modal-overlay modal-overlay--reserve-flow modal-overlay--reserve-above-payment"
+  className="modal-overlay pay-cancel-sheet-overlay"
   aria-hidden="true"
   role="dialog"
   aria-modal="true"
   aria-labelledby="reserve-payment-cancel-title"
 >
-  <div className="modal reserve-flow-modal reserve-expired-modal">
-    <h3 id="reserve-payment-cancel-title" className="reserve-expired-modal__title">Отменить бронирование?</h3>
-    <p className="reserve-expired-modal__sub">
+  <div className="pay-cancel-sheet-panel">
+    <div className="pay-cancel-sheet-icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 6 6 18"></path>
+        <path d="m6 6 12 12"></path>
+      </svg>
+    </div>
+    <h3 id="reserve-payment-cancel-title" className="pay-cancel-sheet-title">
+      Отменить бронирование?
+    </h3>
+    <p className="pay-cancel-sheet-text">
       Это действие сбросит вашу бронь и вы потеряете выбранные номерки.
     </p>
-    <div className="reserve-payment-abandon__actions">
-      <button type="button" className="reserve-flow-btn reserve-flow-btn--black" id="reserve-payment-cancel-dismiss">
+    <div className="pay-cancel-sheet-actions">
+      <button type="button" className="pay-cancel-sheet-btn pay-cancel-sheet-btn--primary" id="reserve-payment-cancel-dismiss">
         Нет, продолжить оплату
       </button>
-      <button type="button" className="reserve-flow-btn reserve-flow-btn--muted" id="reserve-payment-cancel-confirm">
+      <button type="button" className="pay-cancel-sheet-btn pay-cancel-sheet-btn--secondary" id="reserve-payment-cancel-confirm">
         Да, отменить
       </button>
     </div>

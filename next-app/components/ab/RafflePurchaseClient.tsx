@@ -730,8 +730,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         ) {
           autoOpenPaymentTriggeredRef.current = true;
           window.setTimeout(() => {
-            const btn = document.getElementById("reserve-success-go-pay") as HTMLButtonElement | null;
-            btn?.click();
+            void armPaymentRef.current?.();
           }, 30);
         }
       } catch (e) {
@@ -1511,25 +1510,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (orderRef.current && String(orderRef.current.status || "") === "reserved") {
         const ord = orderRef.current;
         const nums = orderNumbers.slice().sort((a, b) => a - b);
-        const amount = Number(ord?.amount_rub ?? 0);
-        const elOrder = document.getElementById("reserve-success-order-id");
-        const elPick = document.getElementById("reserve-success-picked-label");
-        const elNums = document.getElementById("reserve-success-numbers");
-        const elAmt = document.getElementById("reserve-success-amount");
-        const elDl = document.getElementById("reserve-success-deadline");
-        if (elOrder) elOrder.textContent = ord?.id ? "A" + String(ord.id) : "—";
-        if (elPick) elPick.textContent = "Выбрано (" + String(nums.length) + ")";
-        if (elNums) {
-          elNums.innerHTML = nums
-            .map((n) => '<span class="reserve-success-modal__chip">' + esc(String(n)) + "</span>")
-            .join("");
-        }
-        if (elAmt) elAmt.textContent = formatRub(amount) + " ₽";
-        if (elDl) {
-          const until = Number(ord?.reserved_until ?? 0);
-          elDl.textContent = until ? "Крайний срок брони (МСК): " + formatDeadlineMoscow(until) : "";
-        }
-        openOverlay(document.getElementById("modal-reserve-success"));
+        reserveDraftRef.current = {
+          orderId: Number(ord?.id) || 0,
+          amountRub: Number(ord?.amount_rub ?? 0),
+          reservedUntil: Number(ord?.reserved_until ?? 0),
+          numbers: nums,
+          paymentMethod: "collection",
+        };
+        void armPaymentRef.current?.();
         return;
       }
       openCart();
@@ -1607,23 +1595,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         setSelected([]);
         persistDraft(rid, []);
         closeCart();
-        paintFlowSteps("reserve-success-steps", "success");
         const ord = data.order as OrderDto;
         const numsF = (data.numbers as number[]) || [];
-        const amount = Number(ord?.amount_rub ?? 0);
-        const elOrder = document.getElementById("reserve-success-order-id");
-        const elPick = document.getElementById("reserve-success-picked-label");
-        const elNums = document.getElementById("reserve-success-numbers");
-        const elAmt = document.getElementById("reserve-success-amount");
-        const elDl = document.getElementById("reserve-success-deadline");
-        if (elOrder) elOrder.textContent = ord?.id ? "A" + String(ord.id) : "—";
-        if (elPick) elPick.textContent = "Выбрано (" + String(numsF.length) + ")";
-        if (elNums)
-          elNums.innerHTML = numsF
-            .map((n) => '<span class="reserve-success-modal__chip">' + esc(String(n)) + "</span>")
-            .join("");
-        if (elAmt) elAmt.textContent = formatRub(amount) + " ₽";
-        if (elDl) elDl.textContent = ord?.reserved_until ? "Крайний срок брони (МСК): " + formatDeadlineMoscow(Number(ord.reserved_until)) : "";
         reserveDraftRef.current = {
           orderId: Number(ord?.id) || 0,
           amountRub: Number(ord?.amount_rub ?? 0),
@@ -1631,8 +1604,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           numbers: numsF,
           paymentMethod: "collection",
         };
-        openOverlay(document.getElementById("modal-reserve-success"));
         void loadSliceRef.current();
+        await armPaymentRef.current?.();
       } catch (e) {
         const msg = e instanceof AbApiError && e.status === 401 ? "Войдите снова." : String((e as Error).message || "Ошибка");
         toast(msg, "error");
@@ -1656,6 +1629,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       payTimerRef.current = null;
     }
   }, []);
+
+  const armPaymentRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     const wsUrl = session?.token && authVerified ? buildAbWebSocketUrl(session.token) : "";
@@ -1708,6 +1683,40 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
   useEffect(() => {
     if (!authVerified && authCheckInFlight) return;
+    const syncPaySheetFlow = (phase: "pay" | "receipt") => {
+      const nav = document.getElementById("pay-sheet-flow-rail");
+      if (!nav) return;
+      nav.querySelectorAll("[data-pay-flow-step]").forEach((node) => {
+        const k = node.getAttribute("data-pay-flow-step");
+        const bubble = node.querySelector(".pay-sheet-flow-rail__bubble");
+        node.classList.remove("is-done", "is-current", "is-upcoming");
+        if (phase === "pay") {
+          if (k === "pick" || k === "cart") {
+            node.classList.add("is-done");
+            if (bubble) bubble.textContent = "✓";
+          } else if (k === "pay") {
+            node.classList.add("is-current");
+            if (bubble) bubble.textContent = "💳";
+          } else {
+            node.classList.add("is-upcoming");
+            if (bubble) bubble.textContent = "✅";
+          }
+        } else {
+          if (k === "pick" || k === "cart" || k === "pay") {
+            node.classList.add("is-done");
+            if (bubble) bubble.textContent = "✓";
+          } else if (k === "receipt") {
+            node.classList.add("is-current");
+            if (bubble) bubble.textContent = "✅";
+          }
+        }
+      });
+      nav.querySelectorAll("[data-pay-flow-connector]").forEach((node, i) => {
+        if (phase === "pay") node.classList.toggle("is-filled", i < 2);
+        else node.classList.toggle("is-filled", i < 3);
+      });
+    };
+
     const paintReservePayment = (r: RaffleDto, method: "collection" | "tbank_collection" | "qr") => {
       const purpose = String(r.qr_payment_purpose || "Оплата услуг").trim() || "Оплата услуг";
       const elPurT = document.getElementById("reserve-payment-purpose-tbank");
@@ -1716,6 +1725,15 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (elPurT) elPurT.textContent = purpose;
       if (elQrPur) elQrPur.textContent = purpose;
       if (elQrHint) elQrHint.textContent = "«" + purpose + "»";
+      const elPurposeSber = document.getElementById("reserve-payment-purpose-sber");
+      if (elPurposeSber) elPurposeSber.textContent = purpose;
+      const elInstrPur = document.getElementById("reserve-pay-instr-purpose");
+      if (elInstrPur) elInstrPur.textContent = purpose;
+      const dAmt = reserveDraftRef.current?.amountRub;
+      if (typeof dAmt === "number") {
+        const elInstrAmt = document.getElementById("reserve-pay-instr-amount");
+        if (elInstrAmt) elInstrAmt.textContent = formatRub(dAmt) + " ₽";
+      }
       const hasCol =
         (r.sber_enabled != null ? Boolean(Number(r.sber_enabled) === 1 || r.sber_enabled === true) : Boolean(String(r.collection_url || "").trim())) &&
         Boolean(String(r.collection_url || "").trim());
@@ -1748,7 +1766,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         bQr.classList.toggle("is-active", m === "qr");
         bQr.setAttribute("aria-selected", m === "qr" ? "true" : "false");
       }
-      document.getElementById("reserve-payment-methods")!.hidden = Number(hasCol) + Number(hasTbank) + Number(hasQr) < 2;
+      const methEl = document.getElementById("reserve-payment-methods");
+      if (methEl) methEl.hidden = true;
       const rec = String(r.sber_collection_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
       const recT = String(r.tbank_collection_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
       const recQr = String(r.qr_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
@@ -1765,12 +1784,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (a) {
         a.href = href || "#";
         a.setAttribute("aria-disabled", href ? "false" : "true");
-        a.classList.toggle("reserve-flow-btn--disabled", !href);
+        a.classList.toggle("pay-sheet-pay-link--disabled", !href);
       }
       if (at) {
         at.href = hrefT || "#";
         at.setAttribute("aria-disabled", hrefT ? "false" : "true");
-        at.classList.toggle("reserve-flow-btn--disabled", !hrefT);
+        at.classList.toggle("pay-sheet-pay-link--disabled", !hrefT);
       }
       const img = document.getElementById("reserve-payment-qr-image") as HTMLImageElement | null;
       const qr = String(r.qr_image_url || "").trim();
@@ -1781,6 +1800,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       document.getElementById("reserve-payment-collect")!.hidden = m !== "collection";
       document.getElementById("reserve-payment-collect-tbank")!.hidden = m !== "tbank_collection";
       document.getElementById("reserve-payment-qr")!.hidden = m !== "qr";
+      const bankBadge = document.getElementById("reserve-payment-collect-bank");
+      if (bankBadge) {
+        if (m === "collection") bankBadge.textContent = "Сбербанк";
+        else if (m === "tbank_collection") bankBadge.textContent = "Тинькофф";
+        else bankBadge.textContent = "QR";
+      }
       const rules = String(r.rules_url || "").trim();
       const rw = document.getElementById("reserve-payment-rules-wrap");
       const rl = document.getElementById("reserve-payment-rules-link") as HTMLAnchorElement | null;
@@ -1797,28 +1822,33 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const back = document.getElementById("reserve-payment-back");
       const title = document.getElementById("reserve-payment-title");
       const hint = document.getElementById("reserve-payment-phase-hint");
+      const fill = document.getElementById("reserve-payment-progress");
       const isC = step === "confirm";
       if (req) req.hidden = isC;
       if (conf) conf.hidden = !isC;
       if (back) back.hidden = !isC;
-      if (title) title.textContent = isC ? "Чек по переводу" : "Реквизиты для перевода";
+      if (title) title.textContent = isC ? "Последний шаг — загрузите чек" : "Реквизиты для перевода";
       if (hint) {
         hint.textContent = isC
-          ? "Шаг 3: нажмите «Загрузить чек», выберите фото или PDF и отправьте."
-          : "Шаг 2: оплатите сумму ниже, затем нажмите «Я перевёл — загрузить чек».";
+          ? "Шаг «Чек»: выберите фото или PDF из банка и нажмите «Отправить чек»."
+          : "Оплатите сумму ниже, затем нажмите «Я перевёл».";
       }
+      if (fill && isC) fill.style.width = "100%";
       paintFlowSteps("reserve-payment-steps", isC ? "confirm" : "requisites");
+      syncPaySheetFlow(isC ? "receipt" : "pay");
     };
 
     const startPayTimer = (untilTs: number) => {
       clearPayTimer();
+      let windowTotalMs = 0;
       const tick = () => {
         const left = reservationLeftMsRef.current(untilTs);
+        if (windowTotalMs <= 0 && left > 0) windowTotalMs = left;
+        const denom = Math.max(windowTotalMs, 1);
         const el = document.getElementById("reserve-payment-timer");
         const fill = document.getElementById("reserve-payment-progress");
-        const denom = Math.max(60_000, left);
         if (el) el.textContent = formatMmSs(left);
-        if (fill) fill.style.width = String(Math.max(0, Math.min(100, denom > 0 ? (left / denom) * 100 : 0))) + "%";
+        if (fill) fill.style.width = String(Math.max(0, Math.min(100, (left / denom) * 100))) + "%";
         if (left <= 0) {
           clearPayTimer();
           closeOverlay(document.getElementById("modal-reserve-payment"));
@@ -1844,17 +1874,28 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       closeOverlay(document.getElementById("modal-reserve-success"));
       const amt = d.amountRub;
-      document.getElementById("reserve-payment-amount")!.textContent = formatRub(amt) + " ₽";
+      document.getElementById("reserve-payment-amount")!.textContent = formatRub(amt);
       document.getElementById("reserve-payment-amount-inline")!.textContent = formatRub(amt) + " ₽";
       document.getElementById("reserve-payment-amount-check")!.textContent = formatRub(amt) + " ₽";
-      document.getElementById("reserve-payment-order-id")!.textContent = "A" + String(d.orderId);
+      const elInstrAmtTop = document.getElementById("reserve-pay-instr-amount");
+      if (elInstrAmtTop) elInstrAmtTop.textContent = formatRub(amt) + " ₽";
+      const stampEl = document.getElementById("reserve-payment-order-stamp");
+      if (stampEl) {
+        const idn = Math.max(0, Math.floor(Number(d.orderId) || 0));
+        stampEl.textContent = idn.toString(16).padStart(8, "0").slice(-8);
+      }
+      const fullOrd = document.getElementById("reserve-payment-order-id");
+      if (fullOrd) fullOrd.textContent = "Заказ A" + String(d.orderId);
       const dl = document.getElementById("reserve-payment-deadline");
       if (dl) dl.textContent = d.reservedUntil ? "Крайний срок брони (МСК): " + formatDeadlineMoscow(d.reservedUntil) : "";
       paintReservePayment(r, d.paymentMethod);
       switchPayStep("requisites");
       openOverlay(document.getElementById("modal-reserve-payment"));
+      syncPaySheetFlow("pay");
       startPayTimer(d.reservedUntil);
     };
+
+    armPaymentRef.current = armPayment;
 
     const onGoPay = () => {
       void armPayment();
@@ -1891,10 +1932,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     elGoPay?.addEventListener("click", onGoPay);
 
     const onPayClose = () => {
-      if (paymentStepRef.current === "confirm") {
-        switchPayStep("requisites");
-        return;
-      }
       if (reserveDraftRef.current?.orderId) {
         openOverlay(document.getElementById("modal-reserve-payment-cancel-confirm"));
         return;
@@ -1905,10 +1942,24 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const elPayClose = document.getElementById("reserve-payment-close");
     elPayClose?.addEventListener("click", onPayClose);
     const elModalPay = document.getElementById("modal-reserve-payment");
-    const onModalPayBackdrop = (e: MouseEvent) => {
+    const onModalPayClick = (e: MouseEvent) => {
+      const copyBtn = (e.target as HTMLElement).closest?.("[data-copy-target]") as HTMLElement | null;
+      if (copyBtn) {
+        e.preventDefault();
+        const id = copyBtn.getAttribute("data-copy-target");
+        if (!id) return;
+        const cel = document.getElementById(id);
+        const text = cel?.textContent?.trim() || "";
+        if (!text) return;
+        void navigator.clipboard.writeText(text).then(
+          () => toastRef.current("Скопировано", "success"),
+          () => toastRef.current("Не удалось скопировать", "warning"),
+        );
+        return;
+      }
       if (e.target === elModalPay) onPayClose();
     };
-    elModalPay?.addEventListener("click", onModalPayBackdrop);
+    elModalPay?.addEventListener("click", onModalPayClick);
 
     const onCancelDismiss = () => {
       closeOverlay(document.getElementById("modal-reserve-payment-cancel-confirm"));
@@ -1949,6 +2000,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       el?.addEventListener("click", fn);
       if (el) methodHandlers.push({ el, fn });
     }
+
+    const elAltReq = document.getElementById("reserve-payment-alt-requisites");
+    const onAltReq = () => {
+      const rf = raffleRef.current;
+      if (rf) paintReservePayment(rf, "qr");
+    };
+    elAltReq?.addEventListener("click", onAltReq);
 
     const onSupport = () => {
       toastRef.current("Напишите в чат с «Главной»: укажите заказ A" + String(reserveDraftRef.current?.orderId || ""), "info");
@@ -2037,7 +2095,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       clearPayTimer();
       elGoPay?.removeEventListener("click", onGoPay);
       elPayClose?.removeEventListener("click", onPayClose);
-      elModalPay?.removeEventListener("click", onModalPayBackdrop);
+      elModalPay?.removeEventListener("click", onModalPayClick);
+      elAltReq?.removeEventListener("click", onAltReq);
       elCancelDismiss?.removeEventListener("click", onCancelDismiss);
       elModalCancelConfirm?.removeEventListener("click", onModalCancelConfirmBackdrop);
       elCancelConfirmBtn?.removeEventListener("click", onCancelReservation);
@@ -2053,6 +2112,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elExpiredClose?.removeEventListener("click", onExpiredClose);
       elModalExpired?.removeEventListener("click", onModalExpiredBackdrop);
       elModalSuccess?.removeEventListener("click", onModalSuccessBackdrop);
+      armPaymentRef.current = null;
     };
   }, [clearPayTimer, authVerified, authCheckInFlight]);
 
