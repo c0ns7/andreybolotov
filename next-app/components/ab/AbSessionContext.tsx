@@ -187,7 +187,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
     if (!session?.token || !authVerified) return;
     const token = session.token;
     let ws: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryTimer: number | null = null;
     const connect = () => {
       const wsUrl = buildAbWebSocketUrl(token);
       if (!wsUrl) return;
@@ -210,7 +210,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
         }
       };
       ws.onclose = () => {
-        retryTimer = window.setTimeout(connect, 2500);
+        retryTimer = window.setTimeout(connect, 2500) as unknown as number;
       };
     };
     connect();
