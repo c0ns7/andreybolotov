@@ -25,6 +25,7 @@ type RaffleDto = Record<string, unknown> & {
   status?: string;
   ticket_count?: number;
   price_rub?: number;
+  cover_image_url?: string;
   viewers_count?: number;
   rules_url?: string;
   collection_url?: string;
@@ -625,6 +626,19 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         if (h) h.textContent = String(r.title || "Акция");
         if (typeof document !== "undefined") {
           document.title = r.title ? `Акция — ${String(r.title)}` : "Акция";
+        }
+        const coverUrl = String(r.cover_image_url || "").trim();
+        const heroEl = document.getElementById("raffle-page-hero");
+        const coverImg = document.getElementById("raffle-page-cover-img") as HTMLImageElement | null;
+        if (heroEl) heroEl.classList.toggle("raffle-purchase-hero--no-cover", !coverUrl);
+        if (coverImg) {
+          if (coverUrl) {
+            coverImg.src = coverUrl;
+            coverImg.hidden = false;
+          } else {
+            coverImg.removeAttribute("src");
+            coverImg.hidden = true;
+          }
         }
         const badge = document.getElementById("raffle-page-price-badge");
         if (badge) {
