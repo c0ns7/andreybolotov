@@ -1179,6 +1179,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
   useEffect(() => {
     const EDGE = 14;
+    const TOP_HINT_LATCH_IN = 18;
+    const TOP_HINT_LATCH_OUT = 44;
+    const BOTTOM_HINT_LATCH_IN = 18;
+    const BOTTOM_HINT_LATCH_OUT = 44;
     const PULL_TRIGGER = 56;
     const COOLDOWN_MS = 550;
     const WHEEL_ACC_TRIGGER = 96;
@@ -1190,6 +1194,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     let rafHints = false;
     let wheelAccTop = 0;
     let wheelAccBottom = 0;
+    let topHintLatched = false;
+    let bottomHintLatched = false;
+    let lastHintTopText = "";
+    let lastHintBottomText = "";
+    let lastHintShowTop = false;
+    let lastHintShowBottom = false;
 
     function wheelDeltaPixels(e: WheelEvent): number {
       const y = e.deltaY;
@@ -1211,7 +1221,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const fitsOneScreen = maxScroll <= EDGE;
       const atTop = st <= EDGE;
       const atBottom = fitsOneScreen ? false : st >= maxScroll - EDGE;
-      return { st, vh, sh, maxScroll, atTop, atBottom };
+      const distBottom = maxScroll - st;
+      return { st, vh, sh, maxScroll, fitsOneScreen, atTop, atBottom, distBottom };
     }
 
     function getAdjacentParts() {
@@ -1232,6 +1243,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (!topEl || !bottomEl) return;
 
       if (mainStepRef.current !== "grid" || gridLoadingRef.current) {
+        topHintLatched = false;
+        bottomHintLatched = false;
+        lastHintShowTop = false;
+        lastHintShowBottom = false;
+        lastHintTopText = "";
+        lastHintBottomText = "";
         topEl.classList.remove("raffle-range-swipe-hint--visible");
         bottomEl.classList.remove("raffle-range-swipe-hint--visible");
         topEl.setAttribute("aria-hidden", "true");
@@ -1240,23 +1257,49 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
 
       const { prevPart, nextPart } = getAdjacentParts();
-      const { atTop, atBottom } = docMetrics();
+      const { st, maxScroll, fitsOneScreen, distBottom } = docMetrics();
 
-      if (textTop && prevPart) {
-        textTop.textContent =
-          "👆 Потяните вниз (свайп), чтобы открыть " + String(prevPart.from) + "–" + String(prevPart.to);
-      }
-      if (textBottom && nextPart) {
-        textBottom.textContent =
-          "Потяните вверх (свайп), чтобы открыть " + String(nextPart.from) + "–" + String(nextPart.to) + " 👇";
+      if (!prevPart) topHintLatched = false;
+      else {
+        if (st <= TOP_HINT_LATCH_IN) topHintLatched = true;
+        else if (st > TOP_HINT_LATCH_OUT) topHintLatched = false;
       }
 
-      const showTop = atTop && !!prevPart;
-      const showBottom = atBottom && !!nextPart;
-      topEl.classList.toggle("raffle-range-swipe-hint--visible", showTop);
-      bottomEl.classList.toggle("raffle-range-swipe-hint--visible", showBottom);
-      topEl.setAttribute("aria-hidden", showTop ? "false" : "true");
-      bottomEl.setAttribute("aria-hidden", showBottom ? "false" : "true");
+      if (!nextPart || fitsOneScreen) bottomHintLatched = false;
+      else {
+        if (distBottom <= BOTTOM_HINT_LATCH_IN) bottomHintLatched = true;
+        else if (distBottom > BOTTOM_HINT_LATCH_OUT) bottomHintLatched = false;
+      }
+
+      const nextTopText = prevPart
+        ? "👆 Потяните вниз (свайп), чтобы открыть " + String(prevPart.from) + "–" + String(prevPart.to)
+        : "";
+      const nextBottomText = nextPart
+        ? "Потяните вверх (свайп), чтобы открыть " + String(nextPart.from) + "–" + String(nextPart.to) + " 👇"
+        : "";
+
+      const showTop = !!prevPart && topHintLatched;
+      const showBottom = !!nextPart && bottomHintLatched;
+
+      if (textTop && nextTopText && nextTopText !== lastHintTopText) {
+        textTop.textContent = nextTopText;
+        lastHintTopText = nextTopText;
+      }
+      if (textBottom && nextBottomText && nextBottomText !== lastHintBottomText) {
+        textBottom.textContent = nextBottomText;
+        lastHintBottomText = nextBottomText;
+      }
+
+      if (showTop !== lastHintShowTop) {
+        topEl.classList.toggle("raffle-range-swipe-hint--visible", showTop);
+        topEl.setAttribute("aria-hidden", showTop ? "false" : "true");
+        lastHintShowTop = showTop;
+      }
+      if (showBottom !== lastHintShowBottom) {
+        bottomEl.classList.toggle("raffle-range-swipe-hint--visible", showBottom);
+        bottomEl.setAttribute("aria-hidden", showBottom ? "false" : "true");
+        lastHintShowBottom = showBottom;
+      }
     }
 
     function scheduleHints() {
@@ -1364,6 +1407,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       } else {
         wheelAccBottom = 0;
       }
+
+      scheduleHints();
     }
 
     window.addEventListener("scroll", scheduleHints, { passive: true });

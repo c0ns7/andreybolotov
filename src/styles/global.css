@@ -12235,38 +12235,58 @@ html.theme-dark .locality-modal__input {
   color: #f8fafc;
 }
 
-@keyframes raffle-range-swipe-hint-bounce {
-  0%,
+/* Лёгкий однократный пульс при появлении — бесконечный bounce даёт лаги на скролле */
+@keyframes raffle-range-swipe-hint-appear {
+  0% {
+    opacity: 0.75;
+    transform: translateY(2px);
+  }
   100% {
+    opacity: 1;
     transform: translateY(0);
   }
-  50% {
-    transform: translateY(-6px);
-  }
+}
+
+#raffle-page-step-grid {
+  position: relative;
+  overflow: visible;
+}
+
+html.raffle-purchase-page #raffle-page-flow {
+  overflow: visible;
 }
 
 .raffle-range-swipe-hint {
-  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 4;
   text-align: center;
-  opacity: 0.8;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
   transition: opacity 0.2s ease;
+  contain: layout style;
 }
 
 .raffle-range-swipe-hint--visible {
-  display: block;
+  visibility: visible;
+  opacity: 0.9;
 }
 
+/* Вынесены из потока вверх/вниз блока — не перекрывают номерки и не дёргают scrollHeight */
 .raffle-range-swipe-hint--top {
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
+  top: 0;
+  margin: 0;
+  padding: 0 8px;
+  transform: translateY(-100%);
 }
 
 .raffle-range-swipe-hint--bottom {
-  margin-top: 2rem;
-  margin-bottom: 6rem;
-  padding-bottom: 3rem;
+  bottom: 0;
+  margin: 0;
+  padding: 0 8px;
+  transform: translateY(100%);
 }
 
 .raffle-range-swipe-hint__pill {
@@ -12280,7 +12300,17 @@ html.theme-dark .locality-modal__input {
   font-weight: 500;
   font-size: 0.875rem;
   line-height: 1.25;
-  animation: raffle-range-swipe-hint-bounce 1.4s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.raffle-range-swipe-hint--visible .raffle-range-swipe-hint__pill {
+  animation: raffle-range-swipe-hint-appear 0.45s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raffle-range-swipe-hint--visible .raffle-range-swipe-hint__pill {
+    animation: none;
+  }
 }
 
 .raffle-range-swipe-hint__pill--elevated {
