@@ -9391,26 +9391,34 @@ html.raffle-purchase-page .raffle-ticket-grid.raffle-ticket-grid--loading {
   html.raffle-purchase-page .raffle-ticket-grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 6px;
-    padding: 6px 0;
+    padding: 6px 4px;
+    align-items: center;
   }
 
+  /* Жёсткие min 64×64 из .raffle-cell мешают — сбрасываем, квадрат задаёт aspect-ratio */
   html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
-    width: min(72px, 100%);
-    height: min(72px, 100%);
-    max-width: 72px;
-    max-height: 72px;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-width: min(72px, 100%);
     aspect-ratio: 1;
-    font-size: 0.82rem;
+    height: auto;
+    box-sizing: border-box;
+    font-size: clamp(0.72rem, 2.6vw + 0.35rem, 0.82rem);
     justify-self: center;
+    align-self: center;
   }
 
+  /* Занятые ~70% от свободного по стороне, масштабируются вместе с колонкой */
   html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
-    width: min(50px, 100%);
-    height: min(50px, 100%);
-    max-width: 50px;
-    max-height: 50px;
+    width: min(50px, 69.5%);
+    min-width: 0;
+    min-height: 0;
+    max-width: min(50px, 100%);
     aspect-ratio: 1;
-    font-size: 0.65rem;
+    height: auto;
+    box-sizing: border-box;
+    font-size: clamp(0.58rem, 2vw + 0.28rem, 0.66rem);
     justify-self: center;
     align-self: center;
   }
@@ -9419,21 +9427,42 @@ html.raffle-purchase-page .raffle-ticket-grid.raffle-ticket-grid--loading {
 @media (max-width: 480px) {
   html.raffle-purchase-page .raffle-ticket-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 6px;
+    gap: 5px;
+    padding: 6px 2px;
   }
 
   html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
-    font-size: 0.8rem;
+    max-width: min(80px, 100%);
+    font-size: clamp(0.7rem, 4.2vw, 0.8rem);
   }
 
   html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
-    font-size: 0.62rem;
+    width: min(48px, 69.5%);
+    max-width: min(48px, 100%);
+    font-size: clamp(0.56rem, 3.4vw, 0.62rem);
+  }
+}
+
+@media (max-width: 360px) {
+  html.raffle-purchase-page .raffle-ticket-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px 0;
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--free {
+    font-size: clamp(0.65rem, 4.8vw, 0.76rem);
+  }
+
+  html.raffle-purchase-page .raffle-ticket-grid .raffle-cell--taken {
+    width: min(44px, 69.5%);
+    max-width: min(44px, 100%);
+    font-size: clamp(0.52rem, 3.8vw, 0.58rem);
   }
 }
 
 html.raffle-purchase-page .raffle-cell--free {
   border-radius: 12px;
-  font-size: 0.82rem;
 }
 
 html.raffle-purchase-page #raffle-page-step-grid .raffle-legend {
