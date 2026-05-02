@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Grid2X2, Phone, Search, Ticket } from "lucide-react";
+import { ChevronLeft, Grid2X2, Phone, Search, Ticket } from "lucide-react";
 import { buildAbWebSocketUrl } from "../../lib/ab-ws";
 import { getAbLatestTableCached, invalidateAbLatestTableCache, type AbLatestTableRow } from "../../lib/ab-latest-table-cache";
 import AppBottomNav from "./AppBottomNav";
@@ -207,10 +207,23 @@ export default function HomeTableClient() {
       <div className={"screen home-screen" + (mounted ? "" : " screen--hidden")}>
         <div className="app-view home-inner table-page">
           <header className="table-page__header">
-            <h1 className="table-page__title">Таблица номерков</h1>
-            <p className="table-page__subtitle">
-              {raffleTitle ? `Последняя активная акция: ${raffleTitle}` : "Поиск по номерку или номеру телефона"}
-            </p>
+            <div className="table-page__head-row">
+              <button
+                type="button"
+                className="table-page__back"
+                onClick={() => router.push("/home")}
+                aria-label="На главную"
+                title="На главную"
+              >
+                <ChevronLeft size={22} aria-hidden="true" strokeWidth={2.25} />
+              </button>
+              <div className="table-page__head-titles">
+                <h1 className="table-page__title">Таблица номерков</h1>
+                <p className="table-page__subtitle">
+                  {raffleTitle ? `Последняя активная акция: ${raffleTitle}` : "Поиск по номерку или номеру телефона"}
+                </p>
+              </div>
+            </div>
             <label className="table-page__search">
               <Search size={16} aria-hidden="true" />
               <input

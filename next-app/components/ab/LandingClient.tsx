@@ -307,7 +307,9 @@ export default function LandingClient() {
                     />
                   </div>
                 </div>
-                <p className="form-links">{authCheckingPhone ? "Проверяем номер..." : "После ввода последней цифры продолжим автоматически"}</p>
+                {authCheckingPhone ? (
+                  <p className="form-links">Проверяем номер...</p>
+                ) : null}
               </form>
             ) : authStep === "login" ? (
               <form onSubmit={onLogin} noValidate>

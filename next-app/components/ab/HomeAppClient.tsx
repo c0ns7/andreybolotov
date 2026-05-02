@@ -304,15 +304,8 @@ export default function HomeAppClient() {
     <>
       {showHomeBootLoader ? (
         <div className="home-boot-loader" role="status" aria-live="polite" aria-label="Загрузка">
-          <div className="home-boot-loader__inner">
-            <div className="home-boot-loader__logo" aria-hidden="true">
-              <img src="/logo.png" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
-            </div>
-            <div className="home-boot-loader__spinner" aria-hidden="true">
-              <span className="home-boot-loader__ring"></span>
-              <span className="home-boot-loader__ring home-boot-loader__ring--inner"></span>
-            </div>
-            <p className="home-boot-loader__text">Загрузка</p>
+          <div className="home-boot-loader__spinner" aria-hidden="true">
+            <span className="home-boot-loader__ring"></span>
           </div>
         </div>
       ) : null}
@@ -321,8 +314,11 @@ export default function HomeAppClient() {
           <header className="home-sticky">
             <div className="home-brand-row">
               <div className="home-brand-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8" />
+                  <path d="M4 12h16" />
+                  <path d="M12 22v-9" />
+                  <path d="M12 13a5 5 0 0 0 5-5V8a3 3 0 0 0-3-3 4 4 0 0 0-4 4 4 4 0 0 0-4-4 3 3 0 0 0-3 3v2a5 5 0 0 0 5 5" />
                 </svg>
               </div>
               <h1 className="home-brand-title">Быть добру!</h1>

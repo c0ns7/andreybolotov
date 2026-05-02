@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Grid2X2, Phone, RefreshCw, Search, SlidersHorizontal, Ticket, Users, X } from "lucide-react";
+import { ChevronLeft, Grid2X2, Phone, RefreshCw, Search, SlidersHorizontal, Ticket, Users, X } from "lucide-react";
 import { buildAbPublicWebSocketUrl } from "../../lib/ab-ws";
 
 type PublicTicketCard = {
@@ -55,6 +56,7 @@ function buildRangeTabs(ticketCount: number): Array<{ key: string; label: string
 }
 
 export default function PublicTableClient() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -188,10 +190,23 @@ export default function PublicTableClient() {
     <div className="screen home-screen">
       <div className="app-view home-inner table-page table-page--public">
         <header className="table-page__header">
-          <h1 className="table-page__title">Таблица номерков</h1>
-          <p className="table-page__subtitle">
-            {raffleTitle ? `Текущая акция: ${raffleTitle}` : "Публичная таблица с поиском по номеркам и телефону"}
-          </p>
+          <div className="table-page__head-row">
+            <button
+              type="button"
+              className="table-page__back"
+              onClick={() => router.push("/home")}
+              aria-label="На главную"
+              title="На главную"
+            >
+              <ChevronLeft size={22} aria-hidden="true" strokeWidth={2.25} />
+            </button>
+            <div className="table-page__head-titles">
+              <h1 className="table-page__title">Таблица номерков</h1>
+              <p className="table-page__subtitle">
+                {raffleTitle ? `Текущая акция: ${raffleTitle}` : "Публичная таблица с поиском по номеркам и телефону"}
+              </p>
+            </div>
+          </div>
           <div className="table-page__meta-row">
             <span className="table-page__online">
               <Users size={14} aria-hidden="true" />

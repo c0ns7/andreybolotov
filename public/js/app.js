@@ -3242,13 +3242,16 @@
 
   function updateModalCartFlowSteps(totalNums) {
     var nav = document.getElementById("modal-cart-flow-steps");
+    var picked = document.getElementById("modal-cart-picked-label");
     if (!nav) return;
     var n = Number(totalNums);
     if (!Number.isFinite(n) || n < 1) {
       nav.hidden = true;
+      if (picked) picked.hidden = true;
       return;
     }
     nav.hidden = false;
+    if (picked) picked.hidden = false;
     nav.querySelectorAll("[data-cart-flow-step]").forEach(function (node) {
       var key = node.getAttribute("data-cart-flow-step");
       node.classList.remove("is-done", "is-current", "is-upcoming");
@@ -3259,6 +3262,9 @@
       } else {
         node.classList.add("is-upcoming");
       }
+    });
+    nav.querySelectorAll("[data-cart-connector]").forEach(function (node, i) {
+      node.classList.toggle("is-filled", i === 0);
     });
   }
 

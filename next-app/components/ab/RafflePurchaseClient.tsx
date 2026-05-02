@@ -105,6 +105,29 @@ function getRangeTabForTicketN(ticketCount: number, n: number) {
   return null;
 }
 
+function syncCartFlowRail(totalNums: number) {
+  const nav = document.getElementById("modal-cart-flow-steps");
+  const picked = document.getElementById("modal-cart-picked-label");
+  if (!nav) return;
+  if (totalNums < 1) {
+    nav.hidden = true;
+    if (picked) picked.hidden = true;
+    return;
+  }
+  nav.hidden = false;
+  if (picked) picked.hidden = false;
+  nav.querySelectorAll("[data-cart-flow-step]").forEach((node) => {
+    const key = node.getAttribute("data-cart-flow-step");
+    node.classList.remove("is-done", "is-current", "is-upcoming");
+    if (key === "pick") node.classList.add("is-done");
+    else if (key === "cart") node.classList.add("is-current");
+    else node.classList.add("is-upcoming");
+  });
+  nav.querySelectorAll("[data-cart-connector]").forEach((node, i) => {
+    node.classList.toggle("is-filled", i === 0);
+  });
+}
+
 function paintFlowSteps(navId: string, phase: "success" | "requisites" | "confirm" | "wait") {
   const nav = document.getElementById(navId);
   if (!nav) return;
@@ -748,6 +771,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const draft = selected.slice().sort((a, b) => a - b);
     const rid = Number(raffle.id);
     if (!draft.length) {
+      syncCartFlowRail(0);
       root.innerHTML =
         '<div class="cart-modal__chips-row">' +
         '<button type="button" class="cart-modal__add-slot" data-cart-add-more="1" aria-label="Добавить номерки">+</button></div>';
@@ -787,6 +811,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     html +=
       '<button type="button" class="cart-modal__add-slot" data-cart-add-more="1" aria-label="Добавить номерки">+</button></div>';
     root.innerHTML = html;
+    syncCartFlowRail(draft.length);
     if (btn) {
       btn.disabled = false;
       btn.setAttribute("data-checkout-raffle-id", String(rid));
@@ -2313,15 +2338,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   if (!authVerified && authCheckInFlight) {
     return (
       <div className="home-boot-loader" role="status" aria-live="polite" aria-label="Загрузка">
-        <div className="home-boot-loader__inner">
-          <div className="home-boot-loader__logo" aria-hidden="true">
-            <img src="/logo.png" alt="Андрей Болотов" className="home-boot-loader__logo-image" />
-          </div>
-          <div className="home-boot-loader__spinner" aria-hidden="true">
-            <span className="home-boot-loader__ring"></span>
-            <span className="home-boot-loader__ring home-boot-loader__ring--inner"></span>
-          </div>
-          <p className="home-boot-loader__text">Загрузка</p>
+        <div className="home-boot-loader__spinner" aria-hidden="true">
+          <span className="home-boot-loader__ring"></span>
         </div>
       </div>
     );

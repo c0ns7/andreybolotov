@@ -10,7 +10,7 @@ export default function AbRafflePurchaseShellMarkup() {
       <span id="cart-action-strip-sub" className="cart-action-strip__sub">Выбрано билетов: 0</span>
     </span>
     <span className="cart-action-strip__chevron" aria-hidden="true">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 18l6-6-6-6"></path>
       </svg>
     </span>
@@ -65,31 +65,6 @@ export default function AbRafflePurchaseShellMarkup() {
 >
   <div className="modal modal--cart cart-sheet" id="modal-cart-sheet">
     <div className="cart-sheet__grabber" aria-hidden="true"></div>
-    <nav
-      id="modal-cart-flow-steps"
-      className="cart-sheet__flow payment-flow-steps payment-flow-steps--compact"
-      aria-label="Этапы покупки"
-      hidden
-    >
-      <ol className="payment-flow-steps__list">
-        <li className="payment-flow-steps__step" data-cart-flow-step="pick">
-          <span className="payment-flow-steps__num" aria-hidden="true">1</span>
-          <span className="payment-flow-steps__label">Номерки</span>
-        </li>
-        <li className="payment-flow-steps__step" data-cart-flow-step="cart">
-          <span className="payment-flow-steps__num" aria-hidden="true">2</span>
-          <span className="payment-flow-steps__label">Корзина</span>
-        </li>
-        <li className="payment-flow-steps__step" data-cart-flow-step="pay">
-          <span className="payment-flow-steps__num" aria-hidden="true">3</span>
-          <span className="payment-flow-steps__label">Оплата</span>
-        </li>
-        <li className="payment-flow-steps__step" data-cart-flow-step="receipt">
-          <span className="payment-flow-steps__num" aria-hidden="true">4</span>
-          <span className="payment-flow-steps__label">Чек</span>
-        </li>
-      </ol>
-    </nav>
     <div className="cart-sheet__head">
       <div className="cart-sheet__head-text">
         <h2 id="modal-cart-title" className="cart-sheet__title">Ваши номерки</h2>
@@ -102,6 +77,52 @@ export default function AbRafflePurchaseShellMarkup() {
       </button>
     </div>
     <div className="cart-sheet__body custom-scrollbar">
+      <nav id="modal-cart-flow-steps" className="cart-flow-rail" aria-label="Этапы покупки" hidden>
+        <div className="cart-flow-rail__row">
+          <div className="cart-flow-rail__step" data-cart-flow-step="pick">
+            <div className="cart-flow-rail__bubble" aria-hidden="true">
+              ✓
+            </div>
+            <span className="cart-flow-rail__label">Номерок</span>
+          </div>
+          <div className="cart-flow-rail__connector" data-cart-connector="0" aria-hidden="true">
+            <div className="cart-flow-rail__connector-track">
+              <div className="cart-flow-rail__connector-fill"></div>
+            </div>
+          </div>
+          <div className="cart-flow-rail__step" data-cart-flow-step="cart">
+            <div className="cart-flow-rail__bubble" aria-hidden="true">
+              🛒
+            </div>
+            <span className="cart-flow-rail__label">Корзина</span>
+          </div>
+          <div className="cart-flow-rail__connector" data-cart-connector="1" aria-hidden="true">
+            <div className="cart-flow-rail__connector-track">
+              <div className="cart-flow-rail__connector-fill"></div>
+            </div>
+          </div>
+          <div className="cart-flow-rail__step" data-cart-flow-step="pay">
+            <div className="cart-flow-rail__bubble" aria-hidden="true">
+              💳
+            </div>
+            <span className="cart-flow-rail__label">Оплата</span>
+          </div>
+          <div className="cart-flow-rail__connector" data-cart-connector="2" aria-hidden="true">
+            <div className="cart-flow-rail__connector-track">
+              <div className="cart-flow-rail__connector-fill"></div>
+            </div>
+          </div>
+          <div className="cart-flow-rail__step" data-cart-flow-step="receipt">
+            <div className="cart-flow-rail__bubble" aria-hidden="true">
+              ✅
+            </div>
+            <span className="cart-flow-rail__label">Чек</span>
+          </div>
+        </div>
+      </nav>
+      <p id="modal-cart-picked-label" className="cart-sheet__picked-label" hidden>
+        ВЫБРАНО
+      </p>
       <div className="cart-sheet__section">
         <div id="modal-cart-numbers-root"></div>
         <button type="button" className="cart-sheet__clear-all" id="modal-cart-clear-all" aria-label="Очистить все выбранные номерки" hidden>
