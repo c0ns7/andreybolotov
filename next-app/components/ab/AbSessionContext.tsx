@@ -133,9 +133,10 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   const isMaintenanceRoute = pathname === "/maintenance";
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
 
   useEffect(() => {
-    if (isMaintenanceRoute) {
+    if (isMaintenanceRoute || isAdminRoute) {
       detachWebSocket(publicWsRef.current);
       publicWsRef.current = null;
       return;
@@ -181,10 +182,10 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       detachWebSocket(ws);
       if (publicWsRef.current === ws) publicWsRef.current = null;
     };
-  }, [isMaintenanceRoute]);
+  }, [isMaintenanceRoute, isAdminRoute]);
 
   useEffect(() => {
-    if (!session?.token || !authVerified) return;
+    if (!session?.token || !authVerified || isAdminRoute) return;
     const token = session.token;
     let ws: WebSocket | null = null;
     let retryTimer: number | null = null;
@@ -218,7 +219,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       if (retryTimer) window.clearTimeout(retryTimer);
       detachWebSocket(ws);
     };
-  }, [session?.token, authVerified]);
+  }, [session?.token, authVerified, isAdminRoute]);
 
   const setSessionFromLogin = useCallback((s: AbSession) => {
     saveAbSession(s);

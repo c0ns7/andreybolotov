@@ -13961,15 +13961,23 @@ html.theme-dark .locality-modal__input {
   color: #f8fafc;
 }
 
-/* Лёгкий однократный пульс при появлении — бесконечный bounce даёт лаги на скролле */
+/* Появление: только opacity — параллельно крутится bounce на transform у той же плашки */
 @keyframes raffle-range-swipe-hint-appear {
   0% {
     opacity: 0.65;
-    transform: translateY(6px) scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes raffle-range-swipe-hint-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
   }
 }
 
@@ -14015,6 +14023,10 @@ html.raffle-purchase-page #raffle-page-flow {
   pointer-events: none;
 }
 
+.raffle-range-swipe-hint--pull-active .raffle-range-swipe-hint__pill {
+  animation-play-state: paused;
+}
+
 .raffle-range-swipe-hint--top {
   margin: 0 0 8px;
   padding: 0 8px;
@@ -14042,12 +14054,14 @@ html.raffle-purchase-page #raffle-page-flow {
 }
 
 .raffle-range-swipe-hint--visible .raffle-range-swipe-hint__pill {
-  animation: raffle-range-swipe-hint-appear 0.55s cubic-bezier(0.22, 1, 0.36, 1) 1;
+  animation:
+    raffle-range-swipe-hint-appear 0.45s cubic-bezier(0.22, 1, 0.36, 1) 1 both,
+    raffle-range-swipe-hint-bounce 1.45s ease-in-out 0.45s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .raffle-range-swipe-hint--visible .raffle-range-swipe-hint__pill {
-    animation: none;
+    animation: raffle-range-swipe-hint-appear 0.35s ease 1 both;
   }
 }
 
@@ -14099,10 +14113,6 @@ html.theme-dark .raffle-range-swipe-hint__pill--elevated {
   background: linear-gradient(90deg, #38bdf8 0%, #0071e3 100%);
   transition: transform 0.04s linear;
   will-change: transform;
-}
-
-.raffle-range-swipe-hint__pull-fill--from-right {
-  transform-origin: right center;
 }
 
 html.theme-dark .raffle-range-swipe-hint__pull-track {

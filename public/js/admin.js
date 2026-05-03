@@ -9,8 +9,6 @@
   let supportThreadSearch = "";
   /** @type {'all' | 'new' | 'unanswered'} */
   let adminTab = "all";
-  /** @type {WebSocket | null} */
-  let adminWs = null;
 
   let userTypingInThreadActive = false;
   /** @type {number | null} */
@@ -784,16 +782,6 @@
 
   function sendAdminTyping(active) {
     if (selectedId == null) return;
-    var payload = JSON.stringify({
-      type: "typing",
-      userId: selectedId,
-      active: !!active,
-    });
-    if (adminWs && adminWs.readyState === WebSocket.OPEN) {
-      try {
-        adminWs.send(payload);
-      } catch (_) {}
-    }
     fetch("/api/admin/typing", {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -1026,63 +1014,6 @@
     return { Authorization: "Bearer " + x.token };
   }
 
-  /** См. app.js: тот же host что у страницы — прокси Vite /ws → API */
-  function buildAdminWebSocketUrl(token) {
-    var proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return proto + "//" + location.host + "/ws?token=" + encodeURIComponent(token);
-  }
-
-  function disconnectAdminWs() {
-    if (adminWs) {
-      try {
-        adminWs.close();
-      } catch (_) {}
-      adminWs = null;
-    }
-  }
-
-  function connectAdminWs() {
-    disconnectAdminWs();
-    const s = loadSession();
-    if (!s || !s.token) return;
-    let ws;
-    try {
-      ws = new WebSocket(buildAdminWebSocketUrl(s.token));
-    } catch (_) {
-      return;
-    }
-    adminWs = ws;
-    ws.onopen = function () {
-      resendAdminTypingFromInput();
-    };
-    ws.onmessage = function (ev) {
-      let d;
-      try {
-        d = JSON.parse(ev.data);
-      } catch (_) {
-        return;
-      }
-      if (d.type === "ready") return;
-      if (d.type === "typing" && d.from === "user" && d.userId != null) {
-        if (selectedId == null || Number(d.userId) !== Number(selectedId)) return;
-        setUserTypingIndicatorVisible(!!d.active);
-        return;
-      }
-      if (d.type === "chat_message" && d.message && d.userId != null) {
-        loadUsers().catch(function () {});
-        if (Number(selectedId) === Number(d.userId)) {
-          appendAdminMessage(d.message);
-        }
-      }
-    };
-    ws.onclose = function () {
-      if (adminWs === ws) adminWs = null;
-      window.setTimeout(function () {
-        if (!adminWs) connectAdminWs();
-      }, 2500);
-    };
-  }
-
   function bindTabs() {
     document.querySelectorAll(".admin-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -1243,7 +1174,6 @@
       });
     }
 
-    connectAdminWs();
     loadUsers()
       .catch(function (e) {
         if (e.status === 403 || e.status === 401) {

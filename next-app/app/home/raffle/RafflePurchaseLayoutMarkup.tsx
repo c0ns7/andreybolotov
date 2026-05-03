@@ -131,7 +131,7 @@ export default function RafflePurchaseLayoutMarkup() {
                   </span>
                   <div className="raffle-range-swipe-hint__pull-row raffle-range-swipe-hint__pull-row--bottom" aria-hidden="true">
                     <div className="raffle-range-swipe-hint__pull-track">
-                      <div id="raffle-range-pull-fill-bottom" className="raffle-range-swipe-hint__pull-fill raffle-range-swipe-hint__pull-fill--from-right"></div>
+                      <div id="raffle-range-pull-fill-bottom" className="raffle-range-swipe-hint__pull-fill"></div>
                     </div>
                   </div>
                 </div>
