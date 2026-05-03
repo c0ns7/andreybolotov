@@ -14204,3 +14204,251 @@ html.theme-dark .site-online-badge__text {
     transform: none;
   }
 }
+
+/* iPhone Safari — подсказка «Добавить на экран Домой» (только клиент + UA) */
+@keyframes ab-ios-install-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(100% + 12px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ab-ios-install-pulse-scale {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.ab-ios-install-prompt {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.35rem));
+  z-index: 9999;
+  pointer-events: none;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+.ab-ios-install-prompt__enter {
+  pointer-events: auto;
+  animation: ab-ios-install-enter 0.42s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.ab-ios-install-prompt__pulse {
+  animation: ab-ios-install-pulse-scale 2.15s ease-in-out infinite;
+  transform-origin: center bottom;
+  will-change: transform;
+}
+
+.ab-ios-install-prompt__card {
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid #e5e7eb;
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+.ab-ios-install-prompt__inner {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ab-ios-install-prompt__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.ab-ios-install-prompt__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.ab-ios-install-prompt__icon-wrap {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  background: #0071e3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 10px 15px -3px rgba(0, 113, 227, 0.25);
+}
+
+.ab-ios-install-prompt__logo {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  display: block;
+}
+
+.ab-ios-install-prompt__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.25;
+}
+
+.ab-ios-install-prompt__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+.ab-ios-install-prompt__close {
+  flex-shrink: 0;
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+  border-radius: 9999px;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.ab-ios-install-prompt__close:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.ab-ios-install-prompt__close-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+}
+
+.ab-ios-install-prompt__steps {
+  background: #f9fafb;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.35;
+}
+
+.ab-ios-install-prompt__step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ab-ios-install-prompt__step-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ab-ios-install-prompt__step-svg {
+  width: 1rem;
+  height: 1rem;
+  color: #0071e3;
+}
+
+.ab-ios-install-prompt__footer {
+  margin: 0.15rem 0 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.ab-ios-install-prompt__notch {
+  width: 1rem;
+  height: 1rem;
+  margin: -0.2rem auto 0;
+  background: rgba(255, 255, 255, 0.95);
+  transform: rotate(45deg);
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+html.theme-dark .ab-ios-install-prompt__card {
+  background: rgba(28, 28, 30, 0.94);
+  border-color: #3a3a3c;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+html.theme-dark .ab-ios-install-prompt__title {
+  color: #f9fafb;
+}
+
+html.theme-dark .ab-ios-install-prompt__sub {
+  color: #9ca3af;
+}
+
+html.theme-dark .ab-ios-install-prompt__steps {
+  background: #2c2c2e;
+  color: #e5e7eb;
+}
+
+html.theme-dark .ab-ios-install-prompt__step-icon {
+  background: #3a3a3c;
+  border-color: #48484a;
+}
+
+html.theme-dark .ab-ios-install-prompt__close:hover {
+  background: #3a3a3c;
+}
+
+html.theme-dark .ab-ios-install-prompt__notch {
+  background: rgba(28, 28, 30, 0.94);
+  border-right-color: #3a3a3c;
+  border-bottom-color: #3a3a3c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-ios-install-prompt__enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .ab-ios-install-prompt__pulse {
+    animation: none;
+  }
+}

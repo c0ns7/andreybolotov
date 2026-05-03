@@ -5,6 +5,7 @@ import Script from "next/script";
 import AbRouteHtmlClasses from "../components/ab/AbRouteHtmlClasses";
 import { AbSessionProvider } from "../components/ab/AbSessionContext";
 import AbToastHost from "../components/ab/AbToastHost";
+import IosInstallAppPrompt from "../components/ab/IosInstallAppPrompt";
 import SiteOnlineBadge from "../components/ab/SiteOnlineBadge";
 
 export const metadata: Metadata = {
@@ -96,6 +97,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AbSessionProvider>
           <AbToastHost />
           <SiteOnlineBadge />
+          <IosInstallAppPrompt />
           {children}
         </AbSessionProvider>
       </body>
