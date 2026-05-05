@@ -219,11 +219,17 @@ export default function LandingClient() {
         <div id="welcome-splash" className="welcome-splash" role="dialog" aria-modal="true" aria-labelledby="welcome-splash-title">
           <div className="welcome-splash__inner">
             <div className="welcome-splash__mascot-wrap">
-              <img className="welcome-splash__mascot" src="/mascot/mascot_wave.svg" alt="Степь" width={176} height={176} />
+              <img
+                className="welcome-splash__mascot"
+                src="/logoandreybolotov.png"
+                alt="Логотип andreybolotov.ru"
+                width={176}
+                height={176}
+              />
             </div>
             <div className="welcome-splash__text">
               <h1 id="welcome-splash-title" className="welcome-splash__title">
-                Привет! Я Степь! 🐾
+                Привет! Рады вам! 🐾
               </h1>
               <p className="welcome-splash__lead">
                 Добро пожаловать к <strong>Андрею Болотову</strong>

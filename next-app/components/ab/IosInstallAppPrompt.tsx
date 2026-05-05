@@ -55,7 +55,7 @@ export default function IosInstallAppPrompt() {
               <div className="ab-ios-install-prompt__head">
                 <div className="ab-ios-install-prompt__brand">
                   <div className="ab-ios-install-prompt__icon-wrap" aria-hidden="true">
-                    <img className="ab-ios-install-prompt__logo" src="/mascot/mascot_wave.svg" alt="" width={32} height={32} />
+                    <img className="ab-ios-install-prompt__logo" src="/logoandreybolotov.png" alt="" width={32} height={32} />
                   </div>
                   <div>
                     <h3 id="ab-ios-install-title" className="ab-ios-install-prompt__title">

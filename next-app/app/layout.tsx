@@ -37,7 +37,7 @@ export const metadata: Metadata = {
       "Онлайн-платформа для участия в акциях: номерки, история участия, чат с поддержкой и личный кабинет.",
     images: [
       {
-        url: "/og-cover.svg",
+        url: "/logoandreybolotov.png",
         width: 1200,
         height: 630,
         alt: "andreybolotov.ru",
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     title: "andreybolotov.ru — Акции и личный кабинет",
     description:
       "Удобный личный кабинет для участия в акциях: номерки, история, оплата и поддержка.",
-    images: ["/og-cover.svg"],
+    images: ["/logoandreybolotov.png"],
   },
   robots: {
     index: true,
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
       { url: "/favicon.ico", sizes: "any" },
     ],
     shortcut: ["/favicon.ico"],
-    apple: [{ url: "/logo-ab.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logoandreybolotov.png", type: "image/png" }],
   },
   manifest: "/manifest.webmanifest",
 };
@@ -83,7 +83,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             "@type": "Organization",
             name: "andreybolotov.ru",
             url: "https://andreybolotov.ru",
-            logo: "https://andreybolotov.ru/logo-ab.svg",
+            logo: "https://andreybolotov.ru/logoandreybolotov.png",
           })}
         </Script>
         {/* Синхронно до React: классы страниц акции */}

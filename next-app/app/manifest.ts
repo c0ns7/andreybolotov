@@ -12,14 +12,14 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "ru",
     icons: [
       {
-        src: "/favicon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/logoandreybolotov.png",
+        sizes: "192x192",
+        type: "image/png",
       },
       {
-        src: "/logo-ab.svg",
-        sizes: "160x160",
-        type: "image/svg+xml",
+        src: "/logoandreybolotov.png",
+        sizes: "512x512",
+        type: "image/png",
       },
     ],
   };

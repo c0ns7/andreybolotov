@@ -355,15 +355,16 @@ app.get("/favicon.ico", async (c) => {
   }
   return c.redirect("/favicon.svg");
 });
-app.get("/logo-ab.svg", async (c) => serveStaticAsset(c, "logo-ab.svg"));
+app.get("/logo-ab.svg", async (c) => c.redirect("/logoandreybolotov.png"));
+app.get("/logoandreybolotov.png", async (c) => serveStaticAsset(c, "logoandreybolotov.png"));
 app.get("/logo.png", async (c) => {
-  const png = await readStaticAsset("logo.png");
+  const png = await readStaticAsset("logoandreybolotov.png");
   if (png) {
     c.header("Content-Type", "image/png");
     c.header("Cache-Control", "public, max-age=86400");
     return c.body(png);
   }
-  return c.redirect("/logo-ab.svg");
+  return c.redirect("/logoandreybolotov.png");
 });
 app.get("/og-cover.svg", async (c) => serveStaticAsset(c, "og-cover.svg"));
 app.get("/dice.svg", async (c) => serveStaticAsset(c, "dice.svg"));

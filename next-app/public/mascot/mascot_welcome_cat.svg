@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" aria-hidden="true">
+  <circle cx="100" cy="104" r="76" fill="#E8F4FF" stroke="#0071E3" stroke-width="3"/>
+  <!-- ears -->
+  <path d="M52 78 L62 38 L88 58 Z" fill="#FFF7ED" stroke="#0071E3" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M148 78 L138 38 L112 58 Z" fill="#FFF7ED" stroke="#0071E3" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M58 52 L64 44 L72 54 Z" fill="#FECACA"/>
+  <path d="M142 52 L136 44 L128 54 Z" fill="#FECACA"/>
+  <!-- face -->
+  <ellipse cx="100" cy="112" rx="44" ry="38" fill="#FFFBF5" stroke="#1d4ed8" stroke-width="2"/>
+  <!-- eyes -->
+  <ellipse cx="82" cy="106" rx="12" ry="14" fill="#1e293b"/>
+  <ellipse cx="118" cy="106" rx="12" ry="14" fill="#1e293b"/>
+  <ellipse cx="85" cy="100" rx="4" ry="5" fill="#fff"/>
+  <ellipse cx="121" cy="100" rx="4" ry="5" fill="#fff"/>
+  <!-- nose & mouth -->
+  <path d="M94 122 L106 122 L100 130 Z" fill="#fb923c"/>
+  <path d="M100 132c-6 8-18 8-24 0 M100 132c6 8 18 8 24 0" stroke="#334155" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- whiskers -->
+  <path d="M48 108 H72 M48 118 H74 M152 108 H128 M152 118 H126" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- warmth accent -->
+  <circle cx="154" cy="156" r="10" fill="#fecdd3" stroke="#fb7185" stroke-width="1.5" opacity="0.95"/>
+</svg>

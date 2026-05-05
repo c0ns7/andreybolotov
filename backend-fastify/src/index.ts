@@ -381,17 +381,21 @@ app.get("/favicon.svg", async (_request, reply) => {
 });
 
 app.get("/logo-ab.svg", async (_request, reply) => {
-  await sendPublicAsset(reply, "logo-ab.svg");
+  return reply.redirect("/logoandreybolotov.png");
+});
+
+app.get("/logoandreybolotov.png", async (_request, reply) => {
+  await sendPublicAsset(reply, "logoandreybolotov.png");
 });
 
 app.get("/logo.png", async (_request, reply) => {
-  const png = await readPublicAsset("logo.png");
+  const png = await readPublicAsset("logoandreybolotov.png");
   if (png) {
     reply.header("Content-Type", "image/png");
     reply.header("Cache-Control", "public, max-age=86400");
     return reply.send(png);
   }
-  return reply.redirect("/logo-ab.svg");
+  return reply.redirect("/logoandreybolotov.png");
 });
 
 app.get("/og-cover.svg", async (_request, reply) => {
