@@ -11,6 +11,7 @@ const JPEG_QUALITY = 0.82;
 
 const RECEIPT_UPLOAD_ATTEMPTS = 3;
 const RECEIPT_POST_ATTEMPTS = 3;
+export type ReceiptUploadProgressHandler = (percent: number) => void;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -107,19 +108,51 @@ export async function prepareReceiptFileForUpload(file: File): Promise<File> {
   return new File([blob], `${base}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
 }
 
-async function postReceiptUploadOnce(file: File): Promise<Record<string, unknown>> {
+async function postReceiptUploadOnce(file: File, onProgress?: ReceiptUploadProgressHandler): Promise<Record<string, unknown>> {
   const fd = new FormData();
   fd.append("file", file);
-  const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
-  const uploadData = (await up.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!up.ok) {
-    throw new Error(String(uploadData.error || "Не удалось загрузить файл. Попробуйте ещё раз."));
+  if (!onProgress) {
+    const up = await fetch("/api/raffles/receipt-upload", { method: "POST", headers: abAuthHeaders(), body: fd });
+    const uploadData = (await up.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!up.ok) {
+      throw new Error(String(uploadData.error || "Не удалось загрузить файл. Попробуйте ещё раз."));
+    }
+    return uploadData;
   }
-  return uploadData;
+  return await new Promise<Record<string, unknown>>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/raffles/receipt-upload");
+    const headers = abAuthHeaders();
+    for (const [k, v] of Object.entries(headers)) {
+      xhr.setRequestHeader(k, String(v));
+    }
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      onProgress(percent);
+    };
+    xhr.onerror = () => reject(new Error("Failed to fetch"));
+    xhr.onabort = () => reject(new Error("Failed to fetch"));
+    xhr.onload = () => {
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = (JSON.parse(String(xhr.responseText || "{}")) as Record<string, unknown>) || {};
+      } catch {
+        payload = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100);
+        resolve(payload);
+        return;
+      }
+      reject(new Error(String(payload.error || "Не удалось загрузить файл. Попробуйте ещё раз.")));
+    };
+    xhr.send(fd);
+  });
 }
 
 /** Загрузка чека: сжатие картинки (по возможности) + до 3 попыток при сетевом сбое. */
-export async function uploadReceiptFile(file: File): Promise<Record<string, unknown>> {
+export async function uploadReceiptFile(file: File, onProgress?: ReceiptUploadProgressHandler): Promise<Record<string, unknown>> {
   const prepared = await prepareReceiptFileForUpload(file);
   const bad = validateReceiptFileForUpload(prepared);
   if (bad) throw new Error(bad);
@@ -128,7 +161,7 @@ export async function uploadReceiptFile(file: File): Promise<Record<string, unkn
   for (let attempt = 0; attempt < RECEIPT_UPLOAD_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(backoffMs(attempt));
     try {
-      return await postReceiptUploadOnce(prepared);
+      return await postReceiptUploadOnce(prepared, onProgress);
     } catch (e) {
       lastErr = e;
       if (!isNetworkFetchError(e) || attempt === RECEIPT_UPLOAD_ATTEMPTS - 1) throw e;

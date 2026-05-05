@@ -25,6 +25,9 @@ export default function RaffleConfirmClient() {
   const [lead, setLead] = useState("");
   const [networkRetryOpen, setNetworkRetryOpen] = useState(false);
   const orderIdRef = useRef(0);
+  const uploadPayloadRef = useRef<Record<string, unknown> | null>(null);
+  const uploadInFlightRef = useRef(false);
+  const uploadSeqRef = useRef(0);
 
   const onBack = useCallback(() => {
     const oid = orderIdRef.current;
@@ -46,10 +49,18 @@ export default function RaffleConfirmClient() {
       toast("Нажмите «Прикрепить чек» и выберите фото или PDF", "warning");
       return;
     }
+    if (uploadInFlightRef.current) {
+      toast("Дождитесь завершения загрузки файла (100%)", "warning");
+      return;
+    }
+    const uploadData = uploadPayloadRef.current;
+    if (!uploadData) {
+      toast("Файл ещё загружается или загрузка не завершена.", "warning");
+      return;
+    }
     if (!oid) return;
     setNetworkRetryOpen(false);
     try {
-      const uploadData = await uploadReceiptFile(file);
       const res = await postReceiptWithRetries(oid, {
         url: uploadData.url,
         name: uploadData.name,
@@ -130,16 +141,61 @@ export default function RaffleConfirmClient() {
   useEffect(() => {
     const back = document.getElementById("raffle-confirm-back");
     const file = document.getElementById("raffle-confirm-file") as HTMLInputElement | null;
-    const send = document.getElementById("raffle-confirm-send");
+    const send = document.getElementById("raffle-confirm-send") as HTMLButtonElement | null;
+    const progressWrap = document.getElementById("raffle-confirm-upload-progress");
+    const progressFill = document.getElementById("raffle-confirm-upload-progress-fill");
+    const progressText = document.getElementById("raffle-confirm-upload-progress-text");
+    const setSendReady = (ready: boolean) => {
+      if (!send) return;
+      send.disabled = !ready;
+      send.classList.toggle("raffle-confirm-submit--disabled", !ready);
+      send.classList.toggle("raffle-confirm-submit--ready", ready);
+    };
+    const setProgress = (percent: number, text: string, visible = true) => {
+      if (progressWrap) progressWrap.hidden = !visible;
+      if (progressFill) progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      if (progressText) progressText.textContent = text;
+    };
     const onFile = () => {
       const f = file?.files?.[0];
+      const seq = ++uploadSeqRef.current;
       const el = document.getElementById("raffle-confirm-file-name");
       if (el) el.textContent = f ? f.name : "";
+      uploadPayloadRef.current = null;
+      uploadInFlightRef.current = false;
+      setSendReady(false);
+      if (!f) {
+        setProgress(0, "Загрузка: 0%", false);
+        return;
+      }
+      uploadInFlightRef.current = true;
+      setProgress(0, "Загрузка: 0%");
+      void uploadReceiptFile(f, (p) => {
+        if (seq !== uploadSeqRef.current) return;
+        setProgress(p, `Загрузка: ${p}%`);
+      })
+        .then((payload) => {
+          if (seq !== uploadSeqRef.current) return;
+          uploadInFlightRef.current = false;
+          uploadPayloadRef.current = payload;
+          setProgress(100, "Загрузка: 100%");
+          setSendReady(true);
+        })
+        .catch((e) => {
+          if (seq !== uploadSeqRef.current) return;
+          uploadInFlightRef.current = false;
+          uploadPayloadRef.current = null;
+          setProgress(0, "Загрузка: 0%", false);
+          toast(String((e as Error).message || "Не удалось загрузить файл"), "error");
+        });
     };
+    setSendReady(false);
+    setProgress(0, "Загрузка: 0%", false);
     back?.addEventListener("click", onBack);
     file?.addEventListener("change", onFile);
     send?.addEventListener("click", onSend);
     return () => {
+      uploadSeqRef.current += 1;
       back?.removeEventListener("click", onBack);
       file?.removeEventListener("change", onFile);
       send?.removeEventListener("click", onSend);

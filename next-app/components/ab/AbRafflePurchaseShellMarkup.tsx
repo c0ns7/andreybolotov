@@ -572,8 +572,16 @@ export default function AbRafflePurchaseShellMarkup() {
                 </p>
               </div>
             </label>
+            <div id="reserve-payment-upload-progress" className="pay-sheet-receipt-progress" hidden>
+              <div className="pay-sheet-receipt-progress__track">
+                <div id="reserve-payment-upload-progress-fill" className="pay-sheet-receipt-progress__fill" />
+              </div>
+              <p id="reserve-payment-upload-progress-text" className="pay-sheet-receipt-progress__text">
+                Загрузка: 0%
+              </p>
+            </div>
           </div>
-          <button type="button" className="pay-sheet-receipt-send" id="reserve-payment-send">
+          <button type="button" className="pay-sheet-receipt-send pay-sheet-receipt-send--disabled" id="reserve-payment-send" disabled>
             Отправить чек
           </button>
           <button type="button" className="pay-sheet-receipt-back-link" id="reserve-payment-back-link">

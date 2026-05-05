@@ -34,11 +34,24 @@ export default function HomeRaffleConfirmPage() {
               <span id="raffle-confirm-file-name" className="raffle-confirm-file-name" />
             </label>
             <input type="file" id="raffle-confirm-file" className="raffle-confirm-file-input" accept="image/*,application/pdf" />
+            <div id="raffle-confirm-upload-progress" className="raffle-confirm-upload-progress" hidden>
+              <div className="raffle-confirm-upload-progress__track">
+                <div id="raffle-confirm-upload-progress-fill" className="raffle-confirm-upload-progress__fill" />
+              </div>
+              <p id="raffle-confirm-upload-progress-text" className="raffle-confirm-upload-progress__text">
+                Загрузка: 0%
+              </p>
+            </div>
           </div>
           <p className="raffle-confirm-hint">
             Скрин из банка: дата, сумма и получатель. До 10 МБ; большие фото страница попробует сжать перед отправкой.
           </p>
-          <button type="button" className="btn btn--primary raffle-confirm-submit" id="raffle-confirm-send">
+          <button
+            type="button"
+            className="btn btn--primary raffle-confirm-submit raffle-confirm-submit--disabled"
+            id="raffle-confirm-send"
+            disabled
+          >
             Отправить чек
           </button>
         </main>
