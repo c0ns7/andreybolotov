@@ -105,6 +105,41 @@ function numChipsForHistory(nums?: number[], className = "", readonly = true) {
   );
 }
 
+function mergeTicketGroupsByRaffle(groups: TicketGroup[]): TicketGroup[] {
+  const map = new Map<string, TicketGroup>();
+  for (const g of groups) {
+    const rid = Math.floor(Number(g?.raffle?.id) || 0);
+    const title = String(g?.raffle?.title || "").trim();
+    const status = String(g?.raffle?.status || "").trim();
+    const key = rid > 0 ? `id:${rid}` : `title:${title || "Акция"}`;
+    const prev = map.get(key);
+    const incoming = Array.isArray(g?.numbers)
+      ? g.numbers
+          .map((x) => Math.floor(Number(x)))
+          .filter((x) => Number.isFinite(x) && x > 0)
+      : [];
+    if (!prev) {
+      const uniq = Array.from(new Set(incoming)).sort((a, b) => a - b);
+      map.set(key, {
+        raffle: { id: rid > 0 ? rid : undefined, title: title || "Акция", status },
+        numbers: uniq,
+      });
+      continue;
+    }
+    const mergedNums = Array.from(
+      new Set([...(Array.isArray(prev.numbers) ? prev.numbers : []), ...incoming]),
+    ).sort((a, b) => a - b);
+    prev.numbers = mergedNums;
+    if (!prev.raffle?.title && title) {
+      prev.raffle = { ...(prev.raffle || {}), title };
+    }
+    if (!prev.raffle?.status && status) {
+      prev.raffle = { ...(prev.raffle || {}), status };
+    }
+  }
+  return Array.from(map.values()).filter((x) => Array.isArray(x.numbers) && x.numbers.length > 0);
+}
+
 export default function AppBottomNav({
   show,
   profileLetter,
@@ -354,18 +389,21 @@ export default function AppBottomNav({
     latestVisibleRaffleId > 0
       ? wholesaleSlotsAll.filter((s) => Math.floor(Number(s?.raffle_id) || 0) === latestVisibleRaffleId)
       : [];
-  const profileReserved =
+  const profileReservedRaw =
     latestVisibleRaffleId > 0
       ? reserved.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
       : [];
-  const profilePending =
+  const profilePendingRaw =
     latestVisibleRaffleId > 0
       ? pending.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
       : [];
-  const profileConfirmed =
+  const profileConfirmedRaw =
     latestVisibleRaffleId > 0
       ? confirmed.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
       : [];
+  const profileReserved = useMemo(() => mergeTicketGroupsByRaffle(profileReservedRaw), [profileReservedRaw]);
+  const profilePending = useMemo(() => mergeTicketGroupsByRaffle(profilePendingRaw), [profilePendingRaw]);
+  const profileConfirmed = useMemo(() => mergeTicketGroupsByRaffle(profileConfirmedRaw), [profileConfirmedRaw]);
   const hasWholesaleNumbers = wholesaleSlots.some(
     (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
   );
