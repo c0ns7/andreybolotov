@@ -416,6 +416,9 @@ export default function AdminMarkup() {
               Общая активность, участие в акциях и аналитика населённых пунктов с объединением похожих названий.
             </p>
           </div>
+          <button type="button" className="admin-stats-toolbar__graph-btn" id="btn-admin-stats-graph">
+            Показать график
+          </button>
         </div>
         <div id="admin-stats-overview" className="admin-stats-overview"></div>
         <div className="admin-stats-tabs" role="tablist" aria-label="Разделы статистики">
@@ -426,6 +429,27 @@ export default function AdminMarkup() {
         <div id="admin-stats-users-panel" className="admin-stats-panel"></div>
         <div id="admin-stats-raffles-panel" className="admin-stats-panel" hidden></div>
         <div id="admin-stats-localities-panel" className="admin-stats-panel" hidden></div>
+      </div>
+
+      <div
+        id="modal-admin-stats-graph"
+        className="modal-overlay modal-overlay--admin-stats-graph"
+        aria-hidden="true"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-stats-graph-title"
+      >
+        <div className="admin-stats-graph-modal">
+          <div className="admin-stats-graph-modal__top">
+            <h2 id="admin-stats-graph-title" className="admin-stats-graph-modal__title">График</h2>
+            <button type="button" className="admin-stats-graph-modal__close" id="btn-admin-stats-graph-close" aria-label="Закрыть">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="admin-stats-graph-content" className="admin-stats-graph-modal__content"></div>
+        </div>
       </div>
 
       <div id="admin-settings-app" className="admin-settings-app" hidden>

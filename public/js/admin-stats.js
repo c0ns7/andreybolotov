@@ -56,6 +56,105 @@
     return "+7 (" + d.slice(1, 4) + ") " + d.slice(4, 7) + "-" + d.slice(7, 9) + "-" + d.slice(9, 11);
   }
 
+  let currentStatsData = null;
+  let currentStatsTab = "users";
+
+  function buildChartRows() {
+    const d = currentStatsData || {};
+    if (currentStatsTab === "raffles") {
+      const rows = Array.isArray(d.raffles) ? d.raffles : [];
+      return rows.slice(0, 20).map(function (r) {
+        return {
+          label: String(r.title || "Акция"),
+          value: Number(r.tickets_count || 0),
+          suffix: "номерков",
+        };
+      });
+    }
+    if (currentStatsTab === "localities") {
+      const rows = Array.isArray(d.localities) ? d.localities : [];
+      return rows.slice(0, 25).map(function (loc) {
+        return {
+          label: String(loc.title || loc.key || "Населённый пункт"),
+          value: Number(loc.users_count || 0),
+          suffix: "чел.",
+        };
+      });
+    }
+    const rows = Array.isArray(d.top_users) ? d.top_users : [];
+    return rows.slice(0, 25).map(function (u) {
+      return {
+        label: String(u.name || "Пользователь"),
+        value: Number(u.tickets_confirmed || 0),
+        suffix: "номерков",
+      };
+    });
+  }
+
+  function renderGraphModal() {
+    const content = document.getElementById("admin-stats-graph-content");
+    const title = document.getElementById("admin-stats-graph-title");
+    if (!content || !title) return;
+    const caption =
+      currentStatsTab === "raffles"
+        ? "График: номерки по акциям"
+        : currentStatsTab === "localities"
+          ? "График: пользователи по населённым пунктам"
+          : "График: топ пользователей";
+    title.textContent = caption;
+    const rows = buildChartRows();
+    if (!rows.length) {
+      content.innerHTML = '<p class="admin-users-empty">Нет данных для графика.</p>';
+      return;
+    }
+    const max = rows.reduce(function (acc, x) {
+      return Math.max(acc, Number(x.value || 0));
+    }, 0);
+    const safeMax = max > 0 ? max : 1;
+    content.innerHTML =
+      '<div class="admin-stats-chart">' +
+      rows
+        .map(function (r) {
+          const ratio = Math.max(0, Math.min(100, (Number(r.value || 0) / safeMax) * 100));
+          return (
+            '<div class="admin-stats-chart__row">' +
+            '<div class="admin-stats-chart__label" title="' +
+            esc(r.label) +
+            '">' +
+            esc(r.label) +
+            "</div>" +
+            '<div class="admin-stats-chart__bar-wrap"><div class="admin-stats-chart__bar" style="width:' +
+            String(ratio.toFixed(2)) +
+            '%"></div></div>' +
+            '<div class="admin-stats-chart__value">' +
+            esc(String(r.value || 0)) +
+            " " +
+            esc(String(r.suffix || "")) +
+            "</div>" +
+            "</div>"
+          );
+        })
+        .join("") +
+      "</div>";
+  }
+
+  function openGraphModal() {
+    const modal = document.getElementById("modal-admin-stats-graph");
+    if (!modal) return;
+    renderGraphModal();
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeGraphModal() {
+    const modal = document.getElementById("modal-admin-stats-graph");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
   function renderOverview(data) {
     const el = document.getElementById("admin-stats-overview");
     if (!el) return;
@@ -203,6 +302,7 @@
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
+    currentStatsTab = tab;
   }
 
   async function loadStats() {
@@ -210,6 +310,7 @@
       headers: authHeaders(),
       cache: "no-store",
     });
+    currentStatsData = data;
     renderOverview(data);
     renderUsersPanel(data);
     renderRafflesPanel(data);
@@ -221,10 +322,33 @@
     if (!root || root.dataset.inited === "1") return;
     root.dataset.inited = "1";
     applyTab("users");
+    var btnOpenGraph = document.getElementById("btn-admin-stats-graph");
+    var btnCloseGraph = document.getElementById("btn-admin-stats-graph-close");
+    var modalGraph = document.getElementById("modal-admin-stats-graph");
+    if (btnOpenGraph) {
+      btnOpenGraph.addEventListener("click", function () {
+        openGraphModal();
+      });
+    }
+    if (btnCloseGraph) {
+      btnCloseGraph.addEventListener("click", function () {
+        closeGraphModal();
+      });
+    }
+    if (modalGraph) {
+      modalGraph.addEventListener("click", function (e) {
+        if (e.target === modalGraph) closeGraphModal();
+      });
+    }
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (modalGraph && modalGraph.classList.contains("is-open")) closeGraphModal();
+    });
     root.querySelectorAll(".admin-stats-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const tab = btn.getAttribute("data-stats-tab") || "users";
         applyTab(tab);
+        if (modalGraph && modalGraph.classList.contains("is-open")) renderGraphModal();
       });
     });
     loadStats().catch(function (e) {
