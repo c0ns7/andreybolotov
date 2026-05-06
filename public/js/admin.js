@@ -270,6 +270,7 @@
   let paymentsApp = null;
   let usersApp = null;
   let settingsApp = null;
+  let statsApp = null;
   let listEl = null;
   let empty = null;
   let thread = null;
@@ -325,6 +326,7 @@
     paymentsApp = document.getElementById("admin-payments-app");
     usersApp = document.getElementById("admin-users-app");
     settingsApp = document.getElementById("admin-settings-app");
+    statsApp = document.getElementById("admin-stats-app");
     listEl = document.getElementById("admin-user-list");
     empty = document.getElementById("admin-empty");
     thread = document.getElementById("admin-thread");
@@ -479,6 +481,7 @@
     if (paymentsApp) paymentsApp.hidden = true;
     if (usersApp) usersApp.hidden = true;
     if (settingsApp) settingsApp.hidden = true;
+    if (statsApp) statsApp.hidden = true;
   }
 
   function getAdminTab() {
@@ -489,6 +492,7 @@
       if (t === "payments") return "payments";
       if (t === "users") return "users";
       if (t === "settings") return "settings";
+      if (t === "stats") return "stats";
       return "support";
     } catch (_) {
       return "support";
@@ -525,12 +529,14 @@
     var navRaffles = document.getElementById("nav-link-raffles");
     var navPayments = document.getElementById("nav-link-payments");
     var navSettings = document.getElementById("nav-link-settings");
+    var navStats = document.getElementById("nav-link-stats");
 
     if (app) app.hidden = tab !== "support";
     if (rafflesApp) rafflesApp.hidden = tab !== "raffles";
     if (paymentsApp) paymentsApp.hidden = tab !== "payments";
     if (usersApp) usersApp.hidden = tab !== "users";
     if (settingsApp) settingsApp.hidden = tab !== "settings";
+    if (statsApp) statsApp.hidden = tab !== "stats";
 
     if (heading) {
       heading.textContent =
@@ -542,6 +548,8 @@
               ? "Пользователи"
               : tab === "settings"
                 ? "Настройки"
+                : tab === "stats"
+                  ? "Статистика"
                 : "Поддержка";
     }
     if (sub) {
@@ -554,6 +562,8 @@
               ? "Все зарегистрированные пользователи"
               : tab === "settings"
                 ? "Режим технических работ и параметры сайта"
+                : tab === "stats"
+                  ? "Аналитика по пользователям и акциям"
                 : "Пользователи и переписка";
     }
 
@@ -562,6 +572,7 @@
     if (navRaffles) navRaffles.setAttribute("aria-current", tab === "raffles" ? "page" : "false");
     if (navPayments) navPayments.setAttribute("aria-current", tab === "payments" ? "page" : "false");
     if (navSettings) navSettings.setAttribute("aria-current", tab === "settings" ? "page" : "false");
+    if (navStats) navStats.setAttribute("aria-current", tab === "stats" ? "page" : "false");
 
     if (tab === "raffles" && typeof window.abInitRaffles === "function") {
       window.abInitRaffles();
@@ -574,6 +585,9 @@
     }
     if (tab === "settings" && typeof window.abInitSettings === "function") {
       window.abInitSettings();
+    }
+    if (tab === "stats" && typeof window.abInitStats === "function") {
+      window.abInitStats();
     }
     syncAdminMobileChatShell();
   }

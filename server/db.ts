@@ -425,6 +425,308 @@ export type AdminThreadRow = {
   unread_count: number;
 };
 
+export type AdminStatsUserTopRow = {
+  user_id: number;
+  user_name: string;
+  user_phone: string;
+  user_locality: string;
+  ticket_count: number;
+};
+
+export type AdminStatsRaffleUserRow = {
+  raffle_id: number;
+  raffle_title: string;
+  raffle_status: string;
+  user_id: number;
+  user_name: string;
+  user_phone: string;
+  user_locality: string;
+  ticket_count: number;
+};
+
+export type AdminStatsLocalityGroup = {
+  key: string;
+  title: string;
+  users_count: number;
+  share_percent: number;
+  variants: string[];
+};
+
+export type AdminUsersStatsPayload = {
+  overview: {
+    total_users: number;
+    users_with_locality: number;
+    users_without_locality: number;
+    users_without_locality_percent: number;
+  };
+  top_users: Array<{
+    user_id: number;
+    name: string;
+    phone: string;
+    locality: string;
+    tickets_confirmed: number;
+  }>;
+  raffles: Array<{
+    raffle_id: number;
+    title: string;
+    status: string;
+    participants_count: number;
+    tickets_count: number;
+    top_users: Array<{
+      user_id: number;
+      name: string;
+      phone: string;
+      locality: string;
+      tickets_count: number;
+    }>;
+  }>;
+  localities: AdminStatsLocalityGroup[];
+};
+
+function normalizeLocalityKey(raw: string): string {
+  let s = String(raw || "").trim().toLowerCase();
+  if (!s) return "";
+  s = s.replace(/ё/g, "е");
+  s = s.replace(/[.,/#!$%^&*;:{}=_`~()"']/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/^(г|гор|город|пгт|п\.г\.т|пос|поселок|поселок|поселок\s+городского\s+типа|п|с|село|д|деревня|рп|р\.п)\s+/i, "");
+  s = s.replace(/^(г|пгт|п|с|д|рп)\./i, "");
+  s = s.replace(/\s+/g, "");
+  s = s.replace(/[^a-zа-я0-9-]/gi, "");
+  return s.trim();
+}
+
+function localityPhoneticKey(raw: string): string {
+  let s = normalizeLocalityKey(raw);
+  if (!s) return "";
+  // Rough phonetic normalization for common Russian typos/variants.
+  s = s
+    .replace(/ий$/g, "и")
+    .replace(/ый$/g, "и")
+    .replace(/ая$/g, "а")
+    .replace(/ое$/g, "а")
+    .replace(/[ъь]/g, "")
+    .replace(/й/g, "и")
+    .replace(/ы/g, "и")
+    .replace(/э/g, "е")
+    .replace(/ю/g, "у")
+    .replace(/я/g, "а")
+    .replace(/щ/g, "ш")
+    .replace(/ч/g, "ш");
+  // Collapse repeated characters (e.g. "оловяннааая").
+  s = s.replace(/(.)\1+/g, "$1");
+  return s;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j += 1) dp[j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const tmp = dp[j];
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      dp[j] = Math.min(
+        dp[j] + 1,
+        dp[j - 1] + 1,
+        prev + cost,
+      );
+      prev = tmp;
+    }
+  }
+  return dp[b.length];
+}
+
+function canMergeLocalityKeys(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length <= 2 || b.length <= 2) return false;
+  if (a.includes(b) || b.includes(a)) {
+    return Math.abs(a.length - b.length) <= 2;
+  }
+  const dist = levenshteinDistance(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen <= 6) return dist <= 1;
+  if (maxLen <= 10) return dist <= 2;
+  return dist <= 3;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export async function getAdminUsersStats(): Promise<AdminUsersStatsPayload> {
+  const usersTotals = await pgGet<{ total: number; with_loc: number; without_loc: number }>(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE TRIM(COALESCE(locality,'')) <> '')::int AS with_loc,
+            COUNT(*) FILTER (WHERE TRIM(COALESCE(locality,'')) = '')::int AS without_loc
+       FROM users`,
+  );
+  const totalUsers = Number(usersTotals?.total ?? 0);
+  const withLoc = Number(usersTotals?.with_loc ?? 0);
+  const withoutLoc = Number(usersTotals?.without_loc ?? 0);
+  const withoutLocPct = totalUsers > 0 ? round2((withoutLoc * 100) / totalUsers) : 0;
+
+  const topUsersRows = await pgAll<AdminStatsUserTopRow>(
+    `SELECT o.user_id AS user_id,
+            COALESCE(u.name, 'Пользователь #' || o.user_id::text) AS user_name,
+            COALESCE(u.phone, '') AS user_phone,
+            COALESCE(u.locality, '') AS user_locality,
+            COUNT(*)::int AS ticket_count
+       FROM raffle_ticket_holds h
+       JOIN raffle_orders o ON o.id = h.order_id
+       LEFT JOIN users u ON u.id = o.user_id
+      WHERE o.status = 'confirmed'
+        AND COALESCE(h.is_bonus, 0) = 0
+      GROUP BY o.user_id, u.name, u.phone, u.locality
+      ORDER BY ticket_count DESC, o.user_id ASC
+      LIMIT 30`,
+  );
+
+  const raffleRows = await pgAll<AdminStatsRaffleUserRow>(
+    `SELECT r.id AS raffle_id,
+            r.title AS raffle_title,
+            r.status AS raffle_status,
+            o.user_id AS user_id,
+            COALESCE(u.name, 'Пользователь #' || o.user_id::text) AS user_name,
+            COALESCE(u.phone, '') AS user_phone,
+            COALESCE(u.locality, '') AS user_locality,
+            COUNT(*)::int AS ticket_count
+       FROM raffle_ticket_holds h
+       JOIN raffle_orders o ON o.id = h.order_id
+       JOIN raffles r ON r.id = h.raffle_id
+       LEFT JOIN users u ON u.id = o.user_id
+      WHERE COALESCE(h.is_bonus, 0) = 0
+        AND (
+          o.status IN ('confirmed', 'pending_review')
+          OR (o.status = 'reserved' AND o.reserved_until > ?)
+        )
+      GROUP BY r.id, r.title, r.status, o.user_id, u.name, u.phone, u.locality
+      ORDER BY r.id DESC, ticket_count DESC, o.user_id ASC`,
+    [Date.now()],
+  );
+
+  const byRaffle = new Map<number, AdminUsersStatsPayload["raffles"][number]>();
+  for (const row of raffleRows) {
+    const rid = Math.floor(Number(row.raffle_id) || 0);
+    if (rid <= 0) continue;
+    const existing = byRaffle.get(rid);
+    const userEntry = {
+      user_id: Math.floor(Number(row.user_id) || 0),
+      name: String(row.user_name || ""),
+      phone: String(row.user_phone || ""),
+      locality: String(row.user_locality || "").trim(),
+      tickets_count: Math.floor(Number(row.ticket_count) || 0),
+    };
+    if (!existing) {
+      byRaffle.set(rid, {
+        raffle_id: rid,
+        title: String(row.raffle_title || "Акция"),
+        status: String(row.raffle_status || "active"),
+        participants_count: userEntry.user_id > 0 ? 1 : 0,
+        tickets_count: Math.max(0, userEntry.tickets_count),
+        top_users: userEntry.user_id > 0 ? [userEntry] : [],
+      });
+      continue;
+    }
+    existing.tickets_count += Math.max(0, userEntry.tickets_count);
+    if (userEntry.user_id > 0) {
+      existing.participants_count += 1;
+      if (existing.top_users.length < 10) existing.top_users.push(userEntry);
+    }
+  }
+  const raffles = Array.from(byRaffle.values()).map((r) => {
+    r.top_users.sort((a, b) => b.tickets_count - a.tickets_count || a.user_id - b.user_id);
+    if (r.top_users.length > 5) r.top_users = r.top_users.slice(0, 5);
+    return r;
+  });
+
+  const rawLocalities = await pgAll<{ locality: string; users_count: number }>(
+    `SELECT TRIM(COALESCE(locality, '')) AS locality, COUNT(*)::int AS users_count
+       FROM users
+      WHERE TRIM(COALESCE(locality, '')) <> ''
+      GROUP BY TRIM(COALESCE(locality, ''))
+      ORDER BY users_count DESC, locality ASC`,
+  );
+  const grouped = new Map<string, { users_count: number; variants: Map<string, number>; phonetic: string }>();
+  for (const row of rawLocalities) {
+    const src = String(row.locality || "").trim();
+    if (!src) continue;
+    const normalized = normalizeLocalityKey(src);
+    let key = normalized || src.toLowerCase();
+    let phonetic = localityPhoneticKey(src) || key;
+
+    // Fast exact or near-exact shortcuts.
+    if (key.startsWith("п") && key.length > 4) {
+      const alt = key.slice(1);
+      if (grouped.has(alt)) key = alt;
+    }
+
+    // Fuzzy merge: choose closest existing group by phonetic + edit distance.
+    if (!grouped.has(key)) {
+      let bestKey = "";
+      let bestScore = Number.POSITIVE_INFINITY;
+      for (const [gKey, gVal] of grouped.entries()) {
+        const gPh = gVal.phonetic || gKey;
+        const phoneticClose = canMergeLocalityKeys(phonetic, gPh);
+        const textClose = canMergeLocalityKeys(key, gKey);
+        if (!phoneticClose && !textClose) continue;
+        const score = Math.min(
+          levenshteinDistance(key, gKey),
+          levenshteinDistance(phonetic, gPh),
+        );
+        if (score < bestScore) {
+          bestScore = score;
+          bestKey = gKey;
+          if (bestScore === 0) break;
+        }
+      }
+      if (bestKey) key = bestKey;
+    }
+
+    const c = Math.max(0, Math.floor(Number(row.users_count) || 0));
+    if (!grouped.has(key)) {
+      grouped.set(key, { users_count: 0, variants: new Map<string, number>(), phonetic });
+    }
+    const g = grouped.get(key)!;
+    g.users_count += c;
+    g.variants.set(src, (g.variants.get(src) || 0) + c);
+    if (!g.phonetic && phonetic) g.phonetic = phonetic;
+  }
+  const localities: AdminStatsLocalityGroup[] = Array.from(grouped.entries())
+    .map(([key, val]) => {
+      const variantsSorted = Array.from(val.variants.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const title = variantsSorted.length ? variantsSorted[0][0] : key;
+      const variants = variantsSorted.map((x) => x[0]).slice(0, 8);
+      const share = totalUsers > 0 ? round2((val.users_count * 100) / totalUsers) : 0;
+      return { key, title, users_count: val.users_count, share_percent: share, variants };
+    })
+    .sort((a, b) => b.users_count - a.users_count || a.title.localeCompare(b.title))
+    .slice(0, 200);
+
+  return {
+    overview: {
+      total_users: totalUsers,
+      users_with_locality: withLoc,
+      users_without_locality: withoutLoc,
+      users_without_locality_percent: withoutLocPct,
+    },
+    top_users: topUsersRows.map((x) => ({
+      user_id: Math.floor(Number(x.user_id) || 0),
+      name: String(x.user_name || ""),
+      phone: String(x.user_phone || ""),
+      locality: String(x.user_locality || "").trim(),
+      tickets_confirmed: Math.max(0, Math.floor(Number(x.ticket_count) || 0)),
+    })),
+    raffles,
+    localities,
+  };
+}
+
 export type RaffleRow = {
   id: number;
   raffle_hash?: string;

@@ -31,6 +31,7 @@ import {
   countConfirmedTicketsSoldByCenopad,
   deleteSupportStaffMessageForUser,
   getRaffleSalesAccounting,
+  getAdminUsersStats,
   deletePasswordResetTokensForUser,
   deleteUserAccountByAdmin,
   markThreadReadByStaff,
@@ -597,6 +598,14 @@ adminSubApp.get("/users/all", async (c) => {
     offset: safeOff,
     limit: safeLim,
   });
+});
+
+adminSubApp.get("/stats/users", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  const stats = await getAdminUsersStats();
+  return c.json(stats);
 });
 
 adminSubApp.get("/users/:userId/messages", async (c) => {

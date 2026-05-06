@@ -18,6 +18,7 @@ export default function AdminPage() {
       <Script src="/static-proxy/js/admin-payments.js?v=20260425" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-users.js?v=20260425" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-settings.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-stats.js?v=20260505" strategy="afterInteractive" />
     </>
   );
 }

@@ -104,6 +104,16 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Настройки</span>
             </a>
+            <a href="/admin?tab=stats" className="admin-nav__link" id="nav-link-stats">
+              <span className="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="20" x2="12" y2="10"></line>
+                  <line x1="18" y1="20" x2="18" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="16"></line>
+                </svg>
+              </span>
+              <span className="admin-nav__text">Статистика</span>
+            </a>
           </nav>
         </div>
 
@@ -366,6 +376,9 @@ export default function AdminMarkup() {
               <p className="admin-raffles-toolbar__hint">Поиск по имени, телефону или email; отдельно — точный поиск по ID аккаунта. Если заполнен ID, текстовый поиск не используется. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
             </div>
           </div>
+          <a href="/admin?tab=stats" className="admin-users-toolbar__stats-link" id="btn-admin-users-stats">
+            Статистика
+          </a>
         </div>
         <div className="admin-users-search-bar">
           <label className="admin-users-search-wrap admin-users-search-wrap--main">
@@ -393,6 +406,26 @@ export default function AdminMarkup() {
           </label>
         </div>
         <div id="admin-users-list" className="admin-users-list-wrap"></div>
+      </div>
+
+      <div id="admin-stats-app" className="admin-stats-app" hidden>
+        <div className="admin-raffles-toolbar admin-stats-toolbar">
+          <div className="admin-raffles-toolbar__text">
+            <span className="admin-raffles-toolbar__label">Статистика пользователей</span>
+            <p className="admin-raffles-toolbar__hint">
+              Общая активность, участие в акциях и аналитика населённых пунктов с объединением похожих названий.
+            </p>
+          </div>
+        </div>
+        <div id="admin-stats-overview" className="admin-stats-overview"></div>
+        <div className="admin-stats-tabs" role="tablist" aria-label="Разделы статистики">
+          <button type="button" className="admin-stats-tab is-active" data-stats-tab="users" aria-selected="true">Пользователи</button>
+          <button type="button" className="admin-stats-tab" data-stats-tab="raffles" aria-selected="false">По акциям</button>
+          <button type="button" className="admin-stats-tab" data-stats-tab="localities" aria-selected="false">Населённые пункты</button>
+        </div>
+        <div id="admin-stats-users-panel" className="admin-stats-panel"></div>
+        <div id="admin-stats-raffles-panel" className="admin-stats-panel" hidden></div>
+        <div id="admin-stats-localities-panel" className="admin-stats-panel" hidden></div>
       </div>
 
       <div id="admin-settings-app" className="admin-settings-app" hidden>

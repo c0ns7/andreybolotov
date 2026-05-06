@@ -1245,7 +1245,8 @@
   /* Тулбары подразделов (акции, оплаты, пользователи) */
   .admin-raffles-app .admin-raffles-toolbar,
   .admin-payments-app .admin-raffles-toolbar,
-  .admin-users-app .admin-raffles-toolbar {
+.admin-users-app .admin-raffles-toolbar,
+.admin-stats-app .admin-raffles-toolbar {
     padding: 16px 18px;
     background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid rgba(226, 232, 240, 0.95);
@@ -1256,7 +1257,8 @@
 
   .admin-raffles-app .admin-raffles-toolbar__label,
   .admin-payments-app .admin-raffles-toolbar__label,
-  .admin-users-app .admin-raffles-toolbar__label {
+.admin-users-app .admin-raffles-toolbar__label,
+.admin-stats-app .admin-raffles-toolbar__label {
     font-size: 0.68rem;
     color: #64748b;
   }
@@ -1266,6 +1268,114 @@
     color: #334155;
     letter-spacing: 0.02em;
   }
+
+.admin-users-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-users-toolbar__stats-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #1e293b;
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.admin-stats-overview {
+  margin-bottom: 12px;
+}
+
+.admin-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.admin-stats-card {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-stats-card__k {
+  margin: 0 0 6px;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.admin-stats-card__v {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.admin-stats-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-stats-tab {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-stats-tab.is-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-stats-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-stats-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.admin-stats-item__title {
+  margin: 0 0 5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-stats-item__meta,
+.admin-stats-item__variants,
+.admin-stats-item__value {
+  margin: 0;
+  color: #475569;
+  font-size: 0.86rem;
+}
+
+.admin-stats-sublist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #334155;
+}
 
   .admin-users-search {
     padding: 12px 16px;
@@ -1294,7 +1404,8 @@
 
   .admin-raffles-app,
   .admin-payments-app,
-  .admin-users-app {
+.admin-users-app,
+.admin-stats-app {
     animation: adminSectionIn 0.4s ease-out;
   }
 
