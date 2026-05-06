@@ -981,6 +981,29 @@
     color: #6b7280;
     margin-bottom: 4px;
   }
+  .admin-msg-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    background: rgba(220, 38, 38, 0.08);
+    color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .admin-msg-delete-btn:hover {
+    background: rgba(220, 38, 38, 0.14);
+    border-color: rgba(220, 38, 38, 0.35);
+  }
+  .admin-msg-delete-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
   .admin-reply {
     flex-shrink: 0;
     display: flex;

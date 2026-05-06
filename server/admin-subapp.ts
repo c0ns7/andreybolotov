@@ -29,6 +29,7 @@ import {
   countUsersForAdminByExactId,
   countUsersForAdminBySearch,
   countConfirmedTicketsSoldByCenopad,
+  deleteSupportStaffMessageForUser,
   getRaffleSalesAccounting,
   deletePasswordResetTokensForUser,
   deleteUserAccountByAdmin,
@@ -1397,6 +1398,22 @@ adminSubApp.post("/users/:userId/messages", async (c) => {
   return c.json({
     messages: rows.map((r) => messageToDto(r)),
   });
+});
+
+adminSubApp.delete("/users/:userId/messages/:messageId", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const userId = Number(c.req.param("userId"));
+  const messageId = Number(c.req.param("messageId"));
+  if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(messageId) || messageId <= 0) {
+    return c.json({ error: "Некорректные параметры" }, 400);
+  }
+  const target = await getUserById(userId);
+  if (!target) return c.json({ error: "Пользователь не найден" }, 404);
+  const ok = await deleteSupportStaffMessageForUser(userId, messageId);
+  if (!ok) return c.json({ error: "Сообщение не найдено или удаление запрещено" }, 404);
+  const rows = await listSupportMessagesForUser(userId);
+  return c.json({ messages: rows.map((r) => messageToDto(r)) });
 });
 
 adminSubApp.delete("/users/:userId", async (c) => {

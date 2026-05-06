@@ -251,6 +251,17 @@
     return att + text + adminActionCardHtml(parsed.card);
   }
 
+  function messageDeleteButtonHtml(m) {
+    if (!m || !m.is_staff) return "";
+    var id = Number(m.id);
+    if (!Number.isFinite(id) || id <= 0) return "";
+    return (
+      '<button type="button" class="admin-msg-delete-btn" data-admin-delete-msg="' +
+      String(id) +
+      '" aria-label="Удалить сообщение" title="Удалить сообщение">Удалить</button>'
+    );
+  }
+
   let gate = null;
   let adminLoading = null;
   let adminRoot = null;
@@ -868,6 +879,7 @@
           " · " +
           formatTime(m.created_at) +
           "</div>" +
+          messageDeleteButtonHtml(m) +
           messageBubbleInnerHtml(m) +
           "</div></div>"
         );
@@ -898,6 +910,7 @@
       " · " +
       formatTime(m.created_at) +
       "</div>" +
+      messageDeleteButtonHtml(m) +
       messageBubbleInnerHtml(m) +
       "</div>";
     messagesEl.appendChild(div);
@@ -1210,6 +1223,17 @@
       });
     }
 
+    function deleteAdminMessage(messageId) {
+      if (selectedId == null) return Promise.reject(new Error("Нет диалога"));
+      var mid = Number(messageId);
+      if (!Number.isFinite(mid) || mid <= 0) return Promise.reject(new Error("Некорректный id сообщения"));
+      return apiJson("/api/admin/users/" + selectedId + "/messages/" + mid, {
+        method: "DELETE",
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+    }
+
     /** @param {File} f */
     function uploadAdminChatFile(f) {
       if (!f || !f.size || selectedId == null) return;
@@ -1410,6 +1434,26 @@
     if (modalUserTickets) {
       modalUserTickets.addEventListener("click", function (e) {
         if (e.target === modalUserTickets) closeUserTicketsModal();
+      });
+    }
+
+    if (messagesEl) {
+      messagesEl.addEventListener("click", function (e) {
+        var target = e.target;
+        var btn = target && target.closest ? target.closest("[data-admin-delete-msg]") : null;
+        if (!btn) return;
+        var messageId = Number(btn.getAttribute("data-admin-delete-msg"));
+        if (!Number.isFinite(messageId) || messageId <= 0) return;
+        if (!window.confirm("Удалить это сообщение?")) return;
+        btn.disabled = true;
+        deleteAdminMessage(messageId)
+          .then(function (data) {
+            renderMessages(data.messages || []);
+            return loadUsers().catch(function () {});
+          })
+          .catch(function (err) {
+            alert((err && err.message) || "Не удалось удалить сообщение");
+          });
       });
     }
 

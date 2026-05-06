@@ -257,6 +257,16 @@ export async function getSupportMessageById(id: number): Promise<SupportMessageR
   return pgGet<SupportMessageRow>(`SELECT * FROM support_messages WHERE id = ?`, [id]);
 }
 
+export async function deleteSupportStaffMessageForUser(userId: number, messageId: number): Promise<boolean> {
+  const row = await pgGet<{ id: number }>(
+    `DELETE FROM support_messages
+     WHERE id = ? AND user_id = ? AND is_staff = 1
+     RETURNING id`,
+    [messageId, userId],
+  );
+  return !!row?.id;
+}
+
 export async function insertSupportMessage(
   userId: number,
   body: string,
