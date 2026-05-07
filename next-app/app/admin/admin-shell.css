@@ -359,10 +359,29 @@
 
   /* Мобильный полноэкранный режим переписки (как мессенджер) + кнопка «назад» в шапке треда */
   @media (max-width: 699px) {
+    .admin-layout {
+      grid-template-rows: minmax(0, 1fr);
+      min-height: calc(100dvh - 170px);
+      height: calc(100dvh - 170px);
+      max-height: calc(100dvh - 120px);
+      gap: 10px;
+    }
+
+    .admin-main {
+      display: none;
+    }
+
+    .admin-empty {
+      display: none !important;
+    }
+
     .admin-thread__head {
       padding-left: 52px;
       padding-top: calc(14px + env(safe-area-inset-top, 0px));
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     .admin-thread__back {
@@ -427,6 +446,7 @@
     }
 
     html.admin-mobile-chat-active .admin-main {
+      display: flex;
       flex: 1;
       min-height: 0;
       max-height: none;
@@ -438,6 +458,7 @@
     html.admin-mobile-chat-active .admin-thread {
       flex: 1;
       min-height: 0;
+      height: 100dvh;
     }
 
     html.admin-mobile-chat-active .admin-thread__body {
