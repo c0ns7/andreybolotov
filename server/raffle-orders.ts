@@ -14,6 +14,12 @@ import {
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { pgPool } from "./pg.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
+import {
+  getBankCardByIdForRaffle,
+  isBankCardAvailableForNewPayment,
+  pickAvailableBankCard,
+  refreshBankCardDailyLimitCooldown,
+} from "./raffle-bank-cards.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 25;
@@ -32,6 +38,7 @@ export type RaffleOrderRow = {
   raffle_id: number;
   user_id: number;
   bank: string | null;
+  bank_card_id?: number | null;
   amount_rub: number;
   ticket_count: number;
   cenopad_applied?: number;
@@ -778,18 +785,82 @@ export async function getOrderById(orderId: number, client?: PoolClient): Promis
   return await pgGet<RaffleOrderRow>(`SELECT * FROM raffle_orders WHERE id = ?`, [orderId], client);
 }
 
+export async function getOrderPaymentBankCardSuggestion(
+  orderId: number,
+  userId: number,
+): Promise<
+  | { ok: false; error: string }
+  | { ok: true; card: { id: number; card_number: string; recipient: string } | null }
+> {
+  await cleanupExpiredRaffleOrders();
+  const o = await getOrderByIdForUser(orderId, userId);
+  if (!o) return { ok: false, error: "Заявка не найдена" };
+  if (o.status !== "reserved") return { ok: false, error: "Недоступно для этой заявки" };
+  if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
+  const raffle = await getRaffleById(o.raffle_id);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const card = await pickAvailableBankCard({
+    raffleId: o.raffle_id,
+    nowMs: Date.now(),
+    orderTicketCount: o.ticket_count,
+    cardPaymentScope: String((raffle as { card_payment_scope?: string }).card_payment_scope ?? "unlimited"),
+    wholesaleEveryN: Math.max(
+      1,
+      Math.floor(Number((raffle as { wholesale_every_n_tickets?: number }).wholesale_every_n_tickets) || 10),
+    ),
+  });
+  return {
+    ok: true,
+    card: card ? { id: card.id, card_number: card.card_number, recipient: card.recipient } : null,
+  };
+}
+
 export async function setOrderBank(
   orderId: number,
   userId: number,
   bank: "sber" | "other",
+  bankCardId: number | null = null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await cleanupExpiredRaffleOrders();
   const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
   if (o.status !== "reserved") return { ok: false, error: "Статус не позволяет изменить банк" };
   if (Date.now() > o.reserved_until) return { ok: false, error: "Время брони истекло" };
+  const raffle = await getRaffleById(o.raffle_id);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
   const now = Date.now();
-  await pgExec(`UPDATE raffle_orders SET bank = ?, updated_at = ? WHERE id = ?`, [bank, now, orderId]);
+  let nextCardId: number | null =
+    bankCardId != null && Number.isFinite(Number(bankCardId)) ? Math.floor(Number(bankCardId)) : null;
+  if (bank === "sber") {
+    nextCardId = null;
+  } else if (nextCardId != null && nextCardId > 0) {
+    const card = await getBankCardByIdForRaffle(nextCardId, o.raffle_id);
+    if (!card) return { ok: false, error: "Карта не найдена" };
+    const scope = String((raffle as { card_payment_scope?: string }).card_payment_scope ?? "unlimited")
+      .trim()
+      .toLowerCase();
+    const everyN = Math.max(
+      1,
+      Math.floor(Number((raffle as { wholesale_every_n_tickets?: number }).wholesale_every_n_tickets) || 10),
+    );
+    const tickets = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
+    if (scope === "wholesale_only" && tickets < everyN) {
+      return {
+        ok: false,
+        error: `Оплата на карту доступна только при заказе от ${everyN} номерков`,
+      };
+    }
+    const av = await isBankCardAvailableForNewPayment(card, now);
+    if (!av.ok) return { ok: false, error: "Эта карта сейчас недоступна — выберите другой способ оплаты" };
+  } else {
+    nextCardId = null;
+  }
+  await pgExec(`UPDATE raffle_orders SET bank = ?, bank_card_id = ?, updated_at = ? WHERE id = ?`, [
+    bank,
+    nextCardId,
+    now,
+    orderId,
+  ]);
   return { ok: true };
 }
 
@@ -836,6 +907,7 @@ export async function attachReceiptToOrder(
     mime: receipt.mime,
   });
   await insertRaffleOrderEvent(orderId, "receipt_submitted", receiptEventDetail);
+  await refreshBankCardDailyLimitCooldown((o as RaffleOrderRow).bank_card_id ?? null, now);
   return { ok: true };
 }
 
@@ -1155,10 +1227,13 @@ export async function getPublicOrderStatusByToken(rawToken: string): Promise<Pub
 
 export function orderToDto(o: RaffleOrderRow) {
   const tok = String((o as RaffleOrderRow).public_status_token ?? "").trim();
+  const bc = (o as RaffleOrderRow).bank_card_id;
+  const bank_card_id = bc != null && Number.isFinite(Number(bc)) ? Math.floor(Number(bc)) : null;
   return {
     id: o.id,
     raffle_id: o.raffle_id,
     bank: o.bank,
+    bank_card_id,
     amount_rub: o.amount_rub,
     ticket_count: o.ticket_count,
     status: o.status,

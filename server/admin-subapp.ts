@@ -76,6 +76,7 @@ import type {
   AdminRaffleParticipantView,
   PendingPaymentRow,
 } from "./raffle-orders.js";
+import { listBankCardsWithAdminStats, replaceRaffleBankCards, type RaffleBankCardInput } from "./raffle-bank-cards.js";
 import {
   broadcastChatMessage,
   broadcastMaintenanceStatusUpdated,
@@ -386,7 +387,55 @@ type RaffleInput = {
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
+  card_payment_scope: "unlimited" | "wholesale_only";
+  bank_cards: RaffleBankCardInput[];
 };
+
+function parseBankCardsInput(
+  raw: unknown,
+): { ok: true; value: RaffleBankCardInput[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "bank_cards: укажите массив" };
+  const out: RaffleBankCardInput[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const idRaw = o.id;
+    const id = idRaw === undefined || idRaw === null || idRaw === "" ? undefined : Math.floor(Number(idRaw));
+    const card_number = String(o.card_number ?? "").trim();
+    const recipient = String(o.recipient ?? "").trim();
+    if (!card_number && !recipient) continue;
+    if (!card_number) return { ok: false, error: "У каждой карты укажите номер" };
+    if (card_number.length > 64) return { ok: false, error: "Номер карты слишком длинный" };
+    if (recipient.length > 500) return { ok: false, error: "Получатель слишком длинный" };
+    const dailyRaw = o.daily_max_orders;
+    const daily_max_orders =
+      dailyRaw === undefined || dailyRaw === null || dailyRaw === "" ? 0 : Math.floor(Number(dailyRaw));
+    if (!Number.isFinite(daily_max_orders) || daily_max_orders < 0 || daily_max_orders > 1_000_000) {
+      return { ok: false, error: "Лимит операций в сутки: целое число от 0 (без лимита)" };
+    }
+    const duRaw = o.disabled_until_ms;
+    const disabled_until_ms =
+      duRaw === undefined || duRaw === null || duRaw === "" ? null : Math.floor(Number(duRaw));
+    if (disabled_until_ms != null && (!Number.isFinite(disabled_until_ms) || disabled_until_ms < 0)) {
+      return { ok: false, error: "Некорректное время отключения карты" };
+    }
+    const soRaw = o.sort_order;
+    const sort_order =
+      soRaw === undefined || soRaw === null || soRaw === "" ? out.length : Math.floor(Number(soRaw));
+    out.push({
+      id: id && id > 0 ? id : undefined,
+      card_number,
+      recipient,
+      daily_max_orders,
+      disabled_until_ms,
+      sort_order: Number.isFinite(sort_order) ? sort_order : out.length,
+    });
+  }
+  out.sort((a, b) => a.sort_order - b.sort_order);
+  for (let i = 0; i < out.length; i++) out[i].sort_order = i;
+  return { ok: true, value: out };
+}
 
 function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: RaffleInput } | { ok: false; error: string } {
   const title = String(body.title ?? "").trim();
@@ -528,6 +577,11 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     return { ok: false, error: "Ссылка на эфир: укажите URL с http:// или https://" };
   }
 
+  const scopeRaw = String(body.card_payment_scope ?? "unlimited").trim().toLowerCase();
+  const card_payment_scope = scopeRaw === "wholesale_only" ? "wholesale_only" : "unlimited";
+  const parsedCards = parseBankCardsInput(body.bank_cards);
+  if (!parsedCards.ok) return parsedCards;
+
   return {
     ok: true,
     value: {
@@ -563,6 +617,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       promo_5_plus_1_enabled,
       promo_5_plus_2_enabled,
       hidden_from_public,
+      card_payment_scope,
+      bank_cards: parsedCards.value,
     },
   };
 }
@@ -1004,10 +1060,12 @@ adminSubApp.get("/raffles", async (c) => {
       rows.map(async (r) => {
         const soldBySecond = await countConfirmedTicketsSoldByCenopad(r.id);
         const accounting = await getRaffleSalesAccounting(r.id);
+        const bank_cards = await listBankCardsWithAdminStats(r.id, Date.now());
         return {
           ...raffleToDto(r, { forAdmin: true }),
           cenopad_sold_count: soldBySecond,
           sales_accounting: accounting,
+          bank_cards,
         };
       }),
     ),
@@ -1098,16 +1156,20 @@ adminSubApp.post("/raffles", async (c) => {
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
+    card_payment_scope: v.card_payment_scope,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
+  await replaceRaffleBankCards(id, v.bank_cards);
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles POST] notify:", e instanceof Error ? e.message : e),
   );
   broadcastRafflesFeedUpdated();
   const row = await getRaffleById(id);
-  return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
+  const dto = row ? raffleToDto(row, { forAdmin: true }) : null;
+  const bank_cards = row ? await listBankCardsWithAdminStats(row.id, Date.now()) : [];
+  return c.json({ raffle: dto ? { ...dto, bank_cards } : null });
 });
 
 adminSubApp.patch("/raffles/:id", async (c) => {
@@ -1158,17 +1220,21 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
+    card_payment_scope: v.card_payment_scope,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
   });
+  await replaceRaffleBankCards(id, v.bank_cards);
   await recalculateRaffleDerivedStatsForRaffle(id);
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles PATCH] notify:", e instanceof Error ? e.message : e),
   );
   broadcastRafflesFeedUpdated();
   const row = await getRaffleById(id);
-  return c.json({ raffle: row ? raffleToDto(row, { forAdmin: true }) : null });
+  const dto = row ? raffleToDto(row, { forAdmin: true }) : null;
+  const bank_cards = row ? await listBankCardsWithAdminStats(row.id, Date.now()) : [];
+  return c.json({ raffle: dto ? { ...dto, bank_cards } : null });
 });
 
 adminSubApp.post("/raffles/:id/notify-launch", async (c) => {

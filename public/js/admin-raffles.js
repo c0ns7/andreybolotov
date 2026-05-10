@@ -151,6 +151,118 @@
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>',
   };
 
+  function bankCardRowHtml(row) {
+    var id = row.id != null ? String(row.id) : "";
+    var stats = "";
+    if (row.stats_tickets_confirmed != null || row.stats_amount_rub_confirmed != null) {
+      var t = row.stats_tickets_confirmed != null ? String(row.stats_tickets_confirmed) : "0";
+      var a = row.stats_amount_rub_confirmed != null ? String(row.stats_amount_rub_confirmed) : "0";
+      var u = row.usages_today_msk != null ? String(row.usages_today_msk) : "—";
+      stats =
+        '<p class="admin-bank-card-row__stats admin-raffle-field-hint">Учёт: подтв. номерков ' +
+        esc(t) +
+        " · сумма " +
+        esc(a) +
+        " ₽ · операций сегодня " +
+        esc(u) +
+        "</p>";
+    }
+    var daily = row.daily_max_orders != null ? Math.max(0, Math.floor(Number(row.daily_max_orders))) : 0;
+    return (
+      '<div class="admin-bank-card-row" data-bank-card-row role="listitem">' +
+      '<input type="hidden" class="admin-bank-card-id" value="' +
+      esc(id) +
+      '" />' +
+      '<div class="form-row-2">' +
+      '<div class="form-group">' +
+      "<label>Номер карты</label>" +
+      '<input class="input admin-bank-card-number" type="text" maxlength="64" value="' +
+      esc(String(row.card_number || "")) +
+      '" placeholder="Номер карты" autocomplete="off" />' +
+      "</div>" +
+      '<div class="form-group">' +
+      "<label>Получатель</label>" +
+      '<input class="input admin-bank-card-recipient" type="text" maxlength="500" value="' +
+      esc(String(row.recipient || "")) +
+      '" placeholder="Кому на карту" />' +
+      "</div>" +
+      "</div>" +
+      '<div class="form-row-2">' +
+      '<div class="form-group">' +
+      "<label>Макс. операций за сутки (0 — без лимита)</label>" +
+      '<input class="input admin-bank-card-daily" type="number" min="0" step="1" value="' +
+      esc(String(daily)) +
+      '" />' +
+      "</div>" +
+      '<div class="form-group">' +
+      "<label>Отключена до</label>" +
+      '<input class="input admin-bank-card-disabled-until" type="datetime-local" step="60" value="' +
+      esc(formatDateTimeLocalFromMs(row.disabled_until_ms)) +
+      '" />' +
+      "</div>" +
+      "</div>" +
+      stats +
+      '<div class="admin-bank-card-row__actions">' +
+      '<button type="button" class="btn btn--ghost admin-bank-card-snooze">⏸ На сутки</button> ' +
+      '<button type="button" class="btn btn--ghost admin-bank-card-clear-until">Включить</button> ' +
+      '<button type="button" class="btn btn--ghost admin-bank-card-remove" aria-label="Удалить">' +
+      BTN_ICO.trash +
+      "</button>" +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderBankCardsFromEdit(edit) {
+    var wrap = document.getElementById("raffle-bank-cards-list");
+    if (!wrap) return;
+    var scopeEl = document.getElementById("raffle-card-payment-scope");
+    var cards = edit && Array.isArray(edit.bank_cards) ? edit.bank_cards : [];
+    if (scopeEl)
+      scopeEl.value =
+        edit && String(edit.card_payment_scope || "").toLowerCase() === "wholesale_only"
+          ? "wholesale_only"
+          : "unlimited";
+    if (!cards.length) {
+      wrap.innerHTML = '<p class="admin-raffle-field-hint">Нет карт. Нажмите «Добавить карту».</p>';
+      return;
+    }
+    wrap.innerHTML = cards
+      .map(function (c) {
+        return bankCardRowHtml(c);
+      })
+      .join("");
+  }
+
+  function collectBankCardsPayload() {
+    var wrap = document.getElementById("raffle-bank-cards-list");
+    if (!wrap) return [];
+    var rows = wrap.querySelectorAll("[data-bank-card-row]");
+    var out = [];
+    var i = 0;
+    rows.forEach(function (rowEl) {
+      var idEl = rowEl.querySelector(".admin-bank-card-id");
+      var idRaw = idEl ? String(idEl.value || "").trim() : "";
+      var idNum = idRaw ? Math.floor(Number(idRaw)) : 0;
+      var card_number = String(rowEl.querySelector(".admin-bank-card-number")?.value || "").trim();
+      var recipient = String(rowEl.querySelector(".admin-bank-card-recipient")?.value || "").trim();
+      if (!card_number && !recipient) return;
+      if (!card_number) throw new Error("У каждой карты укажите номер");
+      var daily = Math.floor(Number(rowEl.querySelector(".admin-bank-card-daily")?.value || 0));
+      if (!Number.isFinite(daily) || daily < 0) daily = 0;
+      var du = parseDateTimeLocalToMs(rowEl.querySelector(".admin-bank-card-disabled-until")?.value || "");
+      out.push({
+        id: idNum > 0 ? idNum : undefined,
+        card_number: card_number,
+        recipient: recipient,
+        daily_max_orders: daily,
+        disabled_until_ms: du,
+        sort_order: i++,
+      });
+    });
+    return out;
+  }
+
   const listEl = document.getElementById("admin-raffles-list");
   const modalForm = document.getElementById("modal-raffle-form");
   const formTitle = document.getElementById("modal-raffle-form-title");
@@ -724,6 +836,7 @@
     var qf = document.getElementById("raffle-qr-file");
     if (cf) cf.value = "";
     if (qf) qf.value = "";
+    renderBankCardsFromEdit(edit);
     setPayTab("sber");
     syncPayMethodSettingsState();
     setFormLoading(false);
@@ -1469,6 +1582,14 @@
       alert(err.message || "Ошибка загрузки файла");
       return;
     }
+    let bank_cards;
+    try {
+      bank_cards = collectBankCardsPayload();
+    } catch (err) {
+      setFormLoading(false);
+      alert(err.message || "Ошибка списка карт");
+      return;
+    }
     const payload = {
       title: document.getElementById("raffle-title").value.trim(),
       cover_image_url: coverUrl,
@@ -1564,6 +1685,12 @@
         if (!Number.isFinite(n) || n < 1) n = 10;
         return n;
       })(),
+      card_payment_scope: (function () {
+        var el = document.getElementById("raffle-card-payment-scope");
+        var v = String((el && el.value) || "unlimited").trim().toLowerCase();
+        return v === "wholesale_only" ? "wholesale_only" : "unlimited";
+      })(),
+      bank_cards: bank_cards,
       promo_5_plus_1_enabled: (function () {
         var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
         return el && el.value === "5plus1";
@@ -1598,5 +1725,36 @@
     } finally {
       setFormLoading(false);
     }
+  });
+
+  document.getElementById("raffle-bank-cards-list")?.addEventListener("click", function (ev) {
+    var t = ev.target;
+    var btn = t && t.closest ? t.closest("button") : null;
+    if (!btn) return;
+    var row = btn.closest("[data-bank-card-row]");
+    if (!row) return;
+    var wrap = document.getElementById("raffle-bank-cards-list");
+    if (btn.classList.contains("admin-bank-card-remove")) {
+      row.remove();
+      if (wrap && !wrap.querySelector("[data-bank-card-row]")) {
+        wrap.innerHTML = '<p class="admin-raffle-field-hint">Нет карт. Нажмите «Добавить карту».</p>';
+      }
+      return;
+    }
+    if (btn.classList.contains("admin-bank-card-snooze")) {
+      var inp = row.querySelector(".admin-bank-card-disabled-until");
+      if (inp) inp.value = formatDateTimeLocalFromMs(Date.now() + 24 * 60 * 60 * 1000);
+      return;
+    }
+    if (btn.classList.contains("admin-bank-card-clear-until")) {
+      var inp2 = row.querySelector(".admin-bank-card-disabled-until");
+      if (inp2) inp2.value = "";
+    }
+  });
+  document.getElementById("raffle-bank-card-add")?.addEventListener("click", function () {
+    var wrap = document.getElementById("raffle-bank-cards-list");
+    if (!wrap) return;
+    if (!wrap.querySelector("[data-bank-card-row]")) wrap.innerHTML = "";
+    wrap.insertAdjacentHTML("beforeend", bankCardRowHtml({ daily_max_orders: 0 }));
   });
 })();

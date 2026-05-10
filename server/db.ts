@@ -761,6 +761,8 @@ export type RaffleRow = {
   wholesale_enabled: number;
   /** Сколько подтверждённых небонусных номерков у пользователя дают следующий номер оптовика (глобальная очередь). */
   wholesale_every_n_tickets?: number;
+  /** unlimited | wholesale_only — оплата на карты акции для всех или только от порога опта */
+  card_payment_scope?: string;
   promo_5_plus_1_enabled?: number;
   promo_5_plus_1_locked_free_count?: number;
   promo_5_plus_2_enabled?: number;
@@ -777,6 +779,8 @@ export type RaffleDto = {
   title: string;
   cover_image_url: string;
   price_rub: number;
+  /** Базовая цена билета без учёта активной второй цены (ценопада) — для отображения и расчётов. */
+  base_price_rub: number;
   cenopad_enabled?: boolean;
   cenopad_price_rub?: number | null;
   second_price_enabled?: boolean;
@@ -806,6 +810,7 @@ export type RaffleDto = {
   sort_order: number;
   wholesale_enabled: boolean;
   wholesale_every_n_tickets: number;
+  card_payment_scope: "unlimited" | "wholesale_only";
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_1_locked_free_count: number;
   promo_5_plus_2_enabled: boolean;
@@ -878,6 +883,12 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
       1,
       Math.floor(Number((r as RaffleRow).wholesale_every_n_tickets ?? 10)),
     ),
+    card_payment_scope:
+      String((r as RaffleRow).card_payment_scope ?? "")
+        .trim()
+        .toLowerCase() === "wholesale_only"
+        ? "wholesale_only"
+        : "unlimited",
     promo_5_plus_1_enabled: Boolean(Number((r as RaffleRow).promo_5_plus_1_enabled ?? 0)),
     promo_5_plus_1_locked_free_count: Math.max(
       0,
@@ -1034,6 +1045,7 @@ export async function insertRaffle(data: {
   sort_order: number;
   wholesale_enabled: number;
   wholesale_every_n_tickets: number;
+  card_payment_scope: string;
   promo_5_plus_1_enabled: number;
   promo_5_plus_2_enabled: number;
   hidden_from_public: number;
@@ -1045,8 +1057,8 @@ export async function insertRaffle(data: {
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
       sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
-      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -1079,6 +1091,7 @@ export async function insertRaffle(data: {
       data.sort_order,
       data.wholesale_enabled,
       data.wholesale_every_n_tickets,
+      data.card_payment_scope,
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,
@@ -1121,6 +1134,7 @@ export async function updateRaffle(
     sort_order: number;
     wholesale_enabled: number;
     wholesale_every_n_tickets: number;
+    card_payment_scope: string;
     promo_5_plus_1_enabled: number;
     promo_5_plus_2_enabled: number;
     hidden_from_public: number;
@@ -1134,7 +1148,7 @@ export async function updateRaffle(
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
       live_stream_at = ?, live_stream_status = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, updated_at = ?
     WHERE id = ?`,
     [
       data.title,
@@ -1166,6 +1180,7 @@ export async function updateRaffle(
       data.sort_order,
       data.wholesale_enabled,
       data.wholesale_every_n_tickets,
+      data.card_payment_scope,
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,

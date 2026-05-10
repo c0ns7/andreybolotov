@@ -526,6 +526,55 @@ export default function AbRafflePurchaseShellMarkup() {
             </p>
           </section>
 
+          <section id="reserve-payment-bank-card" className="pay-sheet-dark-card" hidden>
+            <div className="pay-sheet-dark-card__head">
+              <span className="pay-sheet-dark-card__tag">Перевод на карту</span>
+              <span className="pay-sheet-dark-card__bank">Реквизиты</span>
+            </div>
+            <div className="pay-sheet-dark-card__divider"></div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Номер карты</p>
+                <p id="reserve-payment-bank-card-number" className="pay-sheet-v">
+                  —
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pay-sheet-copy-btn"
+                data-copy-target="reserve-payment-bank-card-number"
+                aria-label="Копировать номер карты"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <div className="pay-sheet-copy-block">
+              <div className="pay-sheet-copy-block__main">
+                <p className="pay-sheet-k">Получатель</p>
+                <p id="reserve-payment-bank-card-recipient" className="pay-sheet-v">
+                  —
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pay-sheet-copy-btn"
+                data-copy-target="reserve-payment-bank-card-recipient"
+                aria-label="Копировать получателя"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <p id="reserve-payment-bank-card-unavailable" className="pay-sheet-warn-foot" hidden>
+              Сейчас нет свободной карты для этой суммы — переключите способ или попробуйте позже.
+            </p>
+          </section>
+
           <p id="reserve-payment-amount-inline" className="pay-sheet-sr-only" aria-hidden="true">
             0 ₽
           </p>

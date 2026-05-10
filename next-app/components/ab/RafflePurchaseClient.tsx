@@ -39,6 +39,9 @@ type RaffleDto = Record<string, unknown> & {
   collection_recipient?: string;
   qr_recipient?: string;
   qr_payment_purpose?: string;
+  card_payment_scope?: string;
+  wholesale_every_n_tickets?: number;
+  has_bank_cards?: boolean;
 };
 
 type OrderDto = Record<string, unknown> & {
@@ -48,6 +51,7 @@ type OrderDto = Record<string, unknown> & {
   amount_rub?: number;
   reserved_until?: number;
   bank?: string | null;
+  bank_card_id?: number | null;
 };
 
 type Cell = { n: number; kind: string };
@@ -285,8 +289,11 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     amountRub: number;
     reservedUntil: number;
     numbers: number[];
-    paymentMethod: "collection" | "tbank_collection" | "qr";
+    paymentMethod: "collection" | "tbank_collection" | "qr" | "bank_card";
+    activeBankCard: { id: number; card_number: string; recipient: string } | null;
   } | null>(null);
+
+  const altPayCycleRef = useRef<{ modes: string[]; idx: number }>({ modes: [], idx: -1 });
 
   const paymentStepRef = useRef<"requisites" | "confirm">("requisites");
   const payTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -434,6 +441,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         reservedUntil: Number(o.reserved_until ?? 0),
         numbers: nums.slice(),
         paymentMethod: "collection",
+        activeBankCard: null,
       };
     } else if (st !== "reserved") {
       reserveDraftRef.current = null;
@@ -1507,6 +1515,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           reservedUntil: Number(ord?.reserved_until ?? 0),
           numbers: nums,
           paymentMethod: "collection",
+          activeBankCard: null,
         };
         void armPaymentRef.current?.();
         return;
@@ -1594,6 +1603,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           reservedUntil: Number(ord?.reserved_until ?? 0),
           numbers: numsF,
           paymentMethod: "collection",
+          activeBankCard: null,
         };
         void loadSliceRef.current();
         await armPaymentRef.current?.();
@@ -1684,7 +1694,33 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       });
     };
 
-    const paintReservePayment = (r: RaffleDto, method: "collection" | "tbank_collection" | "qr") => {
+    const buildAltPayModes = (r: RaffleDto, ticketCount: number): string[] => {
+      const hasCol =
+        (r.sber_enabled != null ? Boolean(Number(r.sber_enabled) === 1 || r.sber_enabled === true) : Boolean(String(r.collection_url || "").trim())) &&
+        Boolean(String(r.collection_url || "").trim());
+      const hasTbank =
+        (r.tbank_enabled != null ? Boolean(Number(r.tbank_enabled) === 1 || r.tbank_enabled === true) : Boolean(String(r.tbank_collection_url || "").trim())) &&
+        Boolean(String(r.tbank_collection_url || "").trim());
+      const hasQr =
+        (r.qr_enabled != null ? Boolean(Number(r.qr_enabled) === 1 || r.qr_enabled === true) : Boolean(String(r.qr_image_url || "").trim())) &&
+        Boolean(String(r.qr_image_url || "").trim());
+      const scope = String(r.card_payment_scope || "unlimited").toLowerCase();
+      const everyN = Math.max(1, Math.floor(Number(r.wholesale_every_n_tickets) || 10));
+      const wholesaleOk = scope !== "wholesale_only" || ticketCount >= everyN;
+      const hasBankCards = Boolean(r.has_bank_cards) && wholesaleOk;
+      const modes: string[] = [];
+      if (hasQr) modes.push("qr");
+      if (hasBankCards) modes.push("bank_card");
+      if (hasTbank) modes.push("tbank_collection");
+      if (hasCol) modes.push("collection");
+      return modes;
+    };
+
+    const paintReservePayment = (
+      r: RaffleDto,
+      method: "collection" | "tbank_collection" | "qr" | "bank_card",
+      bankCard?: { card_number: string; recipient: string } | null,
+    ) => {
       const purpose = String(r.qr_payment_purpose || "Оплата услуг").trim() || "Оплата услуг";
       const elPurT = document.getElementById("reserve-payment-purpose-tbank");
       const elQrPur = document.getElementById("reserve-payment-qr-purpose");
@@ -1710,9 +1746,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         (r.qr_enabled != null ? Boolean(Number(r.qr_enabled) === 1 || r.qr_enabled === true) : Boolean(String(r.qr_image_url || "").trim())) &&
         Boolean(String(r.qr_image_url || "").trim());
       let m = method;
-      if (m === "collection" && !hasCol) m = hasTbank ? "tbank_collection" : "qr";
-      if (m === "tbank_collection" && !hasTbank) m = hasCol ? "collection" : "qr";
-      if (m === "qr" && !hasQr) m = hasCol ? "collection" : "tbank_collection";
+      if (m !== "bank_card") {
+        if (m === "collection" && !hasCol) m = hasTbank ? "tbank_collection" : "qr";
+        if (m === "tbank_collection" && !hasTbank) m = hasCol ? "collection" : "qr";
+        if (m === "qr" && !hasQr) m = hasCol ? "collection" : "tbank_collection";
+      }
+      const cardResolved =
+        bankCard ??
+        (m === "bank_card" ? reserveDraftRef.current?.activeBankCard ?? null : null);
       if (reserveDraftRef.current) reserveDraftRef.current.paymentMethod = m;
       const bCol = document.getElementById("reserve-payment-method-collection");
       const bTb = document.getElementById("reserve-payment-method-tbank");
@@ -1763,13 +1804,22 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         if (qr) img.src = qr;
         else img.removeAttribute("src");
       }
+      const elBankCard = document.getElementById("reserve-payment-bank-card");
+      if (elBankCard) elBankCard.hidden = m !== "bank_card";
       document.getElementById("reserve-payment-collect")!.hidden = m !== "collection";
       document.getElementById("reserve-payment-collect-tbank")!.hidden = m !== "tbank_collection";
       document.getElementById("reserve-payment-qr")!.hidden = m !== "qr";
+      const elBn = document.getElementById("reserve-payment-bank-card-number");
+      const elBr = document.getElementById("reserve-payment-bank-card-recipient");
+      const elBna = document.getElementById("reserve-payment-bank-card-unavailable");
+      if (elBn) elBn.textContent = cardResolved ? String(cardResolved.card_number || "").trim() || "—" : "—";
+      if (elBr) elBr.textContent = cardResolved ? String(cardResolved.recipient || "").trim() || "—" : "—";
+      if (elBna) elBna.hidden = !(m === "bank_card" && !cardResolved);
       const bankBadge = document.getElementById("reserve-payment-collect-bank");
       if (bankBadge) {
         if (m === "collection") bankBadge.textContent = "Сбербанк";
         else if (m === "tbank_collection") bankBadge.textContent = "Тинькофф";
+        else if (m === "bank_card") bankBadge.textContent = "Карта";
         else bankBadge.textContent = "QR";
       }
       const rules = String(r.rules_url || "").trim();
@@ -1786,6 +1836,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         elStep2Col.hidden = !isSberCollection;
         elStep2Oth.hidden = isSberCollection;
       }
+      const altBtn = document.getElementById("reserve-payment-alt-requisites");
+      const d0 = reserveDraftRef.current;
+      const modesN = d0 ? buildAltPayModes(r, d0.numbers.length) : [];
+      if (altBtn) altBtn.hidden = modesN.length === 0;
     };
 
     const switchPayStep = (step: "requisites" | "confirm") => {
@@ -1836,15 +1890,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const d = reserveDraftRef.current;
       const r = raffleRef.current;
       if (!d || !r?.id) return;
-      try {
-        await fetch("/api/raffles/orders/" + String(d.orderId) + "/bank", {
-          method: "PATCH",
-          headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ bank: "sber" }),
-        });
-      } catch {
-        /* ignore */
-      }
+      altPayCycleRef.current = { modes: [], idx: -1 };
+      d.activeBankCard = null;
+      d.paymentMethod = "collection";
       closeOverlay(document.getElementById("modal-reserve-success"));
       const amt = d.amountRub;
       document.getElementById("reserve-payment-amount")!.textContent = formatRub(amt);
@@ -1857,7 +1905,20 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       const fullOrd = document.getElementById("reserve-payment-order-id");
       if (fullOrd) fullOrd.textContent = "Заказ A" + String(d.orderId);
-      paintReservePayment(r, d.paymentMethod);
+      paintReservePayment(r, "collection");
+      const modeAfter = reserveDraftRef.current?.paymentMethod ?? "collection";
+      try {
+        await fetch("/api/raffles/orders/" + String(d.orderId) + "/bank", {
+          method: "PATCH",
+          headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bank: modeAfter === "collection" ? "sber" : "other",
+            bank_card_id: null,
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
       switchPayStep("requisites");
       openOverlay(document.getElementById("modal-reserve-payment"));
       syncPaySheetFlow("pay");
@@ -1991,11 +2052,73 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     }
 
     const elAltReq = document.getElementById("reserve-payment-alt-requisites");
-    const onAltReq = () => {
+    const onAltReq = async () => {
       const rf = raffleRef.current;
-      if (rf) paintReservePayment(rf, "qr");
+      const d = reserveDraftRef.current;
+      if (!rf || !d?.orderId) return;
+      if (!altPayCycleRef.current.modes.length) {
+        altPayCycleRef.current.modes = buildAltPayModes(rf, d.numbers.length);
+        altPayCycleRef.current.idx = -1;
+      }
+      const modes = altPayCycleRef.current.modes;
+      if (!modes.length) {
+        toastRef.current("Нет других способов оплаты", "warning");
+        return;
+      }
+      altPayCycleRef.current.idx = (altPayCycleRef.current.idx + 1) % modes.length;
+      const mode = modes[altPayCycleRef.current.idx];
+      if (mode === "bank_card") {
+        try {
+          const res = await fetch("/api/raffles/orders/" + String(d.orderId) + "/payment-bank-card", {
+            headers: abAuthHeaders(),
+            cache: "no-store",
+          });
+          const data = (await res.json()) as {
+            suggested_bank_card?: { id: number; card_number: string; recipient: string } | null;
+            error?: string;
+          };
+          if (!res.ok) throw new Error(data.error || "Ошибка");
+          const card = data.suggested_bank_card;
+          if (!card) {
+            d.activeBankCard = null;
+            await fetch("/api/raffles/orders/" + String(d.orderId) + "/bank", {
+              method: "PATCH",
+              headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+              body: JSON.stringify({ bank: "other", bank_card_id: null }),
+            });
+            paintReservePayment(rf, "bank_card", null);
+            toastRef.current("Сейчас нет свободной карты — выберите другой способ ниже", "warning");
+            return;
+          }
+          d.activeBankCard = card;
+          await fetch("/api/raffles/orders/" + String(d.orderId) + "/bank", {
+            method: "PATCH",
+            headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ bank: "other", bank_card_id: card.id }),
+          });
+          paintReservePayment(rf, "bank_card", card);
+        } catch (e) {
+          toastRef.current(String((e as Error).message || "Ошибка"), "error");
+        }
+        return;
+      }
+      d.activeBankCard = null;
+      try {
+        await fetch("/api/raffles/orders/" + String(d.orderId) + "/bank", {
+          method: "PATCH",
+          headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bank: mode === "collection" ? "sber" : "other",
+            bank_card_id: null,
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
+      paintReservePayment(rf, mode as "collection" | "tbank_collection" | "qr");
     };
-    elAltReq?.addEventListener("click", onAltReq);
+    const onAltReqClick = () => void onAltReq();
+    elAltReq?.addEventListener("click", onAltReqClick);
 
     const setReceiptSendReady = (ready: boolean) => {
       const btn = document.getElementById("reserve-payment-send") as HTMLButtonElement | null;
@@ -2135,7 +2258,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elGoPay?.removeEventListener("click", onGoPay);
       elPayClose?.removeEventListener("click", onPayClose);
       elModalPay?.removeEventListener("click", onModalPayClick);
-      elAltReq?.removeEventListener("click", onAltReq);
+      elAltReq?.removeEventListener("click", onAltReqClick);
       elCancelDismiss?.removeEventListener("click", onCancelDismiss);
       elModalCancelConfirm?.removeEventListener("click", onModalCancelConfirmBackdrop);
       elCancelConfirmBtn?.removeEventListener("click", onCancelReservation);

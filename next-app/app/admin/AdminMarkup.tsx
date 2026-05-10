@@ -677,6 +677,33 @@ export default function AdminMarkup() {
                   </div>
                 </div>
               </section>
+              <section className="admin-raffle-section" aria-labelledby="raffle-sec-bank-cards">
+                <h3 id="raffle-sec-bank-cards" className="admin-raffle-section__title">
+                  <span className="admin-raffle-section__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="20" height="14" x="2" y="5" rx="2"></rect>
+                      <line x1="2" x2="22" y1="10" y2="10"></line>
+                    </svg>
+                  </span>
+                  Банковские карты
+                </h3>
+                <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  Реквизиты для кнопки «Другие реквизиты» на оплате: по очереди с резервными картами, дневной лимит операций и учёт продаж по каждой карте.
+                </p>
+                <div className="form-group">
+                  <label htmlFor="raffle-card-payment-scope">Оплата переводом на карту</label>
+                  <select id="raffle-card-payment-scope" className="input input--select">
+                    <option value="unlimited">Доступна всем покупателям (при наличии свободной карты)</option>
+                    <option value="wholesale_only">Только при заказе от N номерков (N — из настройки опта ниже)</option>
+                  </select>
+                </div>
+                <div id="raffle-bank-cards-list" className="admin-bank-cards-list" role="list"></div>
+                <div className="form-actions" style={{ marginTop: "0.75rem" }}>
+                  <button type="button" className="btn btn--ghost" id="raffle-bank-card-add">
+                    + Добавить карту
+                  </button>
+                </div>
+              </section>
               <div className="form-group">
                 <label htmlFor="raffle-rules-url">Ссылка на краткие правила акции</label>
                 <input

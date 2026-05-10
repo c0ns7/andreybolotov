@@ -25,6 +25,7 @@ import {
   markStaffMessagesReadByUser,
   messageToDto,
   raffleToDto,
+  type RaffleRow,
 } from "../../server/db.js";
 import { pgAll } from "../../server/pg-sql.js";
 import {
@@ -41,6 +42,7 @@ import {
   updateUserPasswordHashPg,
 } from "../../server/db-auth-pg.js";
 import { ensurePgRuntimeSchema, isPgConnectivityError } from "../../server/pg.js";
+import { publicRaffleExtraFields } from "../../server/raffle-bank-cards.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "../../server/chat-attachments.js";
 import {
   addTicketsToReservedOrder,
@@ -55,6 +57,7 @@ import {
   getTicketCellKind,
   getTicketGridSlice,
   getTicketNumbersForOrder,
+  getOrderPaymentBankCardSuggestion,
   listConfirmedTicketGroupsForUser,
   listGloballyFreeTicketNumbers,
   listParticipationHistoryForUser,
@@ -83,6 +86,11 @@ import {
   broadcastTypingUserToAdmins,
 } from "../../server/ws-chat.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
+
+async function raffleDtoWithBankCardMeta(r: RaffleRow) {
+  const extra = await publicRaffleExtraFields(r.id);
+  return { ...raffleToDto(r), ...extra };
+}
 
 const rateLimitBuckets = new Map<string, { win: number; n: number }>();
 const paymentParticipationCache = new Map<
@@ -1210,7 +1218,12 @@ app.get("/api/raffles/:id", async (request, reply) => {
   const canAccess = isRaffleVisibleOnSite(raffle) || Boolean(await getActiveOrderForUser(id, user.id));
   if (!canAccess) return reply.code(404).send({ error: "Не найдено" });
   reply.header("Cache-Control", "private, no-store");
-  return { raffle: { ...raffleToDto(raffle), viewers_count: getRaffleViewerCount(id) } };
+  return {
+    raffle: {
+      ...(await raffleDtoWithBankCardMeta(raffle)),
+      viewers_count: getRaffleViewerCount(id),
+    },
+  };
 });
 
 app.get("/api/raffles/by-hash/:hash", async (request, reply) => {
@@ -1224,7 +1237,12 @@ app.get("/api/raffles/by-hash/:hash", async (request, reply) => {
   const canAccess = isRaffleVisibleOnSite(raffle) || Boolean(await getActiveOrderForUser(raffle.id, user.id));
   if (!canAccess) return reply.code(404).send({ error: "Не найдено" });
   reply.header("Cache-Control", "private, no-store");
-  return { raffle: { ...raffleToDto(raffle), viewers_count: getRaffleViewerCount(raffle.id) } };
+  return {
+    raffle: {
+      ...(await raffleDtoWithBankCardMeta(raffle)),
+      viewers_count: getRaffleViewerCount(raffle.id),
+    },
+  };
 });
 
 app.get("/api/raffles/:id/order", async (request, reply) => {
@@ -1241,7 +1259,7 @@ app.get("/api/raffles/:id/order", async (request, reply) => {
     return {
       order: null,
       numbers: [],
-      raffle: raffleToDto(raffle),
+      raffle: await raffleDtoWithBankCardMeta(raffle),
       server_time_ms: serverTimeMs,
       payment_participation: {
         has_confirmed_tickets: false,
@@ -1256,7 +1274,7 @@ app.get("/api/raffles/:id/order", async (request, reply) => {
   return {
     order: orderToDto(order),
     numbers: await getTicketNumbersForOrder(order.id),
-    raffle: raffleToDto(raffle),
+    raffle: await raffleDtoWithBankCardMeta(raffle),
     server_time_ms: serverTimeMs,
     payment_participation: await getCachedPaymentParticipation(user.id, id, order.id),
   };
@@ -1277,7 +1295,7 @@ app.get("/api/raffles/:id/tickets", async (request, reply) => {
   const raffle = await raffleVisibleOrActiveOrder(user.id, id);
   if (!raffle) return reply.code(404).send({ error: "Не найдено" });
   const slice = await getTicketGridSlice(id, user.id, from, to);
-  return { ...slice, raffle: raffleToDto(raffle) };
+  return { ...slice, raffle: await raffleDtoWithBankCardMeta(raffle) };
 });
 
 app.get("/api/raffles/:id/ticket-lookup", async (request, reply) => {
@@ -1394,16 +1412,33 @@ app.post("/api/raffles/orders/:orderId/cancel-reservation", async (request, repl
   return { ok: true, server_time_ms: Date.now() };
 });
 
+app.get("/api/raffles/orders/:orderId/payment-bank-card", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const params = request.params as { orderId?: string };
+  const orderId = Number(params?.orderId);
+  if (!Number.isFinite(orderId)) return reply.code(400).send({ error: "Некорректный id" });
+  const res = await getOrderPaymentBankCardSuggestion(orderId, user.id);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return { suggested_bank_card: res.card, server_time_ms: Date.now() };
+});
+
 app.patch("/api/raffles/orders/:orderId/bank", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
   const params = request.params as { orderId?: string };
   const orderId = Number(params?.orderId);
   if (!Number.isFinite(orderId)) return reply.code(400).send({ error: "Некорректный id" });
-  const body = (request.body ?? {}) as { bank?: string };
+  const body = (request.body ?? {}) as { bank?: string; bank_card_id?: unknown };
   const bank = body.bank === "sber" || body.bank === "other" ? body.bank : null;
   if (!bank) return reply.code(400).send({ error: "Укажите банк: sber или other" });
-  const res = await setOrderBank(orderId, user.id, bank);
+  const rawCard = body.bank_card_id;
+  const bankCardIdParsed =
+    rawCard === undefined || rawCard === null || rawCard === ""
+      ? NaN
+      : Math.floor(Number(rawCard));
+  const bankCardId = Number.isFinite(bankCardIdParsed) && bankCardIdParsed > 0 ? bankCardIdParsed : null;
+  const res = await setOrderBank(orderId, user.id, bank, bank === "other" ? bankCardId : null);
   if (!res.ok) return reply.code(400).send({ error: res.error });
   const order = await getOrderByIdForUser(orderId, user.id);
   if (!order) return reply.code(500).send({ error: "Ошибка" });
@@ -1424,7 +1459,7 @@ app.get("/api/raffles/orders/:orderId", async (request, reply) => {
   return {
     order: orderToDto(order),
     numbers: await getTicketNumbersForOrder(orderId),
-    raffle: raffleToDto(raffle),
+    raffle: await raffleDtoWithBankCardMeta(raffle),
     server_time_ms: Date.now(),
     payment_participation: await buildRafflePaymentParticipationContext(user.id, order.raffle_id, order.id),
   };
