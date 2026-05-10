@@ -450,6 +450,36 @@ async function getPreassignmentPhone(
   return row ? row.phone : null;
 }
 
+/** Телефон владельца номерка в указанной акции (активный hold или предназначение до регистрации). */
+export async function getPhoneForTicketInRaffle(
+  raffleId: number,
+  ticketNumber: number,
+  client?: PoolClient,
+): Promise<string | null> {
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n) || n < 1) return null;
+  const row = await pgGet<{ phone: string }>(
+    `SELECT u.phone AS phone
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN users u ON u.id = o.user_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.status NOT IN ('expired', 'rejected')
+       ORDER BY CASE o.status
+         WHEN 'confirmed' THEN 1
+         WHEN 'pending_review' THEN 2
+         WHEN 'reserved' THEN 3
+         ELSE 4
+       END,
+       o.id DESC
+       LIMIT 1`,
+    [raffleId, n],
+    client,
+  );
+  if (row?.phone) return String(row.phone);
+  const pre = await getPreassignmentPhone(raffleId, n, client);
+  return pre ? String(pre) : null;
+}
+
 export async function getTicketCellKind(
   raffleId: number,
   ticketNumber: number,
@@ -2293,60 +2323,19 @@ export async function adminBulkAssignPhoneLinesToRaffle(
   return { ok: true, assigned: valid.length, skipped, affected_user_ids: [...affectedUserIds] };
 }
 
-/**
- * Строка i (среди непустых) → legacyTicketNumbers[i]. Несколько строк с одним телефоном — несколько
- * номерков одному победителю. Строки обрабатываются по порядку в одной транзакции: повтор номерка
- * в списке для уже закрепившего его же пользователя не считается ошибкой (дубликат строки в файле).
- */
-export async function adminBulkAssignLegacyWinnerLinesToRaffle(
-  raffleId: number,
-  rawLines: string[],
-  legacyTicketNumbers: readonly number[],
-): Promise<
-  | {
-      ok: true;
-      assigned: number;
-      skipped: BulkAssignSkip[];
-      affected_user_ids: number[];
-      notify_targets: { user_id: number; tickets: number[] }[];
-    }
-  | { ok: false; error: string }
-> {
-  const raffle = await getRaffleById(raffleId);
-  if (!raffle) return { ok: false, error: "Акция не найдена" };
+type AdminTicketAssignStep = { line: number; phone: string; wish: number };
+
+async function sequentialAdminAssignTicketSteps(
+  targetRaffleId: number,
+  steps: AdminTicketAssignStep[],
+): Promise<{
+  assigned: number;
+  skipped: BulkAssignSkip[];
+  userTicketSets: Map<number, Set<number>>;
+}> {
+  const raffle = await getRaffleById(targetRaffleId);
+  if (!raffle) throw new Error("NO_RAFFLE");
   const maxN = raffle.ticket_count;
-  const list = legacyTicketNumbers;
-  if (!list.length) return { ok: false, error: "Список номерков победителей пуст" };
-
-  type Parsed = { line: number; phone: string; listIndex: number };
-  const parsed: Parsed[] = [];
-  let nonEmptyIndex = 0;
-  for (let i = 0; i < rawLines.length; i++) {
-    const line = i + 1;
-    const raw = String(rawLines[i] ?? "").trim();
-    if (!raw) continue;
-    const phone = normalizePhone(raw);
-    if (!phone || !isValidRuMobile(phone)) {
-      return { ok: false, error: "Строка " + line + ": некорректный мобильный телефон РФ" };
-    }
-    const listIndex = nonEmptyIndex;
-    nonEmptyIndex += 1;
-    if (listIndex >= list.length) {
-      return {
-        ok: false,
-        error:
-          "Строка " +
-          line +
-          ": в списке победителей только " +
-          list.length +
-          " номерков — уберите лишние строки",
-      };
-    }
-    parsed.push({ line, phone, listIndex });
-  }
-
-  if (parsed.length === 0) return { ok: false, error: "Нет ни одной строки с телефоном" };
-
   const skipped: BulkAssignSkip[] = [];
   const userTicketSets = new Map<number, Set<number>>();
   let assigned = 0;
@@ -2365,8 +2354,8 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
   const client = await pgPool.connect();
   try {
     await client.query("BEGIN");
-    for (const p of parsed) {
-      const wish = Math.floor(Number(list[p.listIndex]));
+    for (const p of steps) {
+      const wish = Math.floor(Number(p.wish));
       if (!Number.isFinite(wish) || wish < 1 || wish > maxN) {
         skipped.push({
           line: p.line,
@@ -2378,17 +2367,17 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
       }
 
       const user = await getUserByPhone(p.phone);
-      const blocked = await isRaffleTicketBlocked(raffleId, wish, client);
+      const blocked = await isRaffleTicketBlocked(targetRaffleId, wish, client);
       if (blocked) {
         if (user && Number.isFinite(user.id) && user.id > 0) {
-          const alreadyTheirs = await ticketHeldByUserInRaffle(raffleId, wish, user.id, client);
+          const alreadyTheirs = await ticketHeldByUserInRaffle(targetRaffleId, wish, user.id, client);
           if (alreadyTheirs) {
             assigned += 1;
             trackUserTicket(user.id, wish);
             continue;
           }
         } else {
-          const preSame = await preassignmentExactExists(raffleId, p.phone, wish, client);
+          const preSame = await preassignmentExactExists(targetRaffleId, p.phone, wish, client);
           if (preSame) {
             assigned += 1;
             continue;
@@ -2405,7 +2394,7 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
 
       if (user && Number.isFinite(user.id) && user.id > 0) {
         try {
-          await createOrAppendConfirmedTicketsForUser(raffleId, user.id, [wish], client);
+          await createOrAppendConfirmedTicketsForUser(targetRaffleId, user.id, [wish], client);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           skipped.push({
@@ -2422,7 +2411,7 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
         try {
           await pgExec(
             `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
-            [raffleId, wish, p.phone, now],
+            [targetRaffleId, wish, p.phone, now],
             client,
           );
         } catch (err) {
@@ -2433,7 +2422,7 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
               err !== null &&
               "code" in err &&
               String((err as { code?: string }).code) === "23505");
-          if (isUnique && (await preassignmentExactExists(raffleId, p.phone, wish, client))) {
+          if (isUnique && (await preassignmentExactExists(targetRaffleId, p.phone, wish, client))) {
             assigned += 1;
             continue;
           }
@@ -2460,18 +2449,113 @@ export async function adminBulkAssignLegacyWinnerLinesToRaffle(
     client.release();
   }
 
-  await recalculateRaffleDerivedStatsForRaffle(raffleId);
+  return { assigned, skipped, userTicketSets };
+}
 
-  const notify_targets = [...userTicketSets.entries()].map(([user_id, set]) => ({
+/**
+ * Номерки из списка (как в акции-источнике) → телефон владельца там же → закрепление в целевой акции
+ * подряд: start, start+1, … (позиция в списке = смещение от start).
+ */
+export async function adminBulkAssignFromSourceRaffleTickets(
+  targetRaffleId: number,
+  sourceRaffleId: number,
+  sourceTicketNumbers: number[],
+  targetStartNumber: number,
+): Promise<
+  | {
+      ok: true;
+      assigned: number;
+      skipped: BulkAssignSkip[];
+      affected_user_ids: number[];
+      notify_targets: { user_id: number; tickets: number[] }[];
+    }
+  | { ok: false; error: string }
+> {
+  const target = await getRaffleById(targetRaffleId);
+  const source = await getRaffleById(sourceRaffleId);
+  if (!target) return { ok: false, error: "Акция не найдена" };
+  if (!source) return { ok: false, error: "Акция-источник не найдена" };
+  if (!sourceTicketNumbers.length) return { ok: false, error: "Укажите хотя бы один номерок" };
+
+  const sourceMax = source.ticket_count;
+  const targetMax = target.ticket_count;
+  const start = Math.max(1, Math.floor(Number(targetStartNumber)) || 1);
+
+  const skipped: BulkAssignSkip[] = [];
+  const steps: AdminTicketAssignStep[] = [];
+
+  for (let i = 0; i < sourceTicketNumbers.length; i++) {
+    const line = i + 1;
+    const srcTn = Math.floor(Number(sourceTicketNumbers[i]));
+    if (!Number.isFinite(srcTn)) {
+      skipped.push({
+        line,
+        phone: "",
+        ticket_number: NaN,
+        reason: "Некорректное значение в списке",
+      });
+      continue;
+    }
+    if (srcTn < 1 || srcTn > sourceMax) {
+      skipped.push({
+        line,
+        phone: "",
+        ticket_number: srcTn,
+        reason: "Номерок " + srcTn + " вне диапазона акции-источника (1–" + sourceMax + ")",
+      });
+      continue;
+    }
+
+    const phoneRaw = await getPhoneForTicketInRaffle(sourceRaffleId, srcTn);
+    const phone = phoneRaw ? normalizePhone(String(phoneRaw)) : "";
+    if (!phone || !isValidRuMobile(phone)) {
+      skipped.push({
+        line,
+        phone: "",
+        ticket_number: srcTn,
+        reason: "Нет владельца номерка №" + srcTn + " в выбранной акции-источнике",
+      });
+      continue;
+    }
+
+    const wish = start + i;
+    if (wish < 1 || wish > targetMax) {
+      skipped.push({
+        line,
+        phone,
+        ticket_number: wish,
+        reason: "Номерок назначения №" + wish + " вне диапазона этой акции (1–" + targetMax + ")",
+      });
+      continue;
+    }
+
+    steps.push({ line, phone, wish });
+  }
+
+  if (steps.length === 0) {
+    return {
+      ok: true,
+      assigned: 0,
+      skipped,
+      affected_user_ids: [],
+      notify_targets: [],
+    };
+  }
+
+  const seq = await sequentialAdminAssignTicketSteps(targetRaffleId, steps);
+  await recalculateRaffleDerivedStatsForRaffle(targetRaffleId);
+
+  const allSkipped = skipped.concat(seq.skipped);
+  const notify_targets = [...seq.userTicketSets.entries()].map(([user_id, set]) => ({
     user_id,
     tickets: [...set].sort((a, b) => a - b),
   }));
-  const affected_user_ids = [...userTicketSets.keys()];
+  const affected_user_ids = [...seq.userTicketSets.keys()];
 
   return {
     ok: true,
-    assigned,
-    skipped,
+    assigned: seq.assigned,
+    skipped: allSkipped,
     affected_user_ids,
     notify_targets,
   };

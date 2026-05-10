@@ -47,7 +47,7 @@ import {
 } from "./db.js";
 import {
   adminAssignPhoneToExactTicket,
-  adminBulkAssignLegacyWinnerLinesToRaffle,
+  adminBulkAssignFromSourceRaffleTickets,
   adminBulkAssignPhoneLinesToRaffle,
   adminDetachParticipantTicket,
   adminFullyReleaseRaffleOrder,
@@ -70,10 +70,6 @@ import {
   recalculateRaffleDerivedStatsForRaffle,
   rejectOrderByAdmin,
 } from "./raffle-orders.js";
-import {
-  getLegacyWinnerSourceRaffleIds,
-  getLegacyWinnerTicketListForSourceRaffle,
-} from "./raffle-legacy-winners.js";
 import type {
   AdminActiveOrderRow,
   AdminPaymentHistoryRow,
@@ -1018,27 +1014,6 @@ adminSubApp.get("/raffles", async (c) => {
   });
 });
 
-adminSubApp.get("/raffles/legacy-winner-sources", async (c) => {
-  const auth = await requireAdmin(c);
-  if (auth instanceof Response) return auth;
-  c.header("Cache-Control", "no-store");
-  const ids = getLegacyWinnerSourceRaffleIds();
-  const sources = await Promise.all(
-    ids.map(async (id) => {
-      const row = await getRaffleById(id);
-      const list = getLegacyWinnerTicketListForSourceRaffle(id);
-      return {
-        id,
-        title: row
-          ? String(row.title || "").trim() || `Акция #${id}`
-          : `Акция #${id} (нет в базе — проверьте id)`,
-        winner_slots: list ? list.length : 0,
-      };
-    }),
-  );
-  return c.json({ sources });
-});
-
 adminSubApp.post("/raffles/upload", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
@@ -1309,7 +1284,12 @@ adminSubApp.post("/raffles/:id/bulk-assign-legacy-winners", async (c) => {
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
   const raffle = await getRaffleById(id);
   if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
-  let body: { text?: unknown; source_raffle_id?: unknown; admin_note?: unknown };
+  let body: {
+    source_raffle_id?: unknown;
+    source_ticket_numbers?: unknown;
+    start_number?: unknown;
+    admin_note?: unknown;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -1319,17 +1299,35 @@ adminSubApp.post("/raffles/:id/bulk-assign-legacy-winners", async (c) => {
   if (!Number.isFinite(sourceId) || sourceId < 1) {
     return c.json({ error: "Выберите акцию-источник" }, 400);
   }
-  const list = getLegacyWinnerTicketListForSourceRaffle(sourceId);
-  if (!list || list.length === 0) {
-    return c.json({ error: "Для этой акции не настроен список победителей" }, 400);
+  const rawNums = body.source_ticket_numbers;
+  let sourceTicketNumbers: number[] = [];
+  if (Array.isArray(rawNums)) {
+    sourceTicketNumbers = rawNums
+      .map((x) => Math.floor(Number(x)))
+      .filter((n) => Number.isFinite(n));
+  } else {
+    const s = String(rawNums ?? "").trim();
+    if (s) {
+      sourceTicketNumbers = s
+        .split(/[,;\s]+/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => Math.floor(Number(p)))
+        .filter((n) => Number.isFinite(n));
+    }
   }
-  const text = String(body.text ?? "");
+  if (sourceTicketNumbers.length === 0) {
+    return c.json({ error: "Укажите номерки из акции-источника (через запятую)" }, 400);
+  }
+  const startNum =
+    body.start_number === undefined || body.start_number === null || body.start_number === ""
+      ? 1
+      : Math.floor(Number(body.start_number));
   const admin_note =
     body.admin_note === undefined || body.admin_note === null
       ? ""
       : String(body.admin_note).trim().slice(0, 500);
-  const lines = text.split(/\r?\n/);
-  const r = await adminBulkAssignLegacyWinnerLinesToRaffle(id, lines, list);
+  const r = await adminBulkAssignFromSourceRaffleTickets(id, sourceId, sourceTicketNumbers, startNum);
   if (!r.ok) return c.json({ error: "error" in r ? r.error : "Ошибка" }, 400);
   if (r.assigned > 0) notifyRaffleGridMutated(id);
   if (Array.isArray(r.affected_user_ids)) {

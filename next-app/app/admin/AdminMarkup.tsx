@@ -961,24 +961,40 @@ export default function AdminMarkup() {
               </div>
               <div className="admin-raffle-legacy-assign">
                 <label className="admin-raffle-bulk-assign__label" htmlFor="raffle-legacy-source">
-                  Быстрое назначение номерков по номеркам из прошлых акций
+                  Назначение по номеркам из прошлой акции
                 </label>
                 <p className="admin-raffle-bulk-assign__hint">
-                  Выберите прошлую акцию-источник (список победителей задаётся на сервере). Первая непустая строка — первый номерок из списка, далее по порядку. Один и тот же телефон можно указать в нескольких строках, если человек выиграл несколько бесплатных номерков. Повтор номерка в списке для того же пользователя не ломает загрузку. Автоматически после запуска акции никому не назначается — только то, что вы внесёте здесь. Зарегистрированным уходит чат и уведомление.
+                  Выберите акцию-источник и перечислите номерки <strong>из той акции</strong> через запятую. Система найдёт владельца каждого номерка и закрепит в <strong>текущей</strong> акции номерки подряд, начиная с указанного «Первый номерок»: 1-я позиция в списке → этот номерок, 2-я → +1, и т.д. Автоматически при запуске никому не назначается. Зарегистрированным уходит чат и уведомление.
                 </p>
                 <div className="form-group">
-                  <label htmlFor="raffle-legacy-source">Акция-источник</label>
+                  <label htmlFor="raffle-legacy-source">Акция-источник (прошлая)</label>
                   <select id="raffle-legacy-source" className="input input--select" disabled defaultValue="">
                     <option value="">Загрузка…</option>
                   </select>
                 </div>
-                <textarea
-                  id="raffle-legacy-phones"
-                  className="input admin-raffle-bulk-assign__textarea"
-                  rows={5}
-                  placeholder="По одному телефону на строку (в том же порядке, что и список победителей)&#10;79141234567&#10;…"
-                  autoComplete="off"
-                ></textarea>
+                <div className="admin-raffle-bulk-assign__row">
+                  <label className="admin-raffle-bulk-assign__start">
+                    <span className="admin-raffle-bulk-assign__start-label">Первый номерок в этой акции</span>
+                    <input
+                      id="raffle-legacy-target-start"
+                      className="input admin-raffle-bulk-assign__start-input"
+                      type="number"
+                      min={1}
+                      defaultValue={1}
+                      inputMode="numeric"
+                    />
+                  </label>
+                </div>
+                <label className="form-group" htmlFor="raffle-legacy-source-tickets">
+                  <span>Номерки из акции-источника (через запятую)</span>
+                  <textarea
+                    id="raffle-legacy-source-tickets"
+                    className="input admin-raffle-bulk-assign__textarea"
+                    rows={5}
+                    placeholder="500, 1617, 700, 1143, …"
+                    autoComplete="off"
+                  ></textarea>
+                </label>
                 <label className="form-group admin-raffle-single-assign__note" htmlFor="raffle-legacy-note">
                   <span>Комментарий для пользователей (необязательно, один на всю загрузку)</span>
                   <textarea
@@ -992,7 +1008,7 @@ export default function AdminMarkup() {
                 </label>
                 <div className="admin-raffle-bulk-assign__row">
                   <button type="button" className="btn btn--primary admin-raffle-bulk-assign__btn" id="raffle-legacy-submit">
-                    Назначить по списку победителей
+                    Назначить
                   </button>
                 </div>
                 <p id="raffle-legacy-result" className="admin-raffle-bulk-assign__result" role="status" hidden></p>

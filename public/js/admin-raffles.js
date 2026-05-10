@@ -961,45 +961,49 @@
     updateSingleAssignSubmitState();
   }
 
-  async function loadLegacyWinnerSources() {
+  async function loadLegacyWinnerSourceSelect() {
     var sel = document.getElementById("raffle-legacy-source");
     if (!sel || sel.tagName !== "SELECT") return;
     sel.innerHTML = '<option value="">Загрузка…</option>';
     sel.disabled = true;
     try {
-      const data = await apiJson("/api/admin/raffles/legacy-winner-sources", {
+      const data = await apiJson("/api/admin/raffles", {
         headers: authHeaders(),
         cache: "no-store",
       });
-      var list = Array.isArray(data.sources) ? data.sources : [];
+      var list = Array.isArray(data.raffles) ? data.raffles : [];
       sel.innerHTML = "";
-      if (!list.length) {
-        var opt0 = document.createElement("option");
-        opt0.value = "";
-        opt0.textContent =
-          "Нет источников — LEGACY_WINNER_TICKETS_BY_SOURCE_RAFFLE_ID или LEGACY_FREE_WINNERS_SOURCE_RAFFLE_IDS в .env";
-        sel.appendChild(opt0);
-        sel.disabled = true;
-        return;
-      }
       var ph = document.createElement("option");
       ph.value = "";
       ph.textContent = "Выберите акцию-источник";
       sel.appendChild(ph);
+      var curId = participantsRaffleId != null ? Number(participantsRaffleId) : NaN;
       for (var i = 0; i < list.length; i++) {
-        var s = list[i];
+        var r = list[i];
+        var rid = Math.floor(Number(r.id));
+        if (!Number.isFinite(rid) || rid < 1) continue;
+        if (Number.isFinite(curId) && rid === curId) continue;
         var o = document.createElement("option");
-        o.value = String(s.id);
-        var slots = s.winner_slots != null ? Number(s.winner_slots) : 0;
-        o.textContent = (s.title || "Акция #" + s.id) + " — " + String(slots) + " номерков в списке";
+        o.value = String(rid);
+        o.textContent = (r.title ? String(r.title) : "Акция #" + rid) + " (id " + String(rid) + ")";
         sel.appendChild(o);
+      }
+      if (sel.options.length <= 1) {
+        var oEmpty = document.createElement("option");
+        oEmpty.value = "";
+        oEmpty.textContent = Number.isFinite(curId)
+          ? "Нет других акций (источник должен отличаться от текущей)"
+          : "В базе нет акций";
+        sel.appendChild(oEmpty);
+        sel.disabled = true;
+        return;
       }
       sel.disabled = false;
     } catch (err) {
       sel.innerHTML = "";
       var o2 = document.createElement("option");
       o2.value = "";
-      o2.textContent = (err && err.message) || "Не удалось загрузить источники";
+      o2.textContent = (err && err.message) || "Не удалось загрузить акции";
       sel.appendChild(o2);
       sel.disabled = true;
     }
@@ -1029,17 +1033,19 @@
       bulkRes.textContent = "";
       bulkRes.className = "admin-raffle-bulk-assign__result";
     }
-    var legTa = document.getElementById("raffle-legacy-phones");
+    var legTa = document.getElementById("raffle-legacy-source-tickets");
+    var legStart = document.getElementById("raffle-legacy-target-start");
     var legNote = document.getElementById("raffle-legacy-note");
     var legRes = document.getElementById("raffle-legacy-result");
     if (legTa && "value" in legTa) legTa.value = "";
+    if (legStart && "value" in legStart) legStart.value = "1";
     if (legNote && "value" in legNote) legNote.value = "";
     if (legRes) {
       legRes.hidden = true;
       legRes.textContent = "";
       legRes.className = "admin-raffle-bulk-assign__result";
     }
-    void loadLegacyWinnerSources();
+    void loadLegacyWinnerSourceSelect();
     setParticipantsTab("participants");
     resetSingleAssignForm();
     participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
@@ -1328,10 +1334,20 @@
         alert("Выберите акцию-источник в списке.");
         return;
       }
-      var ta = document.getElementById("raffle-legacy-phones");
+      var ta = document.getElementById("raffle-legacy-source-tickets");
+      var startEl = document.getElementById("raffle-legacy-target-start");
       var noteEl = document.getElementById("raffle-legacy-note");
       var resultEl = document.getElementById("raffle-legacy-result");
-      var text = ta && ta.value ? String(ta.value) : "";
+      var rawTickets = ta && ta.value ? String(ta.value).trim() : "";
+      if (!rawTickets) {
+        alert("Укажите номерки из акции-источника через запятую.");
+        return;
+      }
+      var start_number = startEl && String(startEl.value).trim() !== "" ? Number(startEl.value) : 1;
+      if (!Number.isFinite(start_number) || start_number < 1) {
+        alert("Укажите корректный первый номерок в этой акции (от 1).");
+        return;
+      }
       var admin_note = noteEl && "value" in noteEl ? String(noteEl.value || "").trim().slice(0, 500) : "";
       btn.disabled = true;
       (async function () {
@@ -1340,8 +1356,9 @@
             method: "POST",
             headers: { ...authHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({
-              text: text,
               source_raffle_id: sourceId,
+              source_ticket_numbers: rawTickets,
+              start_number: start_number,
               admin_note: admin_note || undefined,
             }),
           });

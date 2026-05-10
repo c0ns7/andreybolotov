@@ -981,7 +981,7 @@ export async function listRafflesAll(): Promise<RaffleRow[]> {
 
 export async function listRafflesPublic(): Promise<RaffleRow[]> {
   return pgAll<RaffleRow>(
-    `SELECT * FROM raffles WHERE COALESCE(hidden_from_public, 0) = 0 ORDER BY sort_order ASC, id DESC`,
+    `SELECT * FROM raffles WHERE COALESCE(hidden_from_public, 0) = 0 ORDER BY id DESC`,
   );
 }
 
