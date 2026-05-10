@@ -761,8 +761,20 @@ export default function AdminMarkup() {
                   <span className="admin-toggle__label">Оптовики</span>
                 </label>
                 <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
-                  Учёт от 10 закреплённых номерков в этой акции: отдельный список оптовиков (№ 1, 2, 3… по очереди) и оранжевое выделение в списке участников.
+                  Отдельный список оптовиков (№ 1, 2, 3… по очереди закрепления) и оранжевое выделение в списке участников. Бонусные номерки в счёт не входят.
                 </p>
+              </div>
+              <div id="raffle-wholesale-every-n-wrap" className="form-group" hidden>
+                <label htmlFor="raffle-wholesale-every-n">Закреплённых номерков на 1 номер оптовика</label>
+                <input
+                  id="raffle-wholesale-every-n"
+                  className="input"
+                  type="number"
+                  min={1}
+                  step={1}
+                  defaultValue={10}
+                />
+                <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">По умолчанию 10. Любое целое число от 1.</p>
               </div>
               <div className="form-group admin-raffle-toggle-row" role="group" aria-labelledby="raffle-promo-pack-legend">
                 <div id="raffle-promo-pack-legend" className="admin-toggle__label">
@@ -879,7 +891,9 @@ export default function AdminMarkup() {
             </section>
             <section id="raffle-participants-panel-wholesalers" className="admin-raffle-participants-panel" data-panel="wholesalers" role="tabpanel" aria-labelledby="raffle-participants-tab-wholesalers" aria-hidden="true" hidden>
               <div id="raffle-wholesalers-wrap" className="admin-raffle-wholesalers admin-raffle-wholesalers--tab">
-                <p className="admin-raffle-wholesalers__lead">Номер оптовика выдаётся за каждые 10 закреплённых номерков (глобальная очередь по времени закрепления).</p>
+                <p id="raffle-wholesalers-lead" className="admin-raffle-wholesalers__lead">
+                  Номер оптовика выдаётся за каждые 10 закреплённых номерков (глобальная очередь по времени закрепления).
+                </p>
                 <div id="raffle-wholesalers-list" className="admin-raffle-wholesalers__list"></div>
               </div>
             </section>
@@ -897,6 +911,17 @@ export default function AdminMarkup() {
                     <input id="raffle-single-ticket" className="input" type="number" min="1" inputMode="numeric" placeholder="Например: 2444" autoComplete="off" />
                   </label>
                 </div>
+                <label className="form-group admin-raffle-single-assign__note">
+                  <span>Комментарий для пользователя (необязательно)</span>
+                  <textarea
+                    id="raffle-single-note"
+                    className="input admin-raffle-single-assign__note-input"
+                    rows={2}
+                    maxLength={500}
+                    placeholder="Например: за участие в эфире. Если пусто — в чат уйдёт только факт закрепления номерка."
+                    autoComplete="off"
+                  />
+                </label>
                 <p id="raffle-single-check" className="admin-raffle-single-assign__check" role="status">Введите номерок для проверки.</p>
                 <button type="button" className="btn btn--primary admin-raffle-single-assign__btn" id="raffle-single-submit" disabled>Выдать номерок</button>
               </div>
@@ -933,6 +958,44 @@ export default function AdminMarkup() {
                   </button>
                 </div>
                 <p id="raffle-bulk-result" className="admin-raffle-bulk-assign__result" role="status" hidden></p>
+              </div>
+              <div className="admin-raffle-legacy-assign">
+                <label className="admin-raffle-bulk-assign__label" htmlFor="raffle-legacy-source">
+                  Быстрое назначение номерков по номеркам из прошлых акций
+                </label>
+                <p className="admin-raffle-bulk-assign__hint">
+                  Выберите прошлую акцию-источник (список победителей задаётся на сервере). Первая непустая строка — первый номерок из списка, далее по порядку. Один и тот же телефон можно указать в нескольких строках, если человек выиграл несколько бесплатных номерков. Повтор номерка в списке для того же пользователя не ломает загрузку. Автоматически после запуска акции никому не назначается — только то, что вы внесёте здесь. Зарегистрированным уходит чат и уведомление.
+                </p>
+                <div className="form-group">
+                  <label htmlFor="raffle-legacy-source">Акция-источник</label>
+                  <select id="raffle-legacy-source" className="input input--select" disabled defaultValue="">
+                    <option value="">Загрузка…</option>
+                  </select>
+                </div>
+                <textarea
+                  id="raffle-legacy-phones"
+                  className="input admin-raffle-bulk-assign__textarea"
+                  rows={5}
+                  placeholder="По одному телефону на строку (в том же порядке, что и список победителей)&#10;79141234567&#10;…"
+                  autoComplete="off"
+                ></textarea>
+                <label className="form-group admin-raffle-single-assign__note" htmlFor="raffle-legacy-note">
+                  <span>Комментарий для пользователей (необязательно, один на всю загрузку)</span>
+                  <textarea
+                    id="raffle-legacy-note"
+                    className="input admin-raffle-single-assign__note-input"
+                    rows={2}
+                    maxLength={500}
+                    placeholder="Если пусто — только факт закрепления номерков."
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="admin-raffle-bulk-assign__row">
+                  <button type="button" className="btn btn--primary admin-raffle-bulk-assign__btn" id="raffle-legacy-submit">
+                    Назначить по списку победителей
+                  </button>
+                </div>
+                <p id="raffle-legacy-result" className="admin-raffle-bulk-assign__result" role="status" hidden></p>
               </div>
             </section>
             </div>

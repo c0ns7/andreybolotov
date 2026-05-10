@@ -251,6 +251,67 @@
     return att + text + adminActionCardHtml(parsed.card);
   }
 
+  const ADMIN_CHAT_IMAGE_SKIP_COMPRESS_BELOW_BYTES = 1.2 * 1024 * 1024;
+  const ADMIN_CHAT_IMAGE_MAX_LONG_EDGE = 1920;
+  const ADMIN_CHAT_IMAGE_JPEG_QUALITY = 0.82;
+
+  function loadImageFromFile(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var im = new Image();
+      im.onload = function () {
+        URL.revokeObjectURL(url);
+        resolve(im);
+      };
+      im.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error("IMAGE_DECODE"));
+      };
+      im.src = url;
+    });
+  }
+
+  function prepareAdminChatUploadFile(file) {
+    var type = String((file && file.type) || "")
+      .toLowerCase()
+      .split(";")[0]
+      .trim();
+    if (!type || type.indexOf("image/") !== 0) return Promise.resolve(file);
+    if (file.size > 0 && file.size < ADMIN_CHAT_IMAGE_SKIP_COMPRESS_BELOW_BYTES) return Promise.resolve(file);
+    return loadImageFromFile(file)
+      .then(function (img) {
+        var w = Number(img.naturalWidth || img.width || 0);
+        var h = Number(img.naturalHeight || img.height || 0);
+        if (!w || !h) return file;
+        var scale = Math.min(1, ADMIN_CHAT_IMAGE_MAX_LONG_EDGE / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        if (!ctx) return file;
+        ctx.drawImage(img, 0, 0, w, h);
+        return new Promise(function (resolve) {
+          try {
+            canvas.toBlob(function (blob) {
+              if (!blob || blob.size <= 0 || blob.size >= file.size * 0.97) {
+                resolve(file);
+                return;
+              }
+              var base = String(file.name || "chat-image").replace(/\.[^.\\/]+$/, "").trim() || "chat-image";
+              resolve(new File([blob], base + ".jpg", { type: "image/jpeg", lastModified: Date.now() }));
+            }, "image/jpeg", ADMIN_CHAT_IMAGE_JPEG_QUALITY);
+          } catch (_) {
+            resolve(file);
+          }
+        });
+      })
+      .catch(function () {
+        return file;
+      });
+  }
+
   function messageDeleteButtonHtml(m) {
     if (!m || !m.is_staff) return "";
     var id = Number(m.id);
@@ -1253,13 +1314,16 @@
       if (!f || !f.size || selectedId == null) return;
       if (btnAdminSend && btnAdminSend.disabled) return;
       setAdminComposerDisabled(true);
-      var fd = new FormData();
-      fd.append("file", f);
-      fetch("/api/admin/chat/upload", {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
-      })
+      prepareAdminChatUploadFile(f)
+        .then(function (prepared) {
+          var fd = new FormData();
+          fd.append("file", prepared);
+          return fetch("/api/admin/chat/upload", {
+            method: "POST",
+            headers: authHeaders(),
+            body: fd,
+          });
+        })
         .then(function (res) {
           return res.json().then(function (data) {
             if (!res.ok) throw new Error(data.error || "Ошибка загрузки");

@@ -47,6 +47,7 @@ import {
 } from "./db.js";
 import {
   adminAssignPhoneToExactTicket,
+  adminBulkAssignLegacyWinnerLinesToRaffle,
   adminBulkAssignPhoneLinesToRaffle,
   adminDetachParticipantTicket,
   adminFullyReleaseRaffleOrder,
@@ -69,6 +70,10 @@ import {
   recalculateRaffleDerivedStatsForRaffle,
   rejectOrderByAdmin,
 } from "./raffle-orders.js";
+import {
+  getLegacyWinnerSourceRaffleIds,
+  getLegacyWinnerTicketListForSourceRaffle,
+} from "./raffle-legacy-winners.js";
 import type {
   AdminActiveOrderRow,
   AdminPaymentHistoryRow,
@@ -179,6 +184,53 @@ function buildStaffMaxPrivateInviteOnlyChatBody(): string {
     `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
     MAX_PRIVATE_CHAT_JOIN_URL
   );
+}
+
+function buildStaffAdminAssignedTicketsChatBody(
+  raffleTitle: string,
+  ticketNumbers: number[],
+  adminNote?: string,
+): string {
+  const safeTitle = String(raffleTitle || "акция")
+    .trim()
+    .slice(0, 180);
+  const nums = [
+    ...new Set(
+      ticketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  let head: string;
+  if (nums.length === 0) {
+    head = `Вам закреплены номерки по акции «${safeTitle}».`;
+  } else if (nums.length === 1) {
+    head = `Вам закреплён номерок №${nums[0]} по акции «${safeTitle}».`;
+  } else {
+    head =
+      `Вам закреплены номерки ` + nums.map((n) => `№${n}`).join(", ") + ` по акции «${safeTitle}».`;
+  }
+  const note = String(adminNote ?? "").trim().slice(0, 500);
+  if (!note) return head;
+  return `${head}\n\n${note}`;
+}
+
+async function sendAdminTicketAssignmentNotifications(
+  userId: number,
+  targetRaffleTitle: string,
+  ticketNumbers: number[],
+  adminNote: string,
+): Promise<void> {
+  const trimmed = String(adminNote ?? "").trim().slice(0, 500);
+  const chatBody = buildStaffAdminAssignedTicketsChatBody(
+    targetRaffleTitle,
+    ticketNumbers,
+    trimmed || undefined,
+  );
+  const msgId = await insertSupportMessage(userId, chatBody, true, null);
+  await markThreadReadByStaff(userId);
+  broadcastThreadReadByStaff(userId);
+  const row = await getSupportMessageById(msgId);
+  if (row) broadcastChatMessage(userId, messageToDto(row));
+  notifyUserEmailStaffReply(userId, { body: chatBody, attachmentName: null, attachmentMime: null });
 }
 
 function buildStaffReceiptRejectedChatBody(
@@ -334,6 +386,7 @@ type RaffleInput = {
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
+  wholesale_every_n_tickets: number;
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
@@ -433,6 +486,18 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     : "paused";
 
   const wholesale_enabled = Boolean(body.wholesale_enabled);
+  const wholesaleNEveryRaw = body.wholesale_every_n_tickets;
+  const wholesale_every_n_tickets =
+    wholesaleNEveryRaw === undefined || wholesaleNEveryRaw === null || wholesaleNEveryRaw === ""
+      ? 10
+      : Math.floor(Number(wholesaleNEveryRaw));
+  if (
+    !Number.isFinite(wholesale_every_n_tickets) ||
+    wholesale_every_n_tickets < 1 ||
+    wholesale_every_n_tickets > 100_000_000
+  ) {
+    return { ok: false, error: "Укажите целое число от 1: сколько закреплённых номерков дают 1 номер оптовика" };
+  }
   const promo_5_plus_1_enabled = Boolean(body.promo_5_plus_1_enabled);
   const promo_5_plus_2_enabled = Boolean(body.promo_5_plus_2_enabled);
   if (promo_5_plus_1_enabled && promo_5_plus_2_enabled) {
@@ -498,6 +563,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       status,
       sort_order,
       wholesale_enabled,
+      wholesale_every_n_tickets,
       promo_5_plus_1_enabled,
       promo_5_plus_2_enabled,
       hidden_from_public,
@@ -952,6 +1018,27 @@ adminSubApp.get("/raffles", async (c) => {
   });
 });
 
+adminSubApp.get("/raffles/legacy-winner-sources", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  const ids = getLegacyWinnerSourceRaffleIds();
+  const sources = await Promise.all(
+    ids.map(async (id) => {
+      const row = await getRaffleById(id);
+      const list = getLegacyWinnerTicketListForSourceRaffle(id);
+      return {
+        id,
+        title: row
+          ? String(row.title || "").trim() || `Акция #${id}`
+          : `Акция #${id} (нет в базе — проверьте id)`,
+        winner_slots: list ? list.length : 0,
+      };
+    }),
+  );
+  return c.json({ sources });
+});
+
 adminSubApp.post("/raffles/upload", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
@@ -1035,6 +1122,7 @@ adminSubApp.post("/raffles", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
@@ -1094,6 +1182,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
+    wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
@@ -1148,6 +1237,7 @@ adminSubApp.get("/raffles/:id/participants", async (c) => {
   const wholesalers = includeWholesalers ? await listAdminRaffleWholesalers(id) : [];
   return c.json({
     wholesale_enabled: page.wholesale_enabled,
+    wholesale_every_n_tickets: page.wholesale_every_n_tickets,
     participants: page.participants.map((row: AdminRaffleParticipantView) => ({
       ticket_number: row.ticket_number,
       user_phone: row.user_phone,
@@ -1212,12 +1302,63 @@ adminSubApp.post("/raffles/:id/bulk-assign-phones", async (c) => {
   return c.json({ assigned: r.assigned, skipped: r.skipped });
 });
 
+adminSubApp.post("/raffles/:id/bulk-assign-legacy-winners", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = await getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  let body: { text?: unknown; source_raffle_id?: unknown; admin_note?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const sourceId = Math.floor(Number(body.source_raffle_id));
+  if (!Number.isFinite(sourceId) || sourceId < 1) {
+    return c.json({ error: "Выберите акцию-источник" }, 400);
+  }
+  const list = getLegacyWinnerTicketListForSourceRaffle(sourceId);
+  if (!list || list.length === 0) {
+    return c.json({ error: "Для этой акции не настроен список победителей" }, 400);
+  }
+  const text = String(body.text ?? "");
+  const admin_note =
+    body.admin_note === undefined || body.admin_note === null
+      ? ""
+      : String(body.admin_note).trim().slice(0, 500);
+  const lines = text.split(/\r?\n/);
+  const r = await adminBulkAssignLegacyWinnerLinesToRaffle(id, lines, list);
+  if (!r.ok) return c.json({ error: "error" in r ? r.error : "Ошибка" }, 400);
+  if (r.assigned > 0) notifyRaffleGridMutated(id);
+  if (Array.isArray(r.affected_user_ids)) {
+    for (const uid of r.affected_user_ids) {
+      if (Number.isFinite(uid) && uid > 0) broadcastRaffleTicketsUpdated(uid);
+    }
+  }
+  const title = String(raffle.title || "").trim();
+  for (const t of r.notify_targets) {
+    if (!Number.isFinite(t.user_id) || t.user_id < 1 || !t.tickets.length) continue;
+    try {
+      await sendAdminTicketAssignmentNotifications(t.user_id, title, t.tickets, admin_note);
+    } catch (e) {
+      console.error(
+        "[admin/bulk-assign-legacy-winners] notify user",
+        t.user_id,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+  return c.json({ assigned: r.assigned, skipped: r.skipped });
+});
+
 adminSubApp.post("/raffles/:id/assign-phone-ticket", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
-  let body: { phone?: unknown; ticket_number?: unknown };
+  let body: { phone?: unknown; ticket_number?: unknown; admin_note?: unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -1229,10 +1370,31 @@ adminSubApp.post("/raffles/:id/assign-phone-ticket", async (c) => {
   }
   const ticket_number = Number(body.ticket_number);
   if (!Number.isFinite(ticket_number)) return c.json({ error: "Некорректный номерок" }, 400);
+  const admin_note =
+    body.admin_note === undefined || body.admin_note === null
+      ? ""
+      : String(body.admin_note).trim().slice(0, 500);
   const res = await adminAssignPhoneToExactTicket(id, phone, ticket_number);
   if (!res.ok) return c.json({ error: "error" in res ? res.error : "Ошибка" }, 400);
   notifyRaffleGridMutated(id);
-  if (res.affected_user_id != null) broadcastRaffleTicketsUpdated(res.affected_user_id);
+  const uid = res.affected_user_id;
+  if (uid != null && Number.isFinite(uid) && uid > 0) {
+    broadcastRaffleTicketsUpdated(uid);
+    try {
+      const raffle = await getRaffleById(id);
+      await sendAdminTicketAssignmentNotifications(
+        uid,
+        raffle ? raffle.title : "",
+        [Math.floor(ticket_number)],
+        admin_note,
+      );
+    } catch (e) {
+      console.error(
+        "[admin/assign-phone-ticket] notify:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
   return c.json({ ok: true });
 });
 

@@ -14,6 +14,7 @@
   let participantsRaffleId = null;
   let participantsActiveTab = "participants";
   let participantsWholesaleEnabled = false;
+  let participantsWholesaleEveryN = 10;
   let participantsTotal = 0;
   let participantsOffset = 0;
   let participantsHasMore = false;
@@ -73,6 +74,30 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function wholesaleEveryNLabel() {
+    var n = Math.max(1, Math.floor(Number(participantsWholesaleEveryN)) || 10);
+    return String(n);
+  }
+
+  function updateWholesalersLeadText() {
+    var lead = document.getElementById("raffle-wholesalers-lead");
+    if (!lead) return;
+    lead.textContent =
+      "Номер оптовика выдаётся за каждые " +
+      wholesaleEveryNLabel() +
+      " закреплённых номерков (глобальная очередь по времени закрепления).";
+  }
+
+  function syncWholesaleEveryNRow() {
+    var wrap = document.getElementById("raffle-wholesale-every-n-wrap");
+    var toggle = document.getElementById("raffle-wholesale-enabled");
+    var input = document.getElementById("raffle-wholesale-every-n");
+    if (!wrap || !toggle) return;
+    var on = !!toggle.checked;
+    wrap.hidden = !on;
+    if (input) input.disabled = !on;
   }
 
   function formatDateTimeLocalFromMs(ms) {
@@ -263,6 +288,9 @@
       participantsOffset = participantsCache.length;
       participantsHasMore = !!data.has_more || participantsOffset < participantsTotal;
       participantsWholesaleEnabled = !!data.wholesale_enabled;
+      var wn = Math.floor(Number(data.wholesale_every_n_tickets));
+      participantsWholesaleEveryN = Number.isFinite(wn) && wn >= 1 ? wn : 10;
+      updateWholesalersLeadText();
       if (includeWholesalers) {
         wholesalersCache = Array.isArray(data.wholesalers) ? data.wholesalers : [];
         renderWholesalersList();
@@ -667,6 +695,12 @@
         );
     var whEl = document.getElementById("raffle-wholesale-enabled");
     if (whEl) whEl.checked = edit ? !!edit.wholesale_enabled : false;
+    var whN = document.getElementById("raffle-wholesale-every-n");
+    if (whN) {
+      var en = edit ? Math.max(1, Math.floor(Number(edit.wholesale_every_n_tickets)) || 10) : 10;
+      whN.value = String(en);
+    }
+    syncWholesaleEveryNRow();
     var pack =
       edit && edit.promo_5_plus_2_enabled
         ? "5plus2"
@@ -805,7 +839,9 @@
     if (!wholesalersCache.length) {
       el.innerHTML =
         '<p class="admin-raffle-participants__empty" style="margin:0;border-style:dashed">' +
-        "Пока нет. Номер оптовика присваивается за каждые 10 закреплённых номерков по очереди.</p>";
+        "Пока нет. Номер оптовика присваивается за каждые " +
+        esc(wholesaleEveryNLabel()) +
+        " закреплённых номерков по очереди.</p>";
       return;
     }
     el.innerHTML = wholesalersCache
@@ -919,8 +955,54 @@
     raffleSingleTicketIsFree = false;
     if (raffleSinglePhone) raffleSinglePhone.value = "";
     if (raffleSingleTicket) raffleSingleTicket.value = "";
+    var singleNote = document.getElementById("raffle-single-note");
+    if (singleNote && "value" in singleNote) singleNote.value = "";
     setSingleAssignStatus("Введите номерок для проверки.", "");
     updateSingleAssignSubmitState();
+  }
+
+  async function loadLegacyWinnerSources() {
+    var sel = document.getElementById("raffle-legacy-source");
+    if (!sel || sel.tagName !== "SELECT") return;
+    sel.innerHTML = '<option value="">Загрузка…</option>';
+    sel.disabled = true;
+    try {
+      const data = await apiJson("/api/admin/raffles/legacy-winner-sources", {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      var list = Array.isArray(data.sources) ? data.sources : [];
+      sel.innerHTML = "";
+      if (!list.length) {
+        var opt0 = document.createElement("option");
+        opt0.value = "";
+        opt0.textContent =
+          "Нет источников — LEGACY_WINNER_TICKETS_BY_SOURCE_RAFFLE_ID или LEGACY_FREE_WINNERS_SOURCE_RAFFLE_IDS в .env";
+        sel.appendChild(opt0);
+        sel.disabled = true;
+        return;
+      }
+      var ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = "Выберите акцию-источник";
+      sel.appendChild(ph);
+      for (var i = 0; i < list.length; i++) {
+        var s = list[i];
+        var o = document.createElement("option");
+        o.value = String(s.id);
+        var slots = s.winner_slots != null ? Number(s.winner_slots) : 0;
+        o.textContent = (s.title || "Акция #" + s.id) + " — " + String(slots) + " номерков в списке";
+        sel.appendChild(o);
+      }
+      sel.disabled = false;
+    } catch (err) {
+      sel.innerHTML = "";
+      var o2 = document.createElement("option");
+      o2.value = "";
+      o2.textContent = (err && err.message) || "Не удалось загрузить источники";
+      sel.appendChild(o2);
+      sel.disabled = true;
+    }
   }
 
   async function openParticipants(raffleId) {
@@ -929,6 +1011,8 @@
     participantsCache = [];
     wholesalersCache = [];
     participantsWholesaleEnabled = false;
+    participantsWholesaleEveryN = 10;
+    updateWholesalersLeadText();
     participantsTotal = 0;
     participantsOffset = 0;
     participantsHasMore = false;
@@ -945,6 +1029,17 @@
       bulkRes.textContent = "";
       bulkRes.className = "admin-raffle-bulk-assign__result";
     }
+    var legTa = document.getElementById("raffle-legacy-phones");
+    var legNote = document.getElementById("raffle-legacy-note");
+    var legRes = document.getElementById("raffle-legacy-result");
+    if (legTa && "value" in legTa) legTa.value = "";
+    if (legNote && "value" in legNote) legNote.value = "";
+    if (legRes) {
+      legRes.hidden = true;
+      legRes.textContent = "";
+      legRes.className = "admin-raffle-bulk-assign__result";
+    }
+    void loadLegacyWinnerSources();
     setParticipantsTab("participants");
     resetSingleAssignForm();
     participantsList.innerHTML = '<p class="admin-raffle-participants__empty">Загрузка...</p>';
@@ -1066,6 +1161,7 @@
   document.getElementById("btn-raffle-new")?.addEventListener("click", function () {
     openForm(null);
   });
+  document.getElementById("raffle-wholesale-enabled")?.addEventListener("change", syncWholesaleEveryNRow);
   document.getElementById("modal-raffle-form-close")?.addEventListener("click", closeForm);
   document.getElementById("btn-raffle-cancel")?.addEventListener("click", closeForm);
   document
@@ -1132,18 +1228,22 @@
     setSingleAssignStatus("Выдаём номерок...", "");
     (async function () {
       try {
+        var noteEl = document.getElementById("raffle-single-note");
+        var admin_note = noteEl && "value" in noteEl ? String(noteEl.value || "").trim().slice(0, 500) : "";
         await apiJson("/api/admin/raffles/" + participantsRaffleId + "/assign-phone-ticket", {
           method: "POST",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
             phone: phone,
             ticket_number: ticketNumber,
+            admin_note: admin_note || undefined,
           }),
         });
         setSingleAssignStatus("Номерок успешно выдан.", "is-free");
         await refreshParticipantsBundle();
         raffleSingleTicketIsFree = false;
         if (raffleSingleTicket) raffleSingleTicket.value = "";
+        if (noteEl && "value" in noteEl) noteEl.value = "";
         updateSingleAssignSubmitState();
       } catch (err) {
         raffleSingleTicketIsFree = false;
@@ -1196,6 +1296,66 @@
             String(skipped.length) +
             " (повтор телефона, уже есть в акции или не нашлось свободного номера с нужного места).";
           resultEl.className = "admin-raffle-bulk-assign__result is-warn";
+            } else {
+              resultEl.className = "admin-raffle-bulk-assign__result is-ok";
+            }
+            resultEl.textContent = msg;
+          }
+          await refreshParticipantsBundle();
+        } catch (err) {
+          alert((err && err.message) || "Не удалось назначить");
+        } finally {
+          btn.disabled = false;
+        }
+      })();
+    },
+    true,
+  );
+  document.addEventListener(
+    "click",
+    function (e) {
+      var btn = e.target && e.target.closest && e.target.closest("#raffle-legacy-submit");
+      if (!btn) return;
+      if (!modalParticipants || !modalParticipants.classList.contains("is-open")) return;
+      e.preventDefault();
+      if (!participantsRaffleId) {
+        alert("Откройте участников акции с карточки.");
+        return;
+      }
+      var sel = document.getElementById("raffle-legacy-source");
+      var sourceId = sel && sel.value ? Number(sel.value) : 0;
+      if (!Number.isFinite(sourceId) || sourceId < 1) {
+        alert("Выберите акцию-источник в списке.");
+        return;
+      }
+      var ta = document.getElementById("raffle-legacy-phones");
+      var noteEl = document.getElementById("raffle-legacy-note");
+      var resultEl = document.getElementById("raffle-legacy-result");
+      var text = ta && ta.value ? String(ta.value) : "";
+      var admin_note = noteEl && "value" in noteEl ? String(noteEl.value || "").trim().slice(0, 500) : "";
+      btn.disabled = true;
+      (async function () {
+        try {
+          const data = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/bulk-assign-legacy-winners", {
+            method: "POST",
+            headers: { ...authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: text,
+              source_raffle_id: sourceId,
+              admin_note: admin_note || undefined,
+            }),
+          });
+          const assigned = data.assigned != null ? Number(data.assigned) : 0;
+          const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+          if (resultEl) {
+            resultEl.hidden = false;
+            var msg = "Назначено номерков: " + String(assigned);
+            if (skipped.length) {
+              msg +=
+                ". Пропущено строк: " +
+                String(skipped.length) +
+                " (занятый номерок, повтор телефона, уже в акции и т.п.).";
+              resultEl.className = "admin-raffle-bulk-assign__result is-warn";
             } else {
               resultEl.className = "admin-raffle-bulk-assign__result is-ok";
             }
@@ -1380,6 +1540,12 @@
       wholesale_enabled: (function () {
         var w = document.getElementById("raffle-wholesale-enabled");
         return w ? !!w.checked : false;
+      })(),
+      wholesale_every_n_tickets: (function () {
+        var el = document.getElementById("raffle-wholesale-every-n");
+        var n = el ? Math.floor(Number(el.value)) : 10;
+        if (!Number.isFinite(n) || n < 1) n = 10;
+        return n;
       })(),
       promo_5_plus_1_enabled: (function () {
         var el = document.querySelector('input[name="raffle-promo-pack"]:checked');

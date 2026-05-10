@@ -1901,12 +1901,13 @@ export async function adminUserTicketsForPrimaryRaffle(userId: number): Promise<
   };
 }
 
-/** Пересчёт номеров оптовиков: каждые 10 подтверждённых номерков в акции дают следующий глобальный № по времени подтверждения заказов. */
+/** Пересчёт номеров оптовиков: каждые N подтверждённых небонусных номерков у пользователя дают следующий глобальный № по времени подтверждения заказов. */
 export async function recalculateWholesaleForRaffle(raffleId: number): Promise<void> {
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
   await pgExec(`DELETE FROM raffle_wholesale_assignments WHERE raffle_id = ?`, [raffleId]);
   if (!Number(raffle.wholesale_enabled)) return;
+  const everyN = Math.max(1, Math.floor(Number((raffle as { wholesale_every_n_tickets?: number }).wholesale_every_n_tickets ?? 10)));
 
   const rows = await pgAll<{ user_id: number; ticket_number: number; ord_u: number; oid: number }>(
     `SELECT h.user_id AS user_id, h.ticket_number AS ticket_number, o.updated_at AS ord_u, o.id AS oid
@@ -1925,9 +1926,9 @@ export async function recalculateWholesaleForRaffle(raffleId: number): Promise<v
     const uid = row.user_id;
     const c = (perUser.get(uid) ?? 0) + 1;
     perUser.set(uid, c);
-    if (c % 10 !== 0) continue;
+    if (c % everyN !== 0) continue;
     globalN += 1;
-    const slotIdx = c / 10;
+    const slotIdx = c / everyN;
     await pgExec(
       `INSERT INTO raffle_wholesale_assignments (raffle_id, user_id, user_slot_index, wholesale_number, created_at)
      VALUES (?, ?, ?, ?, ?)`,
@@ -2121,6 +2122,42 @@ async function phoneHasAssignmentInRaffle(raffleId: number, phone: string): Prom
   return Boolean(row);
 }
 
+async function ticketHeldByUserInRaffle(
+  raffleId: number,
+  ticketNumber: number,
+  userId: number,
+  client?: PoolClient,
+): Promise<boolean> {
+  const n = Math.floor(Number(ticketNumber));
+  const uid = Math.floor(Number(userId));
+  if (!Number.isFinite(n) || !Number.isFinite(uid)) return false;
+  const row = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.user_id = ? AND o.status NOT IN ('expired', 'rejected')
+       LIMIT 1`,
+    [raffleId, n, uid],
+    client,
+  );
+  return Boolean(row);
+}
+
+async function preassignmentExactExists(
+  raffleId: number,
+  phone: string,
+  ticketNumber: number,
+  client?: PoolClient,
+): Promise<boolean> {
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n)) return false;
+  const row = await pgGet<{ x?: number }>(
+    `SELECT 1 AS x FROM raffle_phone_preassignments WHERE raffle_id = ? AND phone = ? AND ticket_number = ? LIMIT 1`,
+    [raffleId, phone, n],
+    client,
+  );
+  return Boolean(row);
+}
+
 /**
  * Одна строка — один телефон; желаемый номерок = start + индекс строки среди непустых.
  * Если занят — берём следующий свободный до max.
@@ -2256,6 +2293,190 @@ export async function adminBulkAssignPhoneLinesToRaffle(
   return { ok: true, assigned: valid.length, skipped, affected_user_ids: [...affectedUserIds] };
 }
 
+/**
+ * Строка i (среди непустых) → legacyTicketNumbers[i]. Несколько строк с одним телефоном — несколько
+ * номерков одному победителю. Строки обрабатываются по порядку в одной транзакции: повтор номерка
+ * в списке для уже закрепившего его же пользователя не считается ошибкой (дубликат строки в файле).
+ */
+export async function adminBulkAssignLegacyWinnerLinesToRaffle(
+  raffleId: number,
+  rawLines: string[],
+  legacyTicketNumbers: readonly number[],
+): Promise<
+  | {
+      ok: true;
+      assigned: number;
+      skipped: BulkAssignSkip[];
+      affected_user_ids: number[];
+      notify_targets: { user_id: number; tickets: number[] }[];
+    }
+  | { ok: false; error: string }
+> {
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const maxN = raffle.ticket_count;
+  const list = legacyTicketNumbers;
+  if (!list.length) return { ok: false, error: "Список номерков победителей пуст" };
+
+  type Parsed = { line: number; phone: string; listIndex: number };
+  const parsed: Parsed[] = [];
+  let nonEmptyIndex = 0;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = i + 1;
+    const raw = String(rawLines[i] ?? "").trim();
+    if (!raw) continue;
+    const phone = normalizePhone(raw);
+    if (!phone || !isValidRuMobile(phone)) {
+      return { ok: false, error: "Строка " + line + ": некорректный мобильный телефон РФ" };
+    }
+    const listIndex = nonEmptyIndex;
+    nonEmptyIndex += 1;
+    if (listIndex >= list.length) {
+      return {
+        ok: false,
+        error:
+          "Строка " +
+          line +
+          ": в списке победителей только " +
+          list.length +
+          " номерков — уберите лишние строки",
+      };
+    }
+    parsed.push({ line, phone, listIndex });
+  }
+
+  if (parsed.length === 0) return { ok: false, error: "Нет ни одной строки с телефоном" };
+
+  const skipped: BulkAssignSkip[] = [];
+  const userTicketSets = new Map<number, Set<number>>();
+  let assigned = 0;
+
+  const trackUserTicket = (userId: number, wish: number): void => {
+    const uid = Math.floor(Number(userId));
+    if (!Number.isFinite(uid) || uid < 1) return;
+    let s = userTicketSets.get(uid);
+    if (!s) {
+      s = new Set<number>();
+      userTicketSets.set(uid, s);
+    }
+    s.add(wish);
+  };
+
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const p of parsed) {
+      const wish = Math.floor(Number(list[p.listIndex]));
+      if (!Number.isFinite(wish) || wish < 1 || wish > maxN) {
+        skipped.push({
+          line: p.line,
+          phone: p.phone,
+          ticket_number: wish,
+          reason: "Номерок " + wish + " вне диапазона 1–" + maxN + " в этой акции",
+        });
+        continue;
+      }
+
+      const user = await getUserByPhone(p.phone);
+      const blocked = await isRaffleTicketBlocked(raffleId, wish, client);
+      if (blocked) {
+        if (user && Number.isFinite(user.id) && user.id > 0) {
+          const alreadyTheirs = await ticketHeldByUserInRaffle(raffleId, wish, user.id, client);
+          if (alreadyTheirs) {
+            assigned += 1;
+            trackUserTicket(user.id, wish);
+            continue;
+          }
+        } else {
+          const preSame = await preassignmentExactExists(raffleId, p.phone, wish, client);
+          if (preSame) {
+            assigned += 1;
+            continue;
+          }
+        }
+        skipped.push({
+          line: p.line,
+          phone: p.phone,
+          ticket_number: wish,
+          reason: "Номерок уже занят",
+        });
+        continue;
+      }
+
+      if (user && Number.isFinite(user.id) && user.id > 0) {
+        try {
+          await createOrAppendConfirmedTicketsForUser(raffleId, user.id, [wish], client);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          skipped.push({
+            line: p.line,
+            phone: p.phone,
+            ticket_number: wish,
+            reason: msg.includes("OCCUPIED") ? "Номерок уже занят" : "Не удалось закрепить",
+          });
+          continue;
+        }
+        trackUserTicket(user.id, wish);
+      } else {
+        const now = Date.now();
+        try {
+          await pgExec(
+            `INSERT INTO raffle_phone_preassignments (raffle_id, ticket_number, phone, created_at) VALUES (?, ?, ?, ?)`,
+            [raffleId, wish, p.phone, now],
+            client,
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isUnique =
+            /unique/i.test(msg) ||
+            (typeof err === "object" &&
+              err !== null &&
+              "code" in err &&
+              String((err as { code?: string }).code) === "23505");
+          if (isUnique && (await preassignmentExactExists(raffleId, p.phone, wish, client))) {
+            assigned += 1;
+            continue;
+          }
+          skipped.push({
+            line: p.line,
+            phone: p.phone,
+            ticket_number: wish,
+            reason: isUnique ? "Номерок уже занят" : "Не удалось предназначить",
+          });
+          continue;
+        }
+      }
+      assigned += 1;
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  await recalculateRaffleDerivedStatsForRaffle(raffleId);
+
+  const notify_targets = [...userTicketSets.entries()].map(([user_id, set]) => ({
+    user_id,
+    tickets: [...set].sort((a, b) => a - b),
+  }));
+  const affected_user_ids = [...userTicketSets.keys()];
+
+  return {
+    ok: true,
+    assigned,
+    skipped,
+    affected_user_ids,
+    notify_targets,
+  };
+}
+
 export async function adminAssignPhoneToExactTicket(
   raffleId: number,
   rawPhone: string,
@@ -2289,6 +2510,7 @@ export async function adminAssignPhoneToExactTicket(
 
 export async function getAdminRaffleParticipantsBundle(raffleId: number): Promise<{
   wholesale_enabled: boolean;
+  wholesale_every_n_tickets: number;
   participants: AdminRaffleParticipantView[];
   wholesalers: AdminWholesalerRow[];
 }> {
@@ -2296,6 +2518,7 @@ export async function getAdminRaffleParticipantsBundle(raffleId: number): Promis
   const wholesalers = await listAdminRaffleWholesalers(raffleId);
   return {
     wholesale_enabled: page.wholesale_enabled,
+    wholesale_every_n_tickets: page.wholesale_every_n_tickets,
     participants: page.participants,
     wholesalers,
   };
@@ -2325,10 +2548,19 @@ export async function listAdminRaffleWholesalers(raffleId: number): Promise<Admi
 export async function listAdminRaffleParticipantsPage(
   raffleId: number,
   opts?: { offset?: number; limit?: number; search?: string },
-): Promise<{ wholesale_enabled: boolean; participants: AdminRaffleParticipantView[]; total: number }> {
+): Promise<{
+  wholesale_enabled: boolean;
+  wholesale_every_n_tickets: number;
+  participants: AdminRaffleParticipantView[];
+  total: number;
+}> {
   await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   const wholesale_enabled = Boolean(raffle && Number(raffle.wholesale_enabled));
+  const wholesale_every_n_tickets = Math.max(
+    1,
+    Math.floor(Number((raffle as { wholesale_every_n_tickets?: number } | undefined)?.wholesale_every_n_tickets ?? 10)),
+  );
   const limit = Math.min(Math.max(1, Math.floor(Number(opts?.limit) || 120)), 500);
   const offset = Math.max(0, Math.floor(Number(opts?.offset) || 0));
   const parsed = normalizeAdminParticipantsSearch(String(opts?.search || ""));
@@ -2387,7 +2619,7 @@ export async function listAdminRaffleParticipantsPage(
        SELECT h.ticket_number AS ticket_number,
               u.phone AS user_phone,
               o.status AS order_status,
-              CASE WHEN ? = 1 AND COALESCE(cc.c, 0) >= 10 THEN 1 ELSE 0 END AS is_wholesale,
+              CASE WHEN ? = 1 AND COALESCE(cc.c, 0) >= ? THEN 1 ELSE 0 END AS is_wholesale,
               h.user_id AS user_id,
               u.name AS user_name,
               COALESCE(u.email, '') AS user_email,
@@ -2411,10 +2643,11 @@ export async function listAdminRaffleParticipantsPage(
      ) x
      ORDER BY ticket_number ASC
      LIMIT ? OFFSET ?`,
-    [raffleId, wholesale_enabled ? 1 : 0, ...holdParams, ...preParams, limit, offset],
+    [raffleId, wholesale_enabled ? 1 : 0, wholesale_every_n_tickets, ...holdParams, ...preParams, limit, offset],
   );
   return {
     wholesale_enabled,
+    wholesale_every_n_tickets,
     participants: rows.map((row) => ({
       ticket_number: row.ticket_number,
       user_phone: row.user_phone,

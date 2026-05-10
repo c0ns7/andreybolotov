@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   status TEXT NOT NULL DEFAULT 'active',
   sort_order INTEGER NOT NULL DEFAULT 0,
   wholesale_enabled INTEGER NOT NULL DEFAULT 0,
+  wholesale_every_n_tickets INTEGER NOT NULL DEFAULT 10,
   promo_5_plus_1_enabled INTEGER NOT NULL DEFAULT 0,
   promo_5_plus_1_locked_free_count INTEGER NOT NULL DEFAULT 0,
   promo_5_plus_2_enabled INTEGER NOT NULL DEFAULT 0,

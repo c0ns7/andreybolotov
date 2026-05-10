@@ -20,6 +20,64 @@ type ChatActionCard = { kind: string; title?: string; reason?: string; retry_url
 type ChatTextPart = { type: "text"; value: string } | { type: "max_join"; href: string };
 type ChatAttachmentDto = { url: string; name: string; mime: string };
 
+const CHAT_IMAGE_SKIP_COMPRESS_BELOW_BYTES = 1.2 * 1024 * 1024;
+const CHAT_IMAGE_MAX_LONG_EDGE = 1920;
+const CHAT_IMAGE_JPEG_QUALITY = 0.82;
+
+function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(im);
+    };
+    im.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("IMAGE_DECODE"));
+    };
+    im.src = url;
+  });
+}
+
+async function prepareChatUploadFile(file: File): Promise<File> {
+  const type = String(file.type || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
+  if (!type.startsWith("image/")) return file;
+  if (file.size > 0 && file.size < CHAT_IMAGE_SKIP_COMPRESS_BELOW_BYTES) return file;
+  let img: HTMLImageElement;
+  try {
+    img = await loadImageFromFile(file);
+  } catch {
+    return file;
+  }
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  if (!w || !h) return file;
+  const scale = Math.min(1, CHAT_IMAGE_MAX_LONG_EDGE / Math.max(w, h));
+  w = Math.max(1, Math.round(w * scale));
+  h = Math.max(1, Math.round(h * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file;
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await new Promise<Blob | null>((resolve) => {
+    try {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", CHAT_IMAGE_JPEG_QUALITY);
+    } catch {
+      resolve(null);
+    }
+  });
+  if (!blob || blob.size <= 0) return file;
+  if (blob.size >= file.size * 0.97) return file;
+  const base = file.name.replace(/\.[^.\\/]+$/, "").trim() || "chat-image";
+  return new File([blob], `${base}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+}
+
 function mergeById(base: ChatMsg[], extra: ChatMsg[]) {
   const map = new Map<number, ChatMsg>();
   for (const it of base) map.set(Number(it.id), it);
@@ -434,9 +492,12 @@ export default function ChatPageClient() {
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                const fd = new FormData();
-                fd.append("file", file);
-                void fetch("/api/chat/upload", { method: "POST", headers: abAuthHeaders(), body: fd })
+                void prepareChatUploadFile(file)
+                  .then((prepared) => {
+                    const fd = new FormData();
+                    fd.append("file", prepared);
+                    return fetch("/api/chat/upload", { method: "POST", headers: abAuthHeaders(), body: fd });
+                  })
                   .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
                   .then((x) => {
                     if (!x.ok) throw new Error(String(x.d?.error || "Ошибка загрузки файла"));
