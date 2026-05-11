@@ -64,6 +64,15 @@ function formatRub(n: number) {
   return String(Math.max(0, Math.round(Number(n)))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+/** Показ номера карты группами по 4 цифры (как на самой карте). */
+function formatBankCardForDisplay(raw: string): string {
+  const d = String(raw || "").replace(/\D/g, "");
+  if (!d) return "—";
+  const parts: string[] = [];
+  for (let i = 0; i < d.length; i += 4) parts.push(d.slice(i, i + 4));
+  return parts.join(" ");
+}
+
 function formatMmSs(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);
@@ -1812,7 +1821,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const elBn = document.getElementById("reserve-payment-bank-card-number");
       const elBr = document.getElementById("reserve-payment-bank-card-recipient");
       const elBna = document.getElementById("reserve-payment-bank-card-unavailable");
-      if (elBn) elBn.textContent = cardResolved ? String(cardResolved.card_number || "").trim() || "—" : "—";
+      if (elBn)
+        elBn.textContent = cardResolved
+          ? formatBankCardForDisplay(String(cardResolved.card_number || ""))
+          : "—";
       if (elBr) elBr.textContent = cardResolved ? String(cardResolved.recipient || "").trim() || "—" : "—";
       if (elBna) elBna.hidden = !(m === "bank_card" && !cardResolved);
       const bankBadge = document.getElementById("reserve-payment-collect-bank");

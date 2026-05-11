@@ -529,7 +529,7 @@ export default function AbRafflePurchaseShellMarkup() {
           <section id="reserve-payment-bank-card" className="pay-sheet-dark-card" hidden>
             <div className="pay-sheet-dark-card__head">
               <span className="pay-sheet-dark-card__tag">Перевод на карту</span>
-              <span className="pay-sheet-dark-card__bank">Реквизиты</span>
+              <span className="pay-sheet-dark-card__bank">Карта</span>
             </div>
             <div className="pay-sheet-dark-card__divider"></div>
             <div className="pay-sheet-copy-block">
