@@ -387,7 +387,8 @@ type RaffleInput = {
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
-  card_payment_scope: "unlimited" | "wholesale_only";
+  card_payment_scope: "unlimited" | "wholesale_only" | "min_order_tickets";
+  card_payment_min_tickets: number;
   bank_cards: RaffleBankCardInput[];
 };
 
@@ -578,7 +579,19 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   }
 
   const scopeRaw = String(body.card_payment_scope ?? "unlimited").trim().toLowerCase();
-  const card_payment_scope = scopeRaw === "wholesale_only" ? "wholesale_only" : "unlimited";
+  let card_payment_scope: "unlimited" | "wholesale_only" | "min_order_tickets" = "unlimited";
+  if (scopeRaw === "wholesale_only") card_payment_scope = "wholesale_only";
+  else if (scopeRaw === "min_order_tickets") card_payment_scope = "min_order_tickets";
+
+  const minCardRaw = body.card_payment_min_tickets;
+  const card_payment_min_tickets =
+    minCardRaw === undefined || minCardRaw === null || minCardRaw === ""
+      ? 2
+      : Math.floor(Number(minCardRaw));
+  if (!Number.isFinite(card_payment_min_tickets) || card_payment_min_tickets < 1 || card_payment_min_tickets > 100_000_000) {
+    return { ok: false, error: "Минимум номерков для оплаты на карту: целое число от 1" };
+  }
+
   const parsedCards = parseBankCardsInput(body.bank_cards);
   if (!parsedCards.ok) return parsedCards;
 
@@ -618,6 +631,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       promo_5_plus_2_enabled,
       hidden_from_public,
       card_payment_scope,
+      card_payment_min_tickets,
       bank_cards: parsedCards.value,
     },
   };
@@ -1157,6 +1171,7 @@ adminSubApp.post("/raffles", async (c) => {
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     card_payment_scope: v.card_payment_scope,
+    card_payment_min_tickets: v.card_payment_min_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
@@ -1221,6 +1236,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     card_payment_scope: v.card_payment_scope,
+    card_payment_min_tickets: v.card_payment_min_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,

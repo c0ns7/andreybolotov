@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   wholesale_enabled INTEGER NOT NULL DEFAULT 0,
   wholesale_every_n_tickets INTEGER NOT NULL DEFAULT 10,
   card_payment_scope TEXT NOT NULL DEFAULT 'unlimited',
+  card_payment_min_tickets INTEGER NOT NULL DEFAULT 2,
   promo_5_plus_1_enabled INTEGER NOT NULL DEFAULT 0,
   promo_5_plus_1_locked_free_count INTEGER NOT NULL DEFAULT 0,
   promo_5_plus_2_enabled INTEGER NOT NULL DEFAULT 0,

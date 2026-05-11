@@ -40,6 +40,7 @@ type RaffleDto = Record<string, unknown> & {
   qr_recipient?: string;
   qr_payment_purpose?: string;
   card_payment_scope?: string;
+  card_payment_min_tickets?: number;
   wholesale_every_n_tickets?: number;
   has_bank_cards?: boolean;
 };
@@ -1715,8 +1716,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         Boolean(String(r.qr_image_url || "").trim());
       const scope = String(r.card_payment_scope || "unlimited").toLowerCase();
       const everyN = Math.max(1, Math.floor(Number(r.wholesale_every_n_tickets) || 10));
+      const minCardM = Math.max(1, Math.floor(Number(r.card_payment_min_tickets) || 2));
       const wholesaleOk = scope !== "wholesale_only" || ticketCount >= everyN;
-      const hasBankCards = Boolean(r.has_bank_cards) && wholesaleOk;
+      const minOrderOk = scope !== "min_order_tickets" || ticketCount >= minCardM;
+      const hasBankCards = Boolean(r.has_bank_cards) && wholesaleOk && minOrderOk;
       const modes: string[] = [];
       if (hasQr) modes.push("qr");
       if (hasBankCards) modes.push("bank_card");

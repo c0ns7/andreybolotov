@@ -213,16 +213,31 @@
     );
   }
 
+  function syncCardPaymentScopeUi() {
+    var scopeEl = document.getElementById("raffle-card-payment-scope");
+    var minWrap = document.getElementById("raffle-card-payment-min-tickets-wrap");
+    if (!scopeEl || !minWrap) return;
+    var v = String(scopeEl.value || "").trim().toLowerCase();
+    minWrap.hidden = v !== "min_order_tickets";
+  }
+
   function renderBankCardsFromEdit(edit) {
     var wrap = document.getElementById("raffle-bank-cards-list");
     if (!wrap) return;
     var scopeEl = document.getElementById("raffle-card-payment-scope");
+    var minEl = document.getElementById("raffle-card-payment-min-tickets");
     var cards = edit && Array.isArray(edit.bank_cards) ? edit.bank_cards : [];
-    if (scopeEl)
-      scopeEl.value =
-        edit && String(edit.card_payment_scope || "").toLowerCase() === "wholesale_only"
-          ? "wholesale_only"
-          : "unlimited";
+    if (scopeEl) {
+      var s = edit ? String(edit.card_payment_scope || "").toLowerCase() : "";
+      if (s === "wholesale_only") scopeEl.value = "wholesale_only";
+      else if (s === "min_order_tickets") scopeEl.value = "min_order_tickets";
+      else scopeEl.value = "unlimited";
+    }
+    if (minEl) {
+      var m = edit ? Math.max(1, Math.floor(Number(edit.card_payment_min_tickets)) || 2) : 2;
+      minEl.value = String(m);
+    }
+    syncCardPaymentScopeUi();
     if (!cards.length) {
       wrap.innerHTML = '<p class="admin-raffle-field-hint">Нет карт. Нажмите «Добавить карту».</p>';
       return;
@@ -1323,6 +1338,7 @@
   document.getElementById("raffle-sber-enabled")?.addEventListener("change", syncPayMethodSettingsState);
   document.getElementById("raffle-tbank-enabled")?.addEventListener("change", syncPayMethodSettingsState);
   document.getElementById("raffle-qr-enabled")?.addEventListener("change", syncPayMethodSettingsState);
+  document.getElementById("raffle-card-payment-scope")?.addEventListener("change", syncCardPaymentScopeUi);
   raffleSinglePhone?.addEventListener("input", updateSingleAssignSubmitState);
   raffleSingleTicket?.addEventListener("input", function () {
     raffleSingleTicketIsFree = false;
@@ -1688,7 +1704,14 @@
       card_payment_scope: (function () {
         var el = document.getElementById("raffle-card-payment-scope");
         var v = String((el && el.value) || "unlimited").trim().toLowerCase();
-        return v === "wholesale_only" ? "wholesale_only" : "unlimited";
+        if (v === "wholesale_only" || v === "min_order_tickets") return v;
+        return "unlimited";
+      })(),
+      card_payment_min_tickets: (function () {
+        var el = document.getElementById("raffle-card-payment-min-tickets");
+        var n = el ? Math.floor(Number(el.value)) : 2;
+        if (!Number.isFinite(n) || n < 1) n = 2;
+        return n;
       })(),
       bank_cards: bank_cards,
       promo_5_plus_1_enabled: (function () {

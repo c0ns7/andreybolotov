@@ -17,6 +17,7 @@ import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 import {
   getBankCardByIdForRaffle,
   isBankCardAvailableForNewPayment,
+  isOrderEligibleForRaffleBankCardPayment,
   pickAvailableBankCard,
   refreshBankCardDailyLimitCooldown,
 } from "./raffle-bank-cards.js";
@@ -808,6 +809,10 @@ export async function getOrderPaymentBankCardSuggestion(
       1,
       Math.floor(Number((raffle as { wholesale_every_n_tickets?: number }).wholesale_every_n_tickets) || 10),
     ),
+    cardPaymentMinTickets: Math.max(
+      1,
+      Math.floor(Number((raffle as { card_payment_min_tickets?: number }).card_payment_min_tickets) || 2),
+    ),
   });
   return {
     ok: true,
@@ -843,12 +848,31 @@ export async function setOrderBank(
       1,
       Math.floor(Number((raffle as { wholesale_every_n_tickets?: number }).wholesale_every_n_tickets) || 10),
     );
+    const minOrderT = Math.max(
+      1,
+      Math.floor(Number((raffle as { card_payment_min_tickets?: number }).card_payment_min_tickets) || 2),
+    );
     const tickets = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
-    if (scope === "wholesale_only" && tickets < everyN) {
-      return {
-        ok: false,
-        error: `Оплата на карту доступна только при заказе от ${everyN} номерков`,
-      };
+    if (
+      !isOrderEligibleForRaffleBankCardPayment({
+        cardPaymentScope: scope,
+        orderTicketCount: tickets,
+        wholesaleEveryN: everyN,
+        cardPaymentMinTickets: minOrderT,
+      })
+    ) {
+      if (scope === "wholesale_only") {
+        return {
+          ok: false,
+          error: `Оплата на карту доступна только при заказе от ${everyN} номерков`,
+        };
+      }
+      if (scope === "min_order_tickets") {
+        return {
+          ok: false,
+          error: `Оплата на карту доступна только при заказе от ${minOrderT} номерков`,
+        };
+      }
     }
     const av = await isBankCardAvailableForNewPayment(card, now);
     if (!av.ok) return { ok: false, error: "Эта карта сейчас недоступна — выберите другой способ оплаты" };

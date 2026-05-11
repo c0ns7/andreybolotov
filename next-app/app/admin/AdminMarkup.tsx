@@ -695,7 +695,22 @@ export default function AdminMarkup() {
                   <select id="raffle-card-payment-scope" className="input input--select">
                     <option value="unlimited">Доступна всем покупателям (при наличии свободной карты)</option>
                     <option value="wholesale_only">Только при заказе от N номерков (N — из настройки опта ниже)</option>
+                    <option value="min_order_tickets">Только при заказе от заданного числа номерков (поле ниже)</option>
                   </select>
+                </div>
+                <div id="raffle-card-payment-min-tickets-wrap" className="form-group" hidden>
+                  <label htmlFor="raffle-card-payment-min-tickets">Минимум номерков в заказе для оплаты на карту</label>
+                  <input
+                    id="raffle-card-payment-min-tickets"
+                    className="input"
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={2}
+                  />
+                  <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                    Не связано с порогом опта — отдельный порог только для кнопки «Другие реквизиты» (карта).
+                  </p>
                 </div>
                 <div id="raffle-bank-cards-list" className="admin-bank-cards-list" role="list"></div>
                 <div className="form-actions" style={{ marginTop: "0.75rem" }}>

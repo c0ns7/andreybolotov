@@ -110,13 +110,40 @@ export type PickBankCardArgs = {
   orderTicketCount: number;
   cardPaymentScope: string;
   wholesaleEveryN: number;
+  cardPaymentMinTickets: number;
 };
 
-export async function pickAvailableBankCard(args: PickBankCardArgs): Promise<RaffleBankCardRow | null> {
-  const scope = String(args.cardPaymentScope || "unlimited").toLowerCase();
-  const everyN = Math.max(1, Math.floor(Number(args.wholesaleEveryN) || 10));
+/** Доступна ли оплата на карту акции при данном размере заказа (без учёта лимитов по конкретной карте). */
+export function isOrderEligibleForRaffleBankCardPayment(args: {
+  cardPaymentScope: string;
+  orderTicketCount: number;
+  wholesaleEveryN: number;
+  cardPaymentMinTickets: number;
+}): boolean {
+  const scope = String(args.cardPaymentScope || "unlimited").trim().toLowerCase();
   const tickets = Math.max(0, Math.floor(Number(args.orderTicketCount) || 0));
-  if (scope === "wholesale_only" && tickets < everyN) return null;
+  if (scope === "wholesale_only") {
+    const everyN = Math.max(1, Math.floor(Number(args.wholesaleEveryN) || 10));
+    return tickets >= everyN;
+  }
+  if (scope === "min_order_tickets") {
+    const minT = Math.max(1, Math.floor(Number(args.cardPaymentMinTickets) || 2));
+    return tickets >= minT;
+  }
+  return true;
+}
+
+export async function pickAvailableBankCard(args: PickBankCardArgs): Promise<RaffleBankCardRow | null> {
+  if (
+    !isOrderEligibleForRaffleBankCardPayment({
+      cardPaymentScope: args.cardPaymentScope,
+      orderTicketCount: args.orderTicketCount,
+      wholesaleEveryN: args.wholesaleEveryN,
+      cardPaymentMinTickets: args.cardPaymentMinTickets,
+    })
+  ) {
+    return null;
+  }
 
   const rows = await pgAll<RaffleBankCardRow>(
     `SELECT * FROM raffle_bank_cards WHERE raffle_id = ? ORDER BY sort_order ASC, id ASC`,
