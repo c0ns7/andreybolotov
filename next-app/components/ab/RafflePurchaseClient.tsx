@@ -81,6 +81,36 @@ function formatMmSs(ms: number) {
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
 
+function getRafflePayChannelFlags(r: RaffleDto) {
+  const hasCol =
+    (r.sber_enabled != null ? Boolean(Number(r.sber_enabled) === 1 || r.sber_enabled === true) : Boolean(String(r.collection_url || "").trim())) &&
+    Boolean(String(r.collection_url || "").trim());
+  const hasTbank =
+    (r.tbank_enabled != null ? Boolean(Number(r.tbank_enabled) === 1 || r.tbank_enabled === true) : Boolean(String(r.tbank_collection_url || "").trim())) &&
+    Boolean(String(r.tbank_collection_url || "").trim());
+  const hasQr =
+    (r.qr_enabled != null ? Boolean(Number(r.qr_enabled) === 1 || r.qr_enabled === true) : Boolean(String(r.qr_image_url || "").trim())) &&
+    Boolean(String(r.qr_image_url || "").trim());
+  return { hasCol, hasTbank, hasQr };
+}
+
+/** Сколько номерков не хватает до порога оплаты на карту; null если карт нет, режим без порога или порог уже выполнен. */
+function getBankCardTicketShortfall(r: RaffleDto, ticketCount: number): number | null {
+  if (!r.has_bank_cards) return null;
+  const scope = String(r.card_payment_scope || "unlimited").toLowerCase();
+  const everyN = Math.max(1, Math.floor(Number(r.wholesale_every_n_tickets) || 10));
+  const minCardM = Math.max(1, Math.floor(Number(r.card_payment_min_tickets) || 2));
+  if (scope === "wholesale_only") {
+    if (ticketCount >= everyN) return null;
+    return everyN - ticketCount;
+  }
+  if (scope === "min_order_tickets") {
+    if (ticketCount >= minCardM) return null;
+    return minCardM - ticketCount;
+  }
+  return null;
+}
+
 function buildRangeParts(ticketCount: number) {
   const maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
   const chunk = 500;
@@ -1705,15 +1735,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     };
 
     const buildAltPayModes = (r: RaffleDto, ticketCount: number): string[] => {
-      const hasCol =
-        (r.sber_enabled != null ? Boolean(Number(r.sber_enabled) === 1 || r.sber_enabled === true) : Boolean(String(r.collection_url || "").trim())) &&
-        Boolean(String(r.collection_url || "").trim());
-      const hasTbank =
-        (r.tbank_enabled != null ? Boolean(Number(r.tbank_enabled) === 1 || r.tbank_enabled === true) : Boolean(String(r.tbank_collection_url || "").trim())) &&
-        Boolean(String(r.tbank_collection_url || "").trim());
-      const hasQr =
-        (r.qr_enabled != null ? Boolean(Number(r.qr_enabled) === 1 || r.qr_enabled === true) : Boolean(String(r.qr_image_url || "").trim())) &&
-        Boolean(String(r.qr_image_url || "").trim());
+      const { hasCol, hasTbank, hasQr } = getRafflePayChannelFlags(r);
       const scope = String(r.card_payment_scope || "unlimited").toLowerCase();
       const everyN = Math.max(1, Math.floor(Number(r.wholesale_every_n_tickets) || 10));
       const minCardM = Math.max(1, Math.floor(Number(r.card_payment_min_tickets) || 2));
@@ -2071,6 +2093,23 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const rf = raffleRef.current;
       const d = reserveDraftRef.current;
       if (!rf || !d?.orderId) return;
+      const ch = getRafflePayChannelFlags(rf);
+      const shortfall = getBankCardTicketShortfall(rf, d.numbers.length);
+      if (shortfall != null && shortfall > 0 && ch.hasCol && !ch.hasTbank && !ch.hasQr) {
+        const scope = String(rf.card_payment_scope || "").toLowerCase();
+        const minNeed =
+          scope === "wholesale_only"
+            ? Math.max(1, Math.floor(Number(rf.wholesale_every_n_tickets) || 10))
+            : Math.max(1, Math.floor(Number(rf.card_payment_min_tickets) || 2));
+        const intro =
+          scope === "wholesale_only"
+            ? `Оплата переводом на карту доступна при заказе от ${minNeed} номерков (порог опта).`
+            : `Оплата переводом на карту доступна при заказе от ${minNeed} номерков.`;
+        window.alert(
+          intro + "\n\nНе хватает ещё " + String(shortfall) + " номерков. Добавьте их в заказ и снова откройте окно оплаты.",
+        );
+        return;
+      }
       if (!altPayCycleRef.current.modes.length) {
         altPayCycleRef.current.modes = buildAltPayModes(rf, d.numbers.length);
         altPayCycleRef.current.idx = -1;
