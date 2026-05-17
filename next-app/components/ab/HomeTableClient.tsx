@@ -298,7 +298,6 @@ export default function HomeTableClient() {
         authVerified={authVerified}
         onChat={() => router.push("/home/chat")}
         onChatBlocked={() => toast("Войдите, чтобы написать в чат", "warning")}
-        forceShowTableTab={hasPurchased}
       />
     </>
   );

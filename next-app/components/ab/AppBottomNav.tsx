@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BadgeCheck, Clock3, Gift, Hash, Hourglass, Mail, MapPin } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
@@ -23,7 +23,6 @@ type Props = {
   authVerified: boolean;
   showSearchSheet?: boolean;
   onSearchSheet?: () => void;
-  forceShowTableTab?: boolean;
 };
 
 type WholesaleSlotRow = { raffle_id?: number; wholesale_numbers?: number[] };
@@ -91,17 +90,17 @@ function blurIfFocusInsideModalRoot(rootId: string) {
   }
 }
 
-function numChipsForHistory(nums?: number[], className = "", readonly = true) {
-  const arr = Array.isArray(nums) ? nums : [];
+function historyNumbersRow(label: ReactNode, nums?: number[], rowClass = "") {
+  const arr = Array.isArray(nums)
+    ? nums.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0)
+    : [];
   if (!arr.length) return null;
+  const text = arr.map((n) => `№${String(n)}`).join(", ");
   return (
-    <div className={"tickets-chips " + className}>
-      {arr.map((n) => (
-        <span key={String(n)} className={"tickets-chip" + (readonly ? " tickets-chip--readonly" : "")}>
-          № {String(n)}
-        </span>
-      ))}
-    </div>
+    <p className={"history-row" + (rowClass ? ` ${rowClass}` : "")}>
+      <strong className="history-row__label">{label}</strong>{" "}
+      <span className="history-row__nums">{text}</span>
+    </p>
   );
 }
 
@@ -148,7 +147,6 @@ export default function AppBottomNav({
   authVerified,
   showSearchSheet,
   onSearchSheet,
-  forceShowTableTab,
 }: Props) {
   const { session } = useAbSession();
   const pathname = usePathname() || "";
@@ -185,7 +183,6 @@ export default function AppBottomNav({
     setHistoryOpen(true);
   }, []);
   const isHome = pathname === "/home";
-  const isTable = pathname === "/home/table";
   const isChat = pathname === "/home/chat";
   const isProfile = profileOpen || pathname === "/home/profile" || pathname === "/home/settings";
 
@@ -407,8 +404,6 @@ export default function AppBottomNav({
   const hasWholesaleNumbers = wholesaleSlots.some(
     (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
   );
-  const hasConfirmedTickets = confirmed.some((it) => Array.isArray(it?.numbers) && it.numbers.length > 0);
-  const showTableTab = isHome && hasLatestVisibleRaffle && !!(forceShowTableTab || hasConfirmedTickets || isAdmin);
   const raffleTitleById = useMemo(() => {
     const m = new Map<number, string>();
     const ingest = (groups: TicketGroup[]) => {
@@ -448,19 +443,6 @@ export default function AppBottomNav({
             </span>
             <span className="bottom-nav-btn__label">Главная</span>
           </Link>
-          {showTableTab ? (
-            <Link href="/home/table" className={"bottom-nav-btn" + (isTable ? " bottom-nav-btn--active" : "")} id="tab-table" aria-label="Таблица">
-              <span className="bottom-nav-btn__icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <path d="M3 10h18" />
-                  <path d="M9 4v16" />
-                  <path d="M15 4v16" />
-                </svg>
-              </span>
-              <span className="bottom-nav-btn__label">Таблица</span>
-            </Link>
-          ) : null}
           {showSearchSheet ? (
             <button type="button" className="bottom-nav-btn bottom-nav-btn--dock-search" id="tab-ticket-search" aria-label="Поиск" onClick={onSearchSheet}>
               <span className="bottom-nav-btn__icon">
@@ -788,69 +770,55 @@ export default function AppBottomNav({
             ) : !history.raffles?.length ? (
               <p className="history-empty">История участия пока пуста.</p>
             ) : (
-              history.raffles.map((it, idx) => (
+              history.raffles.map((it, idx) => {
+                const bonusNums = Array.from(
+                  new Set(
+                    [
+                      ...(it.numbers?.bonus_5plus1_confirmed || []),
+                      ...(it.numbers?.bonus_5plus2_confirmed || []),
+                      ...(it.numbers?.bonus_confirmed || []),
+                    ].map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0),
+                  ),
+                ).sort((a, b) => a - b);
+                return (
                 <article className="history-card" key={"h_" + String(idx)}>
                   <div className="history-card__head">
                     <h3 className="history-card__title">{String(it.raffle?.title || "Акция")}</h3>
                   </div>
-                  {it.numbers?.reserved?.length ? (
-                    <div className="history-row">
-                      <strong className="history-row__label">
-                        <Clock3 size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>В брони:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.reserved, "", true)}
-                    </div>
-                  ) : null}
-                  {it.numbers?.pending_review?.length ? (
-                    <div className="history-row history-row--pending">
-                      <strong className="history-row__label">
-                        <Hourglass size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>На проверке:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.pending_review, "history-row__chips--pending", true)}
-                    </div>
-                  ) : null}
-                  {it.numbers?.confirmed?.length ? (
-                    <div className="history-row history-row--confirmed">
-                      <strong className="history-row__label">
-                        <BadgeCheck size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>Закреплено:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.confirmed, "history-row__chips--confirmed", false)}
-                    </div>
-                  ) : null}
-                  {it.numbers?.bonus_5plus1_confirmed?.length ? (
-                    <div className="history-row history-row--bonus">
-                      <strong className="history-row__label">
-                        <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>Бонус 5+1:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.bonus_5plus1_confirmed, "history-row__chips--bonus", true)}
-                    </div>
-                  ) : null}
-                  {it.numbers?.bonus_5plus2_confirmed?.length ? (
-                    <div className="history-row history-row--bonus">
-                      <strong className="history-row__label">
-                        <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>Бонус 5+2:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.bonus_5plus2_confirmed, "history-row__chips--bonus", true)}
-                    </div>
-                  ) : null}
-                  {!it.numbers?.bonus_5plus1_confirmed?.length &&
-                  !it.numbers?.bonus_5plus2_confirmed?.length &&
-                  it.numbers?.bonus_confirmed?.length ? (
-                    <div className="history-row history-row--bonus">
-                      <strong className="history-row__label">
-                        <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>Бонус по акции:</span>
-                      </strong>
-                      {numChipsForHistory(it.numbers.bonus_confirmed, "history-row__chips--bonus", true)}
-                    </div>
-                  ) : null}
+                  {historyNumbersRow(
+                    <>
+                      <Clock3 size={14} strokeWidth={2.2} aria-hidden="true" />
+                      <span>В брони:</span>
+                    </>,
+                    it.numbers?.reserved,
+                  )}
+                  {historyNumbersRow(
+                    <>
+                      <Hourglass size={14} strokeWidth={2.2} aria-hidden="true" />
+                      <span>На проверке:</span>
+                    </>,
+                    it.numbers?.pending_review,
+                    "history-row--pending",
+                  )}
+                  {historyNumbersRow(
+                    <>
+                      <BadgeCheck size={14} strokeWidth={2.2} aria-hidden="true" />
+                      <span>Закреплено:</span>
+                    </>,
+                    it.numbers?.confirmed,
+                    "history-row--confirmed",
+                  )}
+                  {historyNumbersRow(
+                    <>
+                      <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
+                      <span>Бонус:</span>
+                    </>,
+                    bonusNums,
+                    "history-row--bonus",
+                  )}
                 </article>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -311,6 +311,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const [cells, setCells] = useState<Cell[]>([]);
   const [gridLoading, setGridLoading] = useState(false);
   const [onlyFreeView, setOnlyFreeView] = useState(false);
+  const onlyFreeViewRef = useRef(false);
+  onlyFreeViewRef.current = onlyFreeView;
   const [selected, setSelected] = useState<number[]>([]);
   const [order, setOrder] = useState<OrderDto | null>(null);
   const orderRef = useRef(order);
@@ -406,6 +408,48 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   rangeFromRef.current = rangeFrom;
   const rangeToRef = useRef(rangeTo);
   rangeToRef.current = rangeTo;
+
+  const switchRangeTab = useCallback((from: number, to: number) => {
+    if (from === rangeFromRef.current && to === rangeToRef.current) return;
+    document.querySelectorAll(".raffle-range-tab").forEach((b) => {
+      const el = b as HTMLElement;
+      const bf = Number(el.getAttribute("data-from"));
+      const bt = Number(el.getAttribute("data-to"));
+      el.classList.toggle("raffle-range-tab--active", bf === from && bt === to);
+    });
+    setGridLoading(true);
+    setCells([]);
+    setRangeFrom(from);
+    setRangeTo(to);
+  }, []);
+
+  const syncRangeTabsVisibility = useCallback(() => {
+    const tabs = document.getElementById("raffle-page-tabs");
+    if (!tabs) return;
+    const onlyFree = onlyFreeViewRef.current;
+    const btns = Array.from(tabs.querySelectorAll(".raffle-range-tab")) as HTMLElement[];
+    btns.forEach((btn) => {
+      const noFree = btn.classList.contains("raffle-range-tab--no-free");
+      btn.hidden = onlyFree && noFree;
+    });
+    const toolbar = tabs.closest(".raffle-range-toolbar-scroll") as HTMLElement | null;
+    if (toolbar) {
+      const anyVisible = btns.some((b) => !b.hidden);
+      toolbar.hidden = onlyFree && !anyVisible;
+    }
+    if (!onlyFree) return;
+    const active = btns.find((b) => b.classList.contains("raffle-range-tab--active"));
+    if (active && !active.hidden) return;
+    const first = btns.find((b) => !b.hidden);
+    if (!first) return;
+    const from = Number(first.getAttribute("data-from"));
+    const to = Number(first.getAttribute("data-to"));
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+    switchRangeTab(from, to);
+  }, [switchRangeTab]);
+
+  const syncRangeTabsVisibilityRef = useRef(syncRangeTabsVisibility);
+  syncRangeTabsVisibilityRef.current = syncRangeTabsVisibility;
   const rangePartsRef = useRef<{ from: number; to: number }[]>([]);
   rangePartsRef.current = rangeParts;
   const mainStepRef = useRef(mainStep);
@@ -429,6 +473,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (cached && Date.now() - cached.ts < 20_000) {
         setCells(cached.cells);
         setGridLoading(false);
+        const keyCached = String(from) + "-" + String(to);
+        const hasFreeCached = cached.cells.some((c) => String(c.kind) === "free");
+        rangeHasFreeRef.current.set(keyCached, hasFreeCached);
+        const btnCached = document.querySelector(
+          `.raffle-range-tab[data-from="${from}"][data-to="${to}"]`,
+        ) as HTMLElement | null;
+        if (btnCached) btnCached.classList.toggle("raffle-range-tab--no-free", !hasFreeCached);
+        syncRangeTabsVisibilityRef.current();
         return;
       }
     }
@@ -452,6 +504,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       rangeHasFreeRef.current.set(key, hasFree);
       const btn = document.querySelector(`.raffle-range-tab[data-from="${from}"][data-to="${to}"]`) as HTMLElement | null;
       if (btn) btn.classList.toggle("raffle-range-tab--no-free", !hasFree);
+      syncRangeTabsVisibilityRef.current();
     } catch (e) {
       setGridLoading(false);
       throw e;
@@ -745,6 +798,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
             const btn = tabs.querySelector(`.raffle-range-tab[data-from="${p.from}"][data-to="${p.to}"]`) as HTMLElement | null;
             if (btn) btn.classList.toggle("raffle-range-tab--no-free", !known);
           }
+          syncRangeTabsVisibilityRef.current();
         }
         const draftKeyId = Number(r.id || raffleId);
         try {
@@ -1171,6 +1225,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     back?.addEventListener("click", onBack);
     return () => back?.removeEventListener("click", onBack);
   }, [router]);
+
+  useEffect(() => {
+    syncRangeTabsVisibility();
+  }, [onlyFreeView, syncRangeTabsVisibility]);
 
   useEffect(() => {
     const eye = document.getElementById("raffle-page-only-free");
