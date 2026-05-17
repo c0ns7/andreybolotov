@@ -81,7 +81,7 @@ export default function HomeSocialFab({ visible = true, elevated = false }: Prop
       }
       aria-label="Соцсети"
     >
-      <div className="home-social-fab__glow" aria-hidden="true" />
+      <div className="home-social-fab__dock">
       <ul className="home-social-fab__menu" aria-hidden={!open}>
         {SOCIAL_LINKS.map((item, i) => (
           <li key={item.id} className="home-social-fab__item" style={{ transitionDelay: open ? `${0.04 + i * 0.05}s` : "0s" }}>
@@ -106,16 +106,24 @@ export default function HomeSocialFab({ visible = true, elevated = false }: Prop
         aria-label={open ? "Скрыть соцсети" : "Открыть соцсети"}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="home-social-fab__droplet" aria-hidden="true">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
+        <span className="home-social-fab__icons" aria-hidden="true">
+          <span className="home-social-fab__icon home-social-fab__icon--share">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </span>
+          <span className="home-social-fab__icon home-social-fab__icon--close">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </span>
         </span>
-        <span className="home-social-fab__ripple" aria-hidden="true" />
       </button>
-    </div>
+</div>
+</div>
   );
 }

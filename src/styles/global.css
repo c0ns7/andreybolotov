@@ -678,36 +678,32 @@ html.js-intro-done #welcome-splash {
   margin-top: 8px;
 }
 
-/* Главная: плавающие соцсети над нижней навигацией */
+/* Главная: плавающие соцсети над нижней навигацией (в колонке 520px как карточки и nav) */
 .home-social-fab {
   position: fixed;
-  right: max(14px, env(safe-area-inset-right, 0px));
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 520px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   z-index: 45;
-  width: 56px;
-}
-
-.home-social-fab__glow {
-  position: absolute;
-  inset: -8px -6px auto auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.45) 0%, rgba(99, 102, 241, 0) 70%);
-  opacity: 0.7;
   pointer-events: none;
-  transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
-.home-social-fab--open .home-social-fab__glow {
-  opacity: 1;
-  transform: scale(1.15);
+.home-social-fab__dock {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  pointer-events: none;
 }
 
 .home-social-fab__menu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 14px);
+  bottom: calc(100% + 12px);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -764,15 +760,15 @@ html.js-intro-done #welcome-splash {
 }
 
 .home-social-fab__link--max {
-  background: linear-gradient(145deg, #7c3aed 0%, #4f46e5 100%);
+  background: #5b21b6;
 }
 
 .home-social-fab__link--vk {
-  background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+  background: #1d4ed8;
 }
 
 .home-social-fab__link--tg {
-  background: linear-gradient(145deg, #0ea5e9 0%, #0284c7 100%);
+  background: #0284c7;
 }
 
 .home-social-fab__letter {
@@ -784,89 +780,82 @@ html.js-intro-done #welcome-splash {
 
 .home-social-fab__toggle {
   position: relative;
-  width: 56px;
-  height: 56px;
-  border: 0;
+  width: 52px;
+  height: 52px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, #fff);
   border-radius: 50%;
   padding: 0;
   cursor: pointer;
   color: #fff;
-  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 48%, #3b82f6 100%);
-  box-shadow:
-    0 10px 28px rgba(99, 102, 241, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  overflow: visible;
+  background: #111827;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+  pointer-events: auto;
   transition:
-    transform 0.28s cubic-bezier(0.34, 1.45, 0.64, 1),
-    box-shadow 0.28s ease;
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.18s ease;
 }
 
 .home-social-fab__toggle:hover {
-  box-shadow:
-    0 14px 32px rgba(99, 102, 241, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  background: #1f2937;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.28);
 }
 
 .home-social-fab__toggle:active {
-  transform: scale(0.94);
+  transform: scale(0.96);
 }
 
 .home-social-fab--open .home-social-fab__toggle {
-  transform: rotate(-8deg) scale(1.04);
-  background: linear-gradient(145deg, #4f46e5 0%, #7c3aed 55%, #6366f1 100%);
+  background: #374151;
+  border-color: color-mix(in srgb, var(--border) 55%, #fff);
 }
 
-.home-social-fab__droplet {
+.home-social-fab__icons {
   position: relative;
-  z-index: 1;
-  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.home-social-fab__icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.3s ease, opacity 0.25s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
-.home-social-fab--open .home-social-fab__droplet {
-  transform: rotate(90deg) scale(0.92);
-  opacity: 0.92;
+.home-social-fab__icon--share {
+  opacity: 1;
+  transform: scale(1);
 }
 
-.home-social-fab__ripple {
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
+.home-social-fab__icon--close {
   opacity: 0;
-  transform: scale(0.85);
-  animation: home-social-fab-pulse 2.4s ease-out infinite;
-  pointer-events: none;
+  transform: scale(0.82);
 }
 
-.home-social-fab--open .home-social-fab__ripple {
-  animation: none;
+.home-social-fab--open .home-social-fab__icon--share {
   opacity: 0;
+  transform: scale(0.82);
 }
 
-@keyframes home-social-fab-pulse {
-  0% {
-    opacity: 0.55;
-    transform: scale(0.9);
-  }
-  70% {
-    opacity: 0;
-    transform: scale(1.35);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.35);
-  }
+.home-social-fab--open .home-social-fab__icon--close {
+  opacity: 1;
+  transform: scale(1);
 }
 
 html.has-cart-action-strip .home-social-fab {
-  bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(158px + env(safe-area-inset-bottom, 0px));
 }
 
 .home-social-fab--elevated {
-  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(152px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Главная /home: ряд «Соцсети» + «Справочник» (legacy, скрыт) */
