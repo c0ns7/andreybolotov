@@ -179,69 +179,6 @@ export default function SettingsPageClient() {
       });
     }
 
-    function saveEmailNotify(patch: Record<string, boolean>) {
-      const errEl = document.getElementById("settings-notify-error");
-      if (errEl) {
-        errEl.textContent = "";
-        errEl.hidden = true;
-      }
-      return abApiJson("/api/auth/email-notifications", {
-        method: "PATCH",
-        headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      }).catch((er: unknown) => {
-        if (errEl) {
-          errEl.textContent = er instanceof AbApiError ? er.message : "Не удалось сохранить";
-          errEl.hidden = false;
-        }
-        throw er;
-      });
-    }
-
-    const cbNotifyChat = document.getElementById("settings-notify-chat") as HTMLInputElement | null;
-    const cbNotifyRaffleOrders = document.getElementById("settings-notify-raffle-orders") as HTMLInputElement | null;
-    const sessNotify = loadAbSession();
-    if (sessNotify?.token) {
-      abApiJson<{ user: Record<string, unknown> }>("/api/auth/me", { headers: abAuthHeaders(), cache: "no-store" })
-        .then((data) => {
-          const u = (data && data.user) || {};
-          if (cbNotifyChat) cbNotifyChat.checked = u.email_notify_chat !== false;
-          if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.checked = u.email_notify_raffle_orders !== false;
-        })
-        .catch(() => {});
-    } else {
-      if (cbNotifyChat) cbNotifyChat.disabled = true;
-      if (cbNotifyRaffleOrders) cbNotifyRaffleOrders.disabled = true;
-    }
-    if (cbNotifyChat && sessNotify?.token) {
-      cbNotifyChat.addEventListener("change", () => {
-        const want = cbNotifyChat.checked;
-        setToggleStatus("settings-notify-chat-status", "Сохраняем...", "saving");
-        saveEmailNotify({ email_notify_chat: want })
-          .then(() => {
-            setToggleStatus("settings-notify-chat-status", "Сохранено", "ok");
-          })
-          .catch(() => {
-            cbNotifyChat.checked = !want;
-            setToggleStatus("settings-notify-chat-status", "Ошибка", "err");
-          });
-      });
-    }
-    if (cbNotifyRaffleOrders && sessNotify?.token) {
-      cbNotifyRaffleOrders.addEventListener("change", () => {
-        const want = cbNotifyRaffleOrders.checked;
-        setToggleStatus("settings-notify-raffle-orders-status", "Сохраняем...", "saving");
-        saveEmailNotify({ email_notify_raffle_orders: want })
-          .then(() => {
-            setToggleStatus("settings-notify-raffle-orders-status", "Сохранено", "ok");
-          })
-          .catch(() => {
-            cbNotifyRaffleOrders.checked = !want;
-            setToggleStatus("settings-notify-raffle-orders-status", "Ошибка", "err");
-          });
-      });
-    }
-
     const formPw = document.getElementById("form-settings-password");
     const onPwSubmit = (e: Event) => {
       e.preventDefault();

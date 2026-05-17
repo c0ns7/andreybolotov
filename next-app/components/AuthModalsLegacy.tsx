@@ -35,10 +35,9 @@ export default function AuthModalsLegacy() {
               </div>
 
               <div className="reg-step" data-reg-step="2">
-                <div className="form-group" id="email-reg-group">
-                  <label htmlFor="email-reg">Email <span className="form-optional">необязательно</span></label>
-                  <input className="input" type="email" id="email-reg" name="email" autoComplete="email" placeholder="Если есть — укажите" />
-                  <button type="button" className="reg-email-skip" id="btn-reg-skip-email">У меня нет электронной почты</button>
+                <div className="form-group">
+                  <label htmlFor="locality-reg">Населенный пункт</label>
+                  <input className="input" type="text" id="locality-reg" name="locality" autoComplete="address-level2" placeholder="Город или посёлок" />
                 </div>
                 <div className="form-actions form-actions--split">
                   <button type="button" className="btn btn--ghost" id="reg-step-back-2">Назад</button>
@@ -162,7 +161,7 @@ export default function AuthModalsLegacy() {
                 <path d="M15 18l-6-6 6-6"></path>
               </svg>
             </button>
-            <h2 id="forgot-heading" className="modal__top-title">Восстановление</h2>
+            <h2 id="forgot-heading" className="modal__top-title">Сброс пароля</h2>
             <button type="button" className="modal__close" id="modal-forgot-close" aria-label="Закрыть">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12"></path>
@@ -170,15 +169,11 @@ export default function AuthModalsLegacy() {
             </button>
           </div>
           <div className="modal__body">
-            <form id="form-forgot" noValidate>
-              <div className="form-group">
-                <label htmlFor="email-forgot">Email</label>
-                <input className="input" type="email" id="email-forgot" name="email" autoComplete="email" placeholder="you@example.com" />
-              </div>
-              <div className="form-actions">
-                <button type="submit" className="btn btn--primary">Отправить ссылку</button>
-              </div>
-            </form>
+            <p className="modal__lead">Для сброса пароля обратитесь к администратору в личные сообщения в MAX.</p>
+            <p className="modal__lead modal__lead--muted">Я пользуюсь мессенджером MAX. Присоединяйся!</p>
+            <div className="form-actions">
+              <a className="btn btn--primary" href="https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w" target="_blank" rel="noopener noreferrer">Написать в MAX</a>
+            </div>
           </div>
         </div>
       </div>

@@ -5,7 +5,7 @@ import SettingsPageClient from "../../../components/ab/SettingsPageClient";
 
 export const metadata: Metadata = {
   title: "Настройки",
-  description: "Пароль, тема, уведомления на почту и доступность.",
+  description: "Пароль, тема и доступность.",
 };
 
 export default function HomeSettingsPage() {
@@ -44,15 +44,6 @@ export default function HomeSettingsPage() {
                   </svg>
                 </span>
                 <span>Тема</span>
-              </button>
-              <button type="button" className="settings-tab" role="tab" id="tab-settings-notify" data-tab="notify" aria-selected="false" aria-controls="settings-panel-notify" tabIndex={-1}>
-                <span className="settings-tab__icon" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="5" width="18" height="14" rx="2" />
-                    <path d="m3 7 9 6 9-6" />
-                  </svg>
-                </span>
-                <span>Почта</span>
               </button>
               <button type="button" className="settings-tab" role="tab" id="tab-settings-a11y" data-tab="a11y" aria-selected="false" aria-controls="settings-panel-a11y" tabIndex={-1}>
                 <span className="settings-tab__icon" aria-hidden="true">
@@ -200,40 +191,6 @@ export default function HomeSettingsPage() {
                     Тёмная
                   </button>
                 </div>
-              </div>
-            </div>
-
-            <div id="settings-panel-notify" className="settings-tab-panel" role="tabpanel" aria-labelledby="tab-settings-notify" hidden>
-              <div className="settings-card">
-                <h2 className="settings-card__title">Почтовые уведомления</h2>
-                <p className="settings-card__lead">Письма уходят на адрес из вашего профиля. Пароль и важные письма по безопасности приходят всегда.</p>
-                <p id="settings-notify-error" className="settings-msg settings-msg--err" hidden />
-                <label className="settings-option">
-                  <input type="checkbox" id="settings-notify-chat" />
-                  <span className="settings-switch" aria-hidden="true">
-                    <span className="settings-switch__thumb"></span>
-                  </span>
-                  <span className="settings-option__text">
-                    <span className="settings-option__label-row">
-                      <span className="settings-option__label">Чат поддержки</span>
-                      <span id="settings-notify-chat-status" className="settings-option__status" aria-live="polite"></span>
-                    </span>
-                    <span className="settings-option__hint">Когда поддержка ответит в чате, на почту сразу придёт письмо с текстом этого ответа.</span>
-                  </span>
-                </label>
-                <label className="settings-option">
-                  <input type="checkbox" id="settings-notify-raffle-orders" />
-                  <span className="settings-switch" aria-hidden="true">
-                    <span className="settings-switch__thumb"></span>
-                  </span>
-                  <span className="settings-option__text">
-                    <span className="settings-option__label-row">
-                      <span className="settings-option__label">Бронь и оплата</span>
-                      <span id="settings-notify-raffle-orders-status" className="settings-option__status" aria-live="polite"></span>
-                    </span>
-                    <span className="settings-option__hint">Напоминание, что бронь скоро сгорит; письмо, если чек нужно заменить. Не зависит от рассылки о новых акциях.</span>
-                  </span>
-                </label>
               </div>
             </div>
 

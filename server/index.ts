@@ -526,7 +526,7 @@ app.get("/api/internal/cron/raffle-mail-tick", async (c) => {
 });
 
 app.post("/api/auth/register", async (c) => {
-  let body: { phone?: string; name?: string; email?: string; locality?: string; password?: string };
+  let body: { phone?: string; name?: string; locality?: string; password?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -534,7 +534,6 @@ app.post("/api/auth/register", async (c) => {
   }
   const phone = normalizePhone(String(body.phone ?? ""));
   const name = String(body.name ?? "").trim();
-  const emailRaw = String(body.email ?? "").trim().toLowerCase();
   const locality = String(body.locality ?? "").trim().slice(0, 120);
   const password = String(body.password ?? "");
 
@@ -544,16 +543,6 @@ app.post("/api/auth/register", async (c) => {
   }
   if (!name) return c.json({ error: "Укажите ФИО" }, 400);
   if (!locality) return c.json({ error: "Укажите населенный пункт" }, 400);
-  let emailDb: string | null = null;
-  if (emailRaw) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
-      return c.json({ error: "Укажите корректный email" }, 400);
-    }
-    if (await getUserByEmailPg(emailRaw)) {
-      return c.json({ error: "Этот email уже зарегистрирован" }, 409);
-    }
-    emailDb = emailRaw;
-  }
   if (password.length < 6) return c.json({ error: "Пароль не короче 6 символов" }, 400);
 
   if (await getUserByPhonePg(phone)) {
@@ -561,7 +550,7 @@ app.post("/api/auth/register", async (c) => {
   }
 
   const passwordHash = bcrypt.hashSync(password, 10);
-  const userId = await insertUserPg(phone, name, emailDb, locality, passwordHash);
+  const userId = await insertUserPg(phone, name, null, locality, passwordHash);
   try {
     const affected = await materializeRafflePreassignmentsForUser(userId);
     for (const rid of affected) notifyRaffleGridMutated(rid);
@@ -571,14 +560,12 @@ app.post("/api/auth/register", async (c) => {
   const row = await getUserByIdPg(userId);
   const token = randomUUID();
   await createSessionPg(token, userId);
-  const emailOut = row?.email != null && String(row.email).trim() ? String(row.email).trim().toLowerCase() : "";
   return c.json({
     token,
     user: {
       id: userId,
       phone,
       name,
-      email: emailOut,
       locality: row?.locality != null ? String(row.locality).trim() : "",
       role: row?.role ?? "user",
       blocked: false,
@@ -649,7 +636,6 @@ app.post("/api/auth/login", async (c) => {
       id: user.id,
       phone: user.phone,
       name: user.name,
-      email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
       locality: user.locality != null ? String(user.locality).trim() : "",
       role: user.role ?? "user",
       blocked: Number(user.blocked) === 1,
@@ -670,20 +656,14 @@ app.get("/api/auth/me", async (c) => {
     console.error("[me] materialize preassign:", e instanceof Error ? e.message : e);
   }
   const row = await getUserByIdPg(user.id);
-  const notifyChat = row ? Number(row.email_notify_chat ?? 1) !== 0 : true;
-  const notifyRaffleOrders = row ? Number(row.email_notify_raffle_orders ?? 1) !== 0 : true;
   return c.json({
     user: {
       id: user.id,
       phone: user.phone,
       name: user.name,
-      email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
       locality: row?.locality != null ? String(row.locality).trim() : "",
       role: user.role ?? "user",
       blocked: Number(user.blocked) === 1,
-      email_notify_chat: notifyChat,
-      email_notify_raffles: false,
-      email_notify_raffle_orders: notifyRaffleOrders,
     },
   });
 });
@@ -702,64 +682,23 @@ app.post("/api/auth/logout", async (c) => {
 });
 
 app.post("/api/auth/forgot", async (c) => {
-  let body: { email?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "Некорректный JSON" }, 400);
-  }
-  const email = String(body.email ?? "").trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return c.json({ error: "Введите корректный email" }, 400);
-  }
-  const generic = { ok: true, message: "Если email найден, мы отправим ссылку" };
-  const user = await getUserByEmailPg(email);
-  if (!user) {
-    return c.json(generic);
-  }
-  if (!isSmtpReady()) {
-    console.warn("[auth/forgot] SMTP не настроен (SMTP_HOST, SMTP_USER, SMTP_PASS) — письмо не отправлено");
-    return c.json(generic);
-  }
-  const rawToken = randomBytes(32).toString("hex");
-  const tokenHash = hashPasswordResetToken(rawToken);
-  const expiresAt = Date.now() + PASSWORD_RESET_TTL_MS_PG;
-  await setPasswordResetTokenForUserPg(user.id, tokenHash, expiresAt);
-  const resetUrl = `${publicAppOrigin()}/home/reset-password?token=${encodeURIComponent(rawToken)}`;
-  try {
-    await sendPasswordResetEmail(email, resetUrl);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[auth/forgot] SMTP failed:", msg);
-    console.error(e);
-    return c.json({ error: "Не удалось отправить письмо. Попробуйте позже." }, 500);
-  }
-  return c.json(generic);
+  return c.json(
+    {
+      error:
+        "Сброс пароля по email отключён. Обратитесь к администратору в MAX: https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w",
+    },
+    410,
+  );
 });
 
 app.post("/api/auth/reset-password", async (c) => {
-  let body: { token?: string; password?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "Некорректный JSON" }, 400);
-  }
-  const raw = String(body.token ?? "").trim();
-  const password = String(body.password ?? "");
-  if (!/^[a-f0-9]{64}$/i.test(raw)) {
-    return c.json({ error: "Некорректная ссылка" }, 400);
-  }
-  if (password.length < 6) {
-    return c.json({ error: "Пароль не короче 6 символов" }, 400);
-  }
-  const tokenHash = hashPasswordResetToken(raw);
-  const userId = await consumePasswordResetTokenPg(tokenHash);
-  if (!userId) {
-    return c.json({ error: "Ссылка недействительна или истекла" }, 400);
-  }
-  const passwordHash = bcrypt.hashSync(password, 10);
-  await updateUserPasswordHashPg(userId, passwordHash);
-  return c.json({ ok: true });
+  return c.json(
+    {
+      error:
+        "Сброс пароля по ссылке отключён. Обратитесь к администратору в MAX: https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w",
+    },
+    410,
+  );
 });
 
 app.post("/api/auth/change-password", async (c) => {

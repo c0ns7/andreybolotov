@@ -771,6 +771,7 @@ export default function HomeAppClient() {
         show={showApp}
         profileLetter={letter}
         authVerified={authVerified}
+        showBlog
         onChat={() => router.push("/home/chat")}
         onChatBlocked={() => toast("Войдите, чтобы написать в чат", "warning")}
       />

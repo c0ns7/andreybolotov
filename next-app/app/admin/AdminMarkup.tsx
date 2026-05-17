@@ -373,7 +373,7 @@ export default function AdminMarkup() {
             <div className="admin-raffles-toolbar__text">
               <span className="admin-raffles-toolbar__label"
                 >Пользователи <span id="admin-users-total-count" className="admin-users-toolbar__count" aria-live="polite">(…)</span></span>
-              <p className="admin-raffles-toolbar__hint">Поиск по имени, телефону или email; отдельно — точный поиск по ID аккаунта. Если заполнен ID, текстовый поиск не используется. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
+              <p className="admin-raffles-toolbar__hint">Поиск по имени или телефону; отдельно — точный поиск по ID аккаунта. Если заполнен ID, текстовый поиск не используется. Карточки: правка профиля, чат поддержки, роль и блокировка.</p>
             </div>
           </div>
           <a href="/admin?tab=stats" className="admin-users-toolbar__stats-link" id="btn-admin-users-stats">
@@ -387,7 +387,7 @@ export default function AdminMarkup() {
               id="admin-users-search"
               className="input admin-users-search"
               type="search"
-              placeholder="Поиск по имени, телефону, email…"
+              placeholder="Поиск по имени или телефону…"
               autoComplete="off"
             />
           </label>
@@ -1114,10 +1114,6 @@ export default function AdminMarkup() {
                 <span id="raffle-buyer-phone" className="admin-raffle-buyer-modal__value"></span>
               </div>
               <div className="admin-raffle-buyer-modal__row">
-                <span className="admin-raffle-buyer-modal__label">Email</span>
-                <span id="raffle-buyer-email" className="admin-raffle-buyer-modal__value"></span>
-              </div>
-              <div className="admin-raffle-buyer-modal__row">
                 <span className="admin-raffle-buyer-modal__label">Населенный пункт</span>
                 <span id="raffle-buyer-locality" className="admin-raffle-buyer-modal__value"></span>
               </div>
@@ -1159,10 +1155,6 @@ export default function AdminMarkup() {
             <div className="form-group">
               <label htmlFor="edit-user-phone">Телефон</label>
               <input id="edit-user-phone" className="input input--phone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="+7 (___) ___-__-__" />
-            </div>
-            <div className="form-group">
-              <label htmlFor="edit-user-email">Email</label>
-              <input id="edit-user-email" className="input" type="email" autoComplete="email" />
             </div>
             <div className="form-group">
               <label htmlFor="edit-user-locality">Населенный пункт</label>

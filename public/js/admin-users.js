@@ -137,7 +137,7 @@
     return formatDateTime(n);
   }
 
-  /** @type {Array<{id:number;phone:string;name:string;email:string;locality?:string;role:string;blocked:boolean;created_at:number;last_active_at:number|null}>} */
+  /** @type {Array<{id:number;phone:string;name:string;locality?:string;role:string;blocked:boolean;created_at:number;last_active_at:number|null}>} */
   let usersCache = [];
   let usersTotal = 0;
   let listLoading = false;
@@ -271,9 +271,6 @@
             "</p>" +
             '<p class="admin-user-card__line"><span class="admin-user-card__k">Тел.</span> ' +
             esc(formatRuPhone(u.phone)) +
-            "</p>" +
-            '<p class="admin-user-card__line admin-user-card__line--email"><span class="admin-user-card__k">Email</span> ' +
-            esc(String(u.email || "Не указано")) +
             "</p>" +
             '<p class="admin-user-card__line"><span class="admin-user-card__k">Населенный пункт</span> ' +
             esc(String(u.locality || "Не указано")) +

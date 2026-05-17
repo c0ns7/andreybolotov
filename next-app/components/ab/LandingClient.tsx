@@ -4,6 +4,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { abApiJson, AbApiError } from "../../lib/ab-api";
 import { formatRuPhoneInput, isValidRuMobilePhone, phoneToNormalized } from "../../lib/ab-phone";
+import {
+  AB_ADMIN_MAX_LINK_LABEL,
+  AB_ADMIN_MAX_URL,
+  AB_PASSWORD_RESET_ADMIN_TEXT,
+} from "../../lib/ab-support-links";
 import { useAbSession } from "./AbSessionContext";
 
 type AuthResp = {
@@ -12,7 +17,6 @@ type AuthResp = {
     id?: number;
     phone: string;
     name: string;
-    email?: string;
     locality?: string;
     role?: string;
     blocked?: boolean;
@@ -26,7 +30,6 @@ function sessionFromAuth(data: AuthResp) {
     id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : undefined,
     phone: data.user.phone,
     name: data.user.name,
-    email: data.user.email || "",
     locality: data.user.locality || "",
     role: data.user.role || "user",
     blocked: !!data.user.blocked,
@@ -43,7 +46,6 @@ export default function LandingClient() {
 
   const [regPhone, setRegPhone] = useState("");
   const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
   const [regLocality, setRegLocality] = useState("");
   const [regPass, setRegPass] = useState("");
   const [regPass2, setRegPass2] = useState("");
@@ -53,8 +55,6 @@ export default function LandingClient() {
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [showLoginPass, setShowLoginPass] = useState(false);
-
-  const [forgotEmail, setForgotEmail] = useState("");
 
   const showAuthedUi = !!(session?.token && session?.phone && (authVerified || authCheckInFlight));
 
@@ -67,7 +67,6 @@ export default function LandingClient() {
     setLoginPass("");
     setRegPhone("");
     setRegName("");
-    setRegEmail("");
     setRegLocality("");
     setRegPass("");
     setRegPass2("");
@@ -134,10 +133,6 @@ export default function LandingClient() {
       toast("Укажите ФИО", "warning");
       return;
     }
-    if (regEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) {
-      toast("Укажите корректный email или очистите поле", "warning");
-      return;
-    }
     if (!regLocality.trim()) {
       toast("Укажите населенный пункт", "warning");
       return;
@@ -156,7 +151,6 @@ export default function LandingClient() {
         body: JSON.stringify({
           phone,
           name: regName.trim(),
-          email: regEmail.trim() || "",
           locality: regLocality.trim(),
           password: regPass,
         }),
@@ -191,24 +185,6 @@ export default function LandingClient() {
       setModal("none");
     } catch (err) {
       const msg = err instanceof AbApiError ? err.message : "Ошибка входа";
-      toast(msg, "error");
-    }
-  };
-
-  const onForgot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = forgotEmail.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast("Введите email", "warning");
-      return;
-    }
-    try {
-      await abApiJson("/api/auth/forgot", { method: "POST", body: JSON.stringify({ email }) });
-      toast("Если email найден, мы отправим ссылку", "info");
-      setAuthStep("login");
-      setModal("auth");
-    } catch (err) {
-      const msg = err instanceof AbApiError ? err.message : "Ошибка";
       toast(msg, "error");
     }
   };
@@ -380,18 +356,6 @@ export default function LandingClient() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="email-reg-native">Email (необязательно)</label>
-                  <div className="input-wrap input-wrap--with-icon">
-                    <span className="auth-input-icon" aria-hidden="true">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="5" width="18" height="14" rx="2" />
-                        <path d="m3 7 9 6 9-6" />
-                      </svg>
-                    </span>
-                    <input className="input" id="email-reg-native" type="email" autoComplete="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
-                  </div>
-                </div>
-                <div className="form-group">
                   <label htmlFor="locality-reg-native">Населенный пункт</label>
                   <div className="input-wrap input-wrap--with-icon">
                     <span className="auth-input-icon" aria-hidden="true">
@@ -491,7 +455,7 @@ export default function LandingClient() {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            <h2 className="modal__top-title">Восстановление</h2>
+            <h2 className="modal__top-title">Сброс пароля</h2>
             <button type="button" className="modal__close" aria-label="Закрыть" onClick={() => setModal("none")}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
@@ -499,25 +463,20 @@ export default function LandingClient() {
             </button>
           </div>
           <div className="modal__body">
-            <form onSubmit={onForgot} noValidate>
-              <div className="form-group">
-                <label htmlFor="email-forgot-native">Email</label>
-                <div className="input-wrap input-wrap--with-icon">
-                  <span className="auth-input-icon" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="5" width="18" height="14" rx="2" />
-                      <path d="m3 7 9 6 9-6" />
-                    </svg>
-                  </span>
-                  <input className="input" id="email-forgot-native" type="email" autoComplete="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
-                </div>
-              </div>
-              <div className="form-actions">
-                <button type="submit" className="btn btn--primary">
-                  Отправить ссылку
-                </button>
-              </div>
-            </form>
+            <p className="modal__lead">{AB_PASSWORD_RESET_ADMIN_TEXT}</p>
+            <p className="modal__lead modal__lead--muted">
+              Я пользуюсь мессенджером MAX. Присоединяйся!
+            </p>
+            <div className="form-actions">
+              <a
+                className="btn btn--primary"
+                href={AB_ADMIN_MAX_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {AB_ADMIN_MAX_LINK_LABEL}
+              </a>
+            </div>
           </div>
         </div>
       </div>

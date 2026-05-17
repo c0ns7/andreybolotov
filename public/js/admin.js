@@ -3,7 +3,7 @@
 
   const STORAGE_KEY = "ab_auth_v2";
 
-  /** @type {Array<{id:number;phone:string;name:string;email:string;locality?:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
+  /** @type {Array<{id:number;phone:string;name:string;locality?:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
   let allUsersCache = [];
   /** Строка поиска в сайдбаре «Диалоги» (телефон / текст); синхронизируется с полем с debounce */
   let supportThreadSearch = "";
@@ -138,12 +138,9 @@
   }
 
   function buildThreadMeta(user) {
-    const email = user && user.email ? String(user.email) : "Не указано";
-    const locality = user && user.locality ? String(user.locality) : "Не указано";
+        const locality = user && user.locality ? String(user.locality) : "Не указано";
     return (
       formatRuPhone(user.phone) +
-      " · " +
-      email +
       " · " +
       locality +
       " · Последний актив: " +
@@ -352,7 +349,7 @@
   };
 
   let selectedId = null;
-  /** @type {{ id: number; phone: string; name: string; email: string; locality?: string; role: string; last_active_at?: number | null } | null} */
+  /** @type {{ id: number; phone: string; name: string; locality?: string; role: string; last_active_at?: number | null } | null} */
   let selectedUserData = null;
   /** Пока грузится тред, не сбрасывать selectedId в loadUsers (иначе гонка с WS). */
   let threadLoadUserId = null;
@@ -771,7 +768,6 @@
       id: selectedUserData.id,
       phone: selectedUserData.phone,
       name: selectedUserData.name,
-      email: selectedUserData.email,
       locality: selectedUserData.locality || "",
       role: selectedUserData.role || "user",
       blocked: !!selectedUserData.blocked,
@@ -997,18 +993,9 @@
     if (!selectedUserData || !modalEditUser) return;
     const n = document.getElementById("edit-user-name");
     const p = document.getElementById("edit-user-phone");
-    const em = document.getElementById("edit-user-email");
     const loc = document.getElementById("edit-user-locality");
-    const idLine = document.getElementById("edit-user-account-id");
-    if (idLine) {
-      idLine.textContent =
-        selectedUserData.id != null && String(selectedUserData.id).trim() !== ""
-          ? "ID аккаунта: " + selectedUserData.id
-          : "";
-    }
     if (n) n.value = selectedUserData.name || "";
-    if (p) p.value = formatRuPhone(selectedUserData.phone);
-    if (em) em.value = selectedUserData.email || "";
+    if (p) p.value = formatRuPhone(selectedUserData.phone || "");
     if (loc) loc.value = selectedUserData.locality || "";
     var pn = document.getElementById("edit-user-password-new");
     var pc = document.getElementById("edit-user-password-confirm");
@@ -1034,7 +1021,6 @@
       id: selectedId,
       name: user.name || "",
       phone: user.phone || "",
-      email: user.email || "",
       locality: user.locality || "",
       role: user.role || "user",
       blocked: !!user.blocked,
@@ -1199,7 +1185,6 @@
         ...s,
         phone: me.user.phone,
         name: me.user.name,
-        email: me.user.email,
         role: me.user.role != null ? me.user.role : s.role || "user",
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -1544,7 +1529,6 @@
         if (!selectedId) return;
         const name = document.getElementById("edit-user-name").value.trim();
         const phone = document.getElementById("edit-user-phone").value.trim();
-        const email = document.getElementById("edit-user-email").value.trim();
         const locality = document.getElementById("edit-user-locality").value.trim();
         const pwNewEl = document.getElementById("edit-user-password-new");
         const pwConfEl = document.getElementById("edit-user-password-confirm");
@@ -1560,7 +1544,7 @@
             return;
           }
         }
-        const payload = { name, phone, email, locality };
+        const payload = { name, phone, locality };
         if (pwNew) payload.new_password = pwNew;
         apiJson("/api/admin/users/" + selectedId, {
           method: "PATCH",

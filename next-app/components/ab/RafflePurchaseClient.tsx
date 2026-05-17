@@ -132,6 +132,36 @@ function getRangeTabForTicketN(ticketCount: number, n: number) {
   return null;
 }
 
+function sliceCacheKey(raffleId: number, from: number, to: number) {
+  return String(raffleId) + ":" + String(from) + "-" + String(to);
+}
+
+function rebuildCellByNumberMap(sliceCache: Map<string, { ts: number; cells: Cell[] }>): Map<number, Cell> {
+  const map = new Map<number, Cell>();
+  for (const { cells } of sliceCache.values()) {
+    for (const c of cells) {
+      const n = Math.floor(Number(c.n));
+      if (Number.isFinite(n) && n > 0) map.set(n, c);
+    }
+  }
+  return map;
+}
+
+function collectGlobalFreeNumbers(sliceCache: Map<string, { ts: number; cells: Cell[] }>, selected: Set<number>): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const { cells } of sliceCache.values()) {
+    for (const c of cells) {
+      if (String(c.kind) !== "free") continue;
+      const n = Math.floor(Number(c.n));
+      if (!Number.isFinite(n) || n < 1 || selected.has(n) || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out;
+}
+
 function syncCartFlowRail(totalNums: number) {
   const nav = document.getElementById("modal-cart-flow-steps");
   const picked = document.getElementById("modal-cart-picked-label");
@@ -345,6 +375,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const receiptUploadSeqRef = useRef(0);
   const fastLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fastLookupRef = useRef<{ n: number; kind: string | null }>({ n: NaN, kind: null });
+  const cellByNumberRef = useRef(new Map<number, Cell>());
+  const allSlicesLoadedRef = useRef(false);
   const fastCellsLookupDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
@@ -409,19 +441,58 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const rangeToRef = useRef(rangeTo);
   rangeToRef.current = rangeTo;
 
-  const switchRangeTab = useCallback((from: number, to: number) => {
-    if (from === rangeFromRef.current && to === rangeToRef.current) return;
-    document.querySelectorAll(".raffle-range-tab").forEach((b) => {
-      const el = b as HTMLElement;
-      const bf = Number(el.getAttribute("data-from"));
-      const bt = Number(el.getAttribute("data-to"));
-      el.classList.toggle("raffle-range-tab--active", bf === from && bt === to);
-    });
-    setGridLoading(true);
-    setCells([]);
-    setRangeFrom(from);
-    setRangeTo(to);
+  const updateRangeTabMarkersFromCache = useCallback(() => {
+    const tabs = document.getElementById("raffle-page-tabs");
+    if (!tabs) return;
+    for (const p of rangePartsRef.current) {
+      const key = String(p.from) + "-" + String(p.to);
+      const known = rangeHasFreeRef.current.get(key);
+      if (known == null) continue;
+      const btn = tabs.querySelector(
+        `.raffle-range-tab[data-from="${p.from}"][data-to="${p.to}"]`,
+      ) as HTMLElement | null;
+      if (btn) btn.classList.toggle("raffle-range-tab--no-free", !known);
+    }
   }, []);
+
+  const applyCachedRange = useCallback((from: number, to: number, opts?: { showLoader?: boolean }) => {
+    const r = raffleRef.current;
+    if (!r?.id) return false;
+    const cached = sliceCacheRef.current.get(sliceCacheKey(Number(r.id), from, to));
+    if (!cached) {
+      if (opts?.showLoader !== false) {
+        setGridLoading(true);
+        setCells([]);
+      }
+      return false;
+    }
+    setCells(cached.cells);
+    setGridLoading(false);
+    return true;
+  }, []);
+
+  const switchRangeTab = useCallback(
+    (from: number, to: number) => {
+      const same = from === rangeFromRef.current && to === rangeToRef.current;
+      document.querySelectorAll(".raffle-range-tab").forEach((b) => {
+        const el = b as HTMLElement;
+        const bf = Number(el.getAttribute("data-from"));
+        const bt = Number(el.getAttribute("data-to"));
+        el.classList.toggle("raffle-range-tab--active", bf === from && bt === to);
+      });
+      if (!same) {
+        setRangeFrom(from);
+        setRangeTo(to);
+      }
+      if (!applyCachedRange(from, to, { showLoader: !allSlicesLoadedRef.current })) {
+        void loadSliceRef.current({ showLoader: !allSlicesLoadedRef.current });
+      }
+    },
+    [applyCachedRange],
+  );
+
+  const switchRangeTabRef = useRef(switchRangeTab);
+  switchRangeTabRef.current = switchRangeTab;
 
   const syncRangeTabsVisibility = useCallback(() => {
     const tabs = document.getElementById("raffle-page-tabs");
@@ -459,57 +530,104 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const syncRaffleSwipeHintsRef = useRef<() => void>(() => {});
   const sliceCacheRef = useRef(new Map<string, { ts: number; cells: Cell[] }>());
 
-  const loadSlice = useCallback(async (opts?: { force?: boolean; showLoader?: boolean }) => {
-    const r = raffleRef.current;
-    if (!r?.id) return;
-    const id = Number(r.id);
-    const from = rangeFromRef.current;
-    const to = rangeToRef.current;
-    const force = Boolean(opts?.force);
-    const showLoader = opts?.showLoader !== false;
-    const cacheKey = String(id) + ":" + String(from) + "-" + String(to);
-    if (!force) {
-      const cached = sliceCacheRef.current.get(cacheKey);
-      if (cached && Date.now() - cached.ts < 20_000) {
-        setCells(cached.cells);
-        setGridLoading(false);
-        const keyCached = String(from) + "-" + String(to);
-        const hasFreeCached = cached.cells.some((c) => String(c.kind) === "free");
-        rangeHasFreeRef.current.set(keyCached, hasFreeCached);
-        const btnCached = document.querySelector(
-          `.raffle-range-tab[data-from="${from}"][data-to="${to}"]`,
-        ) as HTMLElement | null;
-        if (btnCached) btnCached.classList.toggle("raffle-range-tab--no-free", !hasFreeCached);
-        syncRangeTabsVisibilityRef.current();
-        return;
-      }
-    }
-    if (showLoader) {
-      setCells([]);
-      setGridLoading(true);
-    }
-    try {
-      const res = await fetch(
-        "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
-        { cache: "no-store", headers: abAuthHeaders() },
-      );
-      const data = (await res.json()) as { cells?: Cell[]; error?: string };
-      if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
-      const nextCells = Array.isArray(data.cells) ? data.cells : [];
-      setCells(nextCells);
-      setGridLoading(false);
-      sliceCacheRef.current.set(cacheKey, { ts: Date.now(), cells: nextCells });
-      const key = String(from) + "-" + String(to);
-      const hasFree = nextCells.some((c) => String(c.kind) === "free");
-      rangeHasFreeRef.current.set(key, hasFree);
-      const btn = document.querySelector(`.raffle-range-tab[data-from="${from}"][data-to="${to}"]`) as HTMLElement | null;
-      if (btn) btn.classList.toggle("raffle-range-tab--no-free", !hasFree);
-      syncRangeTabsVisibilityRef.current();
-    } catch (e) {
-      setGridLoading(false);
-      throw e;
-    }
+  const fetchRangeSlice = useCallback(async (id: number, from: number, to: number): Promise<Cell[]> => {
+    const res = await fetch(
+      "/api/raffles/" + String(id) + "/tickets?from=" + String(from) + "&to=" + String(to),
+      { cache: "no-store", headers: abAuthHeaders() },
+    );
+    const data = (await res.json()) as { cells?: Cell[]; error?: string };
+    if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
+    return Array.isArray(data.cells) ? data.cells : [];
   }, []);
+
+  const loadAllSlices = useCallback(
+    async (opts?: { force?: boolean; showLoader?: boolean; parts?: { from: number; to: number }[] }) => {
+      const r = raffleRef.current;
+      if (!r?.id) return;
+      const id = Number(r.id);
+      const parts = opts?.parts?.length ? opts.parts : rangePartsRef.current;
+      if (!parts.length) return;
+      const force = Boolean(opts?.force);
+      const showLoader = opts?.showLoader !== false;
+      if (showLoader) {
+        setCells([]);
+        setGridLoading(true);
+      }
+      try {
+        await Promise.all(
+          parts.map(async (p) => {
+            const cacheKey = sliceCacheKey(id, p.from, p.to);
+            if (!force) {
+              const cached = sliceCacheRef.current.get(cacheKey);
+              if (cached && Date.now() - cached.ts < 20_000) {
+                rangeHasFreeRef.current.set(
+                  String(p.from) + "-" + String(p.to),
+                  cached.cells.some((c) => String(c.kind) === "free"),
+                );
+                return;
+              }
+            }
+            const nextCells = await fetchRangeSlice(id, p.from, p.to);
+            sliceCacheRef.current.set(cacheKey, { ts: Date.now(), cells: nextCells });
+            rangeHasFreeRef.current.set(
+              String(p.from) + "-" + String(p.to),
+              nextCells.some((c) => String(c.kind) === "free"),
+            );
+          }),
+        );
+        cellByNumberRef.current = rebuildCellByNumberMap(sliceCacheRef.current);
+        allSlicesLoadedRef.current = true;
+        updateRangeTabMarkersFromCache();
+        syncRangeTabsVisibilityRef.current();
+        applyCachedRange(rangeFromRef.current, rangeToRef.current, { showLoader: false });
+      } catch (e) {
+        setGridLoading(false);
+        throw e;
+      }
+    },
+    [applyCachedRange, fetchRangeSlice, updateRangeTabMarkersFromCache],
+  );
+
+  const loadSlice = useCallback(
+    async (opts?: { force?: boolean; showLoader?: boolean }) => {
+      const r = raffleRef.current;
+      if (!r?.id) return;
+      if (opts?.force && sliceCacheRef.current.size === 0) {
+        return loadAllSlices(opts);
+      }
+      const id = Number(r.id);
+      const from = rangeFromRef.current;
+      const to = rangeToRef.current;
+      const force = Boolean(opts?.force);
+      const showLoader = opts?.showLoader !== false;
+      const cacheKey = sliceCacheKey(id, from, to);
+      if (!force) {
+        if (applyCachedRange(from, to, { showLoader })) {
+          syncRangeTabsVisibilityRef.current();
+          return;
+        }
+      }
+      if (showLoader) {
+        setCells([]);
+        setGridLoading(true);
+      }
+      try {
+        const nextCells = await fetchRangeSlice(id, from, to);
+        sliceCacheRef.current.set(cacheKey, { ts: Date.now(), cells: nextCells });
+        const key = String(from) + "-" + String(to);
+        rangeHasFreeRef.current.set(key, nextCells.some((c) => String(c.kind) === "free"));
+        cellByNumberRef.current = rebuildCellByNumberMap(sliceCacheRef.current);
+        updateRangeTabMarkersFromCache();
+        setCells(nextCells);
+        setGridLoading(false);
+        syncRangeTabsVisibilityRef.current();
+      } catch (e) {
+        setGridLoading(false);
+        throw e;
+      }
+    },
+    [applyCachedRange, fetchRangeSlice, loadAllSlices, updateRangeTabMarkersFromCache],
+  );
 
   const syncOrder = useCallback(async () => {
     const r = raffleRef.current;
@@ -555,6 +673,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
   const loadSliceRef = useRef(loadSlice);
   loadSliceRef.current = loadSlice;
+  const loadAllSlicesRef = useRef(loadAllSlices);
+  loadAllSlicesRef.current = loadAllSlices;
   const syncOrderRef = useRef(syncOrder);
   syncOrderRef.current = syncOrder;
 
@@ -642,58 +762,27 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       renderFastInputState();
       return;
     }
-    const rf = rangeFromRef.current;
-    const rt = rangeToRef.current;
-    if (n >= rf && n <= rt) {
-      for (const c of cellsRef.current) {
-        if (Number(c.n) === n) {
-          fastLookupRef.current = { n, kind: String(c.kind || "invalid") };
-          renderFastInputState();
-          return;
-        }
-      }
+    const indexed = cellByNumberRef.current.get(n);
+    if (indexed) {
+      fastLookupRef.current = { n, kind: String(indexed.kind || "invalid") };
+      renderFastInputState();
+      return;
+    }
+    if (allSlicesLoadedRef.current) {
+      fastLookupRef.current = { n, kind: "invalid" };
+      renderFastInputState();
+      return;
     }
     fastLookupRef.current = { n, kind: null };
     renderFastInputState();
     fastLookupTimerRef.current = setTimeout(() => {
       fastLookupTimerRef.current = null;
-      const part = getRangeTabForTicketN(Math.max(1, Math.floor(Number(r.ticket_count) || 1)), n);
-      if (!part) {
-        fastLookupRef.current = { n, kind: "invalid" };
-        renderFastInputState();
-        return;
-      }
-      void (async () => {
-        try {
-          const res2 = await fetch(
-            "/api/raffles/" + String(r.id) + "/tickets?from=" + String(part.from) + "&to=" + String(part.to),
-            { cache: "no-store", headers: abAuthHeaders() },
-          );
-          const d2 = (await res2.json()) as { cells?: Cell[]; error?: string };
-          const cur2 = getFastInputN();
-          if (!Number.isFinite(cur2) || cur2 !== n) return;
-          if (!res2.ok || !Array.isArray(d2.cells)) {
-            fastLookupRef.current = { n, kind: "invalid" };
-            renderFastInputState();
-            return;
-          }
-          let kind2: string | null = null;
-          for (const c of d2.cells) {
-            if (Number(c?.n) === n) {
-              kind2 = String(c.kind || "");
-              break;
-            }
-          }
-          fastLookupRef.current = { n, kind: kind2 || "invalid" };
-          renderFastInputState();
-        } catch {
-          const cur3 = getFastInputN();
-          if (!Number.isFinite(cur3) || cur3 !== n) return;
-          fastLookupRef.current = { n, kind: "error" };
-          renderFastInputState();
-        }
-      })();
-    }, 300);
+      const cur = getFastInputN();
+      if (!Number.isFinite(cur) || cur !== n) return;
+      const cell = cellByNumberRef.current.get(n);
+      fastLookupRef.current = { n, kind: cell ? String(cell.kind || "invalid") : "invalid" };
+      renderFastInputState();
+    }, 120);
   }, [renderFastInputState]);
 
   useEffect(() => {
@@ -814,7 +903,11 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           /* ignore */
         }
         await syncOrderRef.current();
-        await loadSliceRef.current();
+        allSlicesLoadedRef.current = false;
+        cellByNumberRef.current = new Map();
+        sliceCacheRef.current.clear();
+        rangeHasFreeRef.current.clear();
+        await loadAllSlicesRef.current({ parts });
         if (
           shouldAutoOpenPayment &&
           !autoOpenPaymentTriggeredRef.current &&
@@ -999,26 +1092,18 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (from === rangeFromRef.current && to === rangeToRef.current) {
         return;
       }
-      document.querySelectorAll(".raffle-range-tab").forEach((b) => {
-        b.classList.toggle("raffle-range-tab--active", b === t);
-      });
-      setGridLoading(true);
-      setCells([]);
-      setRangeFrom(from);
-      setRangeTo(to);
+      switchRangeTab(from, to);
     };
     const tabs = document.getElementById("raffle-page-tabs");
     tabs?.addEventListener("click", onTabs);
     return () => tabs?.removeEventListener("click", onTabs);
-  }, []);
+  }, [switchRangeTab]);
 
   useEffect(() => {
-    if (!raffle?.id) return;
-    void loadSliceRef.current().catch(() => {});
-  }, [raffle?.id, rangeFrom, rangeTo]);
-
-  useEffect(() => {
+    allSlicesLoadedRef.current = false;
+    cellByNumberRef.current = new Map();
     sliceCacheRef.current.clear();
+    rangeHasFreeRef.current.clear();
   }, [raffle?.id]);
 
   const selectionSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1061,7 +1146,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         setOrderNumbers(Array.isArray(removed.numbers) ? removed.numbers : []);
         cur = Array.isArray(removed.numbers) ? removed.numbers.slice() : [];
       }
-      if (reload) void loadSliceRef.current();
+      if (reload) void loadAllSlicesRef.current({ force: true, showLoader: false });
     } catch {
       /* silent */
     }
@@ -1153,16 +1238,16 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toastRef.current("Сначала завершите оплату по брони.", "info");
         return;
       }
-      const free = cellsRef.current
-        .filter((c) => String(c.kind) === "free")
-        .map((c) => c.n)
-        .filter((num) => !selRef.current.has(num));
+      const free = collectGlobalFreeNumbers(sliceCacheRef.current, selRef.current);
       if (!free.length) {
-        toastRef.current("Свободных номерков в этой таблице нет", "warning");
+        toastRef.current("Свободных номерков в акции нет", "warning");
         return;
       }
       const rnd = free[Math.floor(Math.random() * free.length)];
       if (rnd === undefined) return;
+      const maxN = Math.max(1, Math.floor(Number(raffleRef.current?.ticket_count) || 1));
+      const part = getRangeTabForTicketN(maxN, rnd);
+      if (part) switchRangeTabRef.current(part.from, part.to);
       const finp = document.getElementById("raffle-fast-number") as HTMLInputElement | null;
       if (finp) finp.value = String(rnd);
       fastLookupRef.current = { n: rnd, kind: "free" };
@@ -1663,7 +1748,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       setSelected([]);
       if (rid) persistDraft(rid, []);
       void fetch("/api/raffles/cart/clear", { method: "POST", headers: abAuthHeaders() }).catch(() => {});
-      void loadSliceRef.current();
+      void loadAllSlicesRef.current({ force: true, showLoader: false });
     };
     clearBtn.addEventListener("click", onClear);
     return () => clearBtn.removeEventListener("click", onClear);
@@ -1703,7 +1788,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           paymentMethod: "collection",
           activeBankCard: null,
         };
-        void loadSliceRef.current();
+        void loadAllSlicesRef.current({ force: true, showLoader: false });
         await armPaymentRef.current?.();
       } catch (e) {
         const msg = e instanceof AbApiError && e.status === 401 ? "Войдите снова." : String((e as Error).message || "Ошибка");
@@ -1738,14 +1823,18 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (!d || typeof d !== "object") return;
       const rid = raffleIdRef.current;
       if (d.type === "raffle_grid_updated" && Number(d.raffle_id) === rid) {
+        allSlicesLoadedRef.current = false;
         sliceCacheRef.current.clear();
-        void loadSliceRef.current({ force: true, showLoader: false });
+        rangeHasFreeRef.current.clear();
+        void loadAllSlicesRef.current({ force: true, showLoader: false });
         void syncOrderRef.current();
       }
       if (d.type === "raffle_tickets_updated") {
         if (d.raffle_id != null && Number(d.raffle_id) !== rid) return;
+        allSlicesLoadedRef.current = false;
         sliceCacheRef.current.clear();
-        void loadSliceRef.current({ force: true, showLoader: false });
+        rangeHasFreeRef.current.clear();
+        void loadAllSlicesRef.current({ force: true, showLoader: false });
         void syncOrderRef.current();
       }
       if (d.type === "raffles_feed_updated") {
@@ -2042,7 +2131,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         closeOverlay(document.getElementById("modal-reserve-payment"));
         reserveDraftRef.current = null;
         void syncOrderRef.current();
-        void loadSliceRef.current();
+        void loadAllSlicesRef.current({ force: true, showLoader: false });
         toastRef.current("Бронь отменена", "success");
       } catch (e) {
         if (isNetworkFetchError(e)) {
@@ -2320,7 +2409,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         const hint = data.order?.receipt_review_eta_hint ? String(data.order.receipt_review_eta_hint) : "";
         toastRef.current(hint ? "Чек отправлен. " + hint : "Чек отправлен на проверку", "success");
         void syncOrderRef.current();
-        void loadSliceRef.current();
+        void loadAllSlicesRef.current({ force: true, showLoader: false });
         router.replace("/home");
       } catch (e) {
         if (isNetworkFetchError(e)) {
@@ -2513,7 +2602,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         setEnterUi("invalid");
         return;
       }
-      const cell = cellsRef.current.find((c) => Number(c.n) === n);
+      const cell = cellByNumberRef.current.get(n);
       if (cell) {
         const kind = String(cell.kind || "");
         lookupState = { n, kind };
@@ -2523,33 +2612,23 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         else setEnterUi("invalid");
         return;
       }
+      if (allSlicesLoadedRef.current) {
+        lookupState = { n, kind: "invalid" };
+        setEnterUi("invalid");
+        return;
+      }
       setEnterUi("loading");
-      lookupTimer = setTimeout(async () => {
-        const part = getRangeTabForTicketN(maxN, n);
-        if (!part || !raffleRef.current?.id) {
-          lookupState = { n, kind: "invalid" };
-          setEnterUi("invalid");
-          return;
-        }
-        try {
-          const res = await fetch(
-            "/api/raffles/" + String(raffleRef.current.id) + "/tickets?from=" + String(part.from) + "&to=" + String(part.to),
-            { cache: "no-store", headers: abAuthHeaders() },
-          );
-          const data = (await res.json()) as { cells?: Cell[] };
-          const cur = Number(String(input.value || "").replace(/\D/g, ""));
-          if (cur !== n) return;
-          const item = Array.isArray(data.cells) ? data.cells.find((c) => Number(c?.n) === n) : undefined;
-          const kind = String(item?.kind || "invalid");
-          lookupState = { n, kind };
-          if (selRef.current.has(n) || kind === "self_reserved") setEnterUi("self");
-          else if (kind === "free") setEnterUi("free");
-          else if (kind === "taken") setEnterUi("taken");
-          else setEnterUi("invalid");
-        } catch {
-          setEnterUi("invalid");
-        }
-      }, 260);
+      lookupTimer = setTimeout(() => {
+        const cur = Number(String(input.value || "").replace(/\D/g, ""));
+        if (cur !== n) return;
+        const item = cellByNumberRef.current.get(n);
+        const kind = item ? String(item.kind || "invalid") : "invalid";
+        lookupState = { n, kind };
+        if (selRef.current.has(n) || kind === "self_reserved") setEnterUi("self");
+        else if (kind === "free") setEnterUi("free");
+        else if (kind === "taken") setEnterUi("taken");
+        else setEnterUi("invalid");
+      }, 120);
     };
 
     const submit = () => {
@@ -2578,12 +2657,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toast("Сначала завершите оплату по брони.", "info");
         return;
       }
-      const free = cellsRef.current
-        .filter((c) => String(c.kind) === "free")
-        .map((c) => c.n)
-        .filter((n) => !selRef.current.has(n));
+      const free = collectGlobalFreeNumbers(sliceCacheRef.current, selRef.current);
       if (!free.length) {
-        toast("Свободных номерков в этом диапазоне нет", "warning");
+        toast("Свободных номерков в акции нет", "warning");
         return;
       }
       const shuffled = free.slice().sort(() => Math.random() - 0.5);
@@ -2598,6 +2674,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       });
       scheduleSelectionSync();
       renderPicked();
+      const first = add[0];
+      if (first !== undefined) {
+        const maxN = Math.max(1, Math.floor(Number(raffleRef.current?.ticket_count) || 1));
+        const part = getRangeTabForTicketN(maxN, first);
+        if (part) switchRangeTabRef.current(part.from, part.to);
+      }
       setMode("enter");
     };
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BadgeCheck, Clock3, Gift, Hash, Hourglass, Mail, MapPin } from "lucide-react";
+import { BadgeCheck, Clock3, Gift, Hash, Hourglass, MapPin } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
 import { getAbMyTicketsCached, invalidateAbMyTicketsCache } from "../../lib/ab-my-tickets-cache";
@@ -14,6 +14,7 @@ import {
 import { loadAbSession } from "../../lib/ab-session";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { useAbSession } from "./AbSessionContext";
+import HomeBlogStubModal from "./HomeBlogStubModal";
 
 type Props = {
   show: boolean;
@@ -23,6 +24,10 @@ type Props = {
   authVerified: boolean;
   showSearchSheet?: boolean;
   onSearchSheet?: () => void;
+  /** Скрыть «Чат» (страница акции /raffle…) */
+  hideChat?: boolean;
+  /** Показать «Блог» на главной */
+  showBlog?: boolean;
 };
 
 type WholesaleSlotRow = { raffle_id?: number; wholesale_numbers?: number[] };
@@ -147,11 +152,17 @@ export default function AppBottomNav({
   authVerified,
   showSearchSheet,
   onSearchSheet,
+  hideChat: hideChatProp,
+  showBlog = false,
 }: Props) {
   const { session } = useAbSession();
   const pathname = usePathname() || "";
   const router = useRouter();
+  const hideChat =
+    hideChatProp ??
+    (pathname === "/home/raffle" || pathname.startsWith("/raffle/") || pathname.includes("/home/raffle/"));
   const [mounted, setMounted] = useState(false);
+  const [blogOpen, setBlogOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [ticketsLoading, setTicketsLoading] = useState(false);
@@ -419,7 +430,6 @@ export default function AppBottomNav({
     return m;
   }, [reserved, pending, confirmed]);
   const profilePhone = mounted ? formatPhoneRu(session?.phone) : "";
-  const profileEmail = mounted ? session?.email || "Не указано" : "Не указано";
   const profileLocality = mounted ? (session?.locality?.trim() || "Не указано") : "Не указано";
   const profileUserId =
     mounted && session?.id != null && Number(session.id) > 0 ? String(Math.floor(Number(session.id))) : "";
@@ -429,11 +439,26 @@ export default function AppBottomNav({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!blogOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBlogOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [blogOpen]);
+
+  const navSlotCount =
+    1 + (showSearchSheet ? 1 : 0) + (showBlog ? 1 : 0) + (!hideChat ? 1 : 0) + 1;
+  const navInnerClass =
+    "bottom-nav__inner bottom-nav__inner--" + String(Math.min(4, Math.max(3, navSlotCount)));
+
   return (
     <>
+      {showBlog ? <HomeBlogStubModal open={blogOpen} onClose={() => setBlogOpen(false)} /> : null}
       <nav className={"bottom-nav" + (show ? "" : " bottom-nav--hidden")} id="bottom-nav" aria-label="Разделы приложения">
         <button type="button" className="bottom-nav-scrolltop" id="tab-scroll-top" aria-label="Наверх" title="Наверх" hidden />
-        <div className="bottom-nav__inner bottom-nav__inner--3">
+        <div className={navInnerClass}>
           <Link href="/home" className={"bottom-nav-btn" + (isHome ? " bottom-nav-btn--active" : "")} id="tab-home" aria-label="Главная">
             <span className="bottom-nav-btn__icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -454,36 +479,56 @@ export default function AppBottomNav({
               <span className="bottom-nav-btn__label">Поиск</span>
             </button>
           ) : null}
-          <button
-            type="button"
-            className={
-              "bottom-nav-btn" +
-              (isChat ? " bottom-nav-btn--active" : "") +
-              (!isChat && chatUnread > 0 ? " bottom-nav-btn--chat-unread" : "")
-            }
-            id="tab-chat"
-            aria-label="Чат"
-            onClick={() => {
-              const cur = loadAbSession();
-              if (!cur?.token || !authVerified) {
-                onChatBlocked?.();
-                return;
-              }
-              setChatUnread(0);
-              invalidateAbChatUnreadCache();
-              onChat();
-            }}
-          >
-            <span className="bottom-nav-btn__icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-              </svg>
-              <span className="bottom-nav-btn__badge" hidden={chatUnread <= 0}>
-                {chatUnread > 99 ? "99+" : String(chatUnread)}
+          {showBlog ? (
+            <button
+              type="button"
+              className={"bottom-nav-btn" + (blogOpen ? " bottom-nav-btn--active" : "")}
+              id="tab-blog"
+              aria-label="Блог"
+              aria-expanded={blogOpen}
+              onClick={() => setBlogOpen(true)}
+            >
+              <span className="bottom-nav-btn__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
               </span>
-            </span>
-            <span className="bottom-nav-btn__label">Чат</span>
-          </button>
+              <span className="bottom-nav-btn__label">Блог</span>
+            </button>
+          ) : null}
+          {!hideChat ? (
+            <button
+              type="button"
+              className={
+                "bottom-nav-btn" +
+                (isChat ? " bottom-nav-btn--active" : "") +
+                (!isChat && chatUnread > 0 ? " bottom-nav-btn--chat-unread" : "")
+              }
+              id="tab-chat"
+              aria-label="Чат"
+              onClick={() => {
+                const cur = loadAbSession();
+                if (!cur?.token || !authVerified) {
+                  onChatBlocked?.();
+                  return;
+                }
+                setChatUnread(0);
+                invalidateAbChatUnreadCache();
+                onChat();
+              }}
+            >
+              <span className="bottom-nav-btn__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                </svg>
+                <span className="bottom-nav-btn__badge" hidden={chatUnread <= 0}>
+                  {chatUnread > 99 ? "99+" : String(chatUnread)}
+                </span>
+              </span>
+              <span className="bottom-nav-btn__label">Чат</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className={"bottom-nav-btn" + (isProfile ? " bottom-nav-btn--active" : "")}
@@ -551,17 +596,6 @@ export default function AppBottomNav({
                   suppressHydrationWarning
                 >
                   {profileUserIdDisplay}
-                </div>
-              </div>
-              <div className="profile-modal__kv-row">
-                <div className="profile-modal__kv-left">
-                  <span className="profile-modal__kv-icon profile-modal__kv-icon--email" aria-hidden="true">
-                    <Mail size={18} strokeWidth={2.2} />
-                  </span>
-                  <span className="profile-modal__kv-label">EMAIL</span>
-                </div>
-                <div id="profile-field-email" className="profile-modal__kv-value" suppressHydrationWarning>
-                  {profileEmail}
                 </div>
               </div>
               <div className="profile-modal__kv-row">

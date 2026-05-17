@@ -46,7 +46,6 @@
     }
   }
 
-  /** @type {{ token: string; phone: string; name: string; email: string; role?: string } | null} */
   let session = null;
 
   /** true только после успешного /api/auth/me или сразу после входа/регистрации */
@@ -1218,7 +1217,6 @@
     const authed = !!(s && s.token && s.phone && authVerified);
     const headingHero = document.getElementById("profile-modal-heading");
     const phoneHero = document.getElementById("profile-modal-phone-hero");
-    const fieldEmail = document.getElementById("profile-field-email");
     const fieldUserId = document.getElementById("profile-field-user-id");
     const fieldLocality = document.getElementById("profile-field-locality");
     const letterEl = document.getElementById("bottom-nav-profile-letter");
@@ -1236,14 +1234,6 @@
         phoneHero.textContent = phDisp || String(s.phone).trim() || "—";
       } else {
         phoneHero.textContent = "";
-      }
-    }
-    if (fieldEmail) {
-      if (authed && s && s.email) {
-        var em = String(s.email).trim();
-        fieldEmail.textContent = em || "Не указано";
-      } else {
-        fieldEmail.textContent = authed ? "Не указано" : "—";
       }
     }
     if (fieldUserId) {
@@ -6934,19 +6924,6 @@
   bindPasswordToggle(document.getElementById("toggle-pass-reg2"), "pass-reg2");
   bindPasswordToggle(document.getElementById("toggle-pass-login"), "pass-login");
 
-  document.getElementById("btn-reg-skip-email")?.addEventListener("click", function () {
-    var inp = document.getElementById("email-reg");
-    var grp = document.getElementById("email-reg-group");
-    if (!inp) return;
-    inp.value = "";
-    if (grp) grp.classList.add("form-group--email-skipped");
-    showToast("Почту можно не указывать. Сохраните пароль в надёжном месте.", "neutral");
-  });
-  document.getElementById("email-reg")?.addEventListener("input", function () {
-    var grp = document.getElementById("email-reg-group");
-    if (grp && String(this.value || "").trim()) grp.classList.remove("form-group--email-skipped");
-  });
-
   function setRegisterStep(step) {
     var s = Math.max(1, Math.min(3, Number(step) || 1));
     var form = document.getElementById("form-register");
@@ -6975,9 +6952,9 @@
       setRegisterStep(2);
     });
     document.getElementById("reg-step-next-2")?.addEventListener("click", function () {
-      const email = String((document.getElementById("email-reg") || {}).value || "").trim();
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showToast("Укажите корректный email или очистите поле", "warning");
+      const locality = String((document.getElementById("locality-reg") || {}).value || "").trim();
+      if (!locality) {
+        showToast("Укажите населенный пункт", "warning");
         return;
       }
       setRegisterStep(3);
@@ -7426,7 +7403,6 @@
         id: data.user.id != null && Number(data.user.id) > 0 ? Math.floor(Number(data.user.id)) : s.id,
         phone: data.user.phone,
         name: data.user.name,
-        email: data.user.email,
         locality: data.user.locality != null ? String(data.user.locality).trim() : s.locality || "",
         role: data.user.role || "user",
         blocked: accountBlocked,
@@ -7452,7 +7428,6 @@
       id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : undefined,
       phone: data.user.phone,
       name: data.user.name,
-      email: data.user.email,
       locality: data.user.locality != null ? String(data.user.locality).trim() : "",
       role: data.user.role || "user",
       blocked: !!data.user.blocked,
@@ -7641,15 +7616,15 @@
       return;
     }
     const name = document.getElementById("fio-reg").value.trim();
-    const email = document.getElementById("email-reg").value.trim();
+    const locality = String((document.getElementById("locality-reg") || {}).value || "").trim();
     const p1 = document.getElementById("pass-reg").value;
     const p2 = document.getElementById("pass-reg2").value;
     if (!name) {
       showToast("Укажите ФИО", "warning");
       return;
     }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast("Укажите корректный email или очистите поле", "warning");
+    if (!locality) {
+      showToast("Укажите населенный пункт", "warning");
       return;
     }
     if (p1.length < 6) {
@@ -7663,7 +7638,7 @@
 
     apiJson("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ phone, name, email: email || "", password: p1 }),
+      body: JSON.stringify({ phone, name, locality: locality, password: p1 }),
     })
       .then(function (data) {
         authVerified = true;
@@ -7680,7 +7655,6 @@
         }
         formRegister.reset();
         phoneReg.value = "";
-        document.getElementById("email-reg-group")?.classList.remove("form-group--email-skipped");
         setRegisterStep(1);
       })
       .catch(function (err) {
@@ -7727,29 +7701,6 @@
       })
       .catch(function (err) {
         showToast(err.message || "Ошибка входа", "error");
-      });
-  });
-
-  if (formForgot) formForgot.addEventListener("submit", function (e) {
-    e.preventDefault();
-    const email = document.getElementById("email-forgot").value.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast("Введите email", "warning");
-      return;
-    }
-
-    apiJson("/api/auth/forgot", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    })
-      .then(function () {
-        closeModal(modalForgot);
-        openModal(modalLogin);
-        showToast("Если email найден, мы отправим ссылку", "info");
-        formForgot.reset();
-      })
-      .catch(function (err) {
-        showToast(err.message || "Ошибка", "error");
       });
   });
 

@@ -1517,26 +1517,11 @@ adminSubApp.patch("/users/:userId", async (c) => {
   }
 
   const wantsProfile =
-    body.name !== undefined || body.phone !== undefined || body.email !== undefined || body.locality !== undefined;
+    body.name !== undefined || body.phone !== undefined || body.locality !== undefined;
 
   if (wantsProfile) {
     const name = String(body.name ?? target.name).trim();
     const phoneRaw = body.phone !== undefined ? String(body.phone) : target.phone;
-
-    let emailFinal: string | null;
-    if (body.email !== undefined) {
-      const raw = String(body.email).trim().toLowerCase();
-      if (!raw) {
-        emailFinal = null;
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
-        return c.json({ error: "Укажите корректный email" }, 400);
-      } else {
-        emailFinal = raw;
-      }
-    } else {
-      const t = target.email != null ? String(target.email).trim().toLowerCase() : "";
-      emailFinal = t || null;
-    }
 
     const phone = normalizePhone(phoneRaw);
     if (!phone) return c.json({ error: "Введите корректный телефон" }, 400);
@@ -1555,14 +1540,7 @@ adminSubApp.patch("/users/:userId", async (c) => {
     if (existing && existing.id !== userId) {
       return c.json({ error: "Этот номер уже занят другим пользователем" }, 409);
     }
-    if (emailFinal) {
-      const existingEmail = await getUserByEmail(emailFinal);
-      if (existingEmail && existingEmail.id !== userId) {
-        return c.json({ error: "Этот email уже занят другим пользователем" }, 409);
-      }
-    }
-
-    await updateUserProfile(userId, { name, phone, email: emailFinal, locality });
+    await updateUserProfile(userId, { name, phone, email: null, locality });
   }
 
   if (body.new_password !== undefined) {

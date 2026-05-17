@@ -7,7 +7,7 @@
   let rafflesCache = [];
   /** @type {'active' | 'hidden'} */
   let rafflesListTab = "active";
-  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,user_email?:string,user_locality?:string}>} */
+  /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,,user_locality?:string}>} */
   let participantsCache = [];
   /** @type {Array<{wholesale_number:number,user_phone:string}>} */
   let wholesalersCache = [];
@@ -335,13 +335,10 @@
     var title = document.getElementById("modal-raffle-buyer-title");
     var nameEl = document.getElementById("raffle-buyer-name");
     var phoneEl = document.getElementById("raffle-buyer-phone");
-    var emailEl = document.getElementById("raffle-buyer-email");
     var localityEl = document.getElementById("raffle-buyer-locality");
-    var chatBtn = document.getElementById("raffle-buyer-chat");
-    if (title) title.textContent = "Номерок № " + String(ctx.ticket_number);
+    if (title) title.textContent = "Номерок № " + String(ctx.ticket_number != null ? ctx.ticket_number : "");
     if (nameEl) nameEl.textContent = ctx.user_name || "Не указано";
     if (phoneEl) phoneEl.textContent = ctx.user_phone || "Не указано";
-    if (emailEl) emailEl.textContent = ctx.user_email || "Не указано";
     if (localityEl) localityEl.textContent = ctx.user_locality || "Не указано";
     if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
     var chatUid = Number(ctx.user_id);
@@ -894,8 +891,6 @@
             esc(String(uid)) +
             '" data-name="' +
             esc(String(x.user_name != null ? x.user_name : "")) +
-            '" data-email="' +
-            esc(String(x.user_email != null ? x.user_email : "")) +
             '" data-locality="' +
             esc(String(x.user_locality != null ? x.user_locality : "")) +
             '" data-phone="' +
@@ -1241,7 +1236,6 @@
         ...s,
         phone: me.user.phone,
         name: me.user.name,
-        email: me.user.email,
         role: me.user.role != null ? me.user.role : s.role || "user",
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -1534,8 +1528,7 @@
       ticket_number: Number(btn.getAttribute("data-ticket")) || 0,
       user_id: Number(btn.getAttribute("data-user-id")) || 0,
       user_name: btn.getAttribute("data-name") || "",
-      user_email: btn.getAttribute("data-email") || "",
-          user_locality: btn.getAttribute("data-locality") || "",
+      user_locality: btn.getAttribute("data-locality") || "",
       user_phone: btn.getAttribute("data-phone") || "",
     });
   });

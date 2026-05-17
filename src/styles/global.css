@@ -2990,6 +2990,148 @@ html.bottom-nav-hidden-by-fast-input .bottom-nav::before {
   white-space: nowrap;
 }
 
+.bottom-nav__inner--4 {
+  gap: 2px;
+  padding: 8px 6px;
+}
+
+.bottom-nav__inner--4 .bottom-nav-btn {
+  min-width: 0;
+  padding: 8px 2px;
+}
+
+.bottom-nav__inner--4 .bottom-nav-btn__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+/* Заглушка «Блог» */
+@keyframes blog-stub-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes blog-stub-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.blog-stub-modal.modal-overlay {
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.blog-stub-modal.modal-overlay.is-open {
+  animation: blog-stub-overlay-in 0.22s ease-out;
+}
+
+.blog-stub-modal__dialog {
+  position: relative;
+  width: min(100%, 360px);
+  margin: 0 auto;
+  padding: 28px 22px 24px;
+  text-align: center;
+  background: var(--surface, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 22px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+}
+
+.blog-stub-modal.is-open .blog-stub-modal__dialog {
+  animation: blog-stub-dialog-in 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.blog-stub-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+  cursor: pointer;
+}
+
+.blog-stub-modal__icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  border-radius: 20px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.blog-stub-modal__icon-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 24px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.blog-stub-modal__title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.blog-stub-modal__lead {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.blog-stub-modal__text {
+  margin: 0 0 20px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.blog-stub-modal__btn {
+  width: 100%;
+}
+
+html.theme-dark .blog-stub-modal__dialog {
+  background: var(--surface, #1a1f2b);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+html.theme-dark .blog-stub-modal__close {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html.theme-dark .blog-stub-modal__text {
+  color: rgba(248, 250, 252, 0.65);
+}
+
 /* «Свободные номерки» в нижней навигации: видна на всех экранах Next (раньше только с html.raffle-grid-page) */
 .bottom-nav-btn.bottom-nav-btn--dock-search {
   display: flex;

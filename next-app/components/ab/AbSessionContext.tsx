@@ -72,7 +72,6 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
         id: Number.isFinite(uid) && uid > 0 ? Math.floor(uid) : s.id,
         phone: u.phone,
         name: u.name,
-        email: u.email,
         locality: (u as { locality?: string }).locality || "",
         role: u.role || "user",
         blocked,

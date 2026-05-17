@@ -6,7 +6,6 @@ export type AbSession = {
   /** Числовой id аккаунта в БД (для поддержки и админки) */
   id?: number;
   name?: string;
-  email?: string;
   locality?: string;
   role?: string;
   blocked?: boolean;
