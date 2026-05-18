@@ -1,4 +1,4 @@
-import { getUserById, insertSupportMessage, messageToDto } from "./db.js";
+import { deleteSupportStaffMessageForUser, getUserById, insertSupportMessage, messageToDto } from "./db.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 
 export type PrizeType = "physical" | "money";
@@ -345,6 +345,19 @@ export async function updatePrizeAwardAdmin(
   const updated = await getPrizeAwardById(id);
   if (!updated) return { ok: false, error: "Ошибка сохранения" };
   return { ok: true, prize: updated };
+}
+
+export async function deletePrizeAward(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = await getPrizeAwardById(id);
+  if (!row) return { ok: false, error: "Приз не найден" };
+
+  const chatMessageId = Number(row.chat_message_id || 0);
+  if (Number.isFinite(chatMessageId) && chatMessageId > 0) {
+    await deleteSupportStaffMessageForUser(row.user_id, chatMessageId);
+  }
+
+  await pgExec(`DELETE FROM prize_awards WHERE id = ?`, [id]);
+  return { ok: true };
 }
 
 export { messageToDto };

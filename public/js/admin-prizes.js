@@ -189,9 +189,12 @@
         renderResponse(p) +
         "</section>" +
         '<section class="admin-prize-detail__section admin-prize-detail__section--actions">' +
+        '<div class="admin-prize-detail__actions">' +
         '<button type="button" class="btn btn--primary" id="admin-prize-mark-done"' +
         (p.status === "done" ? " disabled" : "") +
         ">Отметить выполненным</button>" +
+        '<button type="button" class="btn btn--danger-outline" id="admin-prize-delete">Удалить</button>' +
+        "</div>" +
         "</section>";
 
       panel.querySelector("[data-user-id]")?.addEventListener("click", function () {
@@ -200,6 +203,9 @@
       });
       document.getElementById("admin-prize-mark-done")?.addEventListener("click", function () {
         void markDone(p.id);
+      });
+      document.getElementById("admin-prize-delete")?.addEventListener("click", function () {
+        void removePrize(p.id);
       });
     } catch (err) {
       panel.innerHTML = '<p class="admin-prizes-empty is-error">' + esc(err.message || "Ошибка") + "</p>";
@@ -214,6 +220,29 @@
     });
     await loadPrizes();
     await openDetail(id, true);
+  }
+
+  async function removePrize(id) {
+    if (!confirm("Удалить приз без восстановления? Сообщение в чате тоже будет удалено.")) return;
+    try {
+      await apiJson("/api/admin/prizes/" + id, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      selectedId = null;
+      const panel = document.getElementById("admin-prize-detail");
+      if (panel) {
+        panel.innerHTML =
+          '<p class="admin-prizes-empty admin-prizes-empty--placeholder">' +
+          '<span class="admin-prizes-empty__icon" aria-hidden="true">🎁</span>' +
+          '<span class="admin-prizes-empty__title">Выберите приз</span>' +
+          '<span class="admin-prizes-empty__text">Нажмите на карточку слева, чтобы увидеть ответ пользователя и действия.</span>' +
+          "</p>";
+      }
+      await loadPrizes();
+    } catch (err) {
+      alert(err.message || "Не удалось удалить");
+    }
   }
 
   function renderSelectedUsers() {

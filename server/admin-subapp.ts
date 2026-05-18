@@ -83,6 +83,7 @@ import {
 import {
   createPrizeAward,
   createPrizeAwardsBulk,
+  deletePrizeAward,
   getPrizeAwardById,
   listPrizeAwardsForAdmin,
   prizeAwardToDto,
@@ -1969,4 +1970,14 @@ adminSubApp.patch("/prizes/:id", async (c) => {
   return c.json({
     prize: await prizeAwardToDtoAsync(res.prize, user ? { name: user.name, phone: user.phone } : undefined),
   });
+});
+
+adminSubApp.delete("/prizes/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const res = await deletePrizeAward(id);
+  if (!res.ok) return c.json({ error: res.error }, 404);
+  return c.json({ ok: true });
 });
