@@ -9,9 +9,11 @@ export const metadata: Metadata = {
 export default function HomeBlogPage() {
   return (
     <div className="app-shell app-shell--with-tabbar" id="app-shell">
-      <main className="blog-shell">
-        <BlogShellClient />
-      </main>
+      <div className="blog-page screen home-screen">
+        <div className="blog-page__inner home-inner">
+          <BlogShellClient />
+        </div>
+      </div>
     </div>
   );
 }

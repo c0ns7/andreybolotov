@@ -1,10 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Eye,
+  Heart,
+  ImageIcon,
+  MessageCircle,
+  PenLine,
+  Plus,
+  Search,
+  Share2,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
 import type { BlogComment, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import { useAbSession } from "../AbSessionContext";
+import BlogPageHeader from "./BlogPageHeader";
 import BlogRichEditor from "./BlogRichEditor";
 
 type Tab = "feed" | "manage";
@@ -20,23 +32,91 @@ function formatDate(ms: number | null) {
   });
 }
 
+function formatDateShort(ms: number | null) {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function stripHtml(html: string) {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function estimateReadMinutes(html: string) {
+  const words = stripHtml(html).split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 180));
+}
+
+function BlogCover({
+  url,
+  mime,
+  variant,
+  title,
+}: {
+  url: string;
+  mime: string | null;
+  variant: "card" | "hero";
+  title?: string;
+}) {
+  if (url) {
+    if (mime?.startsWith("video/")) {
+      return (
+        <video
+          className={variant === "card" ? "blog-card__cover" : "blog-article__cover"}
+          src={url}
+          muted={variant === "card"}
+          playsInline
+          controls={variant === "hero"}
+        />
+      );
+    }
+    return (
+      <img
+        className={variant === "card" ? "blog-card__cover" : "blog-article__cover"}
+        src={url}
+        alt=""
+      />
+    );
+  }
+  return (
+    <div
+      className={
+        variant === "card" ? "blog-card__cover blog-card__cover--empty" : "blog-article__cover blog-article__cover--empty"
+      }
+      aria-hidden="true"
+    >
+      <span className="blog-cover-placeholder__icon">
+        <ImageIcon size={variant === "card" ? 28 : 40} strokeWidth={1.5} />
+      </span>
+      <span className="blog-cover-placeholder__label">Без обложки</span>
+      {title && variant === "hero" ? <span className="blog-cover-placeholder__title">{title}</span> : null}
+    </div>
+  );
+}
+
 function BlogStub() {
   return (
     <div className="blog-stub-page">
-      <div className="blog-stub-page__icon" aria-hidden="true">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-        </svg>
+      <BlogPageHeader title="Блог" backHref="/home" backLabel="На главную" sticky={false} />
+      <div className="blog-stub-page__card">
+        <div className="blog-stub-page__icon" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </div>
+        <h2 className="blog-stub-page__title">Блог скоро откроется</h2>
+        <p className="blog-stub-page__text">
+          Здесь будут истории победителей акций, благотворительные отчёты и новости проекта. Пока раздел доступен только
+          администраторам.
+        </p>
+        <Link href="/home" className="btn btn--primary blog-stub-page__btn">
+          На главную
+        </Link>
       </div>
-      <h1 className="blog-stub-page__title">Блог скоро откроется</h1>
-      <p className="blog-stub-page__text">
-        Здесь будут истории победителей акций, благотворительные отчёты и новости проекта. Пока раздел доступен только
-        администраторам.
-      </p>
-      <Link href="/home" className="btn btn--primary">
-        На главную
-      </Link>
     </div>
   );
 }
@@ -54,8 +134,11 @@ export default function BlogPageClient() {
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [loading, setLoading] = useState(false);
   const [readPost, setReadPost] = useState<BlogPost | null>(null);
+  const [readLoading, setReadLoading] = useState(false);
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [commentDraft, setCommentDraft] = useState("");
+  const [commentSending, setCommentSending] = useState(false);
+  const commentsRef = useRef<HTMLElement>(null);
   const [manageStatus, setManageStatus] = useState<"all" | "published" | "draft">("all");
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -115,17 +198,65 @@ export default function BlogPageClient() {
     return () => window.clearTimeout(t);
   }, [isAdmin, loadPosts]);
 
+  useEffect(() => {
+    if (!readPost) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReadPost(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [readPost]);
+
   const openPost = async (post: BlogPost) => {
     setReadPost(post);
+    setReadLoading(true);
     setComments([]);
+    setCommentDraft("");
     try {
-      await abApiJson(`/api/blog/posts/${post.id}/view`, { method: "POST", headers: adminHeaders });
-      const data = await abApiJson<{ comments: BlogComment[] }>(`/api/blog/posts/${post.id}/comments`, {
-        headers: adminHeaders,
-      });
-      setComments(data.comments || []);
+      if (post.status === "published") {
+        await abApiJson(`/api/blog/posts/${post.id}/view`, { method: "POST", headers: adminHeaders });
+        const [full, commentsData] = await Promise.all([
+          abApiJson<{ post: BlogPost }>(`/api/blog/posts/${encodeURIComponent(post.slug)}`, { headers: adminHeaders }),
+          abApiJson<{ comments: BlogComment[] }>(`/api/blog/posts/${post.id}/comments`, { headers: adminHeaders }),
+        ]);
+        if (full.post) {
+          setReadPost(full.post);
+          setPosts((list) => list.map((p) => (p.id === post.id ? { ...p, ...full.post, view_count: full.post.view_count } : p)));
+        }
+        setComments(commentsData.comments || []);
+      } else {
+        setReadPost(post);
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Не удалось открыть пост", "error");
+    } finally {
+      setReadLoading(false);
+    }
+  };
+
+  const handleCardOpen = (post: BlogPost) => {
+    if (tab === "manage" && post.status === "draft") {
+      openEditor(post);
+      return;
+    }
+    void openPost(post);
+  };
+
+  const scrollToComments = () => {
+    commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const sharePost = async (post: BlogPost) => {
+    const url = `${window.location.origin}/home/blog?post=${encodeURIComponent(post.slug)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.title, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast("Ссылка скопирована", "success");
     } catch {
-      /* ignore */
+      /* cancelled or denied */
     }
   };
 
@@ -145,7 +276,8 @@ export default function BlogPageClient() {
   };
 
   const sendComment = async () => {
-    if (!readPost || !commentDraft.trim()) return;
+    if (!readPost || !commentDraft.trim() || commentSending) return;
+    setCommentSending(true);
     try {
       const data = await abApiJson<{ comment: BlogComment }>(`/api/blog/posts/${readPost.id}/comments`, {
         method: "POST",
@@ -154,9 +286,13 @@ export default function BlogPageClient() {
       });
       if (data.comment) setComments((c) => [...c, data.comment!]);
       setCommentDraft("");
-      setReadPost((p) => (p ? { ...p, comment_count: p.comment_count + 1 } : p));
+      const nextCount = readPost.comment_count + 1;
+      setReadPost((p) => (p ? { ...p, comment_count: nextCount } : p));
+      setPosts((list) => list.map((p) => (p.id === readPost.id ? { ...p, comment_count: nextCount } : p)));
     } catch (e) {
       toast(e instanceof Error ? e.message : "Ошибка", "error");
+    } finally {
+      setCommentSending(false);
     }
   };
 
@@ -264,82 +400,174 @@ export default function BlogPageClient() {
   }
 
   if (readPost) {
+    const readMin = estimateReadMinutes(readPost.body_html);
     return (
-      <article className="blog-page blog-page--read">
-        <header className="blog-page__top">
-          <button type="button" className="btn btn--ghost blog-back" onClick={() => setReadPost(null)}>
-            ← Назад
-          </button>
-        </header>
-        {readPost.cover_url ? (
-          readPost.cover_mime?.startsWith("video/") ? (
-            <video className="blog-post-cover" src={readPost.cover_url} controls playsInline />
-          ) : (
-            <img className="blog-post-cover" src={readPost.cover_url} alt="" />
-          )
-        ) : null}
-        <h1 className="blog-post-title">{readPost.title}</h1>
-        <p className="blog-post-meta">
-          {formatDate(readPost.published_at || readPost.created_at)} · {readPost.view_count} просмотров
-        </p>
-        <div className="blog-post-tags">
-          {readPost.tags.map((t) => (
-            <span key={t.id} className="blog-tag">
-              {t.label}
-            </span>
-          ))}
+      <article className="blog-article">
+        <BlogPageHeader
+          title={readPost.title}
+          backOnClick={() => setReadPost(null)}
+          backLabel="К ленте блога"
+          actions={
+            <button type="button" className="blog-page__icon-action" onClick={() => void sharePost(readPost)} aria-label="Поделиться">
+              <Share2 size={20} />
+            </button>
+          }
+        />
+
+        <div className="blog-article__hero">
+          <BlogCover url={readPost.cover_url} mime={readPost.cover_mime} variant="hero" title={readPost.title} />
+          {readPost.status === "draft" ? <span className="blog-article__draft-badge">Черновик</span> : null}
         </div>
-        <div className="blog-post-body" dangerouslySetInnerHTML={{ __html: readPost.body_html }} />
-        <div className="blog-post-actions">
-          <button
-            type="button"
-            className={"blog-like-btn" + (readPost.liked_by_me ? " is-liked" : "")}
-            onClick={() => void toggleLike(readPost)}
-          >
-            ♥ {readPost.like_count}
-          </button>
-          <span className="blog-post-actions__comments">💬 {readPost.comment_count}</span>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => openEditor(readPost)}>
-            Редактировать
-          </button>
-          <button type="button" className="btn btn--ghost btn--sm blog-danger" onClick={() => void deletePost(readPost.id)}>
-            Удалить
-          </button>
-        </div>
-        <section className="blog-comments">
-          <h2 className="blog-comments__title">Комментарии</h2>
-          <ul className="blog-comments__list">
-            {comments.map((c) => (
-              <li key={c.id} className="blog-comment">
-                <strong>{c.user_name}</strong>
-                <span className="blog-comment__time">{formatDate(c.created_at)}</span>
-                <p>{c.body}</p>
-              </li>
+
+        <div className="blog-article__content">
+          {readLoading ? <p className="blog-article__loading">Загрузка…</p> : null}
+
+          <div className="blog-article__tags">
+            {readPost.tags.map((t) => (
+              <span key={t.id} className="blog-tag">
+                {t.label}
+              </span>
             ))}
-          </ul>
-          <div className="blog-comments__form">
-            <textarea
-              className="input blog-comments__input"
-              rows={3}
-              placeholder="Написать комментарий…"
-              value={commentDraft}
-              onChange={(e) => setCommentDraft(e.target.value)}
-            />
-            <button type="button" className="btn btn--primary" onClick={() => void sendComment()}>
-              Отправить
+          </div>
+
+          <h1 className="blog-article__title">{readPost.title}</h1>
+
+          <p className="blog-article__meta">
+            <time dateTime={new Date(readPost.published_at || readPost.created_at).toISOString()}>
+              {formatDateShort(readPost.published_at || readPost.created_at)}
+            </time>
+            <span className="blog-article__meta-sep">·</span>
+            <span>{readMin} мин чтения</span>
+            {readPost.status === "published" ? (
+              <>
+                <span className="blog-article__meta-sep">·</span>
+                <span className="blog-article__meta-views">
+                  <Eye size={14} aria-hidden="true" />
+                  {readPost.view_count}
+                </span>
+              </>
+            ) : null}
+          </p>
+
+          {readPost.excerpt ? <p className="blog-article__lead">{readPost.excerpt}</p> : null}
+
+          <div className="blog-article__engage">
+            <button
+              type="button"
+              className={"blog-engage-btn blog-engage-btn--like" + (readPost.liked_by_me ? " is-liked" : "")}
+              onClick={() => void toggleLike(readPost)}
+              aria-pressed={readPost.liked_by_me}
+            >
+              <Heart size={18} fill={readPost.liked_by_me ? "currentColor" : "none"} />
+              <span>{readPost.like_count}</span>
+            </button>
+            <button type="button" className="blog-engage-btn" onClick={scrollToComments}>
+              <MessageCircle size={18} />
+              <span>{readPost.comment_count}</span>
+            </button>
+            <button type="button" className="blog-engage-btn blog-engage-btn--ghost" onClick={() => void sharePost(readPost)}>
+              <Share2 size={18} />
+              <span>Поделиться</span>
             </button>
           </div>
-        </section>
+
+          <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: readPost.body_html }} />
+
+          <div className="blog-article__admin">
+            <button type="button" className="blog-article__admin-btn" onClick={() => openEditor(readPost)}>
+              <PenLine size={16} />
+              Редактировать
+            </button>
+            <button type="button" className="blog-article__admin-btn blog-article__admin-btn--danger" onClick={() => void deletePost(readPost.id)}>
+              <Trash2 size={16} />
+              Удалить
+            </button>
+          </div>
+
+          <section ref={commentsRef} className="blog-article__comments" id="comments">
+            <header className="blog-article__comments-head">
+              <h2>Комментарии</h2>
+              <span className="blog-article__comments-count">{readPost.comment_count}</span>
+            </header>
+
+            {comments.length ? (
+              <ul className="blog-comments__list">
+                {comments.map((c) => (
+                  <li key={c.id} className="blog-comment">
+                    <div className="blog-comment__avatar" aria-hidden="true">
+                      {(c.user_name || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="blog-comment__body">
+                      <div className="blog-comment__head">
+                        <strong>{c.user_name}</strong>
+                        <time className="blog-comment__time">{formatDate(c.created_at)}</time>
+                      </div>
+                      <p className="blog-comment__text">{c.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="blog-article__comments-empty">Пока нет комментариев — будьте первым.</p>
+            )}
+
+            <div className="blog-comments__composer">
+              <textarea
+                className="input blog-comments__input"
+                rows={3}
+                placeholder="Написать комментарий…"
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void sendComment();
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={commentSending || !commentDraft.trim()}
+                onClick={() => void sendComment()}
+              >
+                {commentSending ? "Отправка…" : "Отправить"}
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <footer className="blog-article__bar">
+          <button
+            type="button"
+            className={"blog-article__bar-btn" + (readPost.liked_by_me ? " is-liked" : "")}
+            onClick={() => void toggleLike(readPost)}
+            aria-label="Нравится"
+          >
+            <Heart size={22} fill={readPost.liked_by_me ? "currentColor" : "none"} />
+          </button>
+          <button type="button" className="blog-article__bar-btn" onClick={scrollToComments} aria-label="Комментарии">
+            <MessageCircle size={22} />
+          </button>
+          <button type="button" className="blog-article__bar-btn" onClick={() => void sharePost(readPost)} aria-label="Поделиться">
+            <Share2 size={22} />
+          </button>
+        </footer>
       </article>
+
     );
   }
 
   return (
-    <div className="blog-page">
-      <header className="blog-page__head">
-        <h1 className="blog-page__title">Блог</h1>
-        <p className="blog-page__sub">Победители акций, благотворительность, новости</p>
-      </header>
+    <div className="blog-page blog-page--feed">
+      <BlogPageHeader
+        title="Блог"
+        subtitle="Победители акций, благотворительность, новости"
+        backHref="/home"
+        backLabel="На главную"
+        actions={
+          <button type="button" className="blog-page__icon-action blog-page__icon-action--primary" onClick={() => openEditor()} aria-label="Новый пост">
+            <Plus size={22} />
+          </button>
+        }
+      />
 
       <div className="blog-tabs" role="tablist">
         <button
@@ -360,78 +588,113 @@ export default function BlogPageClient() {
         </button>
       </div>
 
-      <div className="blog-filters">
-        <input
-          type="search"
-          className="input blog-filters__search"
-          placeholder="Поиск по заголовку, тексту, ключевым словам…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select className="input blog-filters__select" value={sort} onChange={(e) => setSort(e.target.value as "newest" | "popular")}>
-          <option value="newest">Сначала новые</option>
-          <option value="popular">Популярные</option>
-        </select>
-        <select className="input blog-filters__select" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-          <option value="">Все теги</option>
-          {tags.map((t) => (
-            <option key={t.id} value={t.slug}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        {tab === "manage" ? (
-          <select
-            className="input blog-filters__select"
-            value={manageStatus}
-            onChange={(e) => setManageStatus(e.target.value as "all" | "published" | "draft")}
-          >
-            <option value="all">Все статусы</option>
-            <option value="published">Опубликованные</option>
-            <option value="draft">Черновики</option>
+      <div className="blog-toolbar">
+        <label className="blog-toolbar__search">
+          <Search size={18} className="blog-toolbar__search-icon" aria-hidden="true" />
+          <input
+            type="search"
+            className="input blog-toolbar__search-input"
+            placeholder="Поиск по заголовку и тексту…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <div className="blog-toolbar__row">
+          <select className="input blog-toolbar__select" value={sort} onChange={(e) => setSort(e.target.value as "newest" | "popular")}>
+            <option value="newest">Сначала новые</option>
+            <option value="popular">Популярные</option>
           </select>
-        ) : null}
-        <button type="button" className="btn btn--primary" onClick={() => openEditor()}>
-          + Новый пост
+          <select className="input blog-toolbar__select" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+            <option value="">Все теги</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.slug}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          {tab === "manage" ? (
+            <select
+              className="input blog-toolbar__select"
+              value={manageStatus}
+              onChange={(e) => setManageStatus(e.target.value as "all" | "published" | "draft")}
+            >
+              <option value="all">Все статусы</option>
+              <option value="published">Опубликованные</option>
+              <option value="draft">Черновики</option>
+            </select>
+          ) : null}
+        </div>
+        <button type="button" className="btn btn--primary blog-toolbar__create" onClick={() => openEditor()}>
+          <Plus size={18} aria-hidden="true" />
+          Новый пост
         </button>
       </div>
 
-      {loading ? <p className="blog-loading">Загрузка…</p> : null}
+      {loading ? (
+        <ul className="blog-list blog-list--skeleton" aria-hidden="true">
+          {[1, 2, 3].map((n) => (
+            <li key={n} className="blog-skeleton-card">
+              <div className="blog-skeleton-card__media" />
+              <div className="blog-skeleton-card__line blog-skeleton-card__line--title" />
+              <div className="blog-skeleton-card__line" />
+              <div className="blog-skeleton-card__line blog-skeleton-card__line--short" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {!loading ? (
       <ul className="blog-list">
         {posts.map((p) => (
-          <li key={p.id} className="blog-card">
-            {p.cover_url ? (
-              p.cover_mime?.startsWith("video/") ? (
-                <video className="blog-card__cover" src={p.cover_url} muted playsInline />
-              ) : (
-                <img className="blog-card__cover" src={p.cover_url} alt="" />
-              )
-            ) : (
-              <div className="blog-card__cover blog-card__cover--empty" />
-            )}
-            <div className="blog-card__body">
-              <span className={"blog-card__status blog-card__status--" + p.status}>{p.status === "published" ? "Опубликован" : "Черновик"}</span>
-              <h2 className="blog-card__title">
-                <button type="button" className="blog-card__link" onClick={() => void openPost(p)}>
-                  {p.title}
-                </button>
-              </h2>
-              {p.excerpt ? <p className="blog-card__excerpt">{p.excerpt}</p> : null}
-              <div className="blog-card__meta">
-                <span>{formatDate(p.published_at || p.created_at)}</span>
-                <span>👁 {p.view_count}</span>
-                <span>♥ {p.like_count}</span>
-                <span>💬 {p.comment_count}</span>
+          <li key={p.id}>
+            <article
+              className="blog-card blog-card--clickable"
+              role="button"
+              tabIndex={0}
+              onClick={() => handleCardOpen(p)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCardOpen(p);
+                }
+              }}
+            >
+              <div className="blog-card__media">
+                <BlogCover url={p.cover_url} mime={p.cover_mime} variant="card" />
+                <span className={"blog-card__status blog-card__status--" + p.status}>
+                  {p.status === "published" ? "Опубликован" : "Черновик"}
+                </span>
               </div>
-              <div className="blog-card__tags">
-                {p.tags.map((t) => (
-                  <span key={t.id} className="blog-tag">
-                    {t.label}
+              <div className="blog-card__body">
+                <h2 className="blog-card__title">{p.title}</h2>
+                {p.excerpt ? <p className="blog-card__excerpt">{p.excerpt}</p> : null}
+                <div className="blog-card__meta">
+                  <span>{formatDateShort(p.published_at || p.created_at)}</span>
+                  <span className="blog-card__stat">
+                    <Eye size={14} aria-hidden="true" />
+                    {p.view_count}
                   </span>
-                ))}
+                  <span className="blog-card__stat">
+                    <Heart size={14} aria-hidden="true" />
+                    {p.like_count}
+                  </span>
+                  <span className="blog-card__stat">
+                    <MessageCircle size={14} aria-hidden="true" />
+                    {p.comment_count}
+                  </span>
+                </div>
+                {p.tags.length ? (
+                  <div className="blog-card__tags">
+                    {p.tags.map((t) => (
+                      <span key={t.id} className="blog-tag">
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <span className="blog-card__cta">Читать подробнее</span>
               </div>
               {tab === "manage" ? (
-                <div className="blog-card__actions">
+                <div className="blog-card__actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="btn btn--ghost btn--sm" onClick={() => openEditor(p)}>
                     Изменить
                   </button>
@@ -440,10 +703,12 @@ export default function BlogPageClient() {
                   </button>
                 </div>
               ) : null}
-            </div>
+            </article>
           </li>
         ))}
+
       </ul>
+      ) : null}
       {!loading && !posts.length ? <p className="blog-empty">Пока нет постов</p> : null}
 
       {editorOpen ? (
