@@ -15,7 +15,9 @@
   let prizesCache = [];
   let selectedId = null;
   let searchTimer = null;
-  let createUserId = null;
+  const MAX_RECIPIENTS = 20;
+  /** @type {{ id: number, name: string, phone: string }[]} */
+  let selectedUsers = [];
 
   function loadSession() {
     try {
@@ -214,6 +216,72 @@
     await openDetail(id, true);
   }
 
+  function renderSelectedUsers() {
+    const box = document.getElementById("prize-create-users-selected");
+    if (!box) return;
+    if (!selectedUsers.length) {
+      box.innerHTML = '<p class="admin-prize-create-users-empty">Пока никого не выбрано. Найдите и добавьте победителей из поиска.</p>';
+      return;
+    }
+    box.innerHTML =
+      '<p class="admin-prize-create-users-count">Выбрано: ' +
+      String(selectedUsers.length) +
+      " / " +
+      String(MAX_RECIPIENTS) +
+      '</p><ul class="admin-prize-create-users-chips">' +
+      selectedUsers
+        .map(function (u) {
+          return (
+            '<li class="admin-prize-create-user-chip">' +
+            '<span class="admin-prize-create-user-chip__text">' +
+            esc(u.name) +
+            " · " +
+            esc(formatRuPhone(u.phone)) +
+            "</span>" +
+            '<button type="button" class="admin-prize-create-user-chip__remove" data-remove-id="' +
+            String(u.id) +
+            '" aria-label="Убрать">×</button>' +
+            "</li>"
+          );
+        })
+        .join("") +
+      "</ul>";
+    box.querySelectorAll("[data-remove-id]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const id = Number(btn.getAttribute("data-remove-id"));
+        selectedUsers = selectedUsers.filter(function (u) {
+          return u.id !== id;
+        });
+        renderSelectedUsers();
+      });
+    });
+  }
+
+  function addSelectedUser(u) {
+    const id = Math.floor(Number(u.id));
+    if (!Number.isFinite(id)) return;
+    if (selectedUsers.some(function (x) {
+      return x.id === id;
+    })) {
+      alert("Этот пользователь уже в списке.");
+      return;
+    }
+    if (selectedUsers.length >= MAX_RECIPIENTS) {
+      alert("Можно выбрать не больше " + MAX_RECIPIENTS + " человек за раз.");
+      return;
+    }
+    selectedUsers.push({
+      id: id,
+      name: String(u.name || ""),
+      phone: String(u.phone || ""),
+    });
+    renderSelectedUsers();
+    const q = document.getElementById("prize-create-user-q");
+    if (q && "value" in q) q.value = "";
+    const results = document.getElementById("prize-create-user-results");
+    if (results) results.innerHTML = "";
+  }
+
   function openCreateModal() {
     const modal = document.getElementById("modal-prize-create");
     if (!modal) return;
@@ -223,11 +291,8 @@
     if (q && "value" in q) q.value = "";
     const results = document.getElementById("prize-create-user-results");
     if (results) results.innerHTML = "";
-    const hidden = document.getElementById("prize-create-user-id");
-    if (hidden && "value" in hidden) hidden.value = "";
-    const picked = document.getElementById("prize-create-user-picked");
-    if (picked) picked.hidden = true;
-    createUserId = null;
+    selectedUsers = [];
+    renderSelectedUsers();
   }
 
   function closeCreateModal() {
@@ -272,23 +337,18 @@
       .join("");
     box.querySelectorAll(".admin-prize-user-pick").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        createUserId = Number(btn.getAttribute("data-id"));
-        const hidden = document.getElementById("prize-create-user-id");
-        if (hidden) hidden.value = String(createUserId);
-        const picked = document.getElementById("prize-create-user-picked");
-        if (picked) {
-          picked.textContent = "Выбран: " + btn.getAttribute("data-name") + " (" + btn.getAttribute("data-phone") + ")";
-          picked.hidden = false;
-        }
-        box.innerHTML = "";
+        addSelectedUser({
+          id: Number(btn.getAttribute("data-id")),
+          name: btn.getAttribute("data-name"),
+          phone: btn.getAttribute("data-phone"),
+        });
       });
     });
   }
 
   async function submitCreate() {
-    const uid = createUserId || Number(document.getElementById("prize-create-user-id")?.value);
-    if (!Number.isFinite(uid)) {
-      alert("Выберите пользователя.");
+    if (!selectedUsers.length) {
+      alert("Добавьте хотя бы одного получателя.");
       return;
     }
     const title = document.getElementById("prize-create-title");
@@ -299,20 +359,32 @@
       alert("Укажите название приза.");
       return;
     }
-    await apiJson("/api/admin/prizes", {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        user_id: uid,
-        title: t,
-        intro_message: intro && "value" in intro ? intro.value : "",
-        description: hint && "value" in hint ? hint.value : "",
-        send_chat: true,
-      }),
-    });
-    closeCreateModal();
-    await loadPrizes();
-    alert("Уведомление отправлено в чат. Ответ появится здесь после нажатия «Получить приз».");
+    const submitBtn = document.getElementById("prize-create-submit");
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const data = await apiJson("/api/admin/prizes", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          user_ids: selectedUsers.map(function (u) {
+            return u.id;
+          }),
+          title: t,
+          intro_message: intro && "value" in intro ? intro.value : "",
+          description: hint && "value" in hint ? hint.value : "",
+          send_chat: true,
+        }),
+      });
+      closeCreateModal();
+      await loadPrizes();
+      let msg = "Отправлено " + String(data.created || selectedUsers.length) + " сообщений в чат.";
+      if (data.failed && data.failed.length) {
+        msg += " Не удалось для " + data.failed.length + " чел.";
+      }
+      alert(msg);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
   }
 
   function bindOnce() {

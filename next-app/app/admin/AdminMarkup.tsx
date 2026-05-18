@@ -449,14 +449,14 @@ export default function AdminMarkup() {
           </header>
           <div className="admin-prize-create-modal__body">
             <section className="admin-prize-create-modal__section">
-              <h3 className="admin-prize-create-modal__section-title">Получатель</h3>
+              <h3 className="admin-prize-create-modal__section-title">Получатели</h3>
+              <p className="admin-prize-create-modal__hint">Можно выбрать до 20 человек — каждому уйдёт своё сообщение в чат.</p>
               <label className="form-group">
-                <span>Найти пользователя</span>
+                <span>Добавить пользователя</span>
                 <input id="prize-create-user-q" className="input" type="search" placeholder="Имя или телефон…" autoComplete="off" />
-                <input type="hidden" id="prize-create-user-id" defaultValue="" />
               </label>
               <div id="prize-create-user-results" className="admin-prize-create-user-results"></div>
-              <p id="prize-create-user-picked" className="admin-prize-create-user-picked" hidden></p>
+              <div id="prize-create-users-selected" className="admin-prize-create-users-selected" aria-live="polite"></div>
             </section>
             <section className="admin-prize-create-modal__section">
               <h3 className="admin-prize-create-modal__section-title">Приз</h3>
@@ -476,7 +476,7 @@ export default function AdminMarkup() {
           </div>
           <footer className="admin-prize-create-modal__foot">
             <button type="button" className="btn btn--primary admin-prize-create-modal__submit" id="prize-create-submit">
-              Создать и отправить в чат
+              Отправить приз выбранным
             </button>
           </footer>
         </div>

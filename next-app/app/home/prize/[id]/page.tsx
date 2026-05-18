@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PrizeClaimClient from "../../../../components/ab/prize/PrizeClaimClient";
 
 export const metadata: Metadata = {
-  title: "Забрать приз",
+  title: "Получить приз",
   description: "Оформление получения приза",
 };
 

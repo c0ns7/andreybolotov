@@ -455,7 +455,7 @@ export default function ChatPageClient() {
                             ) : null}
                             {card?.kind === "prize_claim" ? (
                               <div className="chat-action-card chat-action-card--prize">
-                                <p className="chat-action-card__title">{String(card.title || "Забрать приз")}</p>
+                                <p className="chat-action-card__title">{String(card.title || "Получить приз")}</p>
                                 {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
                                 <button
                                   type="button"
@@ -465,23 +465,23 @@ export default function ChatPageClient() {
                                     if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
                                   }}
                                 >
-                                  {String(card.cta || "Забрать приз")}
+                                  {String(card.cta || "Получить приз")}
                                 </button>
                               </div>
                             ) : null}
                             {card?.kind === "receipt_rejected" ? (
-                              <div className="chat-action-card">
+                              <div className="chat-action-card chat-action-card--payment-retry">
                                 <p className="chat-action-card__title">Оплата отклонена</p>
                                 {card.reason ? <p className="chat-action-card__reason">{card.reason}</p> : null}
                                 <button
                                   type="button"
-                                  className="chat-action-card__btn"
+                                  className="chat-action-card__btn chat-action-card__btn--payment-retry"
                                   onClick={() => {
                                     const url = String(card.retry_url || "").trim();
                                     if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
                                   }}
                                 >
-                                  {String(card.cta || "Повторить")}
+                                  {String(card.cta || "Повторить оплату")}
                                 </button>
                               </div>
                             ) : null}

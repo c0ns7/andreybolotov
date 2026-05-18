@@ -543,7 +543,7 @@
 .modal-overlay--prize-form .modal.admin-prize-create-modal {
   display: flex;
   flex-direction: column;
-  max-width: 520px;
+  max-width: 560px;
   width: 100%;
   max-height: min(92dvh, 820px);
   border-radius: 22px;
@@ -680,15 +680,84 @@
   background: #eff6ff;
 }
 
-.admin-prize-create-user-picked {
-  margin: 0 0 4px;
-  padding: 10px 12px;
+.admin-prize-create-modal__hint {
+  margin: -6px 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.admin-prize-create-users-selected {
+  margin-top: 12px;
+}
+
+.admin-prize-create-users-empty {
+  margin: 0;
+  padding: 12px;
   font-size: 0.86rem;
-  font-weight: 700;
-  color: #15803d;
+  color: #94a3b8;
+  text-align: center;
   border-radius: 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.admin-prize-create-users-count {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.admin-prize-create-users-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.admin-prize-create-user-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.admin-prize-create-user-chip__text {
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: #0f172a;
+  min-width: 0;
+}
+
+.admin-prize-create-user-chip__remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+}
+
+.admin-prize-create-user-chip__remove:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
 }
 
 .admin-prize-create-money-fields {

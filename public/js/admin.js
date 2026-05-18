@@ -221,7 +221,7 @@
     if (card && card.kind === "prize_claim") {
       var subtitle = card.subtitle ? '<p class="chat-action-card__reason">' + esc(String(card.subtitle)) + "</p>" : "";
       var href = String(card.claim_url || "").trim();
-      var cta = esc(String(card.cta || "Забрать приз"));
+      var cta = esc(String(card.cta || "Получить приз"));
       var action = href
         ? '<a class="chat-action-card__btn chat-action-card__btn--prize" href="' +
           href.replace(/"/g, "&quot;") +
@@ -232,7 +232,7 @@
       return (
         '<div class="chat-action-card chat-action-card--prize">' +
         '<p class="chat-action-card__title">' +
-        esc(String(card.title || "Забрать приз")) +
+        esc(String(card.title || "Получить приз")) +
         "</p>" +
         subtitle +
         action +
@@ -244,14 +244,14 @@
     var href = String(card.retry_url || "").trim();
     var cta = esc(String(card.cta || "Повторить оплату"));
     var action = href
-      ? '<a class="chat-action-card__btn" href="' +
+      ? '<a class="chat-action-card__btn chat-action-card__btn--payment-retry" href="' +
         href.replace(/"/g, "&quot;") +
         '" target="_blank" rel="noopener noreferrer">' +
         cta +
         "</a>"
-      : '<span class="chat-action-card__btn">' + cta + "</span>";
+      : '<span class="chat-action-card__btn chat-action-card__btn--payment-retry">' + cta + "</span>";
     return (
-      '<div class="chat-action-card">' +
+      '<div class="chat-action-card chat-action-card--payment-retry">' +
       '<p class="chat-action-card__title">Оплата отклонена</p>' +
       reason +
       action +

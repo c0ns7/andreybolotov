@@ -1,0 +1,136 @@
+/* Карточки действий в чате: приз, повтор оплаты */
+.chat-bubble .chat-action-card,
+.chat-bubble__text .chat-action-card,
+.admin-msg-bubble .chat-action-card {
+  margin-top: 12px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.chat-action-card--payment-retry {
+  border: 1px solid #fecaca;
+  background: linear-gradient(145deg, #fff1f2 0%, #ffe4e6 100%);
+}
+
+.chat-action-card--payment-retry .chat-action-card__title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #b91c1c;
+}
+
+.chat-action-card--payment-retry .chat-action-card__reason {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #7f1d1d;
+}
+
+.chat-action-card--prize {
+  border: 1px solid #fcd34d;
+  background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.chat-action-card--prize .chat-action-card__title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #92400e;
+}
+
+.chat-action-card--prize .chat-action-card__reason {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #78350f;
+}
+
+.chat-bubble .chat-action-card__btn,
+.chat-bubble .chat-action-card__btn.chat-action-card__btn--prize,
+.chat-bubble .chat-action-card__btn.chat-action-card__btn--payment-retry,
+.chat-bubble__text .chat-action-card__btn,
+.admin-msg-bubble .chat-action-card__btn,
+.admin-msg-bubble a.chat-action-card__btn,
+.admin-msg-bubble button.chat-action-card__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 16px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  appearance: none;
+  -webkit-appearance: none;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.chat-action-card__btn--payment-retry {
+  background: linear-gradient(145deg, #1d4ed8 0%, #2563eb 48%, #1e40af 100%);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.32);
+}
+
+.chat-action-card__btn--payment-retry:hover,
+.chat-action-card__btn--payment-retry:active {
+  filter: brightness(1.05);
+}
+
+.chat-action-card__btn--prize {
+  background: linear-gradient(145deg, #f59e0b 0%, #d97706 48%, #b45309 100%);
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+}
+
+.chat-action-card__btn--prize:hover,
+.chat-action-card__btn--prize:active {
+  filter: brightness(1.05);
+}
+
+.chat-bubble button.chat-action-card__btn:active,
+.admin-msg-bubble button.chat-action-card__btn:active {
+  transform: scale(0.99);
+}
+
+html.theme-dark .chat-action-card--payment-retry {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--border));
+  background: color-mix(in srgb, #ef4444 12%, var(--surface));
+}
+
+html.theme-dark .chat-action-card--payment-retry .chat-action-card__title {
+  color: #fca5a5;
+}
+
+html.theme-dark .chat-action-card--payment-retry .chat-action-card__reason {
+  color: #fecaca;
+}
+
+html.theme-dark .chat-action-card--prize {
+  background: linear-gradient(145deg, #422006 0%, #1c1917 100%);
+  border-color: #92400e;
+}
+
+html.theme-dark .chat-action-card--prize .chat-action-card__title {
+  color: #fcd34d;
+}
+
+html.theme-dark .chat-action-card--prize .chat-action-card__reason {
+  color: #fde68a;
+}

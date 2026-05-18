@@ -226,34 +226,7 @@
   color: #0f172a;
 }
 
-.chat-action-card--prize {
-  border-color: #fcd34d;
-  background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
-}
-
-.chat-action-card--prize .chat-action-card__title {
-  color: #92400e;
-}
-
-.chat-action-card--prize .chat-action-card__reason {
-  color: #78350f;
-}
-
-.chat-action-card__btn--prize {
-  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
-  border-color: #b45309;
-}
-
-.chat-action-card__btn--prize:hover {
-  filter: brightness(1.05);
-}
-
 html.theme-dark .prize-claim-card {
   background: linear-gradient(180deg, #292524 0%, var(--surface) 40%);
   border-color: var(--border);
-}
-
-html.theme-dark .chat-action-card--prize {
-  background: linear-gradient(145deg, #422006 0%, #1c1917 100%);
-  border-color: #92400e;
 }

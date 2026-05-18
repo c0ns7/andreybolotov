@@ -112,7 +112,7 @@ export function buildPrizeClaimChatBody(
     lines.push(hint);
   }
   lines.push("");
-  lines.push("Нажмите кнопку ниже, напишите ответ в окне и отправьте — мы получим его в разделе «Призы».");
+  lines.push("Нажмите кнопку ниже и отправьте ответ в открывшемся окне.");
   const payload = {
     kind: "prize_claim",
     title: "Получить приз",
@@ -159,6 +159,57 @@ export async function createPrizeAward(input: {
     row.chat_message_id = messageId;
   }
   return { ok: true, prize: row, messageId };
+}
+
+export const MAX_PRIZE_RECIPIENTS = 20;
+
+export async function createPrizeAwardsBulk(input: {
+  userIds: number[];
+  title: string;
+  description?: string;
+  createdByUserId: number | null;
+  introMessage?: string;
+  sendChat?: boolean;
+}): Promise<
+  | {
+      ok: true;
+      created: number;
+      prizes: PrizeAwardRow[];
+      failed: { user_id: number; error: string }[];
+    }
+  | { ok: false; error: string }
+> {
+  const ids = [
+    ...new Set(
+      input.userIds.map((x) => Math.floor(Number(x))).filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  ];
+  if (!ids.length) return { ok: false, error: "Выберите хотя бы одного получателя" };
+  if (ids.length > MAX_PRIZE_RECIPIENTS) {
+    return { ok: false, error: `Можно выбрать не больше ${MAX_PRIZE_RECIPIENTS} человек за раз` };
+  }
+
+  const prizes: PrizeAwardRow[] = [];
+  const failed: { user_id: number; error: string }[] = [];
+
+  for (const userId of ids) {
+    const res = await createPrizeAward({
+      userId,
+      title: input.title,
+      description: input.description,
+      createdByUserId: input.createdByUserId,
+      introMessage: input.introMessage,
+      sendChat: input.sendChat,
+    });
+    if (res.ok) prizes.push(res.prize);
+    else failed.push({ user_id: userId, error: res.error });
+  }
+
+  if (!prizes.length) {
+    return { ok: false, error: failed[0]?.error || "Не удалось создать призы" };
+  }
+
+  return { ok: true, created: prizes.length, prizes, failed };
 }
 
 export async function listPrizeAwardsForAdmin(opts: {

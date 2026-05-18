@@ -82,6 +82,7 @@ import {
 } from "./blog.js";
 import {
   createPrizeAward,
+  createPrizeAwardsBulk,
   getPrizeAwardById,
   listPrizeAwardsForAdmin,
   prizeAwardToDto,
@@ -1883,15 +1884,56 @@ adminSubApp.post("/prizes", async (c) => {
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
+  const title = String(body.title || "");
+  const description = String(body.description || "");
+  const introMessage = String(body.intro_message || "");
+  const sendChat = body.send_chat !== false;
+
+  if (Array.isArray(body.user_ids)) {
+    const userIds = body.user_ids
+      .map((x) => Math.floor(Number(x)))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    const bulk = await createPrizeAwardsBulk({
+      userIds,
+      title,
+      description,
+      createdByUserId: auth.id,
+      introMessage,
+      sendChat,
+    });
+    if (!bulk.ok) return c.json({ error: bulk.error }, 400);
+    for (const prize of bulk.prizes) {
+      if (!prize.chat_message_id) continue;
+      const uid = prize.user_id;
+      await markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = await getSupportMessageById(prize.chat_message_id);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      notifyUserEmailStaffReply(uid, { body: "", attachmentName: null, attachmentMime: null });
+    }
+    const users = new Map<number, { name: string; phone: string }>();
+    for (const p of bulk.prizes) {
+      const u = await getUserById(p.user_id);
+      if (u) users.set(p.user_id, { name: u.name, phone: u.phone });
+    }
+    return c.json({
+      created: bulk.created,
+      failed: bulk.failed,
+      prizes: await Promise.all(
+        bulk.prizes.map((p) => prizeAwardToDtoAsync(p, users.get(p.user_id))),
+      ),
+    });
+  }
+
   const userId = Number(body.user_id);
   if (!Number.isFinite(userId)) return c.json({ error: "Укажите пользователя" }, 400);
   const res = await createPrizeAward({
     userId,
-    title: String(body.title || ""),
-    description: String(body.description || ""),
+    title,
+    description,
     createdByUserId: auth.id,
-    introMessage: String(body.intro_message || ""),
-    sendChat: body.send_chat !== false,
+    introMessage,
+    sendChat,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (res.messageId) {

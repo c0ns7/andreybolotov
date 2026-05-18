@@ -1,3 +1,5 @@
+@import "./chat-action-cards.css";
+
 /* Андрей Болотов — колонка max 520px, светлая тема */
 :root {
   --bg: #f5f5f7;
@@ -9018,44 +9020,6 @@ html.theme-dark .auth-tabs__btn.is-active {
   padding-bottom: 22px;
 }
 
-.chat-action-card {
-  margin-top: 8px;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid #fecaca;
-  background: #fff1f2;
-}
-
-.chat-action-card__title {
-  margin: 0 0 6px;
-  font-size: 0.83rem;
-  font-weight: 800;
-  color: #b91c1c;
-}
-
-.chat-action-card__reason {
-  margin: 0 0 8px;
-  font-size: 0.8rem;
-  line-height: 1.35;
-  color: #7f1d1d;
-}
-
-.chat-action-card__btn {
-  width: 100%;
-  min-height: 34px;
-  border-radius: 10px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.chat-action-card__btn:hover {
-  filter: brightness(1.04);
-}
-
 .chat-bubble__time {
   position: absolute;
   bottom: 4px;
@@ -13652,19 +13616,6 @@ html.theme-dark .chat-loader__orb {
 
 html.theme-dark .chat-loader__text strong {
   color: var(--text);
-}
-
-html.theme-dark .chat-action-card {
-  border-color: color-mix(in srgb, #ef4444 45%, var(--border));
-  background: color-mix(in srgb, #ef4444 10%, var(--surface));
-}
-
-html.theme-dark .chat-action-card__title {
-  color: #fca5a5;
-}
-
-html.theme-dark .chat-action-card__reason {
-  color: #fecaca;
 }
 
 html.theme-dark .chat-day-separator::before {
