@@ -74,6 +74,15 @@ import {
   userCancelReservedRaffleOrder,
 } from "../../server/raffle-orders.js";
 import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
+import {
+  addBlogComment,
+  getBlogPostBySlug,
+  hideBlogComment,
+  listBlogComments,
+  listBlogPosts,
+  recordBlogPostView,
+  toggleBlogPostLike,
+} from "../../server/blog.js";
 import { getStaffTypingForUser } from "../../server/typing-state.js";
 import {
   attachWebSocket,
@@ -1533,6 +1542,92 @@ app.post("/api/raffles/orders/:orderId/receipt", async (request, reply) => {
     server_time_ms: Date.now(),
     payment_participation: await buildRafflePaymentParticipationContext(user.id, order.raffle_id, order.id),
   };
+});
+
+app.get("/api/blog/posts", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const q = request.query as { sort?: string; q?: string; tag?: string; limit?: string; offset?: string };
+  const data = await listBlogPosts({
+    sort: q.sort === "popular" ? "popular" : "newest",
+    search: String(q.q ?? ""),
+    tagSlug: String(q.tag ?? ""),
+    status: "published",
+    limit: Number(q.limit ?? 20),
+    offset: Number(q.offset ?? 0),
+    viewerUserId: user.id,
+  });
+  return data;
+});
+
+app.get("/api/blog/posts/:slug", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const params = request.params as { slug?: string };
+  const slug = String(params.slug ?? "").trim();
+  if (!slug) return reply.code(400).send({ error: "Некорректный адрес" });
+  const post = await getBlogPostBySlug(slug, user.id);
+  if (!post || post.status !== "published") return reply.code(404).send({ error: "Не найдено" });
+  return { post };
+});
+
+app.post("/api/blog/posts/:id/view", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  await recordBlogPostView(id, user.id);
+  return { ok: true };
+});
+
+app.post("/api/blog/posts/:id/like", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  const res = await toggleBlogPostLike(id, user.id);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return { liked: res.liked, like_count: res.like_count };
+});
+
+app.get("/api/blog/posts/:id/comments", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  const comments = await listBlogComments(id);
+  return {
+    comments: comments.map((c) => ({
+      id: c.id,
+      post_id: c.post_id,
+      user_id: c.user_id,
+      body: c.body,
+      parent_id: c.parent_id,
+      created_at: c.created_at,
+      user_name: c.user_name,
+    })),
+  };
+});
+
+app.post("/api/blog/posts/:id/comments", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  const body = (request.body ?? {}) as { body?: string; parent_id?: number };
+  const res = await addBlogComment(id, user.id, String(body.body ?? ""), body.parent_id);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return { comment: res.comment };
+});
+
+app.delete("/api/blog/comments/:commentId", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (String(user.role) !== "admin") return reply.code(403).send({ error: "Недостаточно прав" });
+  const commentId = Number((request.params as { commentId?: string }).commentId);
+  if (!Number.isFinite(commentId)) return reply.code(400).send({ error: "Некорректный id" });
+  await hideBlogComment(commentId);
+  return { ok: true };
 });
 
 app.setErrorHandler((err, request, reply) => {

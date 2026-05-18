@@ -71,6 +71,14 @@ import {
   rejectOrderByAdmin,
   raffleMaxRejectReworksFromEnv,
 } from "./raffle-orders.js";
+import {
+  createBlogPost,
+  deleteBlogPost,
+  getBlogPostById,
+  listAllBlogTags,
+  listBlogPosts,
+  updateBlogPost,
+} from "./blog.js";
 import type {
   AdminActiveOrderRow,
   AdminPaymentHistoryRow,
@@ -134,6 +142,7 @@ async function writeUploadToDirs(dirs: string[], fileName: string, buffer: Buffe
 
 const raffleUploadsDirs = ensureUploadDirs("raffles");
 const chatUploadsDirs = ensureUploadDirs("chat");
+const blogUploadsDirs = ensureUploadDirs("blog");
 
 function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
   const r = Math.floor(Number(raffleId));
@@ -1664,4 +1673,149 @@ adminSubApp.delete("/users/:userId", async (c) => {
   }
   await deleteUserAccountByAdmin(userId);
   return c.json({ ok: true });
+});
+
+adminSubApp.get("/blog/tags", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const tags = await listAllBlogTags();
+  return c.json({ tags });
+});
+
+adminSubApp.get("/blog/posts", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const sort = c.req.query("sort") === "popular" ? "popular" : "newest";
+  const search = String(c.req.query("q") ?? "").trim();
+  const tag = String(c.req.query("tag") ?? "").trim();
+  const statusRaw = String(c.req.query("status") ?? "all");
+  const status =
+    statusRaw === "published" || statusRaw === "draft" ? statusRaw : "all";
+  const limit = Number(c.req.query("limit") ?? 30);
+  const offset = Number(c.req.query("offset") ?? 0);
+  const data = await listBlogPosts({
+    sort,
+    search,
+    tagSlug: tag,
+    status,
+    limit,
+    offset,
+    viewerUserId: auth.id,
+  });
+  return c.json(data);
+});
+
+adminSubApp.get("/blog/posts/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const post = await getBlogPostById(id, auth.id);
+  if (!post) return c.json({ error: "Не найдено" }, 404);
+  return c.json({ post });
+});
+
+adminSubApp.post("/blog/posts", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await createBlogPost(auth.id, {
+    title: String(body.title ?? ""),
+    excerpt: String(body.excerpt ?? ""),
+    body_html: String(body.body_html ?? ""),
+    cover_url: String(body.cover_url ?? ""),
+    cover_mime: body.cover_mime != null ? String(body.cover_mime) : null,
+    keywords: String(body.keywords ?? ""),
+    status: body.status === "published" ? "published" : "draft",
+    tag_labels: Array.isArray(body.tag_labels) ? body.tag_labels.map(String) : [],
+    slug: body.slug != null ? String(body.slug) : undefined,
+  });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ post: res.post });
+});
+
+adminSubApp.patch("/blog/posts/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await updateBlogPost(id, {
+    title: String(body.title ?? ""),
+    excerpt: String(body.excerpt ?? ""),
+    body_html: String(body.body_html ?? ""),
+    cover_url: body.cover_url != null ? String(body.cover_url) : undefined,
+    cover_mime: body.cover_mime != null ? String(body.cover_mime) : undefined,
+    keywords: body.keywords != null ? String(body.keywords) : undefined,
+    status:
+      body.status === "published" ? "published" : body.status === "draft" ? "draft" : undefined,
+    tag_labels: Array.isArray(body.tag_labels) ? body.tag_labels.map(String) : [],
+    slug: body.slug != null ? String(body.slug) : undefined,
+  });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ post: res.post });
+});
+
+adminSubApp.delete("/blog/posts/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  await deleteBlogPost(id);
+  return c.json({ ok: true });
+});
+
+adminSubApp.post("/blog/upload", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.parseBody();
+  } catch {
+    return c.json({ error: "Некорректные данные" }, 400);
+  }
+  const raw = body["file"];
+  if (!raw || typeof raw !== "object") {
+    return c.json({ error: "Нет файла" }, 400);
+  }
+  const blob = raw as { type?: string; arrayBuffer?: () => Promise<ArrayBuffer> };
+  if (typeof blob.arrayBuffer !== "function") {
+    return c.json({ error: "Некорректный файл" }, 400);
+  }
+  const ab = await blob.arrayBuffer();
+  const buffer = Buffer.from(ab);
+  const mime = String(blob.type || "").toLowerCase();
+  const isVideo = mime.startsWith("video/");
+  const max = isVideo ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (buffer.length > max) {
+    return c.json({ error: isVideo ? "Видео не больше 50 МБ" : "Файл не больше 8 МБ" }, 400);
+  }
+  const extMap: Record<string, string> = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+  };
+  const ext = extMap[mime];
+  if (!ext) {
+    return c.json({ error: "Допустимы изображения (JPEG, PNG, WebP, GIF) или видео (MP4, WebM, MOV)" }, 400);
+  }
+  const name = `${randomUUID()}${ext}`;
+  await writeUploadToDirs(blogUploadsDirs, name, buffer);
+  const url = `/uploads/blog/${name}`;
+  return c.json({ url, mime });
 });

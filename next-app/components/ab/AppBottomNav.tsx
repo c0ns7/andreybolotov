@@ -389,6 +389,7 @@ export default function AppBottomNav({
   }, [pathname, refreshChatUnread]);
 
   const isAdmin = mounted && String(session?.role || "") === "admin";
+  const isBlogRoute = pathname === "/home/blog" || pathname.startsWith("/home/blog/");
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
@@ -480,22 +481,40 @@ export default function AppBottomNav({
             </button>
           ) : null}
           {showBlog ? (
-            <button
-              type="button"
-              className={"bottom-nav-btn" + (blogOpen ? " bottom-nav-btn--active" : "")}
-              id="tab-blog"
-              aria-label="Блог"
-              aria-expanded={blogOpen}
-              onClick={() => setBlogOpen(true)}
-            >
-              <span className="bottom-nav-btn__icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                </svg>
-              </span>
-              <span className="bottom-nav-btn__label">Блог</span>
-            </button>
+            isAdmin ? (
+              <Link
+                href="/home/blog"
+                className={"bottom-nav-btn" + (isBlogRoute ? " bottom-nav-btn--active" : "")}
+                id="tab-blog"
+                aria-label="Блог"
+                aria-current={isBlogRoute ? "page" : undefined}
+              >
+                <span className="bottom-nav-btn__icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </span>
+                <span className="bottom-nav-btn__label">Блог</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className={"bottom-nav-btn" + (blogOpen ? " bottom-nav-btn--active" : "")}
+                id="tab-blog"
+                aria-label="Блог"
+                aria-expanded={blogOpen}
+                onClick={() => setBlogOpen(true)}
+              >
+                <span className="bottom-nav-btn__icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </span>
+                <span className="bottom-nav-btn__label">Блог</span>
+              </button>
+            )
           ) : null}
           {!hideChat ? (
             <button
