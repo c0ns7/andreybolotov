@@ -1,5 +1,9 @@
-import { getUserById, insertSupportMessage, messageToDto } from "./db.js";
+import { getRaffleById, getUserById, insertSupportMessage, messageToDto } from "./db.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
+import {
+  adminAssignRandomTicketsToPhone,
+  notifyUserTicketAssignment,
+} from "./raffle-orders.js";
 
 export type PrizeType = "physical" | "money";
 export type PrizeStatus = "pending" | "claimed" | "processing" | "done" | "cancelled";
@@ -24,6 +28,10 @@ export type PrizeAwardRow = {
   review_requested: number;
   review_received: number;
   chat_message_id: number | null;
+  raffle_id: number | null;
+  money_amount_rub: number;
+  exchange_ticket_count: number;
+  allows_ticket_exchange: number;
 };
 
 export type PrizeClaimDataPhysical = {
@@ -32,26 +40,40 @@ export type PrizeClaimDataPhysical = {
   comment?: string;
 };
 
-export type PrizeClaimDataMoney = {
+export type PrizeClaimDataMoneyCash = {
+  choice: "money";
   phone: string;
   bank: string;
   recipient_name: string;
   comment?: string;
 };
 
+export type PrizeClaimDataMoneyTickets = {
+  choice: "tickets";
+  comment?: string;
+};
+
+export type PrizeClaimDataMoney = PrizeClaimDataMoneyCash | PrizeClaimDataMoneyTickets;
+
 function nowMs() {
   return Date.now();
 }
 
-export function prizeAwardToDto(row: PrizeAwardRow, user?: { name: string; phone: string }) {
-  let claim: Record<string, unknown> | null = null;
-  if (row.claim_data) {
-    try {
-      claim = JSON.parse(row.claim_data) as Record<string, unknown>;
-    } catch {
-      claim = null;
-    }
+function parseClaimData(row: PrizeAwardRow): Record<string, unknown> | null {
+  if (!row.claim_data) return null;
+  try {
+    return JSON.parse(row.claim_data) as Record<string, unknown>;
+  } catch {
+    return null;
   }
+}
+
+export function prizeAwardToDto(
+  row: PrizeAwardRow,
+  user?: { name: string; phone: string },
+  extra?: { raffle_title?: string },
+) {
+  const claim = parseClaimData(row);
   return {
     id: row.id,
     user_id: row.user_id,
@@ -73,7 +95,21 @@ export function prizeAwardToDto(row: PrizeAwardRow, user?: { name: string; phone
     review_requested: !!row.review_requested,
     review_received: !!row.review_received,
     chat_message_id: row.chat_message_id,
+    money_amount_rub: Math.max(0, Math.floor(Number(row.money_amount_rub) || 0)),
+    allows_ticket_exchange: !!row.allows_ticket_exchange,
+    raffle_id: row.raffle_id ? Number(row.raffle_id) : null,
+    exchange_ticket_count: Math.max(0, Math.floor(Number(row.exchange_ticket_count) || 0)),
+    raffle_title: extra?.raffle_title ?? "",
   };
+}
+
+export async function prizeAwardToDtoAsync(row: PrizeAwardRow, user?: { name: string; phone: string }) {
+  let raffle_title = "";
+  if (row.raffle_id) {
+    const raffle = await getRaffleById(row.raffle_id);
+    raffle_title = raffle?.title ?? "";
+  }
+  return prizeAwardToDto(row, user, { raffle_title });
 }
 
 export function buildPrizeClaimChatBody(
@@ -81,6 +117,11 @@ export function buildPrizeClaimChatBody(
   title: string,
   prizeType: PrizeType,
   intro?: string,
+  opts?: {
+    moneyAmountRub?: number;
+    allowsTicketExchange?: boolean;
+    exchangeTicketCount?: number;
+  },
 ): string {
   const safeTitle = String(title || "Приз").trim() || "Приз";
   const lines: string[] = [];
@@ -93,6 +134,14 @@ export function buildPrizeClaimChatBody(
   lines.push("");
   if (prizeType === "physical") {
     lines.push("Нажмите кнопку ниже и укажите адрес доставки — так мы не пропустим ваш ответ среди других сообщений.");
+  } else if (opts?.allowsTicketExchange && (opts.exchangeTicketCount ?? 0) > 0) {
+    const amount =
+      opts.moneyAmountRub && opts.moneyAmountRub > 0
+        ? ` (${opts.moneyAmountRub.toLocaleString("ru-RU")} ₽)`
+        : "";
+    lines.push(
+      `Нажмите кнопку ниже: вы можете получить денежный приз${amount} или обменять его на ${opts.exchangeTicketCount} номерков в акции.`,
+    );
   } else {
     lines.push(
       "Нажмите кнопку ниже и укажите телефон, банк и получателя для перевода — так мы не пропустим ваш ответ среди других сообщений.",
@@ -119,19 +168,49 @@ export async function createPrizeAward(input: {
   createdByUserId: number | null;
   introMessage?: string;
   sendChat?: boolean;
+  moneyAmountRub?: number;
+  allowsTicketExchange?: boolean;
+  raffleId?: number | null;
+  exchangeTicketCount?: number;
 }): Promise<{ ok: true; prize: PrizeAwardRow; messageId?: number } | { ok: false; error: string }> {
   const user = await getUserById(input.userId);
   if (!user) return { ok: false, error: "Пользователь не найден" };
   const title = String(input.title || "").trim();
   if (!title) return { ok: false, error: "Укажите название приза" };
   const prizeType = input.prizeType === "money" ? "money" : "physical";
+  const allowsExchange = prizeType === "money" && !!input.allowsTicketExchange;
+  const exchangeCount = Math.max(0, Math.floor(Number(input.exchangeTicketCount) || 0));
+  const raffleId =
+    input.raffleId != null && Number.isFinite(Number(input.raffleId)) ? Math.floor(Number(input.raffleId)) : null;
+  const moneyAmountRub = Math.max(0, Math.floor(Number(input.moneyAmountRub) || 0));
+
+  if (allowsExchange) {
+    if (!raffleId) return { ok: false, error: "Выберите акцию для обмена на номерки" };
+    if (exchangeCount < 1) return { ok: false, error: "Укажите количество номерков при обмене" };
+    const raffle = await getRaffleById(raffleId);
+    if (!raffle) return { ok: false, error: "Акция не найдена" };
+  }
+
   const ts = nowMs();
   const inserted = await pgGet<{ id: number }>(
     `INSERT INTO prize_awards (
       user_id, title, description, prize_type, status, claim_data, admin_notes,
-      created_by_user_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, 'pending', '', '', ?, ?, ?) RETURNING id`,
-    [input.userId, title, String(input.description || "").trim(), prizeType, input.createdByUserId, ts, ts],
+      created_by_user_id, created_at, updated_at,
+      raffle_id, money_amount_rub, exchange_ticket_count, allows_ticket_exchange
+    ) VALUES (?, ?, ?, ?, 'pending', '', '', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [
+      input.userId,
+      title,
+      String(input.description || "").trim(),
+      prizeType,
+      input.createdByUserId,
+      ts,
+      ts,
+      allowsExchange ? raffleId : null,
+      moneyAmountRub,
+      allowsExchange ? exchangeCount : 0,
+      allowsExchange ? 1 : 0,
+    ],
   );
   const id = Number(inserted?.id || 0);
   if (!id) return { ok: false, error: "Не удалось создать приз" };
@@ -140,7 +219,11 @@ export async function createPrizeAward(input: {
 
   let messageId: number | undefined;
   if (input.sendChat !== false) {
-    const body = buildPrizeClaimChatBody(row.id, title, prizeType, input.introMessage);
+    const body = buildPrizeClaimChatBody(row.id, title, prizeType, input.introMessage, {
+      moneyAmountRub,
+      allowsTicketExchange: allowsExchange,
+      exchangeTicketCount: exchangeCount,
+    });
     messageId = await insertSupportMessage(input.userId, body, true, null);
     await pgExec(`UPDATE prize_awards SET chat_message_id = ? WHERE id = ?`, [messageId, row.id]);
     row.chat_message_id = messageId;
@@ -220,7 +303,7 @@ export async function getPrizeAwardForUser(id: number, userId: number): Promise<
 export async function submitPrizeClaim(
   id: number,
   userId: number,
-  data: PrizeClaimDataPhysical | PrizeClaimDataMoney,
+  data: PrizeClaimDataPhysical | PrizeClaimDataMoney | Record<string, unknown>,
 ): Promise<{ ok: true; prize: PrizeAwardRow } | { ok: false; error: string }> {
   const row = await getPrizeAwardForUser(id, userId);
   if (!row) return { ok: false, error: "Приз не найден" };
@@ -231,33 +314,68 @@ export async function submitPrizeClaim(
     return { ok: false, error: "Данные уже отправлены. Если нужно изменить — напишите в поддержку." };
   }
 
+  const ts = nowMs();
+  let claimPayload: Record<string, unknown>;
+  let status: PrizeStatus = "claimed";
+
   if (row.prize_type === "physical") {
     const d = data as PrizeClaimDataPhysical;
     const address = String(d.address || "").trim();
     const recipient_name = String(d.recipient_name || "").trim();
     if (!address || address.length < 10) return { ok: false, error: "Укажите полный адрес доставки" };
     if (!recipient_name) return { ok: false, error: "Укажите имя получателя" };
-    data = { recipient_name, address, comment: String(d.comment || "").trim().slice(0, 500) };
+    claimPayload = { recipient_name, address, comment: String(d.comment || "").trim().slice(0, 500) };
   } else {
-    const d = data as PrizeClaimDataMoney;
-    const phone = String(d.phone || "").replace(/\D/g, "");
-    const bank = String(d.bank || "").trim();
-    const recipient_name = String(d.recipient_name || "").trim();
-    if (phone.length < 10) return { ok: false, error: "Укажите корректный телефон" };
-    if (!bank) return { ok: false, error: "Укажите банк" };
-    if (!recipient_name) return { ok: false, error: "Укажите получателя" };
-    data = {
-      phone,
-      bank,
-      recipient_name,
-      comment: String(d.comment || "").trim().slice(0, 500),
-    };
+    const choice = String((data as Record<string, unknown>).choice || "money").trim();
+    if (choice === "tickets") {
+      if (!row.allows_ticket_exchange) {
+        return { ok: false, error: "Обмен на номерки для этого приза недоступен" };
+      }
+      if (!row.raffle_id) return { ok: false, error: "Акция для номерков не настроена" };
+      const count = Math.max(1, Math.floor(Number(row.exchange_ticket_count) || 1));
+      const user = await getUserById(userId);
+      if (!user?.phone) {
+        return { ok: false, error: "Укажите телефон в профиле или выберите получение деньгами" };
+      }
+      const assign = await adminAssignRandomTicketsToPhone(row.raffle_id, user.phone, count);
+      if (!assign.ok) return { ok: false, error: assign.error };
+      const raffle = await getRaffleById(row.raffle_id);
+      await notifyUserTicketAssignment(
+        userId,
+        raffle?.title ?? "акция",
+        assign.ticket_numbers,
+        `Номерки закреплены по обмену денежного приза «${row.title}».`,
+      );
+      claimPayload = {
+        choice: "tickets",
+        ticket_numbers: assign.ticket_numbers,
+        raffle_id: row.raffle_id,
+        comment: String((data as Record<string, unknown>).comment || "")
+          .trim()
+          .slice(0, 500),
+      };
+      status = "done";
+    } else {
+      const d = data as PrizeClaimDataMoneyCash;
+      const phone = String(d.phone || "").replace(/\D/g, "");
+      const bank = String(d.bank || "").trim();
+      const recipient_name = String(d.recipient_name || "").trim();
+      if (phone.length < 10) return { ok: false, error: "Укажите корректный телефон" };
+      if (!bank) return { ok: false, error: "Укажите банк" };
+      if (!recipient_name) return { ok: false, error: "Укажите получателя" };
+      claimPayload = {
+        choice: "money",
+        phone,
+        bank,
+        recipient_name,
+        comment: String(d.comment || "").trim().slice(0, 500),
+      };
+    }
   }
 
-  const ts = nowMs();
   await pgExec(
-    `UPDATE prize_awards SET status = 'claimed', claim_data = ?, claimed_at = ?, updated_at = ? WHERE id = ?`,
-    [JSON.stringify(data), ts, ts, id],
+    `UPDATE prize_awards SET status = ?, claim_data = ?, claimed_at = ?, updated_at = ? WHERE id = ?`,
+    [status, JSON.stringify(claimPayload), ts, ts, id],
   );
   const updated = await getPrizeAwardById(id);
   if (!updated) return { ok: false, error: "Ошибка сохранения" };
@@ -326,6 +444,10 @@ export async function sendPrizeReceiptToUserChat(
   const row = await getPrizeAwardById(prizeId);
   if (!row) return { ok: false, error: "Приз не найден" };
   if (row.prize_type !== "money") return { ok: false, error: "Чек можно отправить только для денежного приза" };
+  const claim = parseClaimData(row);
+  if (claim?.choice === "tickets") {
+    return { ok: false, error: "Пользователь выбрал обмен на номерки — чек перевода не нужен" };
+  }
   if (!row.transfer_receipt_url) return { ok: false, error: "Сначала загрузите чек перевода" };
 
   const body =

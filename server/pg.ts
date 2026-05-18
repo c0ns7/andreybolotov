@@ -209,4 +209,16 @@ export async function ensurePgRuntimeSchema(): Promise<void> {
   `);
   await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_prize_awards_user ON prize_awards(user_id, created_at DESC)`);
   await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_prize_awards_status ON prize_awards(status, updated_at DESC)`);
+  await pgPool.query(
+    `ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS raffle_id BIGINT REFERENCES raffles(id) ON DELETE SET NULL`,
+  );
+  await pgPool.query(
+    `ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS money_amount_rub INTEGER NOT NULL DEFAULT 0`,
+  );
+  await pgPool.query(
+    `ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS exchange_ticket_count INTEGER NOT NULL DEFAULT 0`,
+  );
+  await pgPool.query(
+    `ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS allows_ticket_exchange INTEGER NOT NULL DEFAULT 0`,
+  );
 }

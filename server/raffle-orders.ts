@@ -6,6 +6,7 @@ import {
   isRaffleCenopadActive,
   getUserById,
   getUserByPhone,
+  insertSupportMessage,
   isRaffleVisibleOnSite,
   getLatestVisibleActiveRaffle,
   listRafflesPublic,
@@ -2997,4 +2998,76 @@ export async function getRaffleOccupiedCount(raffleId: number): Promise<number> 
     raffleId,
   ]);
   return Math.max(0, Number((holds && holds.c) || 0) + Number((pre && pre.c) || 0));
+}
+
+export function buildStaffTicketAssignmentChatBody(
+  raffleTitle: string,
+  ticketNumbers: number[],
+  adminNote?: string,
+): string {
+  const safeTitle = String(raffleTitle || "акция")
+    .trim()
+    .slice(0, 180);
+  const nums = [
+    ...new Set(
+      ticketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  let head: string;
+  if (nums.length === 0) {
+    head = `Вам закреплены номерки по акции «${safeTitle}».`;
+  } else if (nums.length === 1) {
+    head = `Вам закреплён номерок №${nums[0]} по акции «${safeTitle}».`;
+  } else {
+    head = `Вам закреплены номерки ` + nums.map((n) => `№${n}`).join(", ") + ` по акции «${safeTitle}».`;
+  }
+  const note = String(adminNote ?? "").trim().slice(0, 500);
+  if (!note) return head;
+  return `${head}\n\n${note}`;
+}
+
+export async function notifyUserTicketAssignment(
+  userId: number,
+  raffleTitle: string,
+  ticketNumbers: number[],
+  adminNote?: string,
+): Promise<number> {
+  const body = buildStaffTicketAssignmentChatBody(raffleTitle, ticketNumbers, adminNote);
+  return insertSupportMessage(userId, body, true, null);
+}
+
+export async function adminAssignRandomTicketsToPhone(
+  raffleId: number,
+  rawPhone: string,
+  count: number,
+): Promise<{ ok: true; ticket_numbers: number[] } | { ok: false; error: string }> {
+  const need = Math.max(1, Math.floor(Number(count) || 1));
+  const assigned: number[] = [];
+  const tried = new Set<number>();
+
+  for (let round = 0; round < 3 && assigned.length < need; round++) {
+    const free = (await listGloballyFreeTicketNumbers(raffleId)).filter((t) => !assigned.includes(t));
+    if (free.length === 0) break;
+    const pool = [...free];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+    }
+    for (const ticket of pool) {
+      if (assigned.length >= need) break;
+      if (tried.has(ticket)) continue;
+      tried.add(ticket);
+      const res = await adminAssignPhoneToExactTicket(raffleId, rawPhone, ticket);
+      if (res.ok) assigned.push(ticket);
+    }
+  }
+
+  if (assigned.length < need) {
+    return {
+      ok: false,
+      error: `Не удалось закрепить ${need} номерков (закреплено ${assigned.length}). Проверьте свободные номерки в акции.`,
+    };
+  }
+  assigned.sort((a, b) => a - b);
+  return { ok: true, ticket_numbers: assigned };
 }

@@ -466,6 +466,28 @@ export default function AdminMarkup() {
                 <option value="money">Деньги (телефон, банк, получатель)</option>
               </select>
             </label>
+            <div id="prize-create-money-fields" className="admin-prize-create-money-fields" hidden>
+              <label className="form-group">
+                <span>Сумма, ₽</span>
+                <input id="prize-create-money-amount" className="input" type="number" min={0} step={1} placeholder="2000" />
+              </label>
+              <label className="admin-prize-detail__check">
+                <input type="checkbox" id="prize-create-allows-exchange" />
+                Можно обменять на номерки
+              </label>
+              <div id="prize-create-exchange-fields" hidden>
+                <label className="form-group">
+                  <span>Акция для номерков</span>
+                  <select id="prize-create-raffle-id" className="input">
+                    <option value="">— выберите акцию —</option>
+                  </select>
+                </label>
+                <label className="form-group">
+                  <span>Количество номерков при обмене</span>
+                  <input id="prize-create-exchange-count" className="input" type="number" min={1} step={1} defaultValue={1} />
+                </label>
+              </div>
+            </div>
             <label className="form-group">
               <span>Описание (необязательно)</span>
               <textarea id="prize-create-desc" className="input" rows={2} placeholder="Детали приза…" />

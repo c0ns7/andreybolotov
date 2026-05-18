@@ -85,6 +85,7 @@ import {
   getPrizeAwardById,
   listPrizeAwardsForAdmin,
   prizeAwardToDto,
+  prizeAwardToDtoAsync,
   sendPrizeReceiptToUserChat,
   updatePrizeAwardAdmin,
 } from "./prizes.js";
@@ -1870,7 +1871,7 @@ adminSubApp.get("/prizes/:id", async (c) => {
   if (!row) return c.json({ error: "Не найдено" }, 404);
   const user = await getUserById(row.user_id);
   return c.json({
-    prize: prizeAwardToDto(row, user ? { name: user.name, phone: user.phone } : undefined),
+    prize: await prizeAwardToDtoAsync(row, user ? { name: user.name, phone: user.phone } : undefined),
   });
 });
 
@@ -1894,6 +1895,10 @@ adminSubApp.post("/prizes", async (c) => {
     createdByUserId: auth.id,
     introMessage: String(body.intro_message || ""),
     sendChat: body.send_chat !== false,
+    moneyAmountRub: Number(body.money_amount_rub) || 0,
+    allowsTicketExchange: body.allows_ticket_exchange === true,
+    raffleId: body.raffle_id != null ? Number(body.raffle_id) : null,
+    exchangeTicketCount: Number(body.exchange_ticket_count) || 0,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (res.messageId) {
@@ -1904,7 +1909,9 @@ adminSubApp.post("/prizes", async (c) => {
     notifyUserEmailStaffReply(userId, { body: "", attachmentName: null, attachmentMime: null });
   }
   const user = await getUserById(userId);
-  return c.json({ prize: prizeAwardToDto(res.prize, user ? { name: user.name, phone: user.phone } : undefined) });
+  return c.json({
+    prize: await prizeAwardToDtoAsync(res.prize, user ? { name: user.name, phone: user.phone } : undefined),
+  });
 });
 
 adminSubApp.patch("/prizes/:id", async (c) => {
@@ -1933,7 +1940,9 @@ adminSubApp.patch("/prizes/:id", async (c) => {
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   const user = await getUserById(res.prize.user_id);
-  return c.json({ prize: prizeAwardToDto(res.prize, user ? { name: user.name, phone: user.phone } : undefined) });
+  return c.json({
+    prize: await prizeAwardToDtoAsync(res.prize, user ? { name: user.name, phone: user.phone } : undefined),
+  });
 });
 
 adminSubApp.post("/prizes/:id/send-receipt-chat", async (c) => {

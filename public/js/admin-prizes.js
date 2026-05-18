@@ -87,8 +87,22 @@
     const c = prize.claim_data;
     if (!c || typeof c !== "object") return '<p class="admin-prize-detail__empty">Пользователь ещё не отправил данные.</p>';
     if (prize.prize_type === "money") {
+      if (c.choice === "tickets") {
+        const nums = Array.isArray(c.ticket_numbers) ? c.ticket_numbers : [];
+        return (
+          '<dl class="admin-prize-detail__dl">' +
+          "<dt>Выбор</dt><dd>Обмен на номерки</dd>" +
+          (prize.raffle_title ? "<dt>Акция</dt><dd>" + esc(prize.raffle_title) + "</dd>" : "") +
+          "<dt>Номерки</dt><dd>" +
+          esc(nums.length ? nums.map(function (n) { return "№" + n; }).join(", ") : "—") +
+          "</dd>" +
+          (c.comment ? "<dt>Комментарий</dt><dd>" + esc(String(c.comment)) + "</dd>" : "") +
+          "</dl>"
+        );
+      }
       return (
         '<dl class="admin-prize-detail__dl">' +
+        "<dt>Выбор</dt><dd>Получить деньги</dd>" +
         "<dt>Телефон</dt><dd>" +
         esc(formatRuPhone(String(c.phone || ""))) +
         "</dd>" +
@@ -182,8 +196,9 @@
       const data = await apiJson("/api/admin/prizes/" + id, { headers: authHeaders() });
       const p = data.prize;
       if (!p) throw new Error("Не найдено");
+      const moneyChoice = p.claim_data && p.claim_data.choice === "tickets";
       const receiptBlock =
-        p.prize_type === "money"
+        p.prize_type === "money" && !moneyChoice
           ? '<section class="admin-prize-detail__section">' +
             "<h4>Чек перевода</h4>" +
             (p.transfer_receipt_url
@@ -221,6 +236,15 @@
         String(p.user_id) +
         '">Открыть чат</button></p>' +
         (p.description ? '<p class="admin-prize-detail__desc">' + esc(p.description) + "</p>" : "") +
+        (p.prize_type === "money" && p.money_amount_rub
+          ? '<p class="admin-prize-detail__money-sum">Сумма: <strong>' +
+            esc(String(p.money_amount_rub)) +
+            " ₽</strong>" +
+            (p.allows_ticket_exchange
+              ? " · можно обменять на " + esc(String(p.exchange_ticket_count || 0)) + " ном."
+              : "") +
+            "</p>"
+          : "") +
         '<section class="admin-prize-detail__section"><h4>Данные от пользователя</h4>' +
         renderClaimSummary(p) +
         "</section>" +
@@ -321,6 +345,44 @@
     await openDetail(id, true);
   }
 
+  let rafflesForPrizeCache = null;
+
+  function syncPrizeCreateMoneyFields() {
+    const typeEl = document.getElementById("prize-create-type");
+    const moneyBlock = document.getElementById("prize-create-money-fields");
+    const exchangeBlock = document.getElementById("prize-create-exchange-fields");
+    const allows = document.getElementById("prize-create-allows-exchange");
+    const isMoney = typeEl && "value" in typeEl && typeEl.value === "money";
+    if (moneyBlock) moneyBlock.hidden = !isMoney;
+    const allowExchange = isMoney && allows && "checked" in allows && allows.checked;
+    if (exchangeBlock) exchangeBlock.hidden = !allowExchange;
+  }
+
+  async function loadRafflesForPrizeCreate() {
+    if (rafflesForPrizeCache) return rafflesForPrizeCache;
+    const data = await apiJson("/api/admin/raffles", { headers: authHeaders() });
+    rafflesForPrizeCache = Array.isArray(data.raffles) ? data.raffles : [];
+    const sel = document.getElementById("prize-create-raffle-id");
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML =
+        '<option value="">— выберите акцию —</option>' +
+        rafflesForPrizeCache
+          .map(function (r) {
+            return (
+              '<option value="' +
+              String(r.id) +
+              '">' +
+              esc(String(r.title || "Акция " + r.id)) +
+              "</option>"
+            );
+          })
+          .join("");
+      if (cur) sel.value = cur;
+    }
+    return rafflesForPrizeCache;
+  }
+
   function openCreateModal() {
     const modal = document.getElementById("modal-prize-create");
     if (!modal) return;
@@ -333,6 +395,8 @@
     const hidden = document.getElementById("prize-create-user-id");
     if (hidden && "value" in hidden) hidden.value = "";
     createUserId = null;
+    syncPrizeCreateMoneyFields();
+    void loadRafflesForPrizeCreate().catch(function () {});
   }
 
   function closeCreateModal() {
@@ -409,17 +473,35 @@
       alert("Укажите название приза.");
       return;
     }
+    const prizeType = typeEl && "value" in typeEl ? typeEl.value : "physical";
+    const payload = {
+      user_id: uid,
+      title: t,
+      description: desc && "value" in desc ? desc.value : "",
+      prize_type: prizeType,
+      intro_message: intro && "value" in intro ? intro.value : "",
+      send_chat: true,
+    };
+    if (prizeType === "money") {
+      const amountEl = document.getElementById("prize-create-money-amount");
+      const allowsEl = document.getElementById("prize-create-allows-exchange");
+      const raffleEl = document.getElementById("prize-create-raffle-id");
+      const countEl = document.getElementById("prize-create-exchange-count");
+      payload.money_amount_rub = amountEl && "value" in amountEl ? Number(amountEl.value) || 0 : 0;
+      payload.allows_ticket_exchange = !!(allowsEl && "checked" in allowsEl && allowsEl.checked);
+      if (payload.allows_ticket_exchange) {
+        payload.raffle_id = raffleEl && "value" in raffleEl ? Number(raffleEl.value) : 0;
+        payload.exchange_ticket_count = countEl && "value" in countEl ? Number(countEl.value) || 1 : 1;
+        if (!Number.isFinite(payload.raffle_id) || payload.raffle_id < 1) {
+          alert("Выберите акцию для обмена на номерки.");
+          return;
+        }
+      }
+    }
     await apiJson("/api/admin/prizes", {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({
-        user_id: uid,
-        title: t,
-        description: desc && "value" in desc ? desc.value : "",
-        prize_type: typeEl && "value" in typeEl ? typeEl.value : "physical",
-        intro_message: intro && "value" in intro ? intro.value : "",
-        send_chat: true,
-      }),
+      body: JSON.stringify(payload),
     });
     closeCreateModal();
     await loadPrizes();
@@ -438,6 +520,8 @@
         alert(e.message || "Ошибка");
       });
     });
+    document.getElementById("prize-create-type")?.addEventListener("change", syncPrizeCreateMoneyFields);
+    document.getElementById("prize-create-allows-exchange")?.addEventListener("change", syncPrizeCreateMoneyFields);
 
     document.getElementById("prize-create-user-q")?.addEventListener("input", function (e) {
       const v = e.target && "value" in e.target ? e.target.value : "";

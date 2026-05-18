@@ -277,7 +277,11 @@ CREATE TABLE IF NOT EXISTS prize_awards (
   transfer_receipt_mime TEXT NOT NULL DEFAULT '',
   review_requested INTEGER NOT NULL DEFAULT 0,
   review_received INTEGER NOT NULL DEFAULT 0,
-  chat_message_id BIGINT
+  chat_message_id BIGINT,
+  raffle_id BIGINT REFERENCES raffles(id) ON DELETE SET NULL,
+  money_amount_rub INTEGER NOT NULL DEFAULT 0,
+  exchange_ticket_count INTEGER NOT NULL DEFAULT 0,
+  allows_ticket_exchange INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_prize_awards_user ON prize_awards(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prize_awards_status ON prize_awards(status, updated_at DESC);
