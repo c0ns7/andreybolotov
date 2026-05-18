@@ -3,6 +3,33 @@
 
   const STORAGE_KEY = "ab_auth_v2";
   const HISTORY_CLEARED_BEFORE_KEY = "ab_admin_payments_history_cleared_before_v1";
+  const PAYMENTS_FILTER_PHONE_KEY = "ab_admin_payments_filter_phone_v1";
+  const POLL_INTERVAL_MS = 45000;
+  const COPY_DONE_MS = 3000;
+  const TOAST_MS = 5000;
+  const TICKETS_PREVIEW_MAX = 12;
+
+  const REJECT_COMMENT_TEMPLATES = [
+    { label: "Сумма не совпадает", text: "Сумма в чеке не совпадает с суммой заявки. Загрузите чек с правильной суммой." },
+    { label: "Нечитаемый чек", text: "Чек нечитаемый или обрезан. Загрузите полный и чёткий скриншот/фото чека." },
+    { label: "Не тот получатель", text: "В чеке указан другой получатель. Оплатите на реквизиты из инструкции акции." },
+    { label: "Не тот банк", text: "Оплата выполнена не с того банка, который указан в заявке." },
+  ];
+
+  var paymentsRuntime = {
+    token: "",
+    cache: null,
+    lastFetchAt: 0,
+    pollTimer: null,
+    updatedAgoTimer: null,
+    knownPendingIds: new Set(),
+    pendingNewCount: 0,
+    receiptRejectMax: 3,
+    filters: { q: "", sort: "queue_asc", raffle: "" },
+    loading: false,
+  };
+
+  var copyResetTimers = new WeakMap();
 
   /** Декоративные иконки (фиксированный SVG) */
   const ICO = {
@@ -57,8 +84,6 @@
     return String(raw || "").replace(/\D/g, "");
   }
 
-  var phoneCopyResetTimers = new WeakMap();
-
   function copyTextToClipboard(text, onDone) {
     var value = String(text || "");
     if (!value) return;
@@ -91,22 +116,44 @@
     }
   }
 
+  function renderCopyBtn(value, label) {
+    var v = String(value || "").trim();
+    if (!v) return "";
+    return (
+      '<button type="button" class="admin-payment-inline-copy" data-copy-value="' +
+      esc(v) +
+      '" aria-label="' +
+      esc(label) +
+      '" title="' +
+      esc(label) +
+      '">' +
+      '<span class="admin-payment-inline-copy__ico admin-payment-inline-copy__ico--copy">' +
+      ICO.copy +
+      "</span>" +
+      '<span class="admin-payment-inline-copy__ico admin-payment-inline-copy__ico--done">' +
+      ICO.check +
+      "</span></button>"
+    );
+  }
+
   function renderUserPhoneFact(p, opts) {
     opts = opts || {};
     var showCopy = opts.showCopy === true;
     var digits = phoneDigitsOnly(p.user_phone);
-    var copyBtn =
-      showCopy && digits
-        ? '<button type="button" class="admin-payment-phone-copy" data-copy-phone="' +
-          esc(digits) +
-          '" aria-label="Скопировать номер телефона" title="Скопировать номер">' +
-          '<span class="admin-payment-phone-copy__ico admin-payment-phone-copy__ico--copy">' +
-          ICO.copy +
-          "</span>" +
-          '<span class="admin-payment-phone-copy__ico admin-payment-phone-copy__ico--done">' +
-          ICO.check +
-          "</span></button>"
+    var uid = p.user_id != null ? Number(p.user_id) : NaN;
+    var profileLink =
+      Number.isFinite(uid) && uid > 0
+        ? '<a class="admin-payment-user-link" href="/admin?tab=users&amp;user_id=' +
+          String(uid) +
+          '">Профиль</a>'
         : "";
+    var filterBtn =
+      digits
+        ? '<button type="button" class="admin-payment-user-link admin-payment-user-link--btn" data-payments-filter-phone="' +
+          esc(digits) +
+          '">Все заявки</button>'
+        : "";
+    var copyBtn = showCopy && digits ? renderCopyBtn(digits, "Скопировать номер телефона") : "";
     return (
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
@@ -119,8 +166,598 @@
       esc(String(p.user_phone || "")) +
       "</span>" +
       copyBtn +
+      (profileLink || filterBtn
+        ? '<span class="admin-payment-user-links">' + profileLink + filterBtn + "</span>"
+        : "") +
       "</span></li>"
     );
+  }
+
+  function formatWaitHuman(ms) {
+    var n = Number(ms);
+    if (!Number.isFinite(n) || n < 0) return "—";
+    var sec = Math.floor(n / 1000);
+    if (sec < 60) return sec + " с";
+    var m = Math.floor(sec / 60);
+    if (m < 60) return m + " мин";
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    if (h < 24) return h + " ч " + (m ? m + " мин" : "");
+    var d = Math.floor(h / 24);
+    h = h % 24;
+    return d + " д " + (h ? h + " ч" : "");
+  }
+
+  function waitBadgeHtml(sinceMs) {
+    var n = Number(sinceMs);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    var waitMs = Math.max(0, Date.now() - n);
+    var tier = waitMs < 30 * 60 * 1000 ? "ok" : waitMs < 2 * 60 * 60 * 1000 ? "warn" : "danger";
+    return (
+      '<span class="admin-payment-wait admin-payment-wait--' +
+      tier +
+      '" data-wait-since="' +
+      String(n) +
+      '">ждёт ' +
+      esc(formatWaitHuman(waitMs)) +
+      "</span>"
+    );
+  }
+
+  function renderTicketsFact(p) {
+    var nums = Array.isArray(p.ticket_numbers) ? p.ticket_numbers.map(function (x) { return Math.floor(Number(x)); }).filter(Number.isFinite) : [];
+    var count = nums.length || Number(p.ticket_count ?? 0);
+    var copyAll = nums.length ? renderCopyBtn(nums.join(", "), "Скопировать номера") : "";
+    if (!nums.length) {
+      return (
+        '<li class="admin-payment-card__fact">' +
+        '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+        ICO.tickets +
+        "</span>" +
+        "<span><strong>" +
+        String(count) +
+        "</strong> номерков</span></li>"
+      );
+    }
+    var preview = nums.slice(0, TICKETS_PREVIEW_MAX).join(", ");
+    var hasMore = nums.length > TICKETS_PREVIEW_MAX;
+    var full = esc(nums.join(", "));
+    return (
+      '<li class="admin-payment-card__fact admin-payment-card__fact--tickets">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
+      ICO.tickets +
+      "</span>" +
+      '<span class="admin-payment-tickets">' +
+      "<span><strong>" +
+      String(count) +
+      "</strong> номерков</span> " +
+      copyAll +
+      '<div class="admin-payment-tickets__nums">' +
+      '<span class="admin-payment-tickets__preview">' +
+      esc(preview) +
+      (hasMore ? "…" : "") +
+      "</span>" +
+      (hasMore
+        ? '<button type="button" class="admin-payment-tickets__toggle" data-tickets-toggle data-label-show="Показать все (' +
+          String(nums.length) +
+          ')">Показать все (' +
+          String(nums.length) +
+          ")</button>" +
+          '<div class="admin-payment-tickets__full" hidden>' +
+          full +
+          "</div>"
+        : "") +
+      "</div></span></li>"
+    );
+  }
+
+  function findPreviousReceiptUrl(p) {
+    var cur = String(p.receipt_url || "").trim();
+    var prior = Array.isArray(p.receipt_history_prior) ? p.receipt_history_prior : [];
+    for (var i = 0; i < prior.length; i++) {
+      var url = String(prior[i].url || "").trim();
+      if (url && url !== cur) return url;
+    }
+    return prior.length ? String(prior[0].url || "").trim() : "";
+  }
+
+  function renderDuplicateReceiptBanner(p) {
+    if (!Number(p.receipt_same_as_previous || 0)) return "";
+    var prevUrl = findPreviousReceiptUrl(p);
+    var prevBtn = prevUrl
+      ? '<button type="button" class="admin-payment-dup-banner__link" data-preview-receipt="' +
+        esc(prevUrl) +
+        '" data-receipt-mime="">Открыть прошлый чек</button>'
+      : "";
+    return (
+      '<div class="admin-payment-dup-banner" role="alert">' +
+      "<strong>Дубликат чека</strong> — загружен тот же файл, что и раньше. " +
+      prevBtn +
+      "</div>"
+    );
+  }
+
+  function renderReceiptControl(p) {
+    var url = String(p.receipt_url || "").trim();
+    if (!url) {
+      return (
+        '<span class="admin-payment-card__receipt-miss">' +
+        ICO.receipt +
+        "<span>Чек не прикреплён</span></span>"
+      );
+    }
+    var mime = esc(String(p.receipt_mime || ""));
+    return (
+      '<div class="admin-payment-receipt-actions">' +
+      '<button type="button" class="admin-payment-card__receipt-link admin-payment-card__receipt-link--btn" data-preview-receipt="' +
+      esc(url) +
+      '" data-receipt-mime="' +
+      mime +
+      '">' +
+      ICO.receipt +
+      "<span>Превью чека</span></button>" +
+      '<a href="' +
+      esc(url) +
+      '" target="_blank" rel="noopener noreferrer" class="admin-payment-card__receipt-ext">↗</a></div>'
+    );
+  }
+
+  function showToast(message, kind) {
+    var host = document.getElementById("admin-payments-toast-host");
+    if (!host) return;
+    var el = document.createElement("div");
+    el.className = "admin-pay-toast admin-pay-toast--" + (kind || "ok");
+    el.setAttribute("role", "status");
+    el.textContent = String(message || "");
+    host.appendChild(el);
+    requestAnimationFrame(function () {
+      el.classList.add("is-visible");
+    });
+    setTimeout(function () {
+      el.classList.remove("is-visible");
+      setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 280);
+    }, TOAST_MS);
+  }
+
+  function closePaymentsModal() {
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    host.hidden = true;
+    host.setAttribute("aria-hidden", "true");
+    host.innerHTML = "";
+    document.body.classList.remove("admin-pay-modal-open");
+  }
+
+  function openPaymentsModal(innerHtml) {
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    host.innerHTML =
+      '<div class="admin-pay-modal">' +
+      '<button type="button" class="admin-pay-modal__backdrop" data-pay-modal-close aria-label="Закрыть"></button>' +
+      '<div class="admin-pay-modal__panel" role="dialog" aria-modal="true">' +
+      innerHtml +
+      "</div></div>";
+    host.hidden = false;
+    host.setAttribute("aria-hidden", "false");
+    document.body.classList.add("admin-pay-modal-open");
+    host.querySelectorAll("[data-pay-modal-close]").forEach(function (btn) {
+      btn.addEventListener("click", closePaymentsModal);
+    });
+  }
+
+  function openReceiptLightbox(url, mime) {
+    var box = document.getElementById("admin-payments-receipt-lightbox");
+    var body = box ? box.querySelector("[data-lightbox-body]") : null;
+    var openTab = box ? box.querySelector(".admin-pay-lightbox__open-tab") : null;
+    if (!box || !body) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    var u = String(url || "").trim();
+    var m = String(mime || "").toLowerCase();
+    var isPdf = m.indexOf("pdf") >= 0 || /\.pdf(\?|$)/i.test(u);
+    body.innerHTML = "";
+    if (isPdf) {
+      body.innerHTML =
+        '<iframe class="admin-pay-lightbox__iframe" src="' +
+        esc(u) +
+        '" title="Чек PDF"></iframe>';
+    } else {
+      body.innerHTML =
+        '<img class="admin-pay-lightbox__img" src="' +
+        esc(u) +
+        '" alt="Чек" />';
+    }
+    if (openTab) {
+      openTab.href = u;
+      openTab.hidden = !u;
+    }
+    box.hidden = false;
+    box.setAttribute("aria-hidden", "false");
+    document.body.classList.add("admin-pay-lightbox-open");
+  }
+
+  function closeReceiptLightbox() {
+    var box = document.getElementById("admin-payments-receipt-lightbox");
+    if (!box) return;
+    var body = box.querySelector("[data-lightbox-body]");
+    if (body) body.innerHTML = "";
+    box.hidden = true;
+    box.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("admin-pay-lightbox-open");
+  }
+
+  function initReceiptLightboxOnce() {
+    var box = document.getElementById("admin-payments-receipt-lightbox");
+    if (!box || box.getAttribute("data-bound-lightbox") === "1") return;
+    box.setAttribute("data-bound-lightbox", "1");
+    box.querySelectorAll("[data-lightbox-close]").forEach(function (btn) {
+      btn.addEventListener("click", closeReceiptLightbox);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !box.hidden) closeReceiptLightbox();
+    });
+  }
+
+  function renderRejectTemplatesHtml() {
+    return REJECT_COMMENT_TEMPLATES.map(function (t) {
+      return (
+        '<button type="button" class="admin-pay-modal__chip" data-reject-template="' +
+        esc(t.text) +
+        '">' +
+        esc(t.label) +
+        "</button>"
+      );
+    }).join("");
+  }
+
+  function openConfirmModal(token, orderId) {
+    if (!Number.isFinite(orderId)) return;
+    openPaymentsModal(
+      '<header class="admin-pay-modal__head"><h2 class="admin-pay-modal__title">Подтвердить оплату</h2></header>' +
+        '<p class="admin-pay-modal__text">Закрепить номерки за пользователем по заявке <strong>A' +
+        esc(String(orderId)) +
+        "</strong>?</p>" +
+        '<footer class="admin-pay-modal__foot">' +
+        '<button type="button" class="btn btn--ghost" data-pay-modal-close>Отмена</button>' +
+        '<button type="button" class="btn btn--primary" data-pay-modal-submit="confirm" data-order-id="' +
+        String(orderId) +
+        '">Подтвердить</button></footer>',
+    );
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    host.querySelector("[data-pay-modal-submit]").addEventListener("click", function () {
+      closePaymentsModal();
+      submitConfirm(token, orderId);
+    });
+  }
+
+  function openRejectModal(token, orderId) {
+    if (!Number.isFinite(orderId)) return;
+    openPaymentsModal(
+      '<header class="admin-pay-modal__head"><h2 class="admin-pay-modal__title">Отклонить чек</h2></header>' +
+        '<p class="admin-pay-modal__text">Заявка вернётся в бронь или будет отменена при исчерпании лимита доработок.</p>' +
+        '<div class="admin-pay-modal__chips">' +
+        renderRejectTemplatesHtml() +
+        "</div>" +
+        '<label class="admin-pay-modal__label">Комментарий для пользователя <span class="admin-pay-modal__opt">(необязательно)</span></label>' +
+        '<textarea class="input admin-pay-modal__textarea" rows="4" data-reject-comment placeholder="Причина отклонения…"></textarea>' +
+        '<footer class="admin-pay-modal__foot">' +
+        '<button type="button" class="btn btn--ghost" data-pay-modal-close>Отмена</button>' +
+        '<button type="button" class="btn btn--danger-outline" data-pay-modal-submit="reject" data-order-id="' +
+        String(orderId) +
+        '">Отклонить чек</button></footer>',
+    );
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    var ta = host.querySelector("[data-reject-comment]");
+    host.querySelectorAll("[data-reject-template]").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        if (ta) ta.value = chip.getAttribute("data-reject-template") || "";
+      });
+    });
+    host.querySelector("[data-pay-modal-submit]").addEventListener("click", function () {
+      var comment = ta ? String(ta.value || "").trim() : "";
+      closePaymentsModal();
+      submitReject(token, orderId, comment);
+    });
+  }
+
+  function openReleaseModal(token, orderId) {
+    if (!Number.isFinite(orderId)) return;
+    openPaymentsModal(
+      '<header class="admin-pay-modal__head"><h2 class="admin-pay-modal__title">Снять бронь полностью</h2></header>' +
+        '<p class="admin-pay-modal__text admin-pay-modal__text--warn">Номерки вернутся в продажу, заявка будет отменена. Пользователь получит уведомление.</p>' +
+        '<footer class="admin-pay-modal__foot">' +
+        '<button type="button" class="btn btn--ghost" data-pay-modal-close>Отмена</button>' +
+        '<button type="button" class="btn btn--danger-outline" data-pay-modal-step="1" data-order-id="' +
+        String(orderId) +
+        '">Продолжить</button></footer>',
+    );
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    host.querySelector("[data-pay-modal-step]").addEventListener("click", function () {
+      openReleaseModalStep2(token, orderId);
+    });
+  }
+
+  function openReleaseModalStep2(token, orderId) {
+    openPaymentsModal(
+      '<header class="admin-pay-modal__head"><h2 class="admin-pay-modal__title">Подтвердите отмену</h2></header>' +
+        '<p class="admin-pay-modal__text">Это действие нельзя отменить. Заявка <strong>A' +
+        esc(String(orderId)) +
+        "</strong> будет снята.</p>" +
+        '<label class="admin-pay-modal__label">Комментарий <span class="admin-pay-modal__opt">(необязательно)</span></label>' +
+        '<textarea class="input admin-pay-modal__textarea" rows="3" data-release-comment></textarea>' +
+        '<footer class="admin-pay-modal__foot">' +
+        '<button type="button" class="btn btn--ghost" data-pay-modal-close>Назад</button>' +
+        '<button type="button" class="btn btn--danger" data-pay-modal-submit="release" data-order-id="' +
+        String(orderId) +
+        '">Снять бронь</button></footer>',
+    );
+    var host = document.getElementById("admin-payments-modal-host");
+    if (!host) return;
+    host.querySelector("[data-pay-modal-submit]").addEventListener("click", function () {
+      var ta = host.querySelector("[data-release-comment]");
+      var comment = ta ? String(ta.value || "").trim() : "";
+      closePaymentsModal();
+      submitRelease(token, orderId, comment);
+    });
+  }
+
+  function setCardBusy(orderId, busy) {
+    var card = document.querySelector('.admin-payment-card[data-order-id="' + String(orderId) + '"]');
+    if (!card) return;
+    card.classList.toggle("admin-payment-card--busy", !!busy);
+    card.querySelectorAll("button").forEach(function (btn) {
+      btn.disabled = !!busy;
+    });
+  }
+
+  function paintWaitBadges() {
+    document.querySelectorAll(".admin-payment-wait[data-wait-since]").forEach(function (el) {
+      var since = Number(el.getAttribute("data-wait-since"));
+      if (!Number.isFinite(since)) return;
+      var waitMs = Math.max(0, Date.now() - since);
+      var tier = waitMs < 30 * 60 * 1000 ? "ok" : waitMs < 2 * 60 * 60 * 1000 ? "warn" : "danger";
+      el.classList.remove("admin-payment-wait--ok", "admin-payment-wait--warn", "admin-payment-wait--danger");
+      el.classList.add("admin-payment-wait--" + tier);
+      el.textContent = "ждёт " + formatWaitHuman(waitMs);
+    });
+  }
+
+  function updateReloadStatusText() {
+    var el = document.querySelector("[data-payments-updated-ago]");
+    if (!el || !paymentsRuntime.lastFetchAt) return;
+    var sec = Math.max(0, Math.floor((Date.now() - paymentsRuntime.lastFetchAt) / 1000));
+    el.textContent = sec < 5 ? "только что" : "обновлено " + sec + " с назад";
+  }
+
+  function startUpdatedAgoTimer() {
+    if (paymentsRuntime.updatedAgoTimer) clearInterval(paymentsRuntime.updatedAgoTimer);
+    updateReloadStatusText();
+    paymentsRuntime.updatedAgoTimer = setInterval(updateReloadStatusText, 1000);
+  }
+
+  function stopPaymentsPoll() {
+    if (paymentsRuntime.pollTimer) {
+      clearInterval(paymentsRuntime.pollTimer);
+      paymentsRuntime.pollTimer = null;
+    }
+  }
+
+  function startPaymentsPoll() {
+    stopPaymentsPoll();
+    paymentsRuntime.pollTimer = setInterval(function () {
+      pollPaymentsQueue();
+    }, POLL_INTERVAL_MS);
+  }
+
+  function paymentMatchesFilter(p, section) {
+    var q = String(paymentsRuntime.filters.q || "").trim().toLowerCase();
+    if (!q) return true;
+    var idStr = "a" + String(p.id);
+    var phone = phoneDigitsOnly(p.user_phone);
+    var hay =
+      (p.user_name || "") +
+      " " +
+      (p.user_phone || "") +
+      " " +
+      phone +
+      " " +
+      (p.raffle_title || "") +
+      " " +
+      idStr +
+      " " +
+      String(p.amount_rub ?? "");
+    return hay.toLowerCase().indexOf(q) >= 0;
+  }
+
+  function sortPaymentsList(list, sortKey) {
+    var arr = (Array.isArray(list) ? list : []).slice();
+    var sk = sortKey || "queue_asc";
+    arr.sort(function (a, b) {
+      if (sk === "amount_desc") return Number(b.amount_rub) - Number(a.amount_rub);
+      if (sk === "amount_asc") return Number(a.amount_rub) - Number(b.amount_rub);
+      if (sk === "receipt_desc") return Number(b.updated_at || 0) - Number(a.updated_at || 0);
+      if (sk === "receipt_asc") return Number(a.updated_at || 0) - Number(b.updated_at || 0);
+      if (sk === "raffle") {
+        var t = String(a.raffle_title || "").localeCompare(String(b.raffle_title || ""), "ru");
+        if (t) return t;
+      }
+      return Number(a.created_at || 0) - Number(b.created_at || 0);
+    });
+    return arr;
+  }
+
+  function getFilteredPending() {
+    var list = paymentsRuntime.cache && paymentsRuntime.cache.payments ? paymentsRuntime.cache.payments : [];
+    var raffle = String(paymentsRuntime.filters.raffle || "");
+    return sortPaymentsList(
+      list.filter(function (p) {
+        if (raffle && String(p.raffle_id) !== raffle) return false;
+        return paymentMatchesFilter(p, "pending");
+      }),
+      paymentsRuntime.filters.sort,
+    );
+  }
+
+  function getFilteredReserved() {
+    var list = paymentsRuntime.cache && paymentsRuntime.cache.active ? paymentsRuntime.cache.active : [];
+    return sortPaymentsList(
+      list.filter(function (p) {
+        return paymentMatchesFilter(p, "reserved");
+      }),
+      paymentsRuntime.filters.sort,
+    );
+  }
+
+  function rerenderPendingSection() {
+    var section = document.querySelector('[data-payments-section="pending"]');
+    if (!section || !paymentsRuntime.token) return;
+    var rows = getFilteredPending();
+    section.innerHTML = rows.length
+      ? rows.map(renderPaymentCard).join("")
+      : '<p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p>';
+    bindPaymentsCardHandlers(section, paymentsRuntime.token);
+    var mainEl = document.getElementById("admin-payments-main");
+    if (mainEl) updatePaymentTabBadges(mainEl);
+  }
+
+  function rerenderReservedSection() {
+    var section = document.querySelector('[data-payments-section="reserved"]');
+    if (!section || !paymentsRuntime.token) return;
+    var rows = getFilteredReserved();
+    section.innerHTML = rows.length
+      ? rows.map(renderActiveCard).join("")
+      : '<p class="admin-payments-section__empty-note">Нет активных броней без чека.</p>';
+    bindPaymentsCardHandlers(section, paymentsRuntime.token);
+    var mainEl = document.getElementById("admin-payments-main");
+    if (mainEl) updatePaymentTabBadges(mainEl);
+    if (paymentsRuntime.cache && paymentsRuntime.cache.serverTimeMs != null) {
+      initReservedUntilCountdown(paymentsRuntime.cache.serverTimeMs);
+    }
+  }
+
+  function applyPhoneFilterFromStorage() {
+    try {
+      var digits = localStorage.getItem(PAYMENTS_FILTER_PHONE_KEY);
+      if (digits) {
+        paymentsRuntime.filters.q = digits;
+        localStorage.removeItem(PAYMENTS_FILTER_PHONE_KEY);
+      }
+    } catch {}
+  }
+
+  function showPendingNewBanner(count) {
+    var root = document.getElementById("admin-payments-main");
+    if (!root) return;
+    var existing = root.querySelector("[data-payments-new-banner]");
+    if (existing) existing.remove();
+    if (!count) return;
+    var el = document.createElement("div");
+    el.className = "admin-payments-new-banner";
+    el.setAttribute("data-payments-new-banner", "1");
+    el.innerHTML =
+      '<span class="admin-payments-new-banner__text">+' +
+      String(count) +
+      " новых заявок на подтверждение</span>" +
+      '<button type="button" class="btn btn--secondary btn--sm" data-payments-show-new>Показать</button>';
+    root.insertBefore(el, root.firstChild);
+    el.querySelector("[data-payments-show-new]").addEventListener("click", function () {
+      paymentsRuntime.pendingNewCount = 0;
+      el.remove();
+      setPaymentsTab("pending", root);
+      mergePendingFromPoll(paymentsRuntime.cache.payments, paymentsRuntime.token, true);
+    });
+  }
+
+  function mergePendingFromPoll(payments, token, forceInsert) {
+    var section = document.querySelector('[data-payments-section="pending"]');
+    if (!section) return;
+    var fresh = [];
+    var ids = new Set();
+    (Array.isArray(payments) ? payments : []).forEach(function (p) {
+      ids.add(String(p.id));
+      var card = section.querySelector('.admin-payment-card[data-order-id="' + String(p.id) + '"]');
+      if (!card) fresh.push(p);
+    });
+    section.querySelectorAll(".admin-payment-card").forEach(function (card) {
+      var oid = card.getAttribute("data-order-id");
+      if (oid && !ids.has(oid)) card.remove();
+    });
+    if (fresh.length && (forceInsert || !paymentsRuntime.filters.q)) {
+      var html = fresh.map(renderPaymentCard).join("");
+      section.insertAdjacentHTML("afterbegin", html);
+      bindPaymentsCardHandlers(section, token);
+      fresh.forEach(function (p) {
+        var c = section.querySelector('.admin-payment-card[data-order-id="' + String(p.id) + '"]');
+        if (c) {
+          c.classList.add("admin-payment-card--new");
+          setTimeout(function () {
+            c.classList.remove("admin-payment-card--new");
+          }, 8000);
+        }
+      });
+    }
+    var mainEl = document.getElementById("admin-payments-main");
+    if (mainEl) updatePaymentTabBadges(mainEl);
+  }
+
+  function pollPaymentsQueue() {
+    var s = loadSession();
+    if (!s || !s.token || paymentsRuntime.loading) return;
+    fetch("/api/admin/raffle-payments", {
+      headers: { Authorization: "Bearer " + s.token },
+      cache: "no-store",
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) return;
+        var prevPending = paymentsRuntime.cache && paymentsRuntime.cache.payments ? paymentsRuntime.cache.payments : [];
+        var prevIds = new Set(prevPending.map(function (p) { return String(p.id); }));
+        var payments = x.data.payments || [];
+        var newOnes = payments.filter(function (p) {
+          return !prevIds.has(String(p.id));
+        });
+        paymentsRuntime.cache = {
+          payments: payments,
+          active: x.data.active_orders || [],
+          history: filterHistoryRows(x.data.history || []),
+          historyHasMore: !!x.data.history_has_more,
+          historyNextOffset: Number(x.data.history_next_offset ?? 0),
+          historyTotal: Number(x.data.history_total ?? 0),
+          serverTimeMs: x.data.server_time_ms,
+          receiptRejectMax: Number(x.data.receipt_reject_max) || paymentsRuntime.receiptRejectMax,
+        };
+        paymentsRuntime.lastFetchAt = Date.now();
+        paymentsRuntime.receiptRejectMax = paymentsRuntime.cache.receiptRejectMax;
+        if (newOnes.length) {
+          paymentsRuntime.pendingNewCount += newOnes.length;
+          showPendingNewBanner(paymentsRuntime.pendingNewCount);
+          var panel = document.querySelector('[data-payments-panel="pending"]');
+          if (panel && !panel.hidden && !paymentsRuntime.filters.q) {
+            mergePendingFromPoll(payments, s.token, true);
+            paymentsRuntime.pendingNewCount = 0;
+            var banner = document.querySelector("[data-payments-new-banner]");
+            if (banner) banner.remove();
+          }
+        }
+        var nRes = (paymentsRuntime.cache.active || []).length;
+        var nPen = payments.length;
+        var elR = document.querySelector('[data-payments-count="reserved"]');
+        var elP = document.querySelector('[data-payments-count="pending"]');
+        if (elR) elR.textContent = String(nRes);
+        if (elP) elP.textContent = String(nPen);
+        initReservedUntilCountdown(paymentsRuntime.cache.serverTimeMs);
+      })
+      .catch(function () {});
   }
 
   /** Метка времени заявки в часовом поясе браузера (локально для администратора). */
@@ -172,14 +809,13 @@
           oid +
           (tag ? " " + tag : "") +
           "</span>" +
-          '<a class="admin-payment-rhist__link" href="' +
+          '<button type="button" class="admin-payment-rhist__link admin-payment-rhist__link--btn" data-preview-receipt="' +
           url +
-          '" target="_blank" rel="noopener noreferrer">' +
+          '" data-receipt-mime="">' +
           ICO.receipt +
           '<span class="admin-payment-rhist__fname">' +
           name +
-          "</span>" +
-          '<span class="admin-payment-rhist__go" aria-hidden="true">↗</span></a></li>'
+          "</span></button></li>"
         );
       })
       .filter(Boolean)
@@ -330,56 +966,93 @@
     if (elH) elH.textContent = String(useHist);
   }
 
-  function bindChatHandlers(container, token) {
-    container.querySelectorAll("[data-chat-user]").forEach(function (btn) {
+  function bindCopyHandlers(container) {
+    container.querySelectorAll("[data-copy-value], [data-copy-phone]").forEach(function (btn) {
+      if (btn.getAttribute("data-copy-bound") === "1") return;
+      btn.setAttribute("data-copy-bound", "1");
       btn.addEventListener("click", function () {
-        var uid = Number(btn.getAttribute("data-chat-user"));
-        if (!Number.isFinite(uid)) return;
-        if (typeof window.abAdminOpenSupportChat === "function") {
-          window.abAdminOpenSupportChat(uid);
-        }
-      });
-    });
-    container.querySelectorAll("[data-confirm-order]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = Number(btn.getAttribute("data-confirm-order"));
-        confirmOrReject(token, id, "confirm");
-      });
-    });
-    container.querySelectorAll("[data-reject-order]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = Number(btn.getAttribute("data-reject-order"));
-        confirmOrReject(token, id, "reject");
-      });
-    });
-    container.querySelectorAll("[data-release-order]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = Number(btn.getAttribute("data-release-order"));
-        releaseOrder(token, id);
-      });
-    });
-    bindPhoneCopyHandlers(container);
-  }
-
-  function bindPhoneCopyHandlers(container) {
-    container.querySelectorAll("[data-copy-phone]").forEach(function (btn) {
-      if (btn.getAttribute("data-phone-copy-bound") === "1") return;
-      btn.setAttribute("data-phone-copy-bound", "1");
-      btn.addEventListener("click", function () {
-        var digits = btn.getAttribute("data-copy-phone") || "";
-        if (!digits) return;
-        copyTextToClipboard(digits, function () {
-          btn.classList.add("admin-payment-phone-copy--copied");
-          var prev = phoneCopyResetTimers.get(btn);
+        var value = btn.getAttribute("data-copy-value") || btn.getAttribute("data-copy-phone") || "";
+        if (!value) return;
+        copyTextToClipboard(value, function () {
+          btn.classList.add("admin-payment-inline-copy--copied", "admin-payment-phone-copy--copied");
+          var prev = copyResetTimers.get(btn);
           if (prev) clearTimeout(prev);
           var t = setTimeout(function () {
-            btn.classList.remove("admin-payment-phone-copy--copied");
-            phoneCopyResetTimers.delete(btn);
-          }, 3000);
-          phoneCopyResetTimers.set(btn, t);
+            btn.classList.remove("admin-payment-inline-copy--copied", "admin-payment-phone-copy--copied");
+            copyResetTimers.delete(btn);
+          }, COPY_DONE_MS);
+          copyResetTimers.set(btn, t);
         });
       });
     });
+  }
+
+  function bindPaymentsCardHandlers(container, token) {
+    container.querySelectorAll("[data-chat-user]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-chat") === "1") return;
+      btn.setAttribute("data-bound-chat", "1");
+      btn.addEventListener("click", function () {
+        var uid = Number(btn.getAttribute("data-chat-user"));
+        if (!Number.isFinite(uid)) return;
+        if (typeof window.abAdminOpenSupportChat === "function") window.abAdminOpenSupportChat(uid);
+      });
+    });
+    container.querySelectorAll("[data-confirm-order]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-action") === "1") return;
+      btn.setAttribute("data-bound-action", "1");
+      btn.addEventListener("click", function () {
+        openConfirmModal(token, Number(btn.getAttribute("data-confirm-order")));
+      });
+    });
+    container.querySelectorAll("[data-reject-order]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-action") === "1") return;
+      btn.setAttribute("data-bound-action", "1");
+      btn.addEventListener("click", function () {
+        openRejectModal(token, Number(btn.getAttribute("data-reject-order")));
+      });
+    });
+    container.querySelectorAll("[data-release-order]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-action") === "1") return;
+      btn.setAttribute("data-bound-action", "1");
+      btn.addEventListener("click", function () {
+        openReleaseModal(token, Number(btn.getAttribute("data-release-order")));
+      });
+    });
+    container.querySelectorAll("[data-preview-receipt]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-preview") === "1") return;
+      btn.setAttribute("data-bound-preview", "1");
+      btn.addEventListener("click", function () {
+        openReceiptLightbox(btn.getAttribute("data-preview-receipt"), btn.getAttribute("data-receipt-mime"));
+      });
+    });
+    container.querySelectorAll("[data-tickets-toggle]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-tickets") === "1") return;
+      btn.setAttribute("data-bound-tickets", "1");
+      btn.addEventListener("click", function () {
+        var wrap = btn.closest(".admin-payment-tickets");
+        if (!wrap) return;
+        var full = wrap.querySelector(".admin-payment-tickets__full");
+        var preview = wrap.querySelector(".admin-payment-tickets__preview");
+        if (!full) return;
+        var open = full.hidden;
+        full.hidden = !open;
+        if (preview) preview.hidden = open;
+        btn.textContent = open ? "Скрыть" : btn.getAttribute("data-label-show") || "Показать все";
+      });
+    });
+    container.querySelectorAll("[data-payments-filter-phone]").forEach(function (btn) {
+      if (btn.getAttribute("data-bound-filter") === "1") return;
+      btn.setAttribute("data-bound-filter", "1");
+      btn.addEventListener("click", function () {
+        paymentsRuntime.filters.q = btn.getAttribute("data-payments-filter-phone") || "";
+        var input = document.querySelector("[data-payments-search]");
+        if (input) input.value = paymentsRuntime.filters.q;
+        rerenderPendingSection();
+        rerenderReservedSection();
+        setPaymentsTab("pending", document.getElementById("admin-payments-main") || document.body);
+      });
+    });
+    bindCopyHandlers(container);
   }
 
   function removeOrderCardFromView(orderId) {
@@ -481,7 +1154,7 @@
           var rows = filterHistoryRows(Array.isArray(x.data.history) ? x.data.history : []);
           if (rows.length) {
             section.insertAdjacentHTML("beforeend", rows.map(renderPaymentHistoryCard).join(""));
-            bindChatHandlers(section, token);
+            bindPaymentsCardHandlers(section, token);
           }
           var nextOffsetRaw = Number(x.data.next_offset);
           offset = Number.isFinite(nextOffsetRaw) ? nextOffsetRaw : offset + rows.length;
@@ -518,12 +1191,122 @@
     paymentsHistoryObserver.observe(sentinel);
   }
 
-  function loadList() {
+  function collectRaffleFilterOptions(cache) {
+    var map = new Map();
+    function addRows(rows) {
+      (Array.isArray(rows) ? rows : []).forEach(function (p) {
+        if (p.raffle_id == null) return;
+        map.set(String(p.raffle_id), String(p.raffle_title || "Акция " + String(p.raffle_id)));
+      });
+    }
+    if (cache) {
+      addRows(cache.payments);
+      addRows(cache.active);
+    }
+    return Array.from(map.entries()).sort(function (a, b) {
+      return a[1].localeCompare(b[1], "ru");
+    });
+  }
+
+  function renderPaymentsToolbar(cache) {
+    var raffles = collectRaffleFilterOptions(cache);
+    var raffleOpts =
+      '<option value="">Все акции</option>' +
+      raffles
+        .map(function (pair) {
+          var sel = paymentsRuntime.filters.raffle === pair[0] ? " selected" : "";
+          return '<option value="' + esc(pair[0]) + '"' + sel + ">" + esc(pair[1]) + "</option>";
+        })
+        .join("");
+    var sort = paymentsRuntime.filters.sort || "queue_asc";
+    return (
+      '<div class="admin-payments-toolbar-row">' +
+      '<button type="button" class="btn btn--secondary" data-admin-payments-reload>Обновить</button>' +
+      '<span class="admin-payments-toolbar-row__ago" data-payments-updated-ago>загрузка…</span>' +
+      "</div>" +
+      '<div class="admin-payments-filters">' +
+      '<label class="admin-payments-filters__field"><span class="visually-hidden">Поиск</span>' +
+      '<input type="search" class="input admin-payments-filters__search" data-payments-search placeholder="Поиск: имя, телефон, A123, сумма…" value="' +
+      esc(paymentsRuntime.filters.q) +
+      '"></label>' +
+      '<label class="admin-payments-filters__field"><span class="visually-hidden">Сортировка</span>' +
+      '<select class="input admin-payments-filters__sort" data-payments-sort>' +
+      '<option value="queue_asc"' +
+      (sort === "queue_asc" ? " selected" : "") +
+      ">Сначала старые в очереди</option>" +
+      '<option value="receipt_desc"' +
+      (sort === "receipt_desc" ? " selected" : "") +
+      ">Чек: новые сверху</option>" +
+      '<option value="receipt_asc"' +
+      (sort === "receipt_asc" ? " selected" : "") +
+      ">Чек: старые сверху</option>" +
+      '<option value="amount_desc"' +
+      (sort === "amount_desc" ? " selected" : "") +
+      ">Сумма ↓</option>" +
+      '<option value="amount_asc"' +
+      (sort === "amount_asc" ? " selected" : "") +
+      ">Сумма ↑</option>" +
+      '<option value="raffle"' +
+      (sort === "raffle" ? " selected" : "") +
+      ">По акции</option>" +
+      "</select></label>" +
+      '<label class="admin-payments-filters__field"><span class="visually-hidden">Акция</span>' +
+      '<select class="input admin-payments-filters__raffle" data-payments-raffle>' +
+      raffleOpts +
+      "</select></label>" +
+      "</div>"
+    );
+  }
+
+  function bindPaymentsToolbar(root) {
+    if (!root) return;
+    root.querySelectorAll("[data-admin-payments-reload]").forEach(function (btn) {
+      if (btn.getAttribute("data-reload-bound") === "1") return;
+      btn.setAttribute("data-reload-bound", "1");
+      btn.addEventListener("click", function () {
+        loadList(true);
+      });
+    });
+    var search = root.querySelector("[data-payments-search]");
+    if (search && search.getAttribute("data-search-bound") !== "1") {
+      search.setAttribute("data-search-bound", "1");
+      var debounce = null;
+      search.addEventListener("input", function () {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(function () {
+          paymentsRuntime.filters.q = String(search.value || "").trim();
+          rerenderPendingSection();
+          rerenderReservedSection();
+        }, 280);
+      });
+    }
+    var sortEl = root.querySelector("[data-payments-sort]");
+    if (sortEl && sortEl.getAttribute("data-sort-bound") !== "1") {
+      sortEl.setAttribute("data-sort-bound", "1");
+      sortEl.addEventListener("change", function () {
+        paymentsRuntime.filters.sort = sortEl.value || "queue_asc";
+        rerenderPendingSection();
+        rerenderReservedSection();
+      });
+    }
+    var raffleEl = root.querySelector("[data-payments-raffle]");
+    if (raffleEl && raffleEl.getAttribute("data-raffle-bound") !== "1") {
+      raffleEl.setAttribute("data-raffle-bound", "1");
+      raffleEl.addEventListener("change", function () {
+        paymentsRuntime.filters.raffle = raffleEl.value || "";
+        rerenderPendingSection();
+      });
+    }
+  }
+
+  function loadList(forceFull) {
     const listEl = document.getElementById("admin-payments-list");
     const tabsSlot = document.getElementById("admin-payments-tabs-slot");
     const mainEl = document.getElementById("admin-payments-main");
     if (!listEl) return;
     unbindHistoryInfiniteScroll();
+    applyPhoneFilterFromStorage();
+    initReceiptLightboxOnce();
     const s = loadSession();
     if (!s || !s.token) {
       if (tabsSlot) tabsSlot.innerHTML = "";
@@ -531,11 +1314,14 @@
         '<div class="admin-payments-empty admin-payments-empty--soft"><p>Нет сессии</p></div>';
       return;
     }
+    paymentsRuntime.token = s.token;
+    paymentsRuntime.loading = true;
     if (tabsSlot) tabsSlot.innerHTML = "";
     listEl.innerHTML =
       '<div class="admin-payments-skeleton" aria-busy="true">' +
-      '<div class="admin-payments-skeleton__line"></div>' +
-      '<div class="admin-payments-skeleton__line admin-payments-skeleton__line--short"></div>' +
+      '<div class="admin-payments-skeleton__card"></div>' +
+      '<div class="admin-payments-skeleton__card"></div>' +
+      '<div class="admin-payments-skeleton__card"></div>' +
       "</div>";
     fetch("/api/admin/raffle-payments", {
       headers: { Authorization: "Bearer " + s.token },
@@ -578,9 +1364,24 @@
         var nPen = payments.length;
         var historyTotalRaw = Number(x.data.history_total);
         var nHist = Number.isFinite(historyTotalRaw) && historyTotalRaw >= 0 ? Math.floor(historyTotalRaw) : history.length;
-        var initialTab = nRes > 0 ? "reserved" : "pending";
-        if (initialTab === "pending" && nPen === 0 && nHist > 0) initialTab = "history";
-        var tabsHtml = "";
+        paymentsRuntime.cache = {
+          payments: payments,
+          active: active,
+          history: history,
+          historyHasMore: historyHasMore,
+          historyNextOffset: historyNextOffset,
+          historyTotal: nHist,
+          serverTimeMs: serverTimeMs,
+          receiptRejectMax: Number(x.data.receipt_reject_max) || 3,
+        };
+        paymentsRuntime.receiptRejectMax = paymentsRuntime.cache.receiptRejectMax;
+        paymentsRuntime.lastFetchAt = Date.now();
+        paymentsRuntime.pendingNewCount = 0;
+        paymentsRuntime.knownPendingIds = new Set(payments.map(function (p) { return String(p.id); }));
+
+        var initialTab = nPen > 0 ? "pending" : nRes > 0 ? "reserved" : "history";
+        if (initialTab === "history" && nHist === 0 && nRes > 0) initialTab = "reserved";
+        var tabsHtml = renderPaymentsToolbar(paymentsRuntime.cache);
         tabsHtml += '<div class="admin-payments-tabs" role="tablist" aria-label="Тип заявок">';
         tabsHtml +=
           '<button type="button" class="admin-payments-tab' +
@@ -631,8 +1432,10 @@
           ">";
         panelsHtml +=
           '<div class="admin-payments-section admin-payments-cards-grid" data-payments-section="reserved">';
-        if (active.length) {
-          panelsHtml += active.map(renderActiveCard).join("");
+        var filteredReserved = getFilteredReserved();
+        var filteredPending = getFilteredPending();
+        if (filteredReserved.length) {
+          panelsHtml += filteredReserved.map(renderActiveCard).join("");
         } else {
           panelsHtml += '<p class="admin-payments-section__empty-note">Нет активных броней без чека.</p>';
         }
@@ -643,8 +1446,8 @@
           ">";
         panelsHtml +=
           '<div class="admin-payments-section admin-payments-cards-grid" data-payments-section="pending">';
-        if (payments.length) {
-          panelsHtml += payments.map(renderPaymentCard).join("");
+        if (filteredPending.length) {
+          panelsHtml += filteredPending.map(renderPaymentCard).join("");
         } else {
           panelsHtml +=
             '<p class="admin-payments-section__empty-note">Заявок с прикреплённым чеком в очереди сейчас нет.</p>';
@@ -668,7 +1471,8 @@
         var rootForTabs = mainEl || listEl;
         rootForTabs.setAttribute("data-history-total", String(nHist));
         bindPaymentsTabs(rootForTabs);
-        bindChatHandlers(listEl, s.token);
+        bindPaymentsToolbar(rootForTabs);
+        bindPaymentsCardHandlers(listEl, s.token);
         bindHistoryClearActions(rootForTabs);
         bindHistoryInfiniteScroll({
           root: rootForTabs,
@@ -677,8 +1481,13 @@
           nextOffset: historyNextOffset,
         });
         initReservedUntilCountdown(serverTimeMs);
+        startUpdatedAgoTimer();
+        setInterval(paintWaitBadges, 30000);
+        paintWaitBadges();
+        paymentsRuntime.loading = false;
       })
       .catch(function (e) {
+        paymentsRuntime.loading = false;
         var ts = document.getElementById("admin-payments-tabs-slot");
         if (ts) ts.innerHTML = "";
         listEl.innerHTML =
@@ -753,15 +1562,7 @@
       ' · <span class="admin-payment-card__countdown" data-expire-ts="' +
       String(p.reserved_until) +
       '"></span></span></li>' +
-      '<li class="admin-payment-card__fact">' +
-      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
-      ICO.user +
-      "</span>" +
-      "<span>" +
-      esc(String(p.user_name || "—")) +
-      " · " +
-      esc(String(p.user_phone || "")) +
-      "</span></li>" +
+      renderUserPhoneFact(p, { showCopy: true }) +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
       ICO.tickets +
@@ -778,9 +1579,9 @@
       "</span></li>" +
       rejectMetaFacts(p) +
       "</ul>" +
-      '<div class="admin-payment-card__actions">' +
+      '<div class="admin-payment-card__actions admin-payment-card__actions--hierarchy">' +
       chatBtn +
-      '<button type="button" class="admin-payment-btn admin-payment-btn--release" data-release-order="' +
+      '<button type="button" class="admin-payment-btn admin-payment-btn--release admin-payment-btn--secondary" data-release-order="' +
       id +
       '">' +
       ICO.unlock +
@@ -791,17 +1592,22 @@
 
   function rejectMetaFacts(p) {
     var n = Number(p.receipt_reject_count || 0);
+    var max = Number(paymentsRuntime.receiptRejectMax) || 3;
     var note = p.last_reject_comment != null ? String(p.last_reject_comment).trim() : "";
     if (!n && !note) return "";
     var lines = "";
     if (n > 0) {
+      var attempt = Math.min(n + 1, max);
       lines +=
         '<li class="admin-payment-card__fact admin-payment-card__fact--warn">' +
         '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
         ICO.x +
         "</span>" +
-        "<span><strong>Отклонений чека</strong> · " +
-        esc(String(n)) +
+        "<span><strong>Попытка</strong> · " +
+        esc(String(attempt)) +
+        " из " +
+        esc(String(max)) +
+        (n >= max ? " (лимит)" : "") +
         "</span></li>";
     }
     if (note) {
@@ -818,48 +1624,39 @@
   }
 
   function renderPaymentCard(p) {
-    const receipt = p.receipt_url
-      ? '<a href="' +
-        esc(String(p.receipt_url)) +
-        '" target="_blank" rel="noopener noreferrer" class="admin-payment-card__receipt-link">' +
-        ICO.receipt +
-        "<span>Открыть чек</span>" +
-        '<span class="admin-payment-card__receipt-arrow" aria-hidden="true">↗</span></a>'
-      : '<span class="admin-payment-card__receipt-miss">' +
-        ICO.receipt +
-        "<span>Чек не прикреплён</span></span>";
-    const bankLabel =
-      p.bank === "sber" ? "Сбербанк" : p.bank === "other" ? "Другой банк" : "—";
+    const bankLabel = p.bank === "sber" ? "Сбербанк" : p.bank === "other" ? "Другой банк" : "—";
     const id = String(p.id);
+    const publicId = "A" + id;
     var uid = p.user_id != null ? Number(p.user_id) : NaN;
     var chatBtn =
       Number.isFinite(uid) && uid > 0
-        ? '<button type="button" class="admin-payment-btn admin-payment-btn--chat" data-chat-user="' +
+        ? '<button type="button" class="admin-payment-btn admin-payment-btn--chat admin-payment-btn--secondary" data-chat-user="' +
           String(uid) +
           '">' +
           ICO.chat +
           "<span>Написать в чат</span></button>"
         : "";
-    var sameReceiptFact = Number(p.receipt_same_as_previous || 0)
-      ? '<li class="admin-payment-card__fact admin-payment-card__fact--warn">' +
-        '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
-        ICO.receipt +
-        "</span>" +
-        "<span><strong>Внимание</strong> · загружен тот же файл чека, что и в прошлый раз</span></li>"
-      : "";
+    var waitSince = Number(p.updated_at || p.created_at);
     return (
       '<article class="admin-payment-card" data-order-id="' +
       id +
       '">' +
       '<div class="admin-payment-card__stripe" aria-hidden="true"></div>' +
       '<div class="admin-payment-card__body">' +
+      renderDuplicateReceiptBanner(p) +
       '<header class="admin-payment-card__header">' +
       '<div class="admin-payment-card__raffle">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--violet">' +
       ICO.raffle +
       "</span>" +
       '<div class="admin-payment-card__raffle-text">' +
-      '<span class="admin-payment-card__eyebrow">На проверке</span>' +
+      '<span class="admin-payment-card__eyebrow">На проверке · ' +
+      esc(publicId) +
+      " " +
+      renderCopyBtn(publicId, "Скопировать ID заявки") +
+      " " +
+      waitBadgeHtml(waitSince) +
+      "</span>" +
       '<h3 class="admin-payment-card__title">' +
       esc(String(p.raffle_title || "Без названия")) +
       "</h3>" +
@@ -871,7 +1668,9 @@
       '<div><span class="admin-payment-card__eyebrow">Сумма</span>' +
       '<p class="admin-payment-card__sum">' +
       esc(String(p.amount_rub ?? 0)) +
-      " <span class=\"admin-payment-card__currency\">₽</span></p></div></div></header>" +
+      ' <span class="admin-payment-card__currency">₽</span> ' +
+      renderCopyBtn(String(p.amount_rub ?? 0), "Скопировать сумму") +
+      "</p></div></div></header>" +
       '<ul class="admin-payment-card__facts">' +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--teal">' +
@@ -879,51 +1678,44 @@
       "</span>" +
       "<span><strong>Создано</strong> · " +
       esc(formatOrderCreatedLocal(p.created_at)) +
-      " <span class=\"admin-payment-card__tz-hint\">(ваш часовой пояс)</span></span></li>" +
+      ' <span class="admin-payment-card__tz-hint">(ваш часовой пояс)</span></span></li>' +
       renderUserPhoneFact(p, { showCopy: true }) +
-      '<li class="admin-payment-card__fact">' +
-      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
-      ICO.tickets +
-      "</span>" +
-      "<span><strong>" +
-      String(p.ticket_count ?? 0) +
-      "</strong> номерков</span></li>" +
+      renderTicketsFact(p) +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--slate">' +
       ICO.bank +
-      "</span>" +
-      "<span>" +
+      "</span><span>" +
       esc(bankLabel) +
       "</span></li>" +
       '<li class="admin-payment-card__fact admin-payment-card__fact--receipt">' +
-      receipt +
+      renderReceiptControl(p) +
       "</li>" +
-      sameReceiptFact +
       rejectMetaFacts(p) +
       "</ul>" +
       renderPendingReceiptHistory(p) +
-      '<div class="admin-payment-card__actions">' +
-      chatBtn +
+      '<div class="admin-payment-card__actions admin-payment-card__actions--hierarchy">' +
+      '<div class="admin-payment-card__actions-primary">' +
       '<button type="button" class="admin-payment-btn admin-payment-btn--confirm" data-confirm-order="' +
       id +
       '">' +
       ICO.check +
       "<span>Подтвердить</span></button>" +
-      '<button type="button" class="admin-payment-btn admin-payment-btn--reject" data-reject-order="' +
+      "</div>" +
+      '<div class="admin-payment-card__actions-secondary">' +
+      chatBtn +
+      '<button type="button" class="admin-payment-btn admin-payment-btn--reject admin-payment-btn--secondary" data-reject-order="' +
       id +
       '">' +
       ICO.x +
       "<span>Отклонить чек</span></button>" +
-      '<button type="button" class="admin-payment-btn admin-payment-btn--release" data-release-order="' +
+      '<button type="button" class="admin-payment-btn admin-payment-btn--release admin-payment-btn--secondary" data-release-order="' +
       id +
       '">' +
       ICO.unlock +
-      "<span>Снять бронь полностью</span></button>" +
-      "</div></div></article>"
+      "<span>Снять бронь</span></button>" +
+      "</div></div></div></article>"
     );
-  }
-
-  function paymentStatusLabel(status) {
+  }  function paymentStatusLabel(status) {
     var s = String(status || "");
     if (s === "confirmed") return "Закреплено";
     if (s === "pending_review") return "На проверке";
@@ -955,14 +1747,13 @@
           '<span class="admin-payment-rhist__meta">' +
           when +
           "</span>" +
-          '<a class="admin-payment-rhist__link" href="' +
+          '<button type="button" class="admin-payment-rhist__link admin-payment-rhist__link--btn" data-preview-receipt="' +
           url +
-          '" target="_blank" rel="noopener noreferrer">' +
+          '" data-receipt-mime="">' +
           ICO.receipt +
           '<span class="admin-payment-rhist__fname">' +
           name +
-          "</span>" +
-          '<span class="admin-payment-rhist__go" aria-hidden="true">↗</span></a></li>'
+          "</span></button></li>"
         );
       })
       .filter(Boolean)
@@ -1027,13 +1818,7 @@
       "</span><span><strong>Создано</strong> · " +
       esc(formatOrderCreatedLocal(p.created_at)) +
       ' <span class="admin-payment-card__tz-hint">(ваш часовой пояс)</span></span></li>' +
-      '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
-      ICO.user +
-      "</span><span>" +
-      esc(String(p.user_name || "—")) +
-      " · " +
-      esc(String(p.user_phone || "")) +
-      "</span></li>" +
+      renderUserPhoneFact(p, { showCopy: true }) +
       '<li class="admin-payment-card__fact"><span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
       ICO.tickets +
       "</span><span><strong>" +
@@ -1056,71 +1841,81 @@
     );
   }
 
-  async function confirmOrReject(token, orderId, kind) {
-    const msg =
-      kind === "confirm"
-        ? "Подтвердить оплату и закрепить номерки за пользователем?"
-        : "Чек не принят: заявка вернётся в бронь (или будет полностью отменена, если исчерпан лимит доработок). Продолжить?";
-    if (!window.confirm(msg)) return;
-    var comment = "";
-    if (kind === "reject") {
-      comment =
-        window.prompt(
-          "Комментарий для пользователя (необязательно). Попадёт в письмо и в историю заказа:",
-          "",
-        ) || "";
-    }
-    const path =
-      kind === "confirm"
-        ? "/api/admin/raffle-payments/" + String(orderId) + "/confirm"
-        : "/api/admin/raffle-payments/" + String(orderId) + "/reject";
+  async function submitConfirm(token, orderId) {
+    setCardBusy(orderId, true);
     try {
-      const res = await fetch(path, {
+      const res = await fetch("/api/admin/raffle-payments/" + String(orderId) + "/confirm", {
         method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify({ comment: String(comment).trim() }),
+        body: JSON.stringify({}),
       });
-      const data = await res.json().catch(function () {
-        return {};
-      });
+      const data = await res.json().catch(function () { return {}; });
       if (!res.ok) throw new Error(data.error || "Ошибка");
-      if (kind === "reject" && data.mode === "fully_released") {
-        window.alert(
-          "Лимит доработок исчерпан: заявка отменена полностью, номерки возвращены в продажу.",
-        );
-      }
       removeOrderCardFromView(orderId);
+      showToast("Оплата подтверждена", "ok");
     } catch (e) {
-      window.alert(String(e.message || "Ошибка"));
+      showToast(String(e.message || "Ошибка"), "err");
+    } finally {
+      setCardBusy(orderId, false);
     }
   }
 
-  async function releaseOrder(token, orderId) {
-    if (
-      !window.confirm(
-        "Снять бронь полностью? Номерки вернутся в продажу, заявка будет отменена. Пользователь получит письмо (если настроен SMTP).",
-      )
-    )
-      return;
-    const comment =
-      window.prompt("Комментарий пользователю (необязательно, будет в письме):", "") || "";
+  async function submitReject(token, orderId, comment) {
+    setCardBusy(orderId, true);
+    try {
+      const res = await fetch("/api/admin/raffle-payments/" + String(orderId) + "/reject", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: String(comment || "").trim() }),
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || "Ошибка");
+      if (data.mode === "fully_released") {
+        showToast("Лимит доработок исчерпан — заявка отменена", "warn");
+      } else {
+        showToast("Чек отклонён, заявка возвращена в бронь", "ok");
+      }
+      removeOrderCardFromView(orderId);
+    } catch (e) {
+      showToast(String(e.message || "Ошибка"), "err");
+    } finally {
+      setCardBusy(orderId, false);
+    }
+  }
+
+  async function submitRelease(token, orderId, comment) {
+    setCardBusy(orderId, true);
     try {
       const res = await fetch("/api/admin/raffle-orders/" + String(orderId) + "/release", {
         method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify({ comment: String(comment).trim() }),
+        body: JSON.stringify({ comment: String(comment || "").trim() }),
       });
-      const data = await res.json().catch(function () {
-        return {};
-      });
+      const data = await res.json().catch(function () { return {}; });
       if (!res.ok) throw new Error(data.error || "Ошибка");
       removeOrderCardFromView(orderId);
+      showToast("Бронь снята", "ok");
     } catch (e) {
-      window.alert(String(e.message || "Ошибка"));
+      showToast(String(e.message || "Ошибка"), "err");
+    } finally {
+      setCardBusy(orderId, false);
     }
   }
 
   window.abInitPayments = function () {
-    loadList();
+    if (window.__abPaymentsInited) {
+      loadList(true);
+      startPaymentsPoll();
+      return;
+    }
+    window.__abPaymentsInited = true;
+    loadList(true);
+    startPaymentsPoll();
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        closePaymentsModal();
+        closeReceiptLightbox();
+      }
+    });
   };
 })();

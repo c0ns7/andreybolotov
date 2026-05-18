@@ -69,6 +69,7 @@ import {
   orderToDto,
   recalculateRaffleDerivedStatsForRaffle,
   rejectOrderByAdmin,
+  raffleMaxRejectReworksFromEnv,
 } from "./raffle-orders.js";
 import type {
   AdminActiveOrderRow,
@@ -854,6 +855,7 @@ adminSubApp.get("/raffle-payments", async (c) => {
   const historyHasMore = historyBatch.length > historyPageSize;
   return c.json({
     server_time_ms: Date.now(),
+    receipt_reject_max: raffleMaxRejectReworksFromEnv(),
     payments: await Promise.all(
       rows.map(async (row: PendingPaymentRow) => ({
         ...orderToDto(row),
@@ -861,6 +863,8 @@ adminSubApp.get("/raffle-payments", async (c) => {
         user_phone: row.user_phone,
         user_name: row.user_name,
         user_id: row.user_id,
+        ticket_numbers: await getTicketNumbersForOrder(row.id),
+        receipt_mime: row.receipt_mime ?? null,
         receipt_history_prior: await listReceiptHistoryPriorForPendingOrder(
           row.user_id,
           row.raffle_id,

@@ -357,6 +357,25 @@ export default function AdminMarkup() {
           <div id="admin-payments-tabs-slot" className="admin-payments-tabs-slot" aria-live="polite"></div>
           <div id="admin-payments-list" className="admin-payments-list"></div>
         </div>
+        <div id="admin-payments-modal-host" className="admin-pay-modal-host" hidden aria-hidden="true" />
+        <div id="admin-payments-receipt-lightbox" className="admin-pay-lightbox" hidden aria-hidden="true">
+          <button type="button" className="admin-pay-lightbox__backdrop" data-lightbox-close aria-label="Закрыть превью" />
+          <div className="admin-pay-lightbox__panel" role="dialog" aria-modal="true" aria-label="Превью чека">
+            <header className="admin-pay-lightbox__head">
+              <span className="admin-pay-lightbox__title">Чек</span>
+              <div className="admin-pay-lightbox__actions">
+                <a className="admin-pay-lightbox__open-tab" href="#" target="_blank" rel="noopener noreferrer" hidden>
+                  Открыть в новой вкладке
+                </a>
+                <button type="button" className="admin-pay-lightbox__close" data-lightbox-close aria-label="Закрыть">
+                  ×
+                </button>
+              </div>
+            </header>
+            <div className="admin-pay-lightbox__body" data-lightbox-body />
+          </div>
+        </div>
+        <div id="admin-payments-toast-host" className="admin-pay-toast-host" aria-live="polite" />
       </div>
 
       <div id="admin-users-app" className="admin-users-app" hidden>

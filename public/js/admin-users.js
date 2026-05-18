@@ -444,6 +444,13 @@
     el.dataset.inited = "1";
     var search = document.getElementById("admin-users-search");
     var searchId = document.getElementById("admin-users-search-id");
+    try {
+      var u = new URL(location.href);
+      var uid = u.searchParams.get("user_id");
+      var q = u.searchParams.get("user_q");
+      if (searchId && uid) searchId.value = String(uid).replace(/\D/g, "");
+      if (search && q) search.value = String(q);
+    } catch {}
     /** @type {ReturnType<typeof setTimeout> | null} */
     var searchDebounceTimer = null;
     function scheduleRefetch() {
