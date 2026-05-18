@@ -70,7 +70,7 @@ export default function BlogPageClient() {
   const [formStatus, setFormStatus] = useState<"draft" | "published">("draft");
   const [saving, setSaving] = useState(false);
 
-  const adminHeaders = useMemo(() => abAuthHeaders(token), [token]);
+  const adminHeaders = useMemo(() => abAuthHeaders(), [token]);
 
   const loadTags = useCallback(async () => {
     if (!token || !isAdmin) return;
