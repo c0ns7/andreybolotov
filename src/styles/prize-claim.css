@@ -1,0 +1,156 @@
+.prize-claim-shell {
+  padding: 16px 16px calc(88px + env(safe-area-inset-bottom, 0px));
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.prize-claim-page__head {
+  margin-bottom: 14px;
+}
+
+.prize-claim-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.prize-claim-page__loading,
+.prize-claim-page__error {
+  text-align: center;
+  color: #64748b;
+  padding: 32px 16px;
+}
+
+.prize-claim-card {
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 28%, #fff 100%);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
+  padding: 20px 18px 24px;
+}
+
+.prize-claim-card__badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b45309;
+  margin-bottom: 8px;
+}
+
+.prize-claim-card__title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #0f172a;
+}
+
+.prize-claim-card__desc {
+  margin: 0 0 14px;
+  color: #64748b;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.prize-claim-card__hint {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.prize-claim-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prize-claim-card__btn {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.prize-claim-card__done {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.prize-claim-card__done-title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #15803d;
+}
+
+.prize-claim-card__done-text {
+  margin: 0 0 16px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.prize-claim-card__summary {
+  text-align: left;
+  margin: 0 0 16px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.prize-claim-card__summary dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+.prize-claim-card__summary dt:first-child {
+  margin-top: 0;
+}
+
+.prize-claim-card__summary dd {
+  margin: 2px 0 0;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.chat-action-card--prize {
+  border-color: #fcd34d;
+  background: linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.chat-action-card--prize .chat-action-card__title {
+  color: #92400e;
+}
+
+.chat-action-card--prize .chat-action-card__reason {
+  color: #78350f;
+}
+
+.chat-action-card__btn--prize {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: #b45309;
+}
+
+.chat-action-card__btn--prize:hover {
+  filter: brightness(1.05);
+}
+
+html.theme-dark .prize-claim-card {
+  background: linear-gradient(180deg, #292524 0%, var(--surface) 40%);
+  border-color: var(--border);
+}
+
+html.theme-dark .chat-action-card--prize {
+  background: linear-gradient(145deg, #422006 0%, #1c1917 100%);
+  border-color: #92400e;
+}

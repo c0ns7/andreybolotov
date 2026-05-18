@@ -218,6 +218,27 @@
   }
 
   function adminActionCardHtml(card) {
+    if (card && card.kind === "prize_claim") {
+      var subtitle = card.subtitle ? '<p class="chat-action-card__reason">' + esc(String(card.subtitle)) + "</p>" : "";
+      var href = String(card.claim_url || "").trim();
+      var cta = esc(String(card.cta || "Забрать приз"));
+      var action = href
+        ? '<a class="chat-action-card__btn chat-action-card__btn--prize" href="' +
+          href.replace(/"/g, "&quot;") +
+          '" target="_blank" rel="noopener noreferrer">' +
+          cta +
+          "</a>"
+        : '<span class="chat-action-card__btn chat-action-card__btn--prize">' + cta + "</span>";
+      return (
+        '<div class="chat-action-card chat-action-card--prize">' +
+        '<p class="chat-action-card__title">' +
+        esc(String(card.title || "Забрать приз")) +
+        "</p>" +
+        subtitle +
+        action +
+        "</div>"
+      );
+    }
     if (!card || card.kind !== "receipt_rejected") return "";
     var reason = card.reason ? '<p class="chat-action-card__reason">' + esc(String(card.reason)) + "</p>" : "";
     var href = String(card.retry_url || "").trim();
@@ -326,6 +347,7 @@
   let app = null;
   let rafflesApp = null;
   let paymentsApp = null;
+  let prizesApp = null;
   let usersApp = null;
   let settingsApp = null;
   let statsApp = null;
@@ -382,6 +404,7 @@
     app = document.getElementById("admin-app");
     rafflesApp = document.getElementById("admin-raffles-app");
     paymentsApp = document.getElementById("admin-payments-app");
+    prizesApp = document.getElementById("admin-prizes-app");
     usersApp = document.getElementById("admin-users-app");
     settingsApp = document.getElementById("admin-settings-app");
     statsApp = document.getElementById("admin-stats-app");
@@ -537,6 +560,7 @@
     if (app) app.hidden = true;
     if (rafflesApp) rafflesApp.hidden = true;
     if (paymentsApp) paymentsApp.hidden = true;
+    if (prizesApp) prizesApp.hidden = true;
     if (usersApp) usersApp.hidden = true;
     if (settingsApp) settingsApp.hidden = true;
     if (statsApp) statsApp.hidden = true;
@@ -548,6 +572,7 @@
       var t = u.searchParams.get("tab");
       if (t === "raffles") return "raffles";
       if (t === "payments") return "payments";
+      if (t === "prizes") return "prizes";
       if (t === "users") return "users";
       if (t === "settings") return "settings";
       if (t === "stats") return "stats";
@@ -586,12 +611,14 @@
     var navUsers = document.getElementById("nav-link-users");
     var navRaffles = document.getElementById("nav-link-raffles");
     var navPayments = document.getElementById("nav-link-payments");
+    var navPrizes = document.getElementById("nav-link-prizes");
     var navSettings = document.getElementById("nav-link-settings");
     var navStats = document.getElementById("nav-link-stats");
 
     if (app) app.hidden = tab !== "support";
     if (rafflesApp) rafflesApp.hidden = tab !== "raffles";
     if (paymentsApp) paymentsApp.hidden = tab !== "payments";
+    if (prizesApp) prizesApp.hidden = tab !== "prizes";
     if (usersApp) usersApp.hidden = tab !== "users";
     if (settingsApp) settingsApp.hidden = tab !== "settings";
     if (statsApp) statsApp.hidden = tab !== "stats";
@@ -602,7 +629,9 @@
           ? "Акции"
           : tab === "payments"
             ? "Оплаты акций"
-            : tab === "users"
+            : tab === "prizes"
+              ? "Призы"
+              : tab === "users"
               ? "Пользователи"
               : tab === "settings"
                 ? "Настройки"
@@ -616,7 +645,9 @@
           ? "Каталог акций на главной"
           : tab === "payments"
             ? "Проверка чеков и закрепление номерков"
-            : tab === "users"
+            : tab === "prizes"
+              ? "Выдача призов и ответы победителей"
+              : tab === "users"
               ? "Все зарегистрированные пользователи"
               : tab === "settings"
                 ? "Режим технических работ и параметры сайта"
@@ -629,6 +660,7 @@
     if (navUsers) navUsers.setAttribute("aria-current", tab === "users" ? "page" : "false");
     if (navRaffles) navRaffles.setAttribute("aria-current", tab === "raffles" ? "page" : "false");
     if (navPayments) navPayments.setAttribute("aria-current", tab === "payments" ? "page" : "false");
+    if (navPrizes) navPrizes.setAttribute("aria-current", tab === "prizes" ? "page" : "false");
     if (navSettings) navSettings.setAttribute("aria-current", tab === "settings" ? "page" : "false");
     if (navStats) navStats.setAttribute("aria-current", tab === "stats" ? "page" : "false");
 
@@ -637,6 +669,9 @@
     }
     if (tab === "payments" && typeof window.abInitPayments === "function") {
       window.abInitPayments();
+    }
+    if (tab === "prizes" && typeof window.abInitPrizes === "function") {
+      window.abInitPrizes();
     }
     if (tab === "users" && typeof window.abInitUsers === "function") {
       window.abInitUsers();

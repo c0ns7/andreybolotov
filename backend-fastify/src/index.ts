@@ -83,6 +83,13 @@ import {
   recordBlogPostView,
   toggleBlogPostLike,
 } from "../../server/blog.js";
+import {
+  getPrizeAwardForUser,
+  prizeAwardToDto,
+  submitPrizeClaim,
+  type PrizeClaimDataMoney,
+  type PrizeClaimDataPhysical,
+} from "../../server/prizes.js";
 import { getStaffTypingForUser } from "../../server/typing-state.js";
 import {
   attachWebSocket,
@@ -1628,6 +1635,27 @@ app.delete("/api/blog/comments/:commentId", async (request, reply) => {
   if (!Number.isFinite(commentId)) return reply.code(400).send({ error: "Некорректный id" });
   await hideBlogComment(commentId);
   return { ok: true };
+});
+
+app.get("/api/prizes/:id", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  const row = await getPrizeAwardForUser(id, user.id);
+  if (!row) return reply.code(404).send({ error: "Приз не найден" });
+  return { prize: prizeAwardToDto(row, { name: user.name, phone: user.phone }) };
+});
+
+app.post("/api/prizes/:id/claim", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const id = Number((request.params as { id?: string }).id);
+  if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
+  const body = (request.body ?? {}) as Record<string, unknown>;
+  const res = await submitPrizeClaim(id, user.id, body as PrizeClaimDataPhysical & PrizeClaimDataMoney);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return { prize: prizeAwardToDto(res.prize, { name: user.name, phone: user.phone }) };
 });
 
 app.setErrorHandler((err, request, reply) => {

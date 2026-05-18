@@ -95,6 +95,16 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Оплаты</span>
             </a>
+            <a href="/admin?tab=prizes" className="admin-nav__link" id="nav-link-prizes">
+              <span className="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path>
+                  <path d="M4 8h16l-2-4H6L4 8z"></path>
+                  <path d="M12 8v13"></path>
+                </svg>
+              </span>
+              <span className="admin-nav__text">Призы</span>
+            </a>
             <a href="/admin?tab=settings" className="admin-nav__link" id="nav-link-settings">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -376,6 +386,101 @@ export default function AdminMarkup() {
           </div>
         </div>
         <div id="admin-payments-toast-host" className="admin-pay-toast-host" aria-live="polite" />
+      </div>
+
+
+      <div id="admin-prizes-app" className="admin-prizes-app" hidden>
+        <div className="admin-raffles-toolbar admin-prizes-toolbar">
+          <div className="admin-raffles-toolbar__lead">
+            <span className="admin-raffles-toolbar__badge" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path>
+                <path d="M4 8h16l-2-4H6L4 8z"></path>
+              </svg>
+            </span>
+            <div className="admin-raffles-toolbar__text">
+              <span className="admin-raffles-toolbar__label">Призы победителям</span>
+              <p className="admin-raffles-toolbar__hint">
+                Создайте приз — пользователю придёт сообщение в чат с кнопкой «Забрать приз». Ответы не потеряются среди переписки.
+              </p>
+            </div>
+          </div>
+          <button type="button" className="btn btn--primary" id="btn-prize-create">
+            + Выдать приз
+          </button>
+        </div>
+        <div className="admin-prizes-tabs" role="tablist" aria-label="Фильтр призов">
+          <button type="button" className="admin-prizes-tab is-active" data-status="all" aria-selected="true">
+            Все
+          </button>
+          <button type="button" className="admin-prizes-tab" data-status="pending" aria-selected="false">
+            Ожидают
+          </button>
+          <button type="button" className="admin-prizes-tab" data-status="claimed" aria-selected="false">
+            Данные получены
+          </button>
+          <button type="button" className="admin-prizes-tab" data-status="processing" aria-selected="false">
+            В работе
+          </button>
+          <button type="button" className="admin-prizes-tab" data-status="done" aria-selected="false">
+            Выполнено
+          </button>
+        </div>
+        <label className="admin-prizes-search-wrap">
+          <span className="visually-hidden">Поиск</span>
+          <input id="admin-prizes-search" className="input admin-prizes-search" type="search" placeholder="Поиск: имя, телефон, приз, ID…" autoComplete="off" />
+        </label>
+        <div className="admin-prizes-layout">
+          <div id="admin-prizes-list" className="admin-prizes-list" role="list"></div>
+          <div id="admin-prize-detail" className="admin-prize-detail">
+            <p className="admin-prizes-empty">Выберите приз в списке слева.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-prize-create" className="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true">
+        <div className="modal-overlay__backdrop" id="modal-prize-create-backdrop"></div>
+        <div className="modal admin-prize-create-modal">
+          <header className="modal__top admin-prize-create-modal__head">
+            <h2 className="modal__top-title">Выдать приз</h2>
+            <button type="button" className="modal__close" id="modal-prize-create-close" aria-label="Закрыть">
+              ×
+            </button>
+          </header>
+          <div className="admin-prize-create-modal__body">
+            <label className="form-group">
+              <span>Найти пользователя</span>
+              <input id="prize-create-user-q" className="input" type="search" placeholder="Имя или телефон…" autoComplete="off" />
+              <input type="hidden" id="prize-create-user-id" defaultValue="" />
+            </label>
+            <div id="prize-create-user-results" className="admin-prize-create-user-results"></div>
+            <p id="prize-create-user-picked" className="admin-prize-create-user-picked" hidden></p>
+            <label className="form-group">
+              <span>Название приза</span>
+              <input id="prize-create-title" className="input" placeholder="Например: iPhone 15" autoComplete="off" />
+            </label>
+            <label className="form-group">
+              <span>Тип</span>
+              <select id="prize-create-type" className="input" defaultValue="physical">
+                <option value="physical">Приз (нужен адрес доставки)</option>
+                <option value="money">Деньги (телефон, банк, получатель)</option>
+              </select>
+            </label>
+            <label className="form-group">
+              <span>Описание (необязательно)</span>
+              <textarea id="prize-create-desc" className="input" rows={2} placeholder="Детали приза…" />
+            </label>
+            <label className="form-group">
+              <span>Текст в начале сообщения (необязательно)</span>
+              <textarea id="prize-create-intro" className="input" rows={2} placeholder="Поздравляем с победой в эфире…" />
+            </label>
+          </div>
+          <footer className="admin-prize-create-modal__foot">
+            <button type="button" className="btn btn--primary" id="prize-create-submit">
+              Создать и отправить в чат
+            </button>
+          </footer>
+        </div>
       </div>
 
       <div id="admin-users-app" className="admin-users-app" hidden>

@@ -16,7 +16,17 @@ type ChatMsg = {
   attachment_mime?: string | null;
 };
 type ChatListResponse = { messages?: ChatMsg[]; has_more?: boolean };
-type ChatActionCard = { kind: string; title?: string; reason?: string; retry_url?: string; cta?: string };
+type ChatActionCard = {
+  kind: string;
+  title?: string;
+  reason?: string;
+  subtitle?: string;
+  retry_url?: string;
+  claim_url?: string;
+  prize_id?: number;
+  prize_type?: string;
+  cta?: string;
+};
 type ChatTextPart = { type: "text"; value: string } | { type: "max_join"; href: string };
 type ChatAttachmentDto = { url: string; name: string; mime: string };
 
@@ -441,6 +451,22 @@ export default function ChatPageClient() {
                                 >
                                   📎 {String(item.msg.attachment_name || "Вложение")}
                                 </a>
+                              </div>
+                            ) : null}
+                            {card?.kind === "prize_claim" ? (
+                              <div className="chat-action-card chat-action-card--prize">
+                                <p className="chat-action-card__title">{String(card.title || "Забрать приз")}</p>
+                                {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
+                                <button
+                                  type="button"
+                                  className="chat-action-card__btn chat-action-card__btn--prize"
+                                  onClick={() => {
+                                    const url = String(card.claim_url || "").trim();
+                                    if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
+                                  }}
+                                >
+                                  {String(card.cta || "Забрать приз")}
+                                </button>
                               </div>
                             ) : null}
                             {card?.kind === "receipt_rejected" ? (
