@@ -905,6 +905,47 @@
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+
+.admin-raffle-single-assign__ticket-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.admin-raffle-single-assign__ticket-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-raffle-single-assign__random-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  background: #fff;
+  color: #1d4ed8;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.admin-raffle-single-assign__random-btn:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.admin-raffle-single-assign__random-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.admin-raffle-single-assign__random-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .admin-raffle-single-assign__check {
   margin: 8px 0 0;
   font-size: 0.84rem;

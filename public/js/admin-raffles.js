@@ -300,6 +300,7 @@
   const raffleSingleTicket = document.getElementById("raffle-single-ticket");
   const raffleSingleCheck = document.getElementById("raffle-single-check");
   const raffleSingleSubmit = document.getElementById("raffle-single-submit");
+  const raffleSingleRandom = document.getElementById("raffle-single-random");
   const modalBuyer = document.getElementById("modal-raffle-buyer");
   const raffleBuyerReveal = document.getElementById("raffle-buyer-reveal");
   const payTabs = Array.from(document.querySelectorAll(".admin-pay-tab"));
@@ -1069,6 +1070,37 @@
     }, 320);
   }
 
+  async function pickRandomFreeTicket() {
+    if (!participantsRaffleId || !raffleSingleTicket) return;
+    if (raffleSingleCheckTimer) {
+      clearTimeout(raffleSingleCheckTimer);
+      raffleSingleCheckTimer = null;
+    }
+    raffleSingleCheckReqId += 1;
+    if (raffleSingleRandom) raffleSingleRandom.disabled = true;
+    setSingleAssignStatus("Подбираем свободный номерок...", "");
+    try {
+      const data = await apiJson("/api/admin/raffles/" + participantsRaffleId + "/random-free-ticket", {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      const n = Math.floor(Number(data.ticket_number));
+      if (!Number.isFinite(n) || n < 1) {
+        throw new Error("Нет свободных номерков");
+      }
+      raffleSingleTicket.value = String(n);
+      raffleSingleTicketIsFree = true;
+      setSingleAssignStatus("Номерок " + String(n) + " свободен, можно выдавать.", "is-free");
+      updateSingleAssignSubmitState();
+    } catch (err) {
+      raffleSingleTicketIsFree = false;
+      setSingleAssignStatus((err && err.message) || "Не удалось подобрать номерок.", "is-error");
+      updateSingleAssignSubmitState();
+    } finally {
+      if (raffleSingleRandom) raffleSingleRandom.disabled = false;
+    }
+  }
+
   function resetSingleAssignForm() {
     if (raffleSingleCheckTimer) {
       clearTimeout(raffleSingleCheckTimer);
@@ -1338,6 +1370,9 @@
     raffleSingleTicketIsFree = false;
     updateSingleAssignSubmitState();
     scheduleSingleTicketAvailabilityCheck();
+  });
+  raffleSingleRandom?.addEventListener("click", function () {
+    void pickRandomFreeTicket();
   });
   raffleSingleSubmit?.addEventListener("click", function () {
     if (!participantsRaffleId) return;

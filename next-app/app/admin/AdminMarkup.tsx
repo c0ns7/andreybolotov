@@ -969,7 +969,23 @@ export default function AdminMarkup() {
                   </label>
                   <label className="form-group">
                     <span>Номерок</span>
-                    <input id="raffle-single-ticket" className="input" type="number" min="1" inputMode="numeric" placeholder="Например: 2444" autoComplete="off" />
+                    <div className="admin-raffle-single-assign__ticket-row">
+                      <input id="raffle-single-ticket" className="input" type="number" min="1" inputMode="numeric" placeholder="Например: 2444" autoComplete="off" />
+                      <button
+                        type="button"
+                        className="admin-raffle-single-assign__random-btn"
+                        id="raffle-single-random"
+                        title="Подставить случайный свободный номерок"
+                        aria-label="Случайный свободный номерок"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="3" />
+                          <circle cx="8.5" cy="8.5" r="1.25" fill="currentColor" stroke="none" />
+                          <circle cx="15.5" cy="8.5" r="1.25" fill="currentColor" stroke="none" />
+                          <circle cx="12" cy="15.5" r="1.25" fill="currentColor" stroke="none" />
+                        </svg>
+                      </button>
+                    </div>
                   </label>
                 </div>
                 <label className="form-group admin-raffle-single-assign__note">

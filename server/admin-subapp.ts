@@ -65,6 +65,7 @@ import {
   getOrderById,
   getTicketNumbersForOrder,
   isRaffleTicketBlocked,
+  listGloballyFreeTicketNumbers,
   listReceiptHistoryPriorForPendingOrder,
   orderToDto,
   recalculateRaffleDerivedStatsForRaffle,
@@ -1340,6 +1341,19 @@ adminSubApp.get("/raffles/:id/tickets/:ticketNumber/availability", async (c) => 
   }
   const is_free = !await isRaffleTicketBlocked(id, n);
   return c.json({ ticket_number: n, is_free });
+});
+
+adminSubApp.get("/raffles/:id/random-free-ticket", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = await getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  const free = await listGloballyFreeTicketNumbers(id);
+  if (!free.length) return c.json({ error: "Нет свободных номерков" }, 404);
+  const ticket_number = free[Math.floor(Math.random() * free.length)]!;
+  return c.json({ ticket_number, free_count: free.length });
 });
 
 adminSubApp.post("/raffles/:id/bulk-assign-phones", async (c) => {
