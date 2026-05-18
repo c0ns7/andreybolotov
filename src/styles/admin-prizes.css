@@ -1,105 +1,212 @@
 /* ——— Admin: раздел «Призы» ——— */
 
 .admin-prizes-app {
+  min-height: 0;
+  animation: adminPrizesIn 0.35s ease-out;
+}
+
+.admin-prizes-app[hidden] {
+  display: none !important;
+}
+
+.admin-prizes-app:not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 0;
+  gap: 16px;
+}
+
+@keyframes adminPrizesIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.admin-prizes-toolbar {
+  margin-bottom: 0;
+}
+
+.admin-prizes-toolbar__badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  box-shadow: 0 8px 22px rgba(217, 119, 6, 0.35) !important;
+}
+
+.admin-prizes-toolbar__btn {
+  flex-shrink: 0;
+  padding: 11px 20px;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(52, 120, 246, 0.22);
 }
 
 .admin-prizes-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 14px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .admin-prizes-tab {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 8px 12px;
-  border: none;
+  padding: 9px 14px;
+  border: 1px solid var(--border, #e2e8f0);
   border-radius: 10px;
-  background: transparent;
+  background: var(--surface, #fff);
+  font-family: inherit;
   font-size: 0.82rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--text-muted, #64748b);
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-prizes-tab:hover {
+  border-color: #cbd5e1;
+  color: var(--text, #0f172a);
 }
 
 .admin-prizes-tab.is-active {
-  background: #fff;
+  border-color: #93c5fd;
+  background: linear-gradient(180deg, #fff 0%, #eff6ff 100%);
   color: #1d4ed8;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.admin-prizes-panel {
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 40%, #e2e8f0 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .admin-prizes-search-wrap {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.admin-prizes-search-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
 }
 
 .admin-prizes-search {
   width: 100%;
+  padding: 11px 14px;
+  font-size: 0.92rem;
 }
 
 .admin-prizes-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 14px;
-  min-height: 420px;
-  align-items: start;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 16px;
+  min-height: 440px;
+  align-items: stretch;
+}
+
+.admin-prizes-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.admin-prizes-list-heading {
+  margin: 0 0 2px;
+  padding: 0 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
 }
 
 .admin-prizes-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: min(70vh, 720px);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  max-height: min(68vh, 700px);
   overflow: auto;
-  padding-right: 4px;
+  padding: 4px 6px 4px 2px;
+  scrollbar-gutter: stable;
+}
+
+.admin-prizes-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-prizes-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
 }
 
 .admin-prize-card {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
   border: 1px solid #e2e8f0;
   background: #fff;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
 }
 
 .admin-prize-card:hover {
   border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
 }
 
 .admin-prize-card.is-active {
   border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  box-shadow:
+    0 0 0 2px rgba(37, 99, 235, 0.18),
+    0 6px 18px rgba(37, 99, 235, 0.1);
 }
 
 .admin-prize-card--attention {
-  border-color: #fbbf24;
-  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+  border-color: #fcd34d;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 72%);
 }
 
 .admin-prize-card__top {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .admin-prize-card__status {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 999px;
 }
 
@@ -126,51 +233,73 @@
 
 .admin-prize-card__type {
   font-size: 0.72rem;
+  font-weight: 600;
   color: #64748b;
 }
 
 .admin-prize-card__title {
-  margin: 0 0 4px;
-  font-size: 0.95rem;
+  margin: 0 0 6px;
+  font-size: 0.98rem;
   font-weight: 800;
+  line-height: 1.3;
   color: #0f172a;
 }
 
-.admin-prize-card__user,
+.admin-prize-card__user {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
 .admin-prize-card__meta {
   margin: 0;
-  font-size: 0.8rem;
-  color: #64748b;
+  font-size: 0.78rem;
+  color: #94a3b8;
 }
 
 .admin-prize-detail {
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dbe5f1;
+  border-radius: 18px;
   background: #fff;
-  padding: 16px;
+  padding: 20px 20px 22px;
   min-height: 320px;
-  max-height: min(70vh, 720px);
+  max-height: min(68vh, 700px);
   overflow: auto;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .admin-prize-detail__head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  align-items: flex-start;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .admin-prize-detail__head h3 {
   margin: 0;
-  flex: 1;
-  font-size: 1.1rem;
+  flex: 1 1 180px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #0f172a;
 }
 
 .admin-prize-detail__user {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
   font-size: 0.88rem;
   color: #475569;
+  line-height: 1.45;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
 }
 
 .admin-prize-detail__chat-link {
@@ -181,42 +310,78 @@
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.admin-prize-detail__chat-link:hover {
+  color: #1d4ed8;
 }
 
 .admin-prize-detail__desc {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   color: #64748b;
   font-size: 0.9rem;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.admin-prize-detail__money-sum {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  color: #475569;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.admin-prize-detail__money-sum strong {
+  color: #b45309;
 }
 
 .admin-prize-detail__section {
-  margin-bottom: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  margin-bottom: 18px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid #e8eef5;
+  background: #fafbfd;
+}
+
+.admin-prize-detail__section:last-child {
+  margin-bottom: 0;
 }
 
 .admin-prize-detail__section h4 {
-  margin: 0 0 8px;
-  font-size: 0.92rem;
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
 }
 
 .admin-prize-detail__dl {
   margin: 0;
   display: grid;
-  gap: 6px;
+  gap: 0;
 }
 
 .admin-prize-detail__dl dt {
-  font-size: 0.75rem;
+  margin-top: 10px;
+  font-size: 0.72rem;
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-prize-detail__dl dt:first-child {
+  margin-top: 0;
 }
 
 .admin-prize-detail__dl dd {
-  margin: 0 0 8px;
-  font-size: 0.92rem;
+  margin: 4px 0 0;
+  font-size: 0.94rem;
+  line-height: 1.45;
   color: #0f172a;
 }
 
@@ -224,89 +389,290 @@
 .admin-prize-detail__hint {
   margin: 0;
   font-size: 0.88rem;
+  line-height: 1.45;
   color: #64748b;
 }
 
+.admin-prize-detail__section--response {
+  background: #fff;
+  border-color: #bfdbfe;
+}
+
+.admin-prize-detail__response {
+  margin: 0;
+}
+
+.admin-prize-detail__response-text {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.admin-prize-detail__response-meta {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.admin-prize-detail__section--actions {
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
 .admin-prize-detail__receipt-link {
-  display: inline-block;
-  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 12px;
   font-weight: 700;
+  font-size: 0.88rem;
   color: #2563eb;
+  text-decoration: none;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.admin-prize-detail__receipt-link:hover {
+  background: #dbeafe;
 }
 
 .admin-prize-detail__file {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
   font-size: 0.88rem;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+  background: #fff;
 }
 
 .admin-prize-detail__check {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
   font-size: 0.88rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.admin-prize-detail__check input {
+  margin-top: 3px;
+  flex-shrink: 0;
 }
 
 .admin-prize-detail__select-label {
   display: block;
-  margin-top: 10px;
-  font-size: 0.88rem;
-  font-weight: 600;
+  margin-top: 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
 }
 
 .admin-prize-detail__select-label select {
   display: block;
   width: 100%;
-  margin-top: 6px;
+  margin-top: 8px;
+  padding: 10px 12px;
 }
 
 .admin-prize-detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 4px;
 }
 
 .admin-prizes-empty {
   text-align: center;
   color: #64748b;
-  padding: 24px 12px;
+  padding: 28px 16px;
   font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.admin-prizes-empty--placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 280px;
+  padding: 32px 24px;
+}
+
+.admin-prizes-empty__icon {
+  font-size: 2.2rem;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.admin-prizes-empty__title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.admin-prizes-empty__text {
+  max-width: 260px;
+  font-size: 0.86rem;
+  color: #94a3b8;
 }
 
 .admin-prizes-empty.is-error {
   color: #b91c1c;
 }
 
-.admin-prize-create-modal {
-  max-width: 480px;
+.admin-prizes-list .admin-prizes-empty {
+  padding: 40px 16px;
+}
+
+/* ——— Модалка «Выдать приз» ——— */
+
+.modal-overlay--prize-form .modal.admin-prize-create-modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 520px;
+  width: 100%;
+  max-height: min(92dvh, 820px);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.admin-prize-create-modal__top {
+  display: grid !important;
+  grid-template-columns: 42px 1fr 44px !important;
+  align-items: center !important;
+  padding: 14px 16px 16px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 92%) !important;
+}
+
+.admin-prize-create-modal__top-spacer {
+  width: 42px;
+  height: 42px;
+}
+
+.admin-prize-create-modal__title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+
+.admin-prize-create-modal__title.modal__top-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.admin-prize-create-modal__subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.35;
+  max-width: 280px;
+}
+
+.admin-prize-create-modal__close.modal__close {
+  border-radius: 12px;
+  color: #64748b;
+}
+
+.admin-prize-create-modal__close.modal__close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .admin-prize-create-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  padding: 16px 18px 8px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fc 100%);
+}
+
+.admin-prize-create-modal__section {
+  margin: 0;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid #dbe5f1;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.admin-prize-create-modal__section .form-group {
+  margin-bottom: 12px;
+}
+
+.admin-prize-create-modal__section .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.admin-prize-create-modal__section-title {
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #334155;
+}
+
+.admin-prize-create-modal__section .form-group > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
 }
 
 .admin-prize-create-user-results {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 160px;
+  gap: 8px;
+  max-height: 168px;
   overflow: auto;
+  margin: 4px 0 8px;
+  padding-right: 2px;
 }
 
 .admin-prize-user-pick {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  padding: 11px 13px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #f8fafc;
   cursor: pointer;
   font-size: 0.88rem;
+  line-height: 1.35;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .admin-prize-user-pick:hover {
@@ -315,40 +681,105 @@
 }
 
 .admin-prize-create-user-picked {
-  margin: 0;
-  font-size: 0.88rem;
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  font-size: 0.86rem;
   font-weight: 700;
   color: #15803d;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
 }
 
 .admin-prize-create-money-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding: 14px;
+  margin: 4px 0 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+  border: 1px solid #fde68a;
+}
+
+.admin-prize-create-money-fields__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b45309;
+}
+
+.admin-prize-create-exchange-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 12px;
-  margin-bottom: 4px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: #fff;
   border: 1px solid #e2e8f0;
 }
 
-.admin-prize-detail__money-sum {
-  margin: 0 0 10px;
-  font-size: 0.92rem;
-  color: #475569;
+.admin-prize-create-modal__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+}
+
+.admin-prize-create-modal__check input {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .admin-prize-create-modal__foot {
-  padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  flex-shrink: 0;
+  padding: 14px 18px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.admin-prize-create-modal__submit {
+  width: 100%;
+  padding: 13px 18px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(52, 120, 246, 0.28);
 }
 
 @media (max-width: 900px) {
+  .admin-prizes-panel {
+    padding: 14px;
+  }
+
   .admin-prizes-layout {
     grid-template-columns: 1fr;
+    min-height: 0;
   }
 
   .admin-prizes-list {
-    max-height: 280px;
+    max-height: 300px;
+  }
+
+  .admin-prize-detail {
+    max-height: none;
+    min-height: 280px;
+  }
+
+  .admin-prizes-toolbar__btn {
+    width: 100%;
+  }
+
+  .modal-overlay--prize-form .modal.admin-prize-create-modal {
+    max-height: min(96dvh, 900px);
   }
 }

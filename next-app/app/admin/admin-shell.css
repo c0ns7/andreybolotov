@@ -1266,8 +1266,9 @@
   /* Тулбары подразделов (акции, оплаты, пользователи) */
   .admin-raffles-app .admin-raffles-toolbar,
   .admin-payments-app .admin-raffles-toolbar,
-.admin-users-app .admin-raffles-toolbar,
-.admin-stats-app .admin-raffles-toolbar {
+  .admin-prizes-app .admin-raffles-toolbar,
+  .admin-users-app .admin-raffles-toolbar,
+  .admin-stats-app .admin-raffles-toolbar {
     padding: 16px 18px;
     background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid rgba(226, 232, 240, 0.95);
@@ -1278,8 +1279,9 @@
 
   .admin-raffles-app .admin-raffles-toolbar__label,
   .admin-payments-app .admin-raffles-toolbar__label,
-.admin-users-app .admin-raffles-toolbar__label,
-.admin-stats-app .admin-raffles-toolbar__label {
+  .admin-prizes-app .admin-raffles-toolbar__label,
+  .admin-users-app .admin-raffles-toolbar__label,
+  .admin-stats-app .admin-raffles-toolbar__label {
     font-size: 0.68rem;
     color: #64748b;
   }
@@ -1537,9 +1539,19 @@
 
   .admin-raffles-app,
   .admin-payments-app,
-.admin-users-app,
-.admin-stats-app {
+  .admin-prizes-app,
+  .admin-users-app,
+  .admin-stats-app {
     animation: adminSectionIn 0.4s ease-out;
+  }
+
+  .admin-prizes-app[hidden],
+  .admin-raffles-app[hidden],
+  .admin-payments-app[hidden],
+  .admin-users-app[hidden],
+  .admin-settings-app[hidden],
+  .admin-stats-app[hidden] {
+    display: none !important;
   }
 
   @keyframes adminSectionIn {

@@ -1,11 +1,12 @@
-.prize-claim-shell {
-  padding: 16px 16px calc(88px + env(safe-area-inset-bottom, 0px));
+.prize-claim-shell,
+.prize-claim-page {
+  padding: 20px 18px calc(88px + env(safe-area-inset-bottom, 0px));
   max-width: 520px;
   margin: 0 auto;
 }
 
 .prize-claim-page__head {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .prize-claim-page__back {
@@ -29,7 +30,7 @@
   border: 1px solid #e2e8f0;
   background: linear-gradient(180deg, #fffbeb 0%, #fff 28%, #fff 100%);
   box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
-  padding: 20px 18px 24px;
+  padding: 22px 20px 26px;
 }
 
 .prize-claim-card__badge {
@@ -67,10 +68,63 @@
   line-height: 1.45;
 }
 
+.prize-claim-card__hint p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.prize-claim-card__lead {
+  margin: 0 0 12px;
+  font-size: 0.92rem;
+  color: #475569;
+}
+
+.prize-claim-card__textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.prize-claim-card__response {
+  margin: 0 0 16px;
+  padding: 14px;
+  text-align: left;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.prize-claim-card__response-label {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.prize-claim-card__response-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
 .prize-claim-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+
+.prize-claim-form .form-group {
+  margin: 0;
+}
+
+.prize-claim-form .form-group > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #475569;
 }
 
 .prize-claim-card__btn {

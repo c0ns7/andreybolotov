@@ -86,7 +86,6 @@ import {
   listPrizeAwardsForAdmin,
   prizeAwardToDto,
   prizeAwardToDtoAsync,
-  sendPrizeReceiptToUserChat,
   updatePrizeAwardAdmin,
 } from "./prizes.js";
 import type {
@@ -1886,19 +1885,13 @@ adminSubApp.post("/prizes", async (c) => {
   }
   const userId = Number(body.user_id);
   if (!Number.isFinite(userId)) return c.json({ error: "Укажите пользователя" }, 400);
-  const prizeType = String(body.prize_type || "physical") === "money" ? "money" : "physical";
   const res = await createPrizeAward({
     userId,
     title: String(body.title || ""),
     description: String(body.description || ""),
-    prizeType,
     createdByUserId: auth.id,
     introMessage: String(body.intro_message || ""),
     sendChat: body.send_chat !== false,
-    moneyAmountRub: Number(body.money_amount_rub) || 0,
-    allowsTicketExchange: body.allows_ticket_exchange === true,
-    raffleId: body.raffle_id != null ? Number(body.raffle_id) : null,
-    exchangeTicketCount: Number(body.exchange_ticket_count) || 0,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (res.messageId) {
@@ -1925,17 +1918,8 @@ adminSubApp.patch("/prizes/:id", async (c) => {
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
-  const statusRaw = body.status != null ? String(body.status) : undefined;
-  const allowed = ["pending", "claimed", "processing", "done", "cancelled"];
-  const status = statusRaw && allowed.includes(statusRaw) ? (statusRaw as import("./prizes.js").PrizeStatus) : undefined;
   const res = await updatePrizeAwardAdmin(id, {
-    status,
     admin_notes: body.admin_notes != null ? String(body.admin_notes) : undefined,
-    transfer_receipt_url: body.transfer_receipt_url != null ? String(body.transfer_receipt_url) : undefined,
-    transfer_receipt_name: body.transfer_receipt_name != null ? String(body.transfer_receipt_name) : undefined,
-    transfer_receipt_mime: body.transfer_receipt_mime != null ? String(body.transfer_receipt_mime) : undefined,
-    review_requested: body.review_requested != null ? Boolean(body.review_requested) : undefined,
-    review_received: body.review_received != null ? Boolean(body.review_received) : undefined,
     mark_done: Boolean(body.mark_done),
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
@@ -1943,53 +1927,4 @@ adminSubApp.patch("/prizes/:id", async (c) => {
   return c.json({
     prize: await prizeAwardToDtoAsync(res.prize, user ? { name: user.name, phone: user.phone } : undefined),
   });
-});
-
-adminSubApp.post("/prizes/:id/send-receipt-chat", async (c) => {
-  const auth = await requireAdmin(c);
-  if (auth instanceof Response) return auth;
-  const id = Number(c.req.param("id"));
-  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
-  const res = await sendPrizeReceiptToUserChat(id, auth.id);
-  if (!res.ok) return c.json({ error: res.error }, 400);
-  const prize = await getPrizeAwardById(id);
-  const row = await getSupportMessageById(res.messageId);
-  if (row && prize) {
-    broadcastChatMessage(prize.user_id, messageToDto(row));
-    notifyUserEmailStaffReply(prize.user_id, { body: "", attachmentName: null, attachmentMime: null });
-  }
-  return c.json({ ok: true, message_id: res.messageId });
-});
-
-adminSubApp.post("/prizes/upload-receipt", async (c) => {
-  const auth = await requireAdmin(c);
-  if (auth instanceof Response) return auth;
-  let body: Record<string, unknown>;
-  try {
-    body = await c.req.parseBody();
-  } catch {
-    return c.json({ error: "Некорректные данные" }, 400);
-  }
-  const raw = body["file"];
-  if (!raw || typeof raw !== "object") {
-    return c.json({ error: "Нет файла" }, 400);
-  }
-  const blob = raw as { type?: string; arrayBuffer?: () => Promise<ArrayBuffer> };
-  if (typeof blob.arrayBuffer !== "function") {
-    return c.json({ error: "Некорректный файл" }, 400);
-  }
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  const mime = String(blob.type || "application/pdf").toLowerCase();
-  const extMap: Record<string, string> = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "application/pdf": ".pdf",
-  };
-  const ext = extMap[mime];
-  if (!ext) return c.json({ error: "Допустимы JPEG, PNG, WebP или PDF" }, 400);
-  if (buffer.length > 12 * 1024 * 1024) return c.json({ error: "Файл не больше 12 МБ" }, 400);
-  const name = `${randomUUID()}${ext}`;
-  await writeUploadToDirs(prizeUploadsDirs, name, buffer);
-  return c.json({ url: `/uploads/prizes/${name}`, mime, name });
 });
