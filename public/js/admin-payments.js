@@ -28,6 +28,8 @@
       '<svg class="admin-payment-ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
     chat:
       '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+    copy:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
     unlock:
       '<svg class="admin-payment-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>',
   };
@@ -49,6 +51,76 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+  }
+
+  function phoneDigitsOnly(raw) {
+    return String(raw || "").replace(/\D/g, "");
+  }
+
+  var phoneCopyResetTimers = new WeakMap();
+
+  function copyTextToClipboard(text, onDone) {
+    var value = String(text || "");
+    if (!value) return;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard
+        .writeText(value)
+        .then(onDone)
+        .catch(function () {
+          copyTextToClipboardFallback(value, onDone);
+        });
+      return;
+    }
+    copyTextToClipboardFallback(value, onDone);
+  }
+
+  function copyTextToClipboardFallback(text, onDone) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = String(text || "");
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (onDone) onDone();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function renderUserPhoneFact(p, opts) {
+    opts = opts || {};
+    var showCopy = opts.showCopy === true;
+    var digits = phoneDigitsOnly(p.user_phone);
+    var copyBtn =
+      showCopy && digits
+        ? '<button type="button" class="admin-payment-phone-copy" data-copy-phone="' +
+          esc(digits) +
+          '" aria-label="Скопировать номер телефона" title="Скопировать номер">' +
+          '<span class="admin-payment-phone-copy__ico admin-payment-phone-copy__ico--copy">' +
+          ICO.copy +
+          "</span>" +
+          '<span class="admin-payment-phone-copy__ico admin-payment-phone-copy__ico--done">' +
+          ICO.check +
+          "</span></button>"
+        : "";
+    return (
+      '<li class="admin-payment-card__fact">' +
+      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
+      ICO.user +
+      "</span>" +
+      '<span class="admin-payment-phone-line">' +
+      '<span class="admin-payment-phone-line__text">' +
+      esc(String(p.user_name || "—")) +
+      " · " +
+      esc(String(p.user_phone || "")) +
+      "</span>" +
+      copyBtn +
+      "</span></li>"
+    );
   }
 
   /** Метка времени заявки в часовом поясе браузера (локально для администратора). */
@@ -284,6 +356,28 @@
       btn.addEventListener("click", function () {
         var id = Number(btn.getAttribute("data-release-order"));
         releaseOrder(token, id);
+      });
+    });
+    bindPhoneCopyHandlers(container);
+  }
+
+  function bindPhoneCopyHandlers(container) {
+    container.querySelectorAll("[data-copy-phone]").forEach(function (btn) {
+      if (btn.getAttribute("data-phone-copy-bound") === "1") return;
+      btn.setAttribute("data-phone-copy-bound", "1");
+      btn.addEventListener("click", function () {
+        var digits = btn.getAttribute("data-copy-phone") || "";
+        if (!digits) return;
+        copyTextToClipboard(digits, function () {
+          btn.classList.add("admin-payment-phone-copy--copied");
+          var prev = phoneCopyResetTimers.get(btn);
+          if (prev) clearTimeout(prev);
+          var t = setTimeout(function () {
+            btn.classList.remove("admin-payment-phone-copy--copied");
+            phoneCopyResetTimers.delete(btn);
+          }, 3000);
+          phoneCopyResetTimers.set(btn, t);
+        });
       });
     });
   }
@@ -786,15 +880,7 @@
       "<span><strong>Создано</strong> · " +
       esc(formatOrderCreatedLocal(p.created_at)) +
       " <span class=\"admin-payment-card__tz-hint\">(ваш часовой пояс)</span></span></li>" +
-      '<li class="admin-payment-card__fact">' +
-      '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--blue">' +
-      ICO.user +
-      "</span>" +
-      "<span>" +
-      esc(String(p.user_name || "—")) +
-      " · " +
-      esc(String(p.user_phone || "")) +
-      "</span></li>" +
+      renderUserPhoneFact(p, { showCopy: true }) +
       '<li class="admin-payment-card__fact">' +
       '<span class="admin-payment-card__icon-wrap admin-payment-card__icon-wrap--amber">' +
       ICO.tickets +

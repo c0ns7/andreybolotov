@@ -2082,6 +2082,73 @@
   color: #0f172a;
 }
 
+.admin-payment-phone-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.admin-payment-phone-line__text {
+  min-width: 0;
+}
+
+.admin-payment-phone-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.admin-payment-phone-copy:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.admin-payment-phone-copy:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.admin-payment-phone-copy__ico {
+  display: block;
+}
+
+.admin-payment-phone-copy__ico--done {
+  display: none;
+  color: #16a34a;
+}
+
+.admin-payment-phone-copy--copied .admin-payment-phone-copy__ico--copy {
+  display: none;
+}
+
+.admin-payment-phone-copy--copied .admin-payment-phone-copy__ico--done {
+  display: block;
+}
+
+.admin-payment-phone-copy--copied {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
 .admin-payment-card__countdown {
   font-weight: 900;
   color: #ea580c;
