@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import AppBottomNav from "../AppBottomNav";
 import { useSiteFlags } from "../../../lib/use-site-flags";
 import { useAbSession } from "../AbSessionContext";
@@ -16,7 +16,9 @@ export default function BlogShellClient() {
   const show = !!(session?.token && session?.phone);
   return (
     <>
-      <BlogPageClient />
+      <Suspense fallback={<p className="blog-loading">Загрузка…</p>}>
+        <BlogPageClient />
+      </Suspense>
       <AppBottomNav
         show={show}
         showBlog

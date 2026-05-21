@@ -12,7 +12,7 @@ import {
   Share2,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
 import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
@@ -81,7 +81,7 @@ function newLocalId() {
   return "u-" + String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
-export default function BlogPageClient() {
+function BlogPageClientInner() {
   const { session, authVerified, toast } = useAbSession();
   const { blog_enabled: blogEnabled, loaded: siteFlagsLoaded } = useSiteFlags();
   const searchParams = useSearchParams();
@@ -861,5 +861,13 @@ export default function BlogPageClient() {
         <BlogMediaLightbox media={lightbox.media} startIndex={lightbox.index} onClose={() => setLightbox(null)} />
       ) : null}
     </div>
+  );
+}
+
+export default function BlogPageClient() {
+  return (
+    <Suspense fallback={<p className="blog-loading">Загрузка…</p>}>
+      <BlogPageClientInner />
+    </Suspense>
   );
 }

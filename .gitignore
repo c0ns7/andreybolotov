@@ -9,5 +9,6 @@ data/
 uploads/
 public/uploads/
 .next/
+next-app/next-env.d.ts
 *.tsbuildinfo
 *.log
