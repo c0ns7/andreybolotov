@@ -9,12 +9,11 @@ import {
   PenLine,
   Plus,
   Search,
-  Share2,
   Trash2,
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
-import { blogHtmlHasContent, resolveBlogBodyHtml } from "../../../lib/ab-blog-html";
+import { blogHtmlHasContent, resolveBlogBodyHtml, stripBlogBodyDuplicateMedia } from "../../../lib/ab-blog-html";
 import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
 import { useSiteFlags } from "../../../lib/use-site-flags";
@@ -228,20 +227,6 @@ function BlogPageClientInner() {
 
   const scrollToComments = () => {
     commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const sharePost = async (post: BlogPost) => {
-    const url = `${window.location.origin}/home/blog?post=${encodeURIComponent(post.slug)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: post.title, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast("Ссылка скопирована", "success");
-    } catch {
-      /* cancelled or denied */
-    }
   };
 
   const toggleLike = async (post: BlogPost) => {
@@ -458,28 +443,22 @@ function BlogPageClientInner() {
       : readPost.cover_url
         ? [{ id: 0, url: readPost.cover_url, mime: readPost.cover_mime }]
         : [];
-    const readMin = estimateReadMinutes(readPost.body_html);
+    const articleBodyHtml = stripBlogBodyDuplicateMedia(readPost.body_html, articleMedia);
+    const readMin = estimateReadMinutes(articleBodyHtml || readPost.body_html);
     return (
       <article className="blog-article">
-        <BlogPageHeader
-          title={readPost.title}
-          backOnClick={() => setReadPost(null)}
-          backLabel="К ленте блога"
-          actions={
-            <button type="button" className="blog-page__icon-action" onClick={() => void sharePost(readPost)} aria-label="Поделиться">
-              <Share2 size={20} />
-            </button>
-          }
-        />
+        <BlogPageHeader title={readPost.title} backOnClick={() => setReadPost(null)} backLabel="К ленте блога" />
 
-        <div className="blog-article__hero">
-          <BlogMediaCarousel
-            media={articleMedia}
-            variant="hero"
-            onOpen={(i) => setLightbox({ media: articleMedia, index: i })}
-          />
-          {readPost.status === "draft" ? <span className="blog-article__draft-badge">Черновик</span> : null}
-        </div>
+        {articleMedia.length > 0 ? (
+          <div className="blog-article__hero">
+            <BlogMediaCarousel
+              media={articleMedia}
+              variant="hero"
+              onOpen={(i) => setLightbox({ media: articleMedia, index: i })}
+            />
+            {readPost.status === "draft" ? <span className="blog-article__draft-badge">Черновик</span> : null}
+          </div>
+        ) : null}
         {lightbox ? (
           <BlogMediaLightbox media={lightbox.media} startIndex={lightbox.index} onClose={() => setLightbox(null)} />
         ) : null}
@@ -530,13 +509,11 @@ function BlogPageClientInner() {
               <MessageCircle size={18} />
               <span>{readPost.comment_count}</span>
             </button>
-            <button type="button" className="blog-engage-btn blog-engage-btn--ghost" onClick={() => void sharePost(readPost)}>
-              <Share2 size={18} />
-              <span>Поделиться</span>
-            </button>
           </div>
 
-          <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: readPost.body_html }} />
+          {articleBodyHtml ? (
+            <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: articleBodyHtml }} />
+          ) : null}
 
           {isAdmin ? (
           <div className="blog-article__admin">
@@ -612,9 +589,6 @@ function BlogPageClientInner() {
           </button>
           <button type="button" className="blog-article__bar-btn" onClick={scrollToComments} aria-label="Комментарии">
             <MessageCircle size={22} />
-          </button>
-          <button type="button" className="blog-article__bar-btn" onClick={() => void sharePost(readPost)} aria-label="Поделиться">
-            <Share2 size={22} />
           </button>
         </footer>
       </article>

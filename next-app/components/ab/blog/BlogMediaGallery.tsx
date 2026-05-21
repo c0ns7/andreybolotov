@@ -1,14 +1,18 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Film, ImageIcon, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import type { BlogMediaItem } from "../../../lib/ab-blog-types";
 
 type Variant = "card" | "hero";
 
+function isVideoItem(item: BlogMediaItem) {
+  return String(item.mime || "").startsWith("video/");
+}
+
 function MediaSlide({ item, variant }: { item: BlogMediaItem; variant: Variant }) {
   const cls = variant === "card" ? "blog-media-gallery__slide" : "blog-media-gallery__slide blog-media-gallery__slide--hero";
-  if (item.mime?.startsWith("video/")) {
+  if (isVideoItem(item)) {
     return (
       <video
         className={cls}
@@ -130,8 +134,10 @@ export function BlogMediaLightbox({
   onClose: () => void;
 }) {
   const items = media.filter((m) => m.url);
-  const [index, setIndex] = useState(() => Math.min(Math.max(0, startIndex), Math.max(0, items.length - 1)));
   const count = items.length;
+  const [index, setIndex] = useState(() => Math.min(Math.max(0, startIndex), Math.max(0, count - 1)));
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const go = useCallback(
     (delta: number) => {
@@ -140,6 +146,10 @@ export function BlogMediaLightbox({
     },
     [count],
   );
+
+  useEffect(() => {
+    setIndex(Math.min(Math.max(0, startIndex), Math.max(0, count - 1)));
+  }, [startIndex, count]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -155,35 +165,142 @@ export function BlogMediaLightbox({
     };
   }, [onClose, go]);
 
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    void v.play().catch(() => {});
+  }, [index]);
+
   if (!count) return null;
+
   const item = items[index]!;
+  const isVideo = isVideoItem(item);
+
+  const onTouchStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    if (!t) return;
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const onTouchEnd = (e: TouchEvent) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    const t = e.changedTouches[0];
+    if (!start || !t || count < 2) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+    go(dx < 0 ? 1 : -1);
+  };
 
   return (
-    <div className="blog-media-lightbox" role="dialog" aria-modal="true" aria-label="Галерея">
+    <div className="blog-media-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр медиа">
       <button type="button" className="blog-media-lightbox__backdrop" onClick={onClose} aria-label="Закрыть" />
-      <button type="button" className="blog-media-lightbox__close" onClick={onClose} aria-label="Закрыть">
-        <X size={28} />
-      </button>
-      <div className="blog-media-lightbox__stage">
-        {item.mime?.startsWith("video/") ? (
-          <video className="blog-media-lightbox__media" src={item.url} controls autoPlay playsInline />
-        ) : (
-          <img className="blog-media-lightbox__media" src={item.url} alt="" />
-        )}
-      </div>
-      {count > 1 ? (
-        <>
-          <button type="button" className="blog-media-lightbox__nav blog-media-lightbox__nav--prev" onClick={() => go(-1)} aria-label="Предыдущее">
-            <ChevronLeft size={32} />
-          </button>
-          <button type="button" className="blog-media-lightbox__nav blog-media-lightbox__nav--next" onClick={() => go(1)} aria-label="Следующее">
-            <ChevronRight size={32} />
-          </button>
-          <p className="blog-media-lightbox__counter">
-            {index + 1} / {count}
-          </p>
-        </>
+
+      {!isVideo ? (
+        <div
+          className="blog-media-lightbox__ambient"
+          style={{ backgroundImage: `url("${item.url.replace(/"/g, "%22")}")` }}
+          aria-hidden="true"
+        />
       ) : null}
+
+      <div className="blog-media-lightbox__shell">
+        <header className="blog-media-lightbox__top">
+          <div className="blog-media-lightbox__meta">
+            <span className="blog-media-lightbox__badge">
+              {index + 1} / {count}
+            </span>
+            <span className="blog-media-lightbox__type">
+              {isVideo ? (
+                <>
+                  <Film size={14} aria-hidden="true" />
+                  Видео
+                </>
+              ) : (
+                <>
+                  <ImageIcon size={14} aria-hidden="true" />
+                  Фото
+                </>
+              )}
+            </span>
+          </div>
+          <button type="button" className="blog-media-lightbox__close" onClick={onClose} aria-label="Закрыть">
+            <X size={22} strokeWidth={2.25} />
+          </button>
+        </header>
+
+        <div
+          className="blog-media-lightbox__stage"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          {count > 1 ? (
+            <button
+              type="button"
+              className="blog-media-lightbox__nav blog-media-lightbox__nav--prev"
+              onClick={() => go(-1)}
+              aria-label="Предыдущее"
+            >
+              <ChevronLeft size={28} strokeWidth={2.25} />
+            </button>
+          ) : null}
+
+          <figure className={"blog-media-lightbox__frame" + (isVideo ? " blog-media-lightbox__frame--video" : "")}>
+            {isVideo ? (
+              <video
+                ref={videoRef}
+                key={item.url}
+                className="blog-media-lightbox__media blog-media-lightbox__media--video"
+                src={item.url}
+                controls
+                autoPlay
+                playsInline
+              />
+            ) : (
+              <img key={item.url} className="blog-media-lightbox__media" src={item.url} alt="" />
+            )}
+          </figure>
+
+          {count > 1 ? (
+            <button
+              type="button"
+              className="blog-media-lightbox__nav blog-media-lightbox__nav--next"
+              onClick={() => go(1)}
+              aria-label="Следующее"
+            >
+              <ChevronRight size={28} strokeWidth={2.25} />
+            </button>
+          ) : null}
+        </div>
+
+        {count > 1 ? (
+          <footer className="blog-media-lightbox__footer">
+            <div className="blog-media-lightbox__thumbs" role="tablist" aria-label="Все медиа">
+              {items.map((m, i) => {
+                const thumbVideo = isVideoItem(m);
+                return (
+                  <button
+                    key={m.id ? `id-${m.id}` : m.url}
+                    type="button"
+                    role="tab"
+                    aria-selected={i === index}
+                    className={"blog-media-lightbox__thumb" + (i === index ? " is-active" : "")}
+                    onClick={() => setIndex(i)}
+                  >
+                    {thumbVideo ? (
+                      <video src={m.url} muted playsInline preload="metadata" aria-hidden="true" />
+                    ) : (
+                      <img src={m.url} alt="" />
+                    )}
+                    {thumbVideo ? <span className="blog-media-lightbox__thumb-play" aria-hidden="true" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </footer>
+        ) : null}
+      </div>
     </div>
   );
 }

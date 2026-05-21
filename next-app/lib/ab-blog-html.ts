@@ -26,6 +26,46 @@ function escapeHtmlAttr(s: string): string {
 }
 
 /** Текст из редактора + запасной вариант из описания или первого медиа. */
+function normalizeMediaUrl(url: string): string {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  try {
+    return new URL(u, "https://local.invalid").pathname;
+  } catch {
+    return u.split("?")[0]?.split("#")[0] || u;
+  }
+}
+
+/** Убирает из HTML картинки/видео, которые уже показаны в галерее поста. */
+export function stripBlogBodyDuplicateMedia(html: string, media: { url: string }[]): string {
+  const raw = String(html || "").trim();
+  if (!raw || !media.length) return raw;
+  const paths = new Set(media.map((m) => normalizeMediaUrl(m.url)).filter(Boolean));
+  if (!paths.size) return raw;
+
+  if (typeof DOMParser === "undefined") {
+    return raw
+      .replace(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi, (tag, src) =>
+        paths.has(normalizeMediaUrl(src)) ? "" : tag,
+      )
+      .replace(/<video\b[^>]*>[\s\S]*?<\/video>/gi, (tag) => {
+        const m = tag.match(/\bsrc=["']([^"']+)["']/i);
+        return m && paths.has(normalizeMediaUrl(m[1])) ? "" : tag;
+      })
+      .replace(/<p>\s*<\/p>/gi, "");
+  }
+
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  doc.body.querySelectorAll("img, video").forEach((el) => {
+    const src = el.getAttribute("src") || "";
+    if (paths.has(normalizeMediaUrl(src))) el.remove();
+  });
+  doc.body.querySelectorAll("p").forEach((p) => {
+    if (!p.textContent?.trim() && !p.querySelector("img, video, iframe")) p.remove();
+  });
+  return doc.body.innerHTML.trim();
+}
+
 export function resolveBlogBodyHtml(
   html: string,
   excerpt: string,
