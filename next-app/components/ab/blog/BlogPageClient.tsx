@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
+import { blogHtmlHasContent, resolveBlogBodyHtml } from "../../../lib/ab-blog-html";
 import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
 import { useSiteFlags } from "../../../lib/use-site-flags";
@@ -21,7 +22,7 @@ import { useAbSession } from "../AbSessionContext";
 import BlogPageHeader from "./BlogPageHeader";
 import BlogMediaUploader, { type BlogUploadProgress } from "./BlogMediaUploader";
 import { BlogMediaCarousel, BlogMediaLightbox } from "./BlogMediaGallery";
-import BlogRichEditor from "./BlogRichEditor";
+import BlogRichEditor, { type BlogRichEditorHandle } from "./BlogRichEditor";
 
 type Tab = "feed" | "manage";
 
@@ -102,6 +103,7 @@ function BlogPageClientInner() {
   const [commentDraft, setCommentDraft] = useState("");
   const [commentSending, setCommentSending] = useState(false);
   const commentsRef = useRef<HTMLElement>(null);
+  const editorRef = useRef<BlogRichEditorHandle>(null);
   const [manageStatus, setManageStatus] = useState<"all" | "published" | "draft">("all");
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -381,13 +383,19 @@ function BlogPageClientInner() {
       toast("Дождитесь окончания загрузки медиа", "warning");
       return;
     }
+    const mediaPayload = formMedia.map((m) => ({ url: m.url, mime: m.mime }));
+    const bodyHtml = resolveBlogBodyHtml(editorRef.current?.getHtml() ?? formBody, formExcerpt, mediaPayload);
+    if (!blogHtmlHasContent(bodyHtml)) {
+      toast("Добавьте текст поста в редакторе, краткое описание или медиа", "warning");
+      return;
+    }
     setSaving(true);
     const status = publish ? "published" : formStatus;
     const first = formMedia[0];
     const payload = {
-      title: formTitle,
+      title: formTitle.trim(),
       excerpt: formExcerpt,
-      body_html: formBody,
+      body_html: bodyHtml,
       keywords: formKeywords,
       cover_url: first?.url || "",
       cover_mime: first?.mime ?? null,
@@ -841,7 +849,7 @@ function BlogPageClientInner() {
                 }
                 disabled={saving}
               />
-              <BlogRichEditor value={formBody} onChange={setFormBody} onUploadMedia={uploadMedia} />
+              <BlogRichEditor ref={editorRef} value={formBody} onChange={setFormBody} onUploadMedia={uploadMedia} />
             </div>
             <footer className="blog-editor-modal__foot">
               <button type="button" className="btn btn--ghost" disabled={saving || mediaUploading} onClick={() => setEditorOpen(false)}>

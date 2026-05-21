@@ -37,6 +37,51 @@ export type BlogCommentRow = {
   user_phone: string;
 };
 
+function stripBlogHtmlText(html: string): string {
+  return String(html || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function blogBodyHasContent(html: string): boolean {
+  const raw = String(html || "").trim();
+  if (!raw) return false;
+  if (stripBlogHtmlText(raw).length > 0) return true;
+  return /<(img|video|iframe|audio|picture|source)\b/i.test(raw);
+}
+
+function escapeBlogHtmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizeBlogBodyForSave(
+  html: string,
+  excerpt: string,
+  media: { url: string; mime?: string | null }[],
+): string {
+  const raw = String(html || "").trim();
+  if (blogBodyHasContent(raw)) return raw;
+  const ex = String(excerpt || "").trim();
+  if (ex) return `<p>${escapeBlogHtmlText(ex)}</p>`;
+  const first = media.find((m) => String(m.url || "").trim());
+  if (!first) return "";
+  const url = escapeBlogHtmlText(String(first.url).trim());
+  const mime = String(first.mime || "");
+  if (mime.startsWith("video/")) {
+    return `<p><video controls playsinline style="max-width:100%;border-radius:12px" src="${url}"></video></p>`;
+  }
+  return `<p><img src="${url}" alt="" style="max-width:100%;border-radius:12px" /></p>`;
+}
+
 function slugifyTitle(title: string): string {
   const base = String(title || "")
     .trim()
@@ -371,12 +416,12 @@ export async function createBlogPost(authorUserId: number, input: SaveBlogPostIn
   const now = Date.now();
   const title = String(input.title || "").trim().slice(0, 300);
   if (!title) return { ok: false as const, error: "Укажите заголовок" };
-  const body = String(input.body_html || "").trim();
+  const mediaItems = Array.isArray(input.media) ? input.media : [];
+  const body = normalizeBlogBodyForSave(String(input.body_html || ""), String(input.excerpt || ""), mediaItems);
   if (!body) return { ok: false as const, error: "Добавьте текст поста" };
   const status = input.status === "published" ? "published" : "draft";
   const slug = input.slug ? slugifyTitle(input.slug) : await ensureUniqueBlogSlug(title);
   const publishedAt = status === "published" ? now : null;
-  const mediaItems = Array.isArray(input.media) ? input.media : [];
   const cover = mediaItems.length ? coverFromMedia(mediaItems) : {
     cover_url: String(input.cover_url || "").trim().slice(0, 500),
     cover_mime: input.cover_mime ? String(input.cover_mime).slice(0, 120) : null,
@@ -416,7 +461,12 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   const now = Date.now();
   const title = String(input.title || "").trim().slice(0, 300);
   if (!title) return { ok: false as const, error: "Укажите заголовок" };
-  const body = String(input.body_html || "").trim();
+  const mediaItems = Array.isArray(input.media) ? input.media : null;
+  const body = normalizeBlogBodyForSave(
+    String(input.body_html || ""),
+    String(input.excerpt || ""),
+    mediaItems ?? [],
+  );
   if (!body) return { ok: false as const, error: "Добавьте текст поста" };
   const status = input.status === "published" ? "published" : input.status === "draft" ? "draft" : existing.status;
   let publishedAt = existing.published_at;
@@ -425,7 +475,6 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   const slug = input.slug
     ? await ensureUniqueBlogSlug(input.slug, postId)
     : existing.slug;
-  const mediaItems = Array.isArray(input.media) ? input.media : null;
   let coverUrl = String(input.cover_url ?? existing.cover_url).trim().slice(0, 500);
   let coverMime = input.cover_mime != null ? String(input.cover_mime).slice(0, 120) : existing.cover_mime;
   if (mediaItems) {

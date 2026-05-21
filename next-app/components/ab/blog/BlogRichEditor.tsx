@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 const COLORS = ["#0f172a", "#dc2626", "#ea580c", "#16a34a", "#2563eb", "#7c3aed", "#db2777"];
+
+export type BlogRichEditorHandle = {
+  getHtml: () => string;
+};
 
 type Props = {
   value: string;
@@ -10,18 +14,40 @@ type Props = {
   onUploadMedia?: (file: File) => Promise<{ url: string; mime: string } | null>;
 };
 
-export default function BlogRichEditor({ value, onChange, onUploadMedia }: Props) {
+const BlogRichEditor = forwardRef<BlogRichEditorHandle, Props>(function BlogRichEditor(
+  { value, onChange, onUploadMedia },
+  ref,
+) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const skipPropSyncRef = useRef(false);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getHtml: () => {
+        const el = editorRef.current;
+        return String(el?.innerHTML ?? value ?? "").trim();
+      },
+    }),
+    [value],
+  );
 
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
-    if (el.innerHTML !== value) el.innerHTML = value || "";
+    if (skipPropSyncRef.current) {
+      skipPropSyncRef.current = false;
+      return;
+    }
+    const next = value || "";
+    if (el.innerHTML !== next) el.innerHTML = next;
   }, [value]);
 
   const sync = useCallback(() => {
     const el = editorRef.current;
-    if (el) onChange(el.innerHTML);
+    if (!el) return;
+    skipPropSyncRef.current = true;
+    onChange(el.innerHTML);
   }, [onChange]);
 
   const cmd = (command: string, val?: string) => {
@@ -123,4 +149,6 @@ export default function BlogRichEditor({ value, onChange, onUploadMedia }: Props
       />
     </div>
   );
-}
+});
+
+export default BlogRichEditor;
