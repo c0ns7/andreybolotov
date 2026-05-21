@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import BlogShellClient from "../../../components/ab/blog/BlogShellClient";
 
 export const metadata: Metadata = {
@@ -11,7 +12,9 @@ export default function HomeBlogPage() {
     <div className="app-shell app-shell--with-tabbar" id="app-shell">
       <div className="blog-page screen home-screen">
         <div className="blog-page__inner home-inner">
-          <BlogShellClient />
+          <Suspense fallback={<p className="blog-loading">Загрузка…</p>}>
+            <BlogShellClient />
+          </Suspense>
         </div>
       </div>
     </div>
