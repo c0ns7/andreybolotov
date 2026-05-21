@@ -548,6 +548,47 @@
     }
   }
 
+  function countPendingInCache() {
+    if (!paymentsRuntime.cache || !Array.isArray(paymentsRuntime.cache.payments)) return 0;
+    return paymentsRuntime.cache.payments.length;
+  }
+
+  function removeOrderFromPaymentsCache(orderId) {
+    var id = Number(orderId);
+    if (!Number.isFinite(id) || !paymentsRuntime.cache) return;
+    if (Array.isArray(paymentsRuntime.cache.payments)) {
+      paymentsRuntime.cache.payments = paymentsRuntime.cache.payments.filter(function (p) {
+        return Number(p.id) !== id;
+      });
+    }
+    if (paymentsRuntime.knownPendingIds) paymentsRuntime.knownPendingIds.delete(String(id));
+  }
+
+  function removeOrderFromActiveCache(orderId) {
+    var id = Number(orderId);
+    if (!Number.isFinite(id) || !paymentsRuntime.cache) return;
+    if (Array.isArray(paymentsRuntime.cache.active)) {
+      paymentsRuntime.cache.active = paymentsRuntime.cache.active.filter(function (p) {
+        return Number(p.id) !== id;
+      });
+    }
+  }
+
+  function updatePaymentsCountBadges() {
+    var nRes =
+      paymentsRuntime.cache && paymentsRuntime.cache.active ? paymentsRuntime.cache.active.length : 0;
+    var nPen = countPendingInCache();
+    var elR = document.querySelector('[data-payments-count="reserved"]');
+    var elP = document.querySelector('[data-payments-count="pending"]');
+    if (elR) elR.textContent = String(nRes);
+    if (elP) elP.textContent = String(nPen);
+  }
+
+  function syncPaymentsPoll() {
+    if (countPendingInCache() > 0) stopPaymentsPoll();
+    else startPaymentsPoll();
+  }
+
   function startPaymentsPoll() {
     stopPaymentsPoll();
     paymentsRuntime.pollTimer = setInterval(function () {
@@ -709,6 +750,7 @@
   function pollPaymentsQueue() {
     var s = loadSession();
     if (!s || !s.token || paymentsRuntime.loading) return;
+    if (countPendingInCache() > 0) return;
     fetch("/api/admin/raffle-payments", {
       headers: { Authorization: "Bearer " + s.token },
       cache: "no-store",
@@ -1061,7 +1103,12 @@
     var card = document.querySelector('.admin-payment-card[data-order-id="' + String(id) + '"]');
     if (!card) return;
     var section = card.closest("[data-payments-section]");
+    var kind = section && section.getAttribute("data-payments-section");
+    if (kind === "pending") removeOrderFromPaymentsCache(id);
+    else if (kind === "reserved") removeOrderFromActiveCache(id);
     card.remove();
+    updatePaymentsCountBadges();
+    syncPaymentsPoll();
     var mainEl = document.getElementById("admin-payments-main");
     if (mainEl) updatePaymentTabBadges(mainEl);
     if (section) {
@@ -1357,6 +1404,8 @@
             "</div>" +
             "</div>";
           bindPaymentsReloadButton(listEl);
+          paymentsRuntime.cache = { payments: [], active: [], history: [], historyHasMore: false, historyNextOffset: 0, historyTotal: 0 };
+          syncPaymentsPoll();
           return;
         }
 
@@ -1485,6 +1534,7 @@
         setInterval(paintWaitBadges, 30000);
         paintWaitBadges();
         paymentsRuntime.loading = false;
+        syncPaymentsPoll();
       })
       .catch(function (e) {
         paymentsRuntime.loading = false;
@@ -1905,12 +1955,10 @@
   window.abInitPayments = function () {
     if (window.__abPaymentsInited) {
       loadList(true);
-      startPaymentsPoll();
       return;
     }
     window.__abPaymentsInited = true;
     loadList(true);
-    startPaymentsPoll();
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         closePaymentsModal();

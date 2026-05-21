@@ -669,6 +669,12 @@ export default function AdminMarkup() {
               <div className="form-group">
                 <label htmlFor="raffle-cover-file">Обложка — файл</label>
                 <input id="raffle-cover-file" className="input input--file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+                <div className="admin-raffle-upload-progress" data-raffle-upload-progress="cover" hidden>
+                  <div className="admin-raffle-upload-progress__track" aria-hidden="true">
+                    <div className="admin-raffle-upload-progress__bar" />
+                  </div>
+                  <p className="admin-raffle-upload-progress__label" />
+                </div>
                 <p className="admin-raffle-field-hint">JPEG, PNG, WebP или GIF, до 5 МБ. Показывается сразу на главной.</p>
               </div>
               <div className="form-group">
@@ -683,6 +689,12 @@ export default function AdminMarkup() {
                   type="file"
                   accept="image/gif,video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm"
                 />
+                <div className="admin-raffle-upload-progress" data-raffle-upload-progress="gif" hidden>
+                  <div className="admin-raffle-upload-progress__track" aria-hidden="true">
+                    <div className="admin-raffle-upload-progress__bar" />
+                  </div>
+                  <p className="admin-raffle-upload-progress__label" />
+                </div>
                 <p className="admin-raffle-field-hint">
                   GIF до 5 МБ или MP4/WebM/MOV до 30 МБ. Сначала статичная обложка, затем анимация в фоне (видео без звука, с
                   повтором). Очистите поля, чтобы убрать.
@@ -805,6 +817,12 @@ export default function AdminMarkup() {
                   <div className="form-group">
                     <label htmlFor="raffle-qr-file">QR-код — файл</label>
                     <input id="raffle-qr-file" className="input input--file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+                    <div className="admin-raffle-upload-progress" data-raffle-upload-progress="qr" hidden>
+                      <div className="admin-raffle-upload-progress__track" aria-hidden="true">
+                        <div className="admin-raffle-upload-progress__bar" />
+                      </div>
+                      <p className="admin-raffle-upload-progress__label" />
+                    </div>
                     <p className="admin-raffle-field-hint">Загрузка заменит URL.</p>
                   </div>
                   <div className="form-group">

@@ -3132,3 +3132,31 @@ body.admin-pay-lightbox-open {
   padding: 6px 12px;
   font-size: 0.82rem;
 }
+
+.admin-raffle-upload-progress {
+  margin-top: 8px;
+}
+.admin-raffle-upload-progress__track {
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.admin-raffle-upload-progress__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7c3aed, #8b5cf6);
+  transition: width 0.15s ease;
+}
+.admin-raffle-upload-progress__label {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted, #6b7280);
+}
+.admin-raffle-upload-progress--error .admin-raffle-upload-progress__label {
+  color: #b91c1c;
+}
+.admin-raffle-upload-progress--done .admin-raffle-upload-progress__label {
+  color: #059669;
+}

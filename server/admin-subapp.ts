@@ -166,6 +166,36 @@ function isRaffleUploadVideo(mime: string, fileName: string): boolean {
   return /\.(mp4|webm|mov)$/i.test(fileName);
 }
 
+type RaffleUploadBlob = {
+  type?: string;
+  name?: string;
+  arrayBuffer?: () => Promise<ArrayBuffer>;
+  stream?: () => ReadableStream<Uint8Array>;
+};
+
+function pickRaffleUploadFile(body: Record<string, unknown>): RaffleUploadBlob | null {
+  let raw: unknown = body["file"];
+  if (Array.isArray(raw)) raw = raw[raw.length - 1];
+  if (!raw || typeof raw !== "object") return null;
+  const blob = raw as RaffleUploadBlob;
+  if (typeof blob.arrayBuffer !== "function" && typeof blob.stream !== "function") return null;
+  return blob;
+}
+
+async function readRaffleUploadBuffer(blob: RaffleUploadBlob): Promise<Buffer | null> {
+  try {
+    if (typeof blob.arrayBuffer === "function") {
+      return Buffer.from(await blob.arrayBuffer());
+    }
+    if (typeof blob.stream === "function") {
+      return Buffer.from(await new Response(blob.stream()).arrayBuffer());
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function extForRaffleUpload(mime: string, fileName: string): string | null {
   const m = mime.toLowerCase().split(";")[0].trim();
   const byMime: Record<string, string> = {
@@ -177,6 +207,13 @@ function extForRaffleUpload(mime: string, fileName: string): string | null {
     "video/mp4": ".mp4",
     "video/webm": ".webm",
     "video/quicktime": ".mov",
+    "application/octet-stream": /\.mp4$/i.test(fileName)
+      ? ".mp4"
+      : /\.webm$/i.test(fileName)
+        ? ".webm"
+        : /\.mov$/i.test(fileName)
+          ? ".mov"
+          : null,
   };
   if (byMime[m]) return byMime[m];
   const low = fileName.toLowerCase();
@@ -1156,27 +1193,20 @@ adminSubApp.post("/raffles/upload", async (c) => {
   if (auth instanceof Response) return auth;
   let body: Record<string, unknown>;
   try {
-    body = await c.req.parseBody({ all: true });
+    body = await c.req.parseBody();
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
-    if (/size|limit|large|memory|exceed/i.test(msg)) {
-      return c.json({ error: "Файл слишком большой (видео — до 30 МБ)" }, 400);
+    if (/413|payload too large|entity too large|file too large|body exceeded/i.test(msg)) {
+      return c.json({ error: "Файл слишком большой (видео — до 30 МБ)" }, 413);
     }
-    return c.json({ error: "Не удалось прочитать файл. Попробуйте снова или уменьшите размер." }, 400);
+    return c.json({ error: "Не удалось прочитать файл. Попробуйте снова." }, 400);
   }
-  const raw = body["file"];
-  if (!raw || typeof raw !== "object") {
+  const blob = pickRaffleUploadFile(body);
+  if (!blob) {
     return c.json({ error: "Нет файла" }, 400);
   }
-  const blob = raw as { type?: string; name?: string; arrayBuffer?: () => Promise<ArrayBuffer> };
-  if (typeof blob.arrayBuffer !== "function") {
-    return c.json({ error: "Некорректный файл" }, 400);
-  }
-  let buffer: Buffer;
-  try {
-    const ab = await blob.arrayBuffer();
-    buffer = Buffer.from(ab);
-  } catch {
+  const buffer = await readRaffleUploadBuffer(blob);
+  if (!buffer) {
     return c.json({ error: "Не удалось прочитать файл" }, 400);
   }
   const mime = String(blob.type || "").toLowerCase();

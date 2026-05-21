@@ -27,6 +27,167 @@
   let raffleSingleCheckReqId = 0;
   let raffleSingleTicketIsFree = false;
 
+  /** @type {{ cover: RaffleUploadSlot, gif: RaffleUploadSlot, qr: RaffleUploadSlot }} */
+  var raffleUploadState = {
+    cover: { busy: false, progress: 0, doneKey: "", error: "" },
+    gif: { busy: false, progress: 0, doneKey: "", error: "" },
+    qr: { busy: false, progress: 0, doneKey: "", error: "" },
+  };
+
+  /** @typedef {{ busy: boolean, progress: number, doneKey: string, error: string }} RaffleUploadSlot */
+
+  function raffleFileKey(file) {
+    return String(file.name || "") + ":" + String(file.size) + ":" + String(file.lastModified);
+  }
+
+  function resetRaffleUploadState() {
+    ["cover", "gif", "qr"].forEach(function (kind) {
+      raffleUploadState[kind] = { busy: false, progress: 0, doneKey: "", error: "" };
+      paintRaffleUploadProgress(kind);
+    });
+    updateRaffleFormSaveState();
+  }
+
+  function paintRaffleUploadProgress(kind) {
+    var wrap = document.querySelector('[data-raffle-upload-progress="' + kind + '"]');
+    if (!wrap) return;
+    var st = raffleUploadState[kind];
+    var show = st.busy || st.error || st.progress >= 1;
+    wrap.hidden = !show;
+    wrap.classList.toggle("admin-raffle-upload-progress--error", !!st.error);
+    wrap.classList.toggle("admin-raffle-upload-progress--done", !st.busy && !st.error && st.progress >= 1);
+    var bar = wrap.querySelector(".admin-raffle-upload-progress__bar");
+    var label = wrap.querySelector(".admin-raffle-upload-progress__label");
+    var pct = Math.max(0, Math.min(100, Math.round(st.progress * 100)));
+    if (bar) bar.style.width = pct + "%";
+    if (label) {
+      if (st.error) label.textContent = st.error;
+      else if (st.busy) label.textContent = "Загрузка… " + pct + "%";
+      else if (st.progress >= 1) label.textContent = "Загружено";
+      else label.textContent = "";
+    }
+  }
+
+  function updateRaffleFormSaveState() {
+    var btn = document.getElementById("btn-raffle-submit");
+    if (!btn) return;
+    var uploading =
+      raffleUploadState.cover.busy || raffleUploadState.gif.busy || raffleUploadState.qr.busy;
+    btn.disabled = uploading;
+    btn.setAttribute("aria-disabled", uploading ? "true" : "false");
+  }
+
+  function validateRaffleAnimFile(file) {
+    var gifMime = String(file.type || "").toLowerCase();
+    var gifName = String(file.name || "").toLowerCase();
+    var isAnimVideo = gifMime.startsWith("video/") || /\.(mp4|webm|mov)$/.test(gifName);
+    var okAnim = gifMime === "image/gif" || isAnimVideo;
+    if (!okAnim) throw new Error("Анимация: загрузите GIF или видео MP4 / WebM / MOV");
+    if (isAnimVideo && file.size > 30 * 1024 * 1024) throw new Error("Видео не больше 30 МБ");
+    if (!isAnimVideo && file.size > 5 * 1024 * 1024) throw new Error("GIF не больше 5 МБ");
+  }
+
+  function validateRaffleImageFile(file) {
+    if (file.size > 5 * 1024 * 1024) throw new Error("Файл не больше 5 МБ");
+  }
+
+  function uploadFileWithProgress(file, kind) {
+    return new Promise(function (resolve, reject) {
+      var st = raffleUploadState[kind];
+      st.busy = true;
+      st.progress = 0;
+      st.error = "";
+      paintRaffleUploadProgress(kind);
+      updateRaffleFormSaveState();
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/admin/raffles/upload");
+      var headers = authHeaders();
+      Object.keys(headers).forEach(function (k) {
+        xhr.setRequestHeader(k, headers[k]);
+      });
+      xhr.upload.onprogress = function (ev) {
+        if (!ev.lengthComputable) return;
+        st.progress = ev.loaded / ev.total;
+        paintRaffleUploadProgress(kind);
+      };
+      xhr.onload = function () {
+        st.busy = false;
+        var data = {};
+        try {
+          data = JSON.parse(xhr.responseText || "{}");
+        } catch {}
+        if (xhr.status >= 200 && xhr.status < 300 && data.url) {
+          st.progress = 1;
+          st.doneKey = raffleFileKey(file);
+          paintRaffleUploadProgress(kind);
+          updateRaffleFormSaveState();
+          resolve(data.url);
+          return;
+        }
+        var errMsg = data.error || "Ошибка загрузки";
+        if (xhr.status === 413) errMsg = "Файл слишком большой (видео — до 30 МБ)";
+        st.error = errMsg;
+        st.progress = 0;
+        paintRaffleUploadProgress(kind);
+        updateRaffleFormSaveState();
+        reject(new Error(errMsg));
+      };
+      xhr.onerror = function () {
+        st.busy = false;
+        st.error = "Сеть недоступна";
+        paintRaffleUploadProgress(kind);
+        updateRaffleFormSaveState();
+        reject(new Error("Сеть недоступна"));
+      };
+      var fd = new FormData();
+      fd.append("file", file);
+      xhr.send(fd);
+    });
+  }
+
+  function startRaffleFileUpload(kind, file, urlInputId) {
+    var key = raffleFileKey(file);
+    var st = raffleUploadState[kind];
+    if (st.busy) return;
+    if (st.doneKey === key) return;
+    st.doneKey = "";
+    uploadFileWithProgress(file, kind)
+      .then(function (url) {
+        var urlEl = document.getElementById(urlInputId);
+        if (urlEl) urlEl.value = url;
+      })
+      .catch(function (err) {
+        alert((err && err.message) || "Ошибка загрузки");
+      });
+  }
+
+  function bindRaffleFileUpload(inputId, kind, urlInputId, validateFn) {
+    var input = document.getElementById(inputId);
+    if (!input || input.getAttribute("data-upload-bound") === "1") return;
+    input.setAttribute("data-upload-bound", "1");
+    input.addEventListener("change", function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      try {
+        if (validateFn) validateFn(file);
+      } catch (e) {
+        alert((e && e.message) || "Некорректный файл");
+        input.value = "";
+        return;
+      }
+      startRaffleFileUpload(kind, file, urlInputId);
+    });
+  }
+
+  function raffleFilePendingUpload(inputId, kind) {
+    var input = document.getElementById(inputId);
+    var file = input && input.files && input.files[0];
+    if (!file) return false;
+    var st = raffleUploadState[kind];
+    if (st.busy) return true;
+    return st.doneKey !== raffleFileKey(file);
+  }
+
   function loadSession() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -702,25 +863,6 @@
     }
   }
 
-  async function uploadFile(file) {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/admin/raffles/upload", {
-      method: "POST",
-      headers: authHeaders(),
-      body: fd,
-    });
-    const data = await res.json().catch(function () {
-      return {};
-    });
-    if (!res.ok) {
-      var errMsg = data.error || "Ошибка загрузки";
-      if (res.status === 413) errMsg = "Файл слишком большой (видео — до 30 МБ)";
-      throw new Error(errMsg);
-    }
-    return data.url;
-  }
-
   function openForm(editId) {
     if (!modalForm || !form) return;
     const edit = editId != null ? getRaffle(editId) : null;
@@ -857,6 +999,7 @@
     if (cf) cf.value = "";
     if (gf) gf.value = "";
     if (qf) qf.value = "";
+    resetRaffleUploadState();
     renderBankCardsFromEdit(edit);
     setPayTab("sber");
     syncPayMethodSettingsState();
@@ -1242,7 +1385,9 @@
   function setFormLoading(loading) {
     var btn = document.getElementById("btn-raffle-submit");
     var label = document.getElementById("btn-raffle-submit-label");
-    if (btn) btn.disabled = !!loading;
+    var uploading =
+      raffleUploadState.cover.busy || raffleUploadState.gif.busy || raffleUploadState.qr.busy;
+    if (btn) btn.disabled = !!loading || uploading;
     if (label) label.textContent = loading ? "Сохранение…" : "Сохранить";
   }
 
@@ -1627,35 +1772,19 @@
       return el ? String(el.value || "").trim() : "";
     })();
     let qrUrl = document.getElementById("raffle-qr-url").value.trim();
-    let coverFile = document.getElementById("raffle-cover-file").files[0];
-    let gifFile = document.getElementById("raffle-cover-gif-file") && document.getElementById("raffle-cover-gif-file").files[0];
-    let qrFile = document.getElementById("raffle-qr-file").files[0];
-    setFormLoading(true);
-    try {
-      if (coverFile) coverUrl = await uploadFile(coverFile);
-      if (gifFile) {
-        var gifMime = String(gifFile.type || "").toLowerCase();
-        var gifName = String(gifFile.name || "").toLowerCase();
-        var isAnimVideo =
-          gifMime.startsWith("video/") || /\.(mp4|webm|mov)$/.test(gifName);
-        var okAnim = gifMime === "image/gif" || isAnimVideo;
-        if (!okAnim) {
-          throw new Error("Анимация: загрузите GIF или видео MP4 / WebM / MOV");
-        }
-        if (isAnimVideo && gifFile.size > 30 * 1024 * 1024) {
-          throw new Error("Видео не больше 30 МБ");
-        }
-        if (!isAnimVideo && gifFile.size > 5 * 1024 * 1024) {
-          throw new Error("GIF не больше 5 МБ");
-        }
-        gifUrl = await uploadFile(gifFile);
-      }
-      if (qrFile) qrUrl = await uploadFile(qrFile);
-    } catch (err) {
-      setFormLoading(false);
-      alert(err.message || "Ошибка загрузки файла");
+    if (raffleFilePendingUpload("raffle-cover-file", "cover")) {
+      alert("Дождитесь окончания загрузки обложки");
       return;
     }
+    if (raffleFilePendingUpload("raffle-cover-gif-file", "gif")) {
+      alert("Дождитесь окончания загрузки анимации");
+      return;
+    }
+    if (raffleFilePendingUpload("raffle-qr-file", "qr")) {
+      alert("Дождитесь окончания загрузки QR-кода");
+      return;
+    }
+    setFormLoading(true);
     let bank_cards;
     try {
       bank_cards = collectBankCardsPayload();
@@ -1839,4 +1968,8 @@
     if (!wrap.querySelector("[data-bank-card-row]")) wrap.innerHTML = "";
     wrap.insertAdjacentHTML("beforeend", bankCardRowHtml({ daily_max_orders: 0 }));
   });
+
+  bindRaffleFileUpload("raffle-cover-file", "cover", "raffle-cover-url", validateRaffleImageFile);
+  bindRaffleFileUpload("raffle-cover-gif-file", "gif", "raffle-cover-gif-url", validateRaffleAnimFile);
+  bindRaffleFileUpload("raffle-qr-file", "qr", "raffle-qr-url", validateRaffleImageFile);
 })();
