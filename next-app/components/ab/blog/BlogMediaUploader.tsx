@@ -9,6 +9,8 @@ export type BlogUploadProgress = {
   name: string;
   progress: number;
   busy: boolean;
+  /** Файл отправлен, сервер сохраняет на диск */
+  processing?: boolean;
   error: string;
   done: boolean;
 };
@@ -73,7 +75,15 @@ export default function BlogMediaUploader({
                 />
               </div>
               <span className="blog-media-uploader__progress-label">
-                {u.error || (u.busy ? "Загрузка… " + Math.round(u.progress * 100) + "%" : u.done ? "Готово" : "")}
+                {u.error
+                  ? u.error
+                  : u.processing
+                    ? "Сохранение на сервере…"
+                    : u.busy
+                      ? "Загрузка… " + Math.round(u.progress * 100) + "%"
+                      : u.done
+                        ? "Готово"
+                        : ""}
               </span>
             </li>
           ))}

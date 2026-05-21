@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
+import { abDirectHttpOrigin, blogUploadApiUrl, uploadTimeoutMs } from "../../../lib/ab-upload-api";
 import { prefetchMediaList } from "../../../lib/ab-media-cache";
 import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
 import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
@@ -275,39 +276,86 @@ function BlogPageClientInner() {
   const uploadOneFile = (file: File, localId: string) =>
     new Promise<{ url: string; mime: string } | null>((resolve) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/admin/blog/upload");
+      const uploadUrl = blogUploadApiUrl();
+      xhr.open("POST", uploadUrl);
+      xhr.timeout = uploadTimeoutMs(file.size);
       xhr.setRequestHeader("Authorization", "Bearer " + token);
+      const markProcessing = () => {
+        setMediaUploads((list) =>
+          list.map((u) =>
+            u.localId === localId ? { ...u, busy: true, processing: true, progress: Math.max(u.progress, 0.92) } : u,
+          ),
+        );
+      };
       xhr.upload.onprogress = (ev) => {
-        const p =
+        const raw =
           ev.lengthComputable && ev.total > 0
             ? ev.loaded / ev.total
             : file.size > 0
-              ? Math.min(0.95, ev.loaded / file.size)
+              ? ev.loaded / file.size
               : 0.05;
+        const p = Math.min(0.9, Math.max(0.02, raw));
         setMediaUploads((list) =>
-          list.map((u) => (u.localId === localId ? { ...u, progress: Math.max(0.02, p), busy: true } : u)),
+          list.map((u) =>
+            u.localId === localId ? { ...u, progress: p, busy: true, processing: false, error: "" } : u,
+          ),
         );
       };
+      xhr.upload.onload = markProcessing;
       xhr.onload = () => {
-        const data = JSON.parse(xhr.responseText || "{}") as { url?: string; mime?: string; error?: string };
+        let data: { url?: string; mime?: string; error?: string } = {};
+        try {
+          data = JSON.parse(xhr.responseText || "{}") as { url?: string; mime?: string; error?: string };
+        } catch {
+          data = {};
+        }
         if (xhr.status >= 200 && xhr.status < 300 && data.url) {
           setMediaUploads((list) =>
             list.map((u) =>
-              u.localId === localId ? { ...u, busy: false, progress: 1, done: true, error: "" } : u,
+              u.localId === localId
+                ? { ...u, busy: false, processing: false, progress: 1, done: true, error: "" }
+                : u,
             ),
           );
           resolve({ url: data.url, mime: String(data.mime || file.type) });
           return;
         }
-        const err = data.error || "Ошибка загрузки";
+        let err = data.error || "Ошибка загрузки";
+        if (xhr.status === 413) {
+          err = data.error || "Файл слишком большой. Проверьте nginx: client_max_body_size 500M.";
+        } else if (xhr.status === 0) {
+          err = abDirectHttpOrigin()
+            ? "Не удалось связаться с API. Проверьте NEXT_PUBLIC_AB_HTTP_ORIGIN и CORS."
+            : "Сервер не ответил. Для видео >50 МБ задайте NEXT_PUBLIC_AB_HTTP_ORIGIN на URL Fastify (порт 8787).";
+        }
         setMediaUploads((list) =>
-          list.map((u) => (u.localId === localId ? { ...u, busy: false, error: err, progress: 0 } : u)),
+          list.map((u) =>
+            u.localId === localId ? { ...u, busy: false, processing: false, error: err, progress: 0 } : u,
+          ),
         );
         resolve(null);
       };
       xhr.onerror = () => {
         setMediaUploads((list) =>
-          list.map((u) => (u.localId === localId ? { ...u, busy: false, error: "Сеть недоступна" } : u)),
+          list.map((u) =>
+            u.localId === localId ? { ...u, busy: false, processing: false, error: "Сеть недоступна" } : u,
+          ),
+        );
+        resolve(null);
+      };
+      xhr.ontimeout = () => {
+        setMediaUploads((list) =>
+          list.map((u) =>
+            u.localId === localId
+              ? {
+                  ...u,
+                  busy: false,
+                  processing: false,
+                  error: "Таймаут. Для больших видео укажите NEXT_PUBLIC_AB_HTTP_ORIGIN и увеличьте proxy_read_timeout в nginx.",
+                  progress: 0,
+                }
+              : u,
+          ),
         );
         resolve(null);
       };

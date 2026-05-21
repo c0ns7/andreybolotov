@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** До 10 мин на приём большого видео при прокси через Next */
+export const maxDuration = 600;
 
 function upstreamOrigin(): string {
   return (process.env.AB_UPSTREAM_ORIGIN || "http://127.0.0.1:8787").replace(/\/$/, "");

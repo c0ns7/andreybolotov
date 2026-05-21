@@ -267,17 +267,19 @@ function parseChatMessagePayload(body: { body?: string; attachment?: unknown }):
 
 const host = process.env.API_HOST || "0.0.0.0";
 const port = Number(process.env.API_PORT || 8787);
+const MULTIPART_MAX_FILE_BYTES = BLOG_UPLOAD_MAX_VIDEO_BYTES + 5 * 1024 * 1024;
 
 const app = Fastify({
   logger: true,
+  /** Большие видео в блоге: до ~10 мин на приём и запись файла */
+  requestTimeout: 600_000,
+  bodyLimit: MULTIPART_MAX_FILE_BYTES + 1024 * 1024,
 });
 
 await app.register(cors, {
   origin: true,
   credentials: true,
 });
-
-const MULTIPART_MAX_FILE_BYTES = BLOG_UPLOAD_MAX_VIDEO_BYTES + 5 * 1024 * 1024;
 
 await app.register(multipart, {
   limits: {
