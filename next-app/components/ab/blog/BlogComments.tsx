@@ -1,9 +1,10 @@
 "use client";
 
 import { Heart, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { abApiJson } from "../../../lib/ab-api";
 import type { BlogComment, BlogCommentSort } from "../../../lib/ab-blog-types";
+import { BLOG_COMMENTS_PAGE_SIZE } from "../../../lib/ab-blog-types";
 
 function formatCommentTime(ms: number) {
   const diff = Date.now() - ms;
@@ -33,6 +34,10 @@ function avatarHue(name: string) {
   return h;
 }
 
+function sortTop(list: BlogComment[]) {
+  return [...list].sort((a, b) => b.like_count - a.like_count || b.created_at - a.created_at);
+}
+
 type Props = {
   postId: number;
   totalCount: number;
@@ -57,28 +62,85 @@ export default function BlogComments({
   const [sort, setSort] = useState<BlogCommentSort>("top");
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [likingId, setLikingId] = useState<number | null>(null);
 
-  const loadComments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await abApiJson<{ comments: BlogComment[] }>(
-        `/api/blog/posts/${postId}/comments?sort=${sort}`,
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreLock = useRef(false);
+  const offsetRef = useRef(0);
+
+  const fetchPage = useCallback(
+    async (offset: number, append: boolean) => {
+      const data = await abApiJson<{
+        comments: BlogComment[];
+        has_more: boolean;
+      }>(
+        `/api/blog/posts/${postId}/comments?sort=${sort}&limit=${BLOG_COMMENTS_PAGE_SIZE}&offset=${offset}`,
         { headers },
       );
-      setComments(data.comments || []);
+      const batch = data.comments || [];
+      setHasMore(!!data.has_more);
+      offsetRef.current = offset + batch.length;
+      setComments((prev) => {
+        if (!append) return batch;
+        const seen = new Set(prev.map((c) => c.id));
+        const merged = [...prev];
+        for (const c of batch) {
+          if (!seen.has(c.id)) merged.push(c);
+        }
+        return merged;
+      });
+    },
+    [postId, sort, headers],
+  );
+
+  const loadInitial = useCallback(async () => {
+    setLoading(true);
+    setHasMore(false);
+    offsetRef.current = 0;
+    try {
+      await fetchPage(0, false);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Не удалось загрузить комментарии", "error");
+      setComments([]);
     } finally {
       setLoading(false);
     }
-  }, [postId, sort, headers, toast]);
+  }, [fetchPage, toast]);
+
+  const loadMore = useCallback(async () => {
+    if (loadMoreLock.current || loading || loadingMore || !hasMore) return;
+    loadMoreLock.current = true;
+    setLoadingMore(true);
+    try {
+      await fetchPage(offsetRef.current, true);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Не удалось подгрузить", "error");
+    } finally {
+      setLoadingMore(false);
+      loadMoreLock.current = false;
+    }
+  }, [fetchPage, hasMore, loading, loadingMore, toast]);
 
   useEffect(() => {
-    void loadComments();
-  }, [loadComments, refreshKey]);
+    void loadInitial();
+  }, [loadInitial, refreshKey]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || loading) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { root: null, rootMargin: "120px 0px", threshold: 0 },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [loadMore, loading, hasMore, comments.length]);
 
   const sendComment = async () => {
     if (!draft.trim() || sending) return;
@@ -91,12 +153,11 @@ export default function BlogComments({
       });
       if (data.comment) {
         setComments((list) => {
-          const next = sort === "new" ? [data.comment, ...list] : [...list, data.comment];
-          if (sort !== "top") return next;
-          return [...next].sort(
-            (a, b) => b.like_count - a.like_count || b.created_at - a.created_at,
-          );
+          if (list.some((c) => c.id === data.comment.id)) return list;
+          const next = sort === "new" ? [data.comment, ...list] : sortTop([...list, data.comment]);
+          return next;
         });
+        offsetRef.current += 1;
         onCountChange(totalCount + 1);
       }
       setDraft("");
@@ -120,9 +181,7 @@ export default function BlogComments({
           c.id === comment.id ? { ...c, liked_by_me: data.liked, like_count: data.like_count } : c,
         );
         if (sort !== "top") return next;
-        return [...next].sort(
-          (a, b) => b.like_count - a.like_count || b.created_at - a.created_at,
-        );
+        return sortTop(next);
       });
     } catch (e) {
       toast(e instanceof Error ? e.message : "Ошибка", "error");
@@ -136,6 +195,7 @@ export default function BlogComments({
     try {
       await abApiJson(`/api/blog/comments/${commentId}`, { method: "DELETE", headers });
       setComments((list) => list.filter((c) => c.id !== commentId));
+      offsetRef.current = Math.max(0, offsetRef.current - 1);
       onCountChange(Math.max(0, totalCount - 1));
       toast("Комментарий удалён", "success");
     } catch (e) {
@@ -189,60 +249,70 @@ export default function BlogComments({
           ))}
         </ul>
       ) : comments.length ? (
-        <ul className="blog-cmt__list">
-          {comments.map((c) => {
-            const canDelete = isAdmin || (sessionUserId > 0 && Number(c.user_id) === sessionUserId);
-            const name = c.user_name || "Участник";
-            const hue = avatarHue(name);
-            return (
-              <li key={c.id} className="blog-cmt__item">
-                <article className="blog-cmt__card">
-                  <div
-                    className="blog-cmt__avatar"
-                    style={{ background: `hsl(${hue} 68% 48%)` }}
-                    aria-hidden="true"
-                  >
-                    {name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="blog-cmt__main">
-                    <header className="blog-cmt__meta">
-                      <span className="blog-cmt__author">{name}</span>
-                      <time className="blog-cmt__time" dateTime={new Date(c.created_at).toISOString()}>
-                        {formatCommentTime(c.created_at)}
-                      </time>
-                    </header>
-                    <p className="blog-cmt__text">{c.body}</p>
-                    <footer className="blog-cmt__actions">
-                      <button
-                        type="button"
-                        className={
-                          "blog-cmt__like" + (c.liked_by_me ? " is-liked" : "") + (likingId === c.id ? " is-busy" : "")
-                        }
-                        onClick={() => void toggleCommentLike(c)}
-                        aria-pressed={c.liked_by_me}
-                        aria-label={c.liked_by_me ? "Убрать лайк" : "Нравится"}
-                        disabled={likingId === c.id}
-                      >
-                        <Heart size={16} fill={c.liked_by_me ? "currentColor" : "none"} aria-hidden="true" />
-                        <span>{c.like_count > 0 ? c.like_count : "Нравится"}</span>
-                      </button>
-                      {canDelete ? (
+        <>
+          <ul className="blog-cmt__list">
+            {comments.map((c) => {
+              const canDelete = isAdmin || (sessionUserId > 0 && Number(c.user_id) === sessionUserId);
+              const name = c.user_name || "Участник";
+              const hue = avatarHue(name);
+              return (
+                <li key={c.id} className="blog-cmt__item">
+                  <article className="blog-cmt__card">
+                    <div
+                      className="blog-cmt__avatar"
+                      style={{ background: `hsl(${hue} 68% 48%)` }}
+                      aria-hidden="true"
+                    >
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="blog-cmt__main">
+                      <header className="blog-cmt__meta">
+                        <span className="blog-cmt__author">{name}</span>
+                        <time className="blog-cmt__time" dateTime={new Date(c.created_at).toISOString()}>
+                          {formatCommentTime(c.created_at)}
+                        </time>
+                      </header>
+                      <p className="blog-cmt__text">{c.body}</p>
+                      <footer className="blog-cmt__actions">
                         <button
                           type="button"
-                          className="blog-cmt__delete"
-                          aria-label="Удалить комментарий"
-                          onClick={() => void deleteComment(c.id)}
+                          className={
+                            "blog-cmt__like" +
+                            (c.liked_by_me ? " is-liked" : "") +
+                            (likingId === c.id ? " is-busy" : "")
+                          }
+                          onClick={() => void toggleCommentLike(c)}
+                          aria-pressed={c.liked_by_me}
+                          aria-label={c.liked_by_me ? "Убрать лайк" : "Нравится"}
+                          disabled={likingId === c.id}
                         >
-                          <Trash2 size={15} aria-hidden="true" />
+                          <Heart size={16} fill={c.liked_by_me ? "currentColor" : "none"} aria-hidden="true" />
+                          <span>{c.like_count > 0 ? c.like_count : "Нравится"}</span>
                         </button>
-                      ) : null}
-                    </footer>
-                  </div>
-                </article>
-              </li>
-            );
-          })}
-        </ul>
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            className="blog-cmt__delete"
+                            aria-label="Удалить комментарий"
+                            onClick={() => void deleteComment(c.id)}
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </footer>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+          <div ref={sentinelRef} className="blog-cmt__sentinel" aria-hidden="true" />
+          {loadingMore ? (
+            <p className="blog-cmt__more" role="status">
+              Загрузка…
+            </p>
+          ) : null}
+        </>
       ) : (
         <p className="blog-cmt__empty">Пока нет комментариев — напишите первым.</p>
       )}

@@ -625,18 +625,25 @@ export async function listBlogComments(
   postId: number,
   viewerUserId: number,
   sort: BlogCommentSort = "top",
+  opts: { limit?: number; offset?: number } = {},
 ) {
+  const limit = Math.min(40, Math.max(1, Math.floor(Number(opts.limit) || 12)));
+  const offset = Math.max(0, Math.floor(Number(opts.offset) || 0));
+  const fetchLimit = limit + 1;
   const order =
     sort === "new"
-      ? "c.created_at DESC"
-      : "COALESCE(lc.cnt, 0) DESC, c.created_at DESC";
+      ? "c.created_at DESC, c.id DESC"
+      : "COALESCE(lc.cnt, 0) DESC, c.created_at DESC, c.id DESC";
   const rows = await pgAll<BlogCommentRow>(
     `${BLOG_COMMENT_SELECT}
      WHERE c.post_id = ? AND c.hidden = 0
-     ORDER BY ${order}`,
-    [viewerUserId, postId],
+     ORDER BY ${order}
+     LIMIT ? OFFSET ?`,
+    [viewerUserId, postId, fetchLimit, offset],
   );
-  return rows.map(mapBlogCommentRow);
+  const has_more = rows.length > limit;
+  const comments = rows.slice(0, limit).map(mapBlogCommentRow);
+  return { comments, has_more, limit, offset };
 }
 
 export async function getBlogCommentById(commentId: number, viewerUserId: number) {

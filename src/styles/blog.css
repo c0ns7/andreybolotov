@@ -58,6 +58,8 @@ html.js-blog-post-reading .blog-page__inner {
   margin-top: 0;
   background: linear-gradient(to bottom, color-mix(in srgb, var(--bg, #f8fafc) 92%, transparent) 75%, transparent);
   backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
 }
 
 .blog-page__back {
@@ -873,6 +875,26 @@ html.js-blog-post-reading .blog-page__inner {
   color: #64748b;
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+.blog-cmt__sentinel {
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.blog-cmt__more {
+  margin: 0 0 12px;
+  padding: 8px 0 4px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.blog-cmt__more--hint {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .blog-cmt__composer {

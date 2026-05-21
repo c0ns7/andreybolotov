@@ -32,6 +32,9 @@ export type BlogPost = {
 
 export type BlogCommentSort = "top" | "new";
 
+/** Сколько комментариев подгружать за один запрос. */
+export const BLOG_COMMENTS_PAGE_SIZE = 12;
+
 export type BlogComment = {
   id: number;
   post_id: number;

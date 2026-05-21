@@ -1715,10 +1715,15 @@ app.get("/api/blog/posts/:id/comments", async (request, reply) => {
   if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
-  const q = (request.query ?? {}) as { sort?: string };
+  const q = (request.query ?? {}) as { sort?: string; limit?: string; offset?: string };
   const sort = String(q.sort || "top") === "new" ? "new" : "top";
-  const comments = await listBlogComments(id, user.id, sort);
-  return { comments, sort };
+  const limit = Number(q.limit);
+  const offset = Number(q.offset);
+  const res = await listBlogComments(id, user.id, sort, {
+    limit: Number.isFinite(limit) ? limit : undefined,
+    offset: Number.isFinite(offset) ? offset : undefined,
+  });
+  return { ...res, sort };
 });
 
 app.post("/api/blog/comments/:commentId/like", async (request, reply) => {
