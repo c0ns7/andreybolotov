@@ -186,6 +186,10 @@ html.has-cart-action-strip .app-shell--with-tabbar {
   display: none !important;
 }
 
+html.js-blog-post-reading .bottom-nav {
+  display: none !important;
+}
+
 .screen {
   flex: 1;
   display: flex;

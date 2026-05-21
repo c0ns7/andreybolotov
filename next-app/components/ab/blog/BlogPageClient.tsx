@@ -168,6 +168,13 @@ function BlogPageClientInner() {
   }, [canUseBlog, loadPosts]);
 
   useEffect(() => {
+    const root = document.documentElement;
+    if (readPost) root.classList.add("js-blog-post-reading");
+    else root.classList.remove("js-blog-post-reading");
+    return () => root.classList.remove("js-blog-post-reading");
+  }, [readPost]);
+
+  useEffect(() => {
     if (!readPost) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setReadPost(null);
@@ -175,6 +182,10 @@ function BlogPageClientInner() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [readPost]);
+
+  const scrollToComments = () => {
+    document.getElementById("comments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const syncBlogUnreadNav = () => {
     invalidateAbBlogUnreadCache();
@@ -544,6 +555,28 @@ function BlogPageClientInner() {
             />
           ) : null}
         </div>
+
+        {readPost.status === "published" ? (
+          <footer className="blog-article__bar" aria-label="Быстрые действия">
+            <button
+              type="button"
+              className={"blog-article__bar-btn" + (readPost.liked_by_me ? " is-liked" : "")}
+              onClick={() => void toggleLike(readPost)}
+              aria-label="Нравится"
+              aria-pressed={readPost.liked_by_me}
+            >
+              <Heart size={22} fill={readPost.liked_by_me ? "currentColor" : "none"} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="blog-article__bar-btn"
+              onClick={scrollToComments}
+              aria-label={`Комментарии (${readPost.comment_count})`}
+            >
+              <MessageCircle size={22} aria-hidden="true" />
+            </button>
+          </footer>
+        ) : null}
       </article>,
     );
   }
