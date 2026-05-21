@@ -2,7 +2,12 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { getRequestListener } from "@hono/node-server";
-import { adminSubApp, getAdminUserFromAuthHeader, saveRaffleUploadBuffer } from "../../server/admin-subapp.js";
+import {
+  adminSubApp,
+  getAdminUserFromAuthHeader,
+  saveBlogUploadBuffer,
+  saveRaffleUploadBuffer,
+} from "../../server/admin-subapp.js";
 import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
@@ -397,6 +402,43 @@ app.post("/api/admin/raffles/upload", async (request, reply) => {
   return { url: saved.url, mime: saved.mime };
 });
 
+app.post("/api/admin/blog/upload", async (request, reply) => {
+  const auth = request.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return reply.code(401).send({ error: "Не авторизован" });
+  }
+  const admin = await getAdminUserFromAuthHeader(auth);
+  if (!admin) {
+    return reply.code(403).send({ error: "Недостаточно прав" });
+  }
+  let part;
+  try {
+    part = await request.file();
+  } catch (err) {
+    const code = err && typeof err === "object" && "statusCode" in err ? Number(err.statusCode) : 0;
+    if (code === 413) return reply.code(413).send({ error: "Файл слишком большой" });
+    return reply.code(400).send({ error: "Не удалось прочитать файл" });
+  }
+  if (!part) return reply.code(400).send({ error: "Нет файла" });
+  const mime = String(part.mimetype || "").toLowerCase();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  const cap = 55 * 1024 * 1024;
+  try {
+    for await (const chunk of part.file) {
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += b.length;
+      if (total > cap) return reply.code(413).send({ error: "Файл слишком большой" });
+      chunks.push(b);
+    }
+  } catch {
+    return reply.code(400).send({ error: "Не удалось прочитать файл" });
+  }
+  const saved = await saveBlogUploadBuffer(Buffer.concat(chunks), mime);
+  if (!saved.ok) return reply.code(saved.status).send({ error: saved.error });
+  return { url: saved.url, mime: saved.mime };
+});
+
 await app.register(
   async function adminHonoBridge(f) {
     f.all("/*", async (request, reply) => {
@@ -545,6 +587,7 @@ app.get("/api/site/status", async (_request, reply) => {
   const settings = await getSiteSettings();
   return {
     maintenance: settings.maintenance_enabled,
+    blog_enabled: settings.blog_enabled,
   };
 });
 
@@ -1599,9 +1642,17 @@ app.post("/api/raffles/orders/:orderId/receipt", async (request, reply) => {
   };
 });
 
+async function requireBlogPublic(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply, user: { role?: string }) {
+  const site = await getSiteSettings();
+  if (site.blog_enabled || String(user.role) === "admin") return true;
+  void reply.code(403).send({ error: "Блог временно недоступен", code: "blog_disabled" });
+  return false;
+}
+
 app.get("/api/blog/posts", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const q = request.query as { sort?: string; q?: string; tag?: string; limit?: string; offset?: string };
   const data = await listBlogPosts({
     sort: q.sort === "popular" ? "popular" : "newest",
@@ -1618,6 +1669,7 @@ app.get("/api/blog/posts", async (request, reply) => {
 app.get("/api/blog/posts/:slug", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const params = request.params as { slug?: string };
   const slug = String(params.slug ?? "").trim();
   if (!slug) return reply.code(400).send({ error: "Некорректный адрес" });
@@ -1629,6 +1681,7 @@ app.get("/api/blog/posts/:slug", async (request, reply) => {
 app.post("/api/blog/posts/:id/view", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
   await recordBlogPostView(id, user.id);
@@ -1638,6 +1691,7 @@ app.post("/api/blog/posts/:id/view", async (request, reply) => {
 app.post("/api/blog/posts/:id/like", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
   const res = await toggleBlogPostLike(id, user.id);
@@ -1648,6 +1702,7 @@ app.post("/api/blog/posts/:id/like", async (request, reply) => {
 app.get("/api/blog/posts/:id/comments", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
   const comments = await listBlogComments(id);
@@ -1667,6 +1722,7 @@ app.get("/api/blog/posts/:id/comments", async (request, reply) => {
 app.post("/api/blog/posts/:id/comments", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
   const body = (request.body ?? {}) as { body?: string; parent_id?: number };

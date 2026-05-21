@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Eye,
   Heart,
-  ImageIcon,
   MessageCircle,
   PenLine,
   Plus,
@@ -14,9 +14,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
-import type { BlogComment, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
+import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
+import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
+import { useSiteFlags } from "../../../lib/use-site-flags";
 import { useAbSession } from "../AbSessionContext";
 import BlogPageHeader from "./BlogPageHeader";
+import BlogMediaUploader, { type BlogUploadProgress } from "./BlogMediaUploader";
+import { BlogMediaCarousel, BlogMediaLightbox } from "./BlogMediaGallery";
 import BlogRichEditor from "./BlogRichEditor";
 
 type Tab = "feed" | "manage";
@@ -50,54 +54,7 @@ function estimateReadMinutes(html: string) {
   return Math.max(1, Math.ceil(words / 180));
 }
 
-function BlogCover({
-  url,
-  mime,
-  variant,
-  title,
-}: {
-  url: string;
-  mime: string | null;
-  variant: "card" | "hero";
-  title?: string;
-}) {
-  if (url) {
-    if (mime?.startsWith("video/")) {
-      return (
-        <video
-          className={variant === "card" ? "blog-card__cover" : "blog-article__cover"}
-          src={url}
-          muted={variant === "card"}
-          playsInline
-          controls={variant === "hero"}
-        />
-      );
-    }
-    return (
-      <img
-        className={variant === "card" ? "blog-card__cover" : "blog-article__cover"}
-        src={url}
-        alt=""
-      />
-    );
-  }
-  return (
-    <div
-      className={
-        variant === "card" ? "blog-card__cover blog-card__cover--empty" : "blog-article__cover blog-article__cover--empty"
-      }
-      aria-hidden="true"
-    >
-      <span className="blog-cover-placeholder__icon">
-        <ImageIcon size={variant === "card" ? 28 : 40} strokeWidth={1.5} />
-      </span>
-      <span className="blog-cover-placeholder__label">Без обложки</span>
-      {title && variant === "hero" ? <span className="blog-cover-placeholder__title">{title}</span> : null}
-    </div>
-  );
-}
-
-function BlogStub() {
+function BlogDisabledStub() {
   return (
     <div className="blog-stub-page">
       <BlogPageHeader title="Блог" backHref="/home" backLabel="На главную" sticky={false} />
@@ -108,10 +65,9 @@ function BlogStub() {
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
         </div>
-        <h2 className="blog-stub-page__title">Блог скоро откроется</h2>
+        <h2 className="blog-stub-page__title">Блог временно недоступен</h2>
         <p className="blog-stub-page__text">
-          Здесь будут истории победителей акций, благотворительные отчёты и новости проекта. Пока раздел доступен только
-          администраторам.
+          Раздел отключён администратором. Загляните позже — здесь появятся истории победителей, отчёты и новости проекта.
         </p>
         <Link href="/home" className="btn btn--primary blog-stub-page__btn">
           На главную
@@ -121,9 +77,16 @@ function BlogStub() {
   );
 }
 
+function newLocalId() {
+  return "u-" + String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
 export default function BlogPageClient() {
   const { session, authVerified, toast } = useAbSession();
+  const { blog_enabled: blogEnabled, loaded: siteFlagsLoaded } = useSiteFlags();
+  const searchParams = useSearchParams();
   const isAdmin = authVerified && String(session?.role || "") === "admin";
+  const canUseBlog = blogEnabled || isAdmin;
   const token = session?.token || "";
 
   const [tab, setTab] = useState<Tab>("feed");
@@ -148,12 +111,16 @@ export default function BlogPageClient() {
   const [formBody, setFormBody] = useState("");
   const [formKeywords, setFormKeywords] = useState("");
   const [formTags, setFormTags] = useState("");
-  const [formCover, setFormCover] = useState("");
-  const [formCoverMime, setFormCoverMime] = useState<string | null>(null);
+  const [formMedia, setFormMedia] = useState<BlogMediaItem[]>([]);
+  const [mediaUploads, setMediaUploads] = useState<BlogUploadProgress[]>([]);
   const [formStatus, setFormStatus] = useState<"draft" | "published">("draft");
   const [saving, setSaving] = useState(false);
+  const [lightbox, setLightbox] = useState<{ media: BlogMediaItem[]; index: number } | null>(null);
+  const deepLinkHandled = useRef(false);
 
   const adminHeaders = useMemo(() => abAuthHeaders(), [token]);
+
+  const mediaUploading = mediaUploads.some((u) => u.busy);
 
   const loadTags = useCallback(async () => {
     if (!token || !isAdmin) return;
@@ -166,7 +133,8 @@ export default function BlogPageClient() {
   }, [token, isAdmin, adminHeaders]);
 
   const loadPosts = useCallback(async () => {
-    if (!token || !isAdmin) return;
+    if (!token || !canUseBlog) return;
+    if (tab === "manage" && !isAdmin) return;
     setLoading(true);
     try {
       const status = tab === "manage" ? manageStatus : "published";
@@ -174,16 +142,14 @@ export default function BlogPageClient() {
         tab === "manage"
           ? `/api/admin/blog/posts?sort=${sort}&status=${status}&limit=40&q=${encodeURIComponent(search)}&tag=${encodeURIComponent(tagFilter)}`
           : `/api/blog/posts?sort=${sort}&limit=40&q=${encodeURIComponent(search)}&tag=${encodeURIComponent(tagFilter)}`;
-      const data = await abApiJson<{ posts: BlogPost[] }>(base, {
-        headers: tab === "manage" ? adminHeaders : adminHeaders,
-      });
+      const data = await abApiJson<{ posts: BlogPost[] }>(base, { headers: adminHeaders });
       setPosts(data.posts || []);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Ошибка загрузки", "error");
     } finally {
       setLoading(false);
     }
-  }, [token, isAdmin, tab, sort, search, tagFilter, manageStatus, adminHeaders, toast]);
+  }, [token, canUseBlog, isAdmin, tab, sort, search, tagFilter, manageStatus, adminHeaders, toast]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -191,12 +157,12 @@ export default function BlogPageClient() {
   }, [isAdmin, loadTags]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canUseBlog) return;
     const t = window.setTimeout(() => {
       void loadPosts();
     }, 320);
     return () => window.clearTimeout(t);
-  }, [isAdmin, loadPosts]);
+  }, [canUseBlog, loadPosts]);
 
   useEffect(() => {
     if (!readPost) return;
@@ -233,6 +199,22 @@ export default function BlogPageClient() {
       setReadLoading(false);
     }
   };
+
+  useEffect(() => {
+    const slug = searchParams.get("post");
+    if (!slug || deepLinkHandled.current || !canUseBlog || !token) return;
+    deepLinkHandled.current = true;
+    void (async () => {
+      try {
+        const data = await abApiJson<{ post: BlogPost }>(`/api/blog/posts/${encodeURIComponent(slug)}`, {
+          headers: adminHeaders,
+        });
+        if (data.post) await openPost(data.post);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [searchParams, canUseBlog, token, adminHeaders]);
 
   const handleCardOpen = (post: BlogPost) => {
     if (tab === "manage" && post.status === "draft") {
@@ -296,23 +278,82 @@ export default function BlogPageClient() {
     }
   };
 
-  const uploadMedia = async (file: File) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/admin/blog/upload", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token },
-      body: fd,
+  const uploadOneFile = (file: File, localId: string) =>
+    new Promise<{ url: string; mime: string } | null>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/admin/blog/upload");
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.upload.onprogress = (ev) => {
+        const p =
+          ev.lengthComputable && ev.total > 0
+            ? ev.loaded / ev.total
+            : file.size > 0
+              ? Math.min(0.95, xhr.upload.loaded / file.size)
+              : 0.05;
+        setMediaUploads((list) =>
+          list.map((u) => (u.localId === localId ? { ...u, progress: Math.max(0.02, p), busy: true } : u)),
+        );
+      };
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText || "{}") as { url?: string; mime?: string; error?: string };
+        if (xhr.status >= 200 && xhr.status < 300 && data.url) {
+          setMediaUploads((list) =>
+            list.map((u) =>
+              u.localId === localId ? { ...u, busy: false, progress: 1, done: true, error: "" } : u,
+            ),
+          );
+          resolve({ url: data.url, mime: String(data.mime || file.type) });
+          return;
+        }
+        const err = data.error || "Ошибка загрузки";
+        setMediaUploads((list) =>
+          list.map((u) => (u.localId === localId ? { ...u, busy: false, error: err, progress: 0 } : u)),
+        );
+        resolve(null);
+      };
+      xhr.onerror = () => {
+        setMediaUploads((list) =>
+          list.map((u) => (u.localId === localId ? { ...u, busy: false, error: "Сеть недоступна" } : u)),
+        );
+        resolve(null);
+      };
+      const fd = new FormData();
+      fd.append("file", file);
+      xhr.send(fd);
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      toast(String(data.error || "Ошибка загрузки"), "error");
-      return null;
+
+  const queueMediaFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    const room = BLOG_MEDIA_MAX - formMedia.length - mediaUploads.filter((u) => u.busy).length;
+    if (room <= 0) {
+      toast(`Не больше ${BLOG_MEDIA_MAX} медиа`, "warning");
+      return;
     }
-    return { url: String(data.url || ""), mime: String(data.mime || file.type) };
+    for (const file of arr.slice(0, room)) {
+      const localId = newLocalId();
+      setMediaUploads((list) => [
+        ...list,
+        { localId, name: file.name, progress: 0.02, busy: true, error: "", done: false },
+      ]);
+      const up = await uploadOneFile(file, localId);
+      if (up) {
+        setFormMedia((m) => [...m, { id: 0, url: up.url, mime: up.mime }]);
+      }
+      setMediaUploads((list) => list.filter((u) => u.localId !== localId));
+    }
+  };
+
+  const uploadMedia = async (file: File) => {
+    const localId = newLocalId();
+    setMediaUploads([{ localId, name: file.name, progress: 0.02, busy: true, error: "", done: false }]);
+    const up = await uploadOneFile(file, localId);
+    setMediaUploads([]);
+    if (!up) return null;
+    return up;
   };
 
   const openEditor = (post?: BlogPost) => {
+    setMediaUploads([]);
     if (post) {
       setEditId(post.id);
       setFormTitle(post.title);
@@ -320,8 +361,7 @@ export default function BlogPageClient() {
       setFormBody(post.body_html);
       setFormKeywords(post.keywords);
       setFormTags(post.tags.map((t) => t.label).join(", "));
-      setFormCover(post.cover_url);
-      setFormCoverMime(post.cover_mime);
+      setFormMedia(post.media?.length ? post.media : post.cover_url ? [{ id: 0, url: post.cover_url, mime: post.cover_mime }] : []);
       setFormStatus(post.status === "published" ? "published" : "draft");
     } else {
       setEditId(null);
@@ -330,23 +370,28 @@ export default function BlogPageClient() {
       setFormBody("");
       setFormKeywords("");
       setFormTags("");
-      setFormCover("");
-      setFormCoverMime(null);
+      setFormMedia([]);
       setFormStatus("draft");
     }
     setEditorOpen(true);
   };
 
   const savePost = async (publish?: boolean) => {
+    if (mediaUploading) {
+      toast("Дождитесь окончания загрузки медиа", "warning");
+      return;
+    }
     setSaving(true);
     const status = publish ? "published" : formStatus;
+    const first = formMedia[0];
     const payload = {
       title: formTitle,
       excerpt: formExcerpt,
       body_html: formBody,
       keywords: formKeywords,
-      cover_url: formCover,
-      cover_mime: formCoverMime,
+      cover_url: first?.url || "",
+      cover_mime: first?.mime ?? null,
+      media: formMedia.map((m) => ({ url: m.url, mime: m.mime })),
       status,
       tag_labels: formTags
         .split(",")
@@ -391,15 +436,20 @@ export default function BlogPageClient() {
     }
   };
 
-  if (!authVerified) {
+  if (!authVerified || !siteFlagsLoaded) {
     return <p className="blog-loading">Загрузка…</p>;
   }
 
-  if (!isAdmin) {
-    return <BlogStub />;
+  if (!canUseBlog) {
+    return <BlogDisabledStub />;
   }
 
   if (readPost) {
+    const articleMedia = readPost.media?.length
+      ? readPost.media
+      : readPost.cover_url
+        ? [{ id: 0, url: readPost.cover_url, mime: readPost.cover_mime }]
+        : [];
     const readMin = estimateReadMinutes(readPost.body_html);
     return (
       <article className="blog-article">
@@ -415,9 +465,16 @@ export default function BlogPageClient() {
         />
 
         <div className="blog-article__hero">
-          <BlogCover url={readPost.cover_url} mime={readPost.cover_mime} variant="hero" title={readPost.title} />
+          <BlogMediaCarousel
+            media={articleMedia}
+            variant="hero"
+            onOpen={(i) => setLightbox({ media: articleMedia, index: i })}
+          />
           {readPost.status === "draft" ? <span className="blog-article__draft-badge">Черновик</span> : null}
         </div>
+        {lightbox ? (
+          <BlogMediaLightbox media={lightbox.media} startIndex={lightbox.index} onClose={() => setLightbox(null)} />
+        ) : null}
 
         <div className="blog-article__content">
           {readLoading ? <p className="blog-article__loading">Загрузка…</p> : null}
@@ -473,6 +530,7 @@ export default function BlogPageClient() {
 
           <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: readPost.body_html }} />
 
+          {isAdmin ? (
           <div className="blog-article__admin">
             <button type="button" className="blog-article__admin-btn" onClick={() => openEditor(readPost)}>
               <PenLine size={16} />
@@ -483,6 +541,7 @@ export default function BlogPageClient() {
               Удалить
             </button>
           </div>
+          ) : null}
 
           <section ref={commentsRef} className="blog-article__comments" id="comments">
             <header className="blog-article__comments-head">
@@ -563,12 +622,21 @@ export default function BlogPageClient() {
         backHref="/home"
         backLabel="На главную"
         actions={
-          <button type="button" className="blog-page__icon-action blog-page__icon-action--primary" onClick={() => openEditor()} aria-label="Новый пост">
-            <Plus size={22} />
-          </button>
+          isAdmin ? (
+            <button type="button" className="blog-page__icon-action blog-page__icon-action--primary" onClick={() => openEditor()} aria-label="Новый пост">
+              <Plus size={22} />
+            </button>
+          ) : undefined
         }
       />
 
+      {isAdmin && !blogEnabled ? (
+        <p className="blog-admin-banner" role="status">
+          Блог скрыт для пользователей. Включите в админке → Настройки.
+        </p>
+      ) : null}
+
+      {isAdmin ? (
       <div className="blog-tabs" role="tablist">
         <button
           type="button"
@@ -587,6 +655,7 @@ export default function BlogPageClient() {
           Управление
         </button>
       </div>
+      ) : null}
 
       <div className="blog-toolbar">
         <label className="blog-toolbar__search">
@@ -624,10 +693,12 @@ export default function BlogPageClient() {
             </select>
           ) : null}
         </div>
-        <button type="button" className="btn btn--primary blog-toolbar__create" onClick={() => openEditor()}>
-          <Plus size={18} aria-hidden="true" />
-          Новый пост
-        </button>
+        {isAdmin ? (
+          <button type="button" className="btn btn--primary blog-toolbar__create" onClick={() => openEditor()}>
+            <Plus size={18} aria-hidden="true" />
+            Новый пост
+          </button>
+        ) : null}
       </div>
 
       {loading ? (
@@ -659,10 +730,21 @@ export default function BlogPageClient() {
               }}
             >
               <div className="blog-card__media">
-                <BlogCover url={p.cover_url} mime={p.cover_mime} variant="card" />
+                <BlogMediaCarousel
+                  media={
+                    p.media?.length ? p.media : p.cover_url ? [{ id: 0, url: p.cover_url, mime: p.cover_mime }] : []
+                  }
+                  variant="card"
+                  onOpen={(i) => {
+                    const m = p.media?.length ? p.media : p.cover_url ? [{ id: 0, url: p.cover_url, mime: p.cover_mime }] : [];
+                    setLightbox({ media: m, index: i });
+                  }}
+                />
+                {tab === "manage" ? (
                 <span className={"blog-card__status blog-card__status--" + p.status}>
                   {p.status === "published" ? "Опубликован" : "Черновик"}
                 </span>
+                ) : null}
               </div>
               <div className="blog-card__body">
                 <h2 className="blog-card__title">{p.title}</h2>
@@ -743,44 +825,40 @@ export default function BlogPageClient() {
                   onChange={(e) => setFormTags(e.target.value)}
                 />
               </label>
-              <label className="blog-field">
-                <span>Обложка (фото или видео)</span>
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={async (e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    const up = await uploadMedia(f);
-                    if (up) {
-                      setFormCover(up.url);
-                      setFormCoverMime(up.mime);
-                    }
-                  }}
-                />
-                {formCover ? (
-                  formCoverMime?.startsWith("video/") ? (
-                    <video src={formCover} controls className="blog-editor-cover-preview" />
-                  ) : (
-                    <img src={formCover} alt="" className="blog-editor-cover-preview" />
-                  )
-                ) : null}
-              </label>
+              <BlogMediaUploader
+                items={formMedia}
+                uploads={mediaUploads}
+                onPickFiles={(files) => void queueMediaFiles(files)}
+                onRemove={(i) => setFormMedia((m) => m.filter((_, j) => j !== i))}
+                onMove={(from, to) =>
+                  setFormMedia((m) => {
+                    if (to < 0 || to >= m.length) return m;
+                    const next = m.slice();
+                    const [item] = next.splice(from, 1);
+                    next.splice(to, 0, item!);
+                    return next;
+                  })
+                }
+                disabled={saving}
+              />
               <BlogRichEditor value={formBody} onChange={setFormBody} onUploadMedia={uploadMedia} />
             </div>
             <footer className="blog-editor-modal__foot">
-              <button type="button" className="btn btn--ghost" disabled={saving} onClick={() => setEditorOpen(false)}>
+              <button type="button" className="btn btn--ghost" disabled={saving || mediaUploading} onClick={() => setEditorOpen(false)}>
                 Отмена
               </button>
-              <button type="button" className="btn btn--secondary" disabled={saving} onClick={() => void savePost(false)}>
+              <button type="button" className="btn btn--secondary" disabled={saving || mediaUploading} onClick={() => void savePost(false)}>
                 {formStatus === "published" ? "Сохранить" : "Черновик"}
               </button>
-              <button type="button" className="btn btn--primary" disabled={saving} onClick={() => void savePost(true)}>
+              <button type="button" className="btn btn--primary" disabled={saving || mediaUploading} onClick={() => void savePost(true)}>
                 Опубликовать
               </button>
             </footer>
           </div>
         </div>
+      ) : null}
+      {lightbox && !readPost ? (
+        <BlogMediaLightbox media={lightbox.media} startIndex={lightbox.index} onClose={() => setLightbox(null)} />
       ) : null}
     </div>
   );

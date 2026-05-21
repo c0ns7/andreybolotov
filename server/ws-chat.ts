@@ -242,6 +242,28 @@ export function broadcastMaintenanceStatusUpdated(enabled: boolean) {
   broadcastJsonToPublicRaffleFeed({ type: "site_maintenance_updated", maintenance: Boolean(enabled) });
 }
 
+/** Уведомление клиентам: включён или выключен публичный блог */
+export function broadcastBlogEnabledUpdated(enabled: boolean) {
+  const payload = JSON.stringify({ type: "site_blog_enabled_updated", blog_enabled: Boolean(enabled) });
+  for (const ws of adminSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "site_blog_enabled_updated", blog_enabled: Boolean(enabled) });
+}
+
 /** Уведомление всем клиентам: изменилось количество онлайн в акции */
 export function broadcastRaffleViewersUpdated(raffleId: number) {
   const rid = Math.floor(Number(raffleId));

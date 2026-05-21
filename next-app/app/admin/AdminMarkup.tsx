@@ -604,6 +604,19 @@ export default function AdminMarkup() {
             <p className="admin-settings-card__status" id="admin-settings-status" role="status"></p>
           </div>
           <div className="admin-settings-card">
+            <h2 className="admin-settings-card__title">Блог на сайте</h2>
+            <p className="admin-settings-card__text">
+              Если выключено, пользователи видят заглушку вместо раздела «Блог». Администраторы по-прежнему могут
+              создавать и редактировать посты.
+            </p>
+            <label className="admin-settings-toggle">
+              <input type="checkbox" id="admin-settings-blog-enabled" className="admin-settings-toggle__input" role="switch" />
+              <span className="admin-settings-toggle__track" aria-hidden="true"></span>
+              <span className="admin-settings-toggle__label">Блог доступен пользователям</span>
+            </label>
+            <p className="admin-settings-card__status" id="admin-settings-blog-status" role="status"></p>
+          </div>
+          <div className="admin-settings-card">
             <h2 className="admin-settings-card__title">Рассылка MAX</h2>
             <p className="admin-settings-card__text">
               Отправляет всем пользователям с закрепленной оплатой короткое приглашение в приватный чат MAX. Текст про номерки не добавляется.

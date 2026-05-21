@@ -422,6 +422,7 @@ app.get("/api/site/status", async (c) => {
   const site = await getSiteSettings();
   return c.json({
     maintenance: site.maintenance_enabled,
+    blog_enabled: site.blog_enabled,
   });
 });
 

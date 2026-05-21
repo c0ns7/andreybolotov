@@ -1224,15 +1224,22 @@ export async function setRafflePromoGiftLockedCounts(
   );
 }
 
-export async function getSiteSettings(): Promise<{ maintenance_enabled: boolean }> {
-  const row = await pgGet<{ maintenance_enabled: number }>(
-    `SELECT maintenance_enabled FROM site_settings WHERE id = 1`,
+export async function getSiteSettings(): Promise<{ maintenance_enabled: boolean; blog_enabled: boolean }> {
+  const row = await pgGet<{ maintenance_enabled: number; blog_enabled?: number }>(
+    `SELECT maintenance_enabled, blog_enabled FROM site_settings WHERE id = 1`,
   );
-  return { maintenance_enabled: Boolean(Number(row?.maintenance_enabled)) };
+  return {
+    maintenance_enabled: Boolean(Number(row?.maintenance_enabled)),
+    blog_enabled: Boolean(Number(row?.blog_enabled)),
+  };
 }
 
 export async function setMaintenanceEnabled(on: boolean): Promise<void> {
   await pgExec(`UPDATE site_settings SET maintenance_enabled = ? WHERE id = 1`, [on ? 1 : 0]);
+}
+
+export async function setBlogEnabled(on: boolean): Promise<void> {
+  await pgExec(`UPDATE site_settings SET blog_enabled = ? WHERE id = 1`, [on ? 1 : 0]);
 }
 
 export async function deleteRaffle(id: number): Promise<void> {

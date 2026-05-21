@@ -1,5 +1,13 @@
 export type BlogTag = { id: number; slug: string; label: string };
 
+export type BlogMediaItem = {
+  id: number;
+  url: string;
+  mime: string | null;
+};
+
+export const BLOG_MEDIA_MAX = 10;
+
 export type BlogPost = {
   id: number;
   slug: string;
@@ -18,6 +26,7 @@ export type BlogPost = {
   created_at: number;
   updated_at: number;
   tags: BlogTag[];
+  media: BlogMediaItem[];
   liked_by_me?: boolean;
 };
 

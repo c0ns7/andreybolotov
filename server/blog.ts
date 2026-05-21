@@ -96,15 +96,44 @@ export async function ensureUniqueBlogSlug(base: string, excludeId?: number): Pr
   }
 }
 
-export function postToDto(row: BlogPostRow, tags: BlogTagRow[] = [], likedByMe = false) {
+export type BlogMediaRow = {
+  id: number;
+  post_id: number;
+  sort_order: number;
+  url: string;
+  mime: string | null;
+};
+
+export const BLOG_MEDIA_MAX_PER_POST = 10;
+
+export type BlogMediaInput = { url: string; mime?: string | null };
+
+function mediaRowsToDto(rows: BlogMediaRow[]) {
+  return rows.map((r) => ({ id: r.id, url: r.url, mime: r.mime }));
+}
+
+function resolvePostMedia(media: BlogMediaRow[], coverUrl: string, coverMime: string | null) {
+  if (media.length) return mediaRowsToDto(media);
+  if (coverUrl) return [{ id: 0, url: coverUrl, mime: coverMime }];
+  return [];
+}
+
+export function postToDto(
+  row: BlogPostRow,
+  tags: BlogTagRow[] = [],
+  likedByMe = false,
+  media: BlogMediaRow[] = [],
+) {
+  const mediaDto = resolvePostMedia(media, row.cover_url, row.cover_mime);
+  const first = mediaDto[0];
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
     excerpt: row.excerpt,
     body_html: row.body_html,
-    cover_url: row.cover_url,
-    cover_mime: row.cover_mime,
+    cover_url: first?.url || row.cover_url,
+    cover_mime: first?.mime ?? row.cover_mime,
     keywords: row.keywords,
     author_user_id: row.author_user_id,
     status: row.status,
@@ -115,8 +144,53 @@ export function postToDto(row: BlogPostRow, tags: BlogTagRow[] = [], likedByMe =
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: tags.map((t) => ({ id: t.id, slug: t.slug, label: t.label })),
+    media: mediaDto,
     liked_by_me: likedByMe,
   };
+}
+
+async function loadMediaForPosts(postIds: number[]): Promise<Map<number, BlogMediaRow[]>> {
+  const map = new Map<number, BlogMediaRow[]>();
+  if (!postIds.length) return map;
+  const placeholders = postIds.map(() => "?").join(",");
+  const rows = await pgAll<BlogMediaRow>(
+    `SELECT id, post_id, sort_order, url, mime FROM blog_post_media
+     WHERE post_id IN (${placeholders}) ORDER BY post_id, sort_order ASC, id ASC`,
+    postIds,
+  );
+  for (const r of rows) {
+    const pid = Number(r.post_id);
+    if (!map.has(pid)) map.set(pid, []);
+    map.get(pid)!.push(r);
+  }
+  return map;
+}
+
+async function setPostMedia(postId: number, items: BlogMediaInput[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const clean = items
+    .map((it, i) => ({
+      url: String(it.url || "").trim().slice(0, 500),
+      mime: it.mime != null ? String(it.mime).slice(0, 120) : null,
+      sort_order: i,
+    }))
+    .filter((it) => it.url);
+  if (clean.length > BLOG_MEDIA_MAX_PER_POST) {
+    return { ok: false, error: `Не больше ${BLOG_MEDIA_MAX_PER_POST} медиа в одном посте` };
+  }
+  await pgExec(`DELETE FROM blog_post_media WHERE post_id = ?`, [postId]);
+  const now = Date.now();
+  for (const it of clean) {
+    await pgExec(
+      `INSERT INTO blog_post_media (post_id, sort_order, url, mime, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [postId, it.sort_order, it.url, it.mime, now],
+    );
+  }
+  return { ok: true };
+}
+
+function coverFromMedia(items: BlogMediaInput[]): { cover_url: string; cover_mime: string | null } {
+  const first = items.map((it) => ({ url: String(it.url || "").trim(), mime: it.mime ?? null })).find((it) => it.url);
+  return { cover_url: first?.url || "", cover_mime: first?.mime || null };
 }
 
 async function loadTagsForPosts(postIds: number[]): Promise<Map<number, BlogTagRow[]>> {
@@ -208,9 +282,12 @@ export async function listBlogPosts(opts: ListBlogPostsOpts = {}) {
   const slice = hasMore ? rows.slice(0, limit) : rows;
   const ids = slice.map((r) => r.id);
   const tagsMap = await loadTagsForPosts(ids);
+  const mediaMap = await loadMediaForPosts(ids);
   const liked = await loadLikedSet(Number(opts.viewerUserId) || 0, ids);
   return {
-    posts: slice.map((r) => postToDto(r, tagsMap.get(r.id) || [], liked.has(r.id))),
+    posts: slice.map((r) =>
+      postToDto(r, tagsMap.get(r.id) || [], liked.has(r.id), mediaMap.get(r.id) || []),
+    ),
     has_more: hasMore,
     next_offset: offset + slice.length,
   };
@@ -225,7 +302,8 @@ export async function getBlogPostBySlug(slug: string, viewerUserId?: number) {
     [row.id],
   );
   const liked = await loadLikedSet(Number(viewerUserId) || 0, [row.id]);
-  return postToDto(row, tags, liked.has(row.id));
+  const mediaMap = await loadMediaForPosts([row.id]);
+  return postToDto(row, tags, liked.has(row.id), mediaMap.get(row.id) || []);
 }
 
 export async function getBlogPostById(id: number, viewerUserId?: number) {
@@ -237,7 +315,8 @@ export async function getBlogPostById(id: number, viewerUserId?: number) {
     [row.id],
   );
   const liked = await loadLikedSet(Number(viewerUserId) || 0, [row.id]);
-  return postToDto(row, tags, liked.has(row.id));
+  const mediaMap = await loadMediaForPosts([row.id]);
+  return postToDto(row, tags, liked.has(row.id), mediaMap.get(row.id) || []);
 }
 
 export async function listAllBlogTags(): Promise<BlogTagRow[]> {
@@ -281,6 +360,7 @@ export type SaveBlogPostInput = {
   body_html: string;
   cover_url?: string;
   cover_mime?: string | null;
+  media?: BlogMediaInput[];
   keywords?: string;
   status?: "draft" | "published";
   tag_labels?: string[];
@@ -296,6 +376,11 @@ export async function createBlogPost(authorUserId: number, input: SaveBlogPostIn
   const status = input.status === "published" ? "published" : "draft";
   const slug = input.slug ? slugifyTitle(input.slug) : await ensureUniqueBlogSlug(title);
   const publishedAt = status === "published" ? now : null;
+  const mediaItems = Array.isArray(input.media) ? input.media : [];
+  const cover = mediaItems.length ? coverFromMedia(mediaItems) : {
+    cover_url: String(input.cover_url || "").trim().slice(0, 500),
+    cover_mime: input.cover_mime ? String(input.cover_mime).slice(0, 120) : null,
+  };
   const row = await pgGet<BlogPostRow>(
     `INSERT INTO blog_posts (
       slug, title, excerpt, body_html, cover_url, cover_mime, keywords,
@@ -306,8 +391,8 @@ export async function createBlogPost(authorUserId: number, input: SaveBlogPostIn
       title,
       String(input.excerpt || "").trim().slice(0, 500),
       body.slice(0, 500_000),
-      String(input.cover_url || "").trim().slice(0, 500),
-      input.cover_mime ? String(input.cover_mime).slice(0, 120) : null,
+      cover.cover_url,
+      cover.cover_mime,
       String(input.keywords || "").trim().slice(0, 500),
       authorUserId,
       status,
@@ -318,6 +403,10 @@ export async function createBlogPost(authorUserId: number, input: SaveBlogPostIn
   );
   if (!row) return { ok: false as const, error: "Не удалось создать пост" };
   await setPostTags(row.id, Array.isArray(input.tag_labels) ? input.tag_labels : []);
+  if (mediaItems.length) {
+    const mediaRes = await setPostMedia(row.id, mediaItems);
+    if (!mediaRes.ok) return { ok: false as const, error: mediaRes.error };
+  }
   return { ok: true as const, post: await getBlogPostById(row.id, authorUserId) };
 }
 
@@ -336,6 +425,14 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   const slug = input.slug
     ? await ensureUniqueBlogSlug(input.slug, postId)
     : existing.slug;
+  const mediaItems = Array.isArray(input.media) ? input.media : null;
+  let coverUrl = String(input.cover_url ?? existing.cover_url).trim().slice(0, 500);
+  let coverMime = input.cover_mime != null ? String(input.cover_mime).slice(0, 120) : existing.cover_mime;
+  if (mediaItems) {
+    const cover = coverFromMedia(mediaItems);
+    coverUrl = cover.cover_url;
+    coverMime = cover.cover_mime;
+  }
   await pgExec(
     `UPDATE blog_posts SET slug = ?, title = ?, excerpt = ?, body_html = ?, cover_url = ?, cover_mime = ?,
      keywords = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?`,
@@ -344,8 +441,8 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
       title,
       String(input.excerpt || "").trim().slice(0, 500),
       body.slice(0, 500_000),
-      String(input.cover_url ?? existing.cover_url).trim().slice(0, 500),
-      input.cover_mime != null ? String(input.cover_mime).slice(0, 120) : existing.cover_mime,
+      coverUrl,
+      coverMime,
       String(input.keywords ?? existing.keywords).trim().slice(0, 500),
       status,
       publishedAt,
@@ -354,6 +451,10 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
     ],
   );
   await setPostTags(postId, Array.isArray(input.tag_labels) ? input.tag_labels : []);
+  if (mediaItems) {
+    const mediaRes = await setPostMedia(postId, mediaItems);
+    if (!mediaRes.ok) return { ok: false as const, error: mediaRes.error };
+  }
   return { ok: true as const, post: await getBlogPostById(postId) };
 }
 

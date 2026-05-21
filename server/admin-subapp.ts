@@ -14,6 +14,7 @@ import {
   deleteRaffle,
   getRaffleById,
   getSiteSettings,
+  setBlogEnabled,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -99,6 +100,7 @@ import type {
 import { listBankCardsWithAdminStats, replaceRaffleBankCards, type RaffleBankCardInput } from "./raffle-bank-cards.js";
 import {
   broadcastChatMessage,
+  broadcastBlogEnabledUpdated,
   broadcastMaintenanceStatusUpdated,
   broadcastRaffleLaunchNotified,
   broadcastRafflesFeedUpdated,
@@ -803,15 +805,22 @@ adminSubApp.get("/settings", async (c) => {
 adminSubApp.patch("/settings", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
-  let body: { maintenance_enabled?: unknown };
+  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
-  const enabled = Boolean(body.maintenance_enabled);
-  await setMaintenanceEnabled(enabled);
-  broadcastMaintenanceStatusUpdated(enabled);
+  if (body.maintenance_enabled !== undefined) {
+    const enabled = Boolean(body.maintenance_enabled);
+    await setMaintenanceEnabled(enabled);
+    broadcastMaintenanceStatusUpdated(enabled);
+  }
+  if (body.blog_enabled !== undefined) {
+    const blogOn = Boolean(body.blog_enabled);
+    await setBlogEnabled(blogOn);
+    broadcastBlogEnabledUpdated(blogOn);
+  }
   c.header("Cache-Control", "no-store");
   return c.json(await getSiteSettings());
 });
@@ -1862,12 +1871,21 @@ adminSubApp.post("/blog/posts", async (c) => {
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
+  const media = Array.isArray(body.media)
+    ? body.media
+        .map((m: unknown) => {
+          const o = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+          return { url: String(o.url ?? ""), mime: o.mime != null ? String(o.mime) : null };
+        })
+        .filter((m: { url: string }) => m.url)
+    : [];
   const res = await createBlogPost(auth.id, {
     title: String(body.title ?? ""),
     excerpt: String(body.excerpt ?? ""),
     body_html: String(body.body_html ?? ""),
     cover_url: String(body.cover_url ?? ""),
     cover_mime: body.cover_mime != null ? String(body.cover_mime) : null,
+    media,
     keywords: String(body.keywords ?? ""),
     status: body.status === "published" ? "published" : "draft",
     tag_labels: Array.isArray(body.tag_labels) ? body.tag_labels.map(String) : [],
@@ -1888,12 +1906,21 @@ adminSubApp.patch("/blog/posts/:id", async (c) => {
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
+  const media = Array.isArray(body.media)
+    ? body.media
+        .map((m: unknown) => {
+          const o = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+          return { url: String(o.url ?? ""), mime: o.mime != null ? String(o.mime) : null };
+        })
+        .filter((m: { url: string }) => m.url)
+    : undefined;
   const res = await updateBlogPost(id, {
     title: String(body.title ?? ""),
     excerpt: String(body.excerpt ?? ""),
     body_html: String(body.body_html ?? ""),
     cover_url: body.cover_url != null ? String(body.cover_url) : undefined,
     cover_mime: body.cover_mime != null ? String(body.cover_mime) : undefined,
+    media,
     keywords: body.keywords != null ? String(body.keywords) : undefined,
     status:
       body.status === "published" ? "published" : body.status === "draft" ? "draft" : undefined,
@@ -1913,30 +1940,23 @@ adminSubApp.delete("/blog/posts/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-adminSubApp.post("/blog/upload", async (c) => {
-  const auth = await requireAdmin(c);
-  if (auth instanceof Response) return auth;
-  let body: Record<string, unknown>;
-  try {
-    body = await c.req.parseBody();
-  } catch {
-    return c.json({ error: "Некорректные данные" }, 400);
-  }
-  const raw = body["file"];
-  if (!raw || typeof raw !== "object") {
-    return c.json({ error: "Нет файла" }, 400);
-  }
-  const blob = raw as { type?: string; arrayBuffer?: () => Promise<ArrayBuffer> };
-  if (typeof blob.arrayBuffer !== "function") {
-    return c.json({ error: "Некорректный файл" }, 400);
-  }
-  const ab = await blob.arrayBuffer();
-  const buffer = Buffer.from(ab);
-  const mime = String(blob.type || "").toLowerCase();
+export type BlogUploadSaveResult =
+  | { ok: true; url: string; mime: string }
+  | { ok: false; status: number; error: string };
+
+export async function saveBlogUploadBuffer(buffer: Buffer, mimeRaw: string): Promise<BlogUploadSaveResult> {
+  const mime = String(mimeRaw || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
   const isVideo = mime.startsWith("video/");
   const max = isVideo ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
   if (buffer.length > max) {
-    return c.json({ error: isVideo ? "Видео не больше 50 МБ" : "Файл не больше 8 МБ" }, 400);
+    return {
+      ok: false,
+      status: 400,
+      error: isVideo ? "Видео не больше 50 МБ" : "Файл не больше 8 МБ",
+    };
   }
   const extMap: Record<string, string> = {
     "image/jpeg": ".jpg",
@@ -1950,12 +1970,41 @@ adminSubApp.post("/blog/upload", async (c) => {
   };
   const ext = extMap[mime];
   if (!ext) {
-    return c.json({ error: "Допустимы изображения (JPEG, PNG, WebP, GIF) или видео (MP4, WebM, MOV)" }, 400);
+    return {
+      ok: false,
+      status: 400,
+      error: "Допустимы изображения (JPEG, PNG, WebP, GIF) или видео (MP4, WebM, MOV)",
+    };
   }
   const name = `${randomUUID()}${ext}`;
-  await writeUploadToDirs(blogUploadsDirs, name, buffer);
-  const url = `/uploads/blog/${name}`;
-  return c.json({ url, mime });
+  try {
+    await writeUploadToDirs(blogUploadsDirs, name, buffer);
+  } catch {
+    return { ok: false, status: 500, error: "Не удалось сохранить файл" };
+  }
+  return { ok: true, url: `/uploads/blog/${name}`, mime: mime || (isVideo ? "video/mp4" : "image/jpeg") };
+}
+
+adminSubApp.post("/blog/upload", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.parseBody();
+  } catch {
+    return c.json({ error: "Некорректные данные" }, 400);
+  }
+  const blob = pickRaffleUploadFile(body);
+  if (!blob) {
+    return c.json({ error: "Нет файла" }, 400);
+  }
+  const buffer = await readRaffleUploadBuffer(blob);
+  if (!buffer) {
+    return c.json({ error: "Некорректный файл" }, 400);
+  }
+  const saved = await saveBlogUploadBuffer(buffer, String(blob.type || ""));
+  if (!saved.ok) return c.json({ error: saved.error }, saved.status === 500 ? 500 : 400);
+  return c.json({ url: saved.url, mime: saved.mime });
 });
 
 adminSubApp.get("/prizes", async (c) => {

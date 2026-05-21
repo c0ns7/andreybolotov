@@ -33,10 +33,12 @@ export default function HomeBlogStubModal({ open, onClose }: Props) {
           </svg>
         </div>
         <h2 id="blog-stub-title" className="blog-stub-modal__title">
-          Блог
+          Блог временно недоступен
         </h2>
-        <p className="blog-stub-modal__lead">Раздел пока в разработке</p>
-        <p className="blog-stub-modal__text">Скоро здесь появятся новости, истории участников и полезные материалы. Загляните чуть позже.</p>
+        <p className="blog-stub-modal__lead">Раздел отключён</p>
+        <p className="blog-stub-modal__text">
+          Администратор временно закрыл блог. Новости и истории участников появятся здесь, когда раздел снова откроют.
+        </p>
         <button type="button" className="btn btn--primary blog-stub-modal__btn" onClick={onClose}>
           Понятно
         </button>

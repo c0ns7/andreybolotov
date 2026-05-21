@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, BadgeCheck, Clock3, Gift, Hash, Hourglass, MapPin, Ticket } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Clock3, Gift, HandHeart, Hash, Hourglass, MapPin, Ticket } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
 import { getAbMyTicketsCached, invalidateAbMyTicketsCache } from "../../lib/ab-my-tickets-cache";
@@ -28,6 +28,7 @@ type Props = {
   hideChat?: boolean;
   /** Показать «Блог» на главной */
   showBlog?: boolean;
+  blogEnabled?: boolean;
 };
 
 type WholesaleSlotRow = { raffle_id?: number; wholesale_numbers?: number[] };
@@ -89,6 +90,10 @@ function numChips(nums?: number[], readonly = true) {
       ))}
     </div>
   );
+}
+
+function BlogNavIcon() {
+  return <HandHeart size={22} strokeWidth={2} aria-hidden="true" />;
 }
 
 function blurIfFocusInsideModalRoot(rootId: string) {
@@ -275,6 +280,7 @@ export default function AppBottomNav({
   onSearchSheet,
   hideChat: hideChatProp,
   showBlog = false,
+  blogEnabled = false,
 }: Props) {
   const { session } = useAbSession();
   const pathname = usePathname() || "";
@@ -602,7 +608,7 @@ export default function AppBottomNav({
             </button>
           ) : null}
           {showBlog ? (
-            isAdmin ? (
+            blogEnabled || isAdmin ? (
               <Link
                 href="/home/blog"
                 className={"bottom-nav-btn" + (isBlogRoute ? " bottom-nav-btn--active" : "")}
@@ -611,10 +617,7 @@ export default function AppBottomNav({
                 aria-current={isBlogRoute ? "page" : undefined}
               >
                 <span className="bottom-nav-btn__icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
+                  <BlogNavIcon />
                 </span>
                 <span className="bottom-nav-btn__label">Блог</span>
               </Link>
@@ -628,10 +631,7 @@ export default function AppBottomNav({
                 onClick={() => setBlogOpen(true)}
               >
                 <span className="bottom-nav-btn__icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
+                  <BlogNavIcon />
                 </span>
                 <span className="bottom-nav-btn__label">Блог</span>
               </button>

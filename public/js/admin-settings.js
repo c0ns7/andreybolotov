@@ -21,9 +21,10 @@
     return { Authorization: "Bearer " + x.token };
   }
 
-  function fetchSettings(toggle, statusEl) {
+  function fetchSettings(toggle, statusEl, blogToggle, blogStatusEl) {
     if (!toggle) return;
     toggle.disabled = true;
+    if (blogToggle) blogToggle.disabled = true;
     fetch("/api/admin/settings", { headers: authHeaders(), cache: "no-store" })
       .then(function (r) {
         return r.json().then(function (d) {
@@ -32,16 +33,44 @@
       })
       .then(function (x) {
         toggle.disabled = false;
+        if (blogToggle) blogToggle.disabled = false;
         if (!x.ok) {
           if (statusEl) statusEl.textContent = x.d.error || "Не удалось загрузить настройки";
           return;
         }
         toggle.checked = !!x.d.maintenance_enabled;
+        if (blogToggle) blogToggle.checked = !!x.d.blog_enabled;
         if (statusEl) statusEl.textContent = "";
+        if (blogStatusEl) blogStatusEl.textContent = "";
       })
       .catch(function () {
         toggle.disabled = false;
+        if (blogToggle) blogToggle.disabled = false;
         if (statusEl) statusEl.textContent = "Ошибка сети";
+      });
+  }
+
+  function patchSettings(body, onOk, onErr) {
+    fetch("/api/admin/settings", {
+      method: "PATCH",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { ok: r.ok, d: d };
+        });
+      })
+      .then(function (x) {
+        if (!x.ok) {
+          onErr(x.d);
+          return;
+        }
+        onOk(x.d);
+      })
+      .catch(function () {
+        onErr({ error: "Ошибка сети" });
       });
   }
 
@@ -90,49 +119,65 @@
   window.abInitSettings = function () {
     const toggle = document.getElementById("admin-settings-maintenance");
     const statusEl = document.getElementById("admin-settings-status");
+    const blogToggle = document.getElementById("admin-settings-blog-enabled");
+    const blogStatusEl = document.getElementById("admin-settings-blog-status");
     if (!toggle) return;
     const s = loadSession();
     if (!s || !s.token) return;
 
-    fetchSettings(toggle, statusEl);
+    fetchSettings(toggle, statusEl, blogToggle, blogStatusEl);
     bindMaxBroadcast();
 
-    if (toggle.dataset.abSettingsChangeBound === "1") return;
-    toggle.dataset.abSettingsChangeBound = "1";
-
-    toggle.addEventListener("change", function () {
-      const on = toggle.checked;
-      toggle.disabled = true;
-      if (statusEl) statusEl.textContent = "Сохранение…";
-      fetch("/api/admin/settings", {
-        method: "PATCH",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ maintenance_enabled: on }),
-        cache: "no-store",
-      })
-        .then(function (r) {
-          return r.json().then(function (d) {
-            return { ok: r.ok, d: d };
-          });
-        })
-        .then(function (x) {
-          toggle.disabled = false;
-          if (!x.ok) {
+    if (toggle.dataset.abSettingsChangeBound !== "1") {
+      toggle.dataset.abSettingsChangeBound = "1";
+      toggle.addEventListener("change", function () {
+        const on = toggle.checked;
+        toggle.disabled = true;
+        if (statusEl) statusEl.textContent = "Сохранение…";
+        patchSettings(
+          { maintenance_enabled: on },
+          function (d) {
+            toggle.disabled = false;
+            toggle.checked = !!d.maintenance_enabled;
+            if (blogToggle) blogToggle.checked = !!d.blog_enabled;
+            if (statusEl) statusEl.textContent = "Сохранено";
+            setTimeout(function () {
+              if (statusEl && statusEl.textContent === "Сохранено") statusEl.textContent = "";
+            }, 2000);
+          },
+          function (d) {
+            toggle.disabled = false;
             toggle.checked = !on;
-            if (statusEl) statusEl.textContent = x.d.error || "Не удалось сохранить";
-            return;
-          }
-          toggle.checked = !!x.d.maintenance_enabled;
-          if (statusEl) statusEl.textContent = "Сохранено";
-          setTimeout(function () {
-            if (statusEl && statusEl.textContent === "Сохранено") statusEl.textContent = "";
-          }, 2000);
-        })
-        .catch(function () {
-          toggle.disabled = false;
-          toggle.checked = !on;
-          if (statusEl) statusEl.textContent = "Ошибка сети";
-        });
-    });
+            if (statusEl) statusEl.textContent = d.error || "Не удалось сохранить";
+          },
+        );
+      });
+    }
+
+    if (blogToggle && blogToggle.dataset.abSettingsChangeBound !== "1") {
+      blogToggle.dataset.abSettingsChangeBound = "1";
+      blogToggle.addEventListener("change", function () {
+        const on = blogToggle.checked;
+        blogToggle.disabled = true;
+        if (blogStatusEl) blogStatusEl.textContent = "Сохранение…";
+        patchSettings(
+          { blog_enabled: on },
+          function (d) {
+            blogToggle.disabled = false;
+            blogToggle.checked = !!d.blog_enabled;
+            if (toggle) toggle.checked = !!d.maintenance_enabled;
+            if (blogStatusEl) blogStatusEl.textContent = "Сохранено";
+            setTimeout(function () {
+              if (blogStatusEl && blogStatusEl.textContent === "Сохранено") blogStatusEl.textContent = "";
+            }, 2000);
+          },
+          function (d) {
+            blogToggle.disabled = false;
+            blogToggle.checked = !on;
+            if (blogStatusEl) blogStatusEl.textContent = d.error || "Не удалось сохранить";
+          },
+        );
+      });
+    }
   };
 })();

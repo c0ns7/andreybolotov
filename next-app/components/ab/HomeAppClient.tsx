@@ -8,7 +8,9 @@ import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
 import AppBottomNav from "./AppBottomNav";
-import HomeSocialFab from "./HomeSocialFab";
+import { useSiteFlags } from "../../lib/use-site-flags";
+import HomeFeedEmpty from "./HomeFeedEmpty";
+import HomeSocialLinks from "./HomeSocialLinks";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 
@@ -55,9 +57,11 @@ function formatCountdown(targetMs: number, nowMs: number) {
 export default function HomeAppClient() {
   const router = useRouter();
   const { session, authVerified, authCheckInFlight, toast, verifySession } = useAbSession();
+  const { blog_enabled: blogEnabled } = useSiteFlags();
   const [mounted, setMounted] = useState(false);
   const [raffles, setRaffles] = useState<RaffleRow[]>([]);
   const [feedErr, setFeedErr] = useState(false);
+  const [feedRetrying, setFeedRetrying] = useState(false);
   const [feedBootstrapped, setFeedBootstrapped] = useState(false);
   const [reservedCount, setReservedCount] = useState(0);
   const [reservedRaffleId, setReservedRaffleId] = useState<number>(0);
@@ -156,6 +160,16 @@ export default function HomeAppClient() {
       setFeedBootstrapped(true);
     }
   }, [session, authVerified, router, refreshTableAccess]);
+
+  const onRetryFeed = useCallback(async () => {
+    if (feedRetrying || !session?.token || !authVerified) return;
+    setFeedRetrying(true);
+    try {
+      await loadFeed();
+    } finally {
+      setFeedRetrying(false);
+    }
+  }, [feedRetrying, session?.token, authVerified, loadFeed]);
 
   useEffect(() => {
     void loadFeed();
@@ -338,22 +352,30 @@ export default function HomeAppClient() {
         <div id="view-app-feed" className="app-view home-inner">
           <header className="home-sticky">
             <div className="home-brand-row">
-              <div className="home-brand-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8" />
-                  <path d="M4 12h16" />
-                  <path d="M12 22v-9" />
-                  <path d="M12 13a5 5 0 0 0 5-5V8a3 3 0 0 0-3-3 4 4 0 0 0-4 4 4 4 0 0 0-4-4 3 3 0 0 0-3 3v2a5 5 0 0 0 5 5" />
-                </svg>
+              <div className="home-brand-row__main">
+                <div className="home-brand-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8" />
+                    <path d="M4 12h16" />
+                    <path d="M12 22v-9" />
+                    <path d="M12 13a5 5 0 0 0 5-5V8a3 3 0 0 0-3-3 4 4 0 0 0-4 4 4 4 0 0 0-4-4 3 3 0 0 0-3 3v2a5 5 0 0 0 5 5" />
+                  </svg>
+                </div>
+                <h1 className="home-brand-title">Быть добру!</h1>
               </div>
-              <h1 className="home-brand-title">Быть добру!</h1>
+              <HomeSocialLinks />
             </div>
           </header>
           <div className="home-cards" id="home-cards-app">
             {feedErr ? (
-              <p className="home-feed-empty">Не удалось загрузить акции. Попробуйте обновить страницу.</p>
+              <HomeFeedEmpty
+                variant="error"
+                retrying={feedRetrying}
+                onRetry={() => void onRetryFeed()}
+                onOpenChat={() => router.push("/home/chat")}
+              />
             ) : !raffles.length ? (
-              <p className="home-feed-empty">Пока нет акций.</p>
+              <HomeFeedEmpty variant="empty" onOpenChat={() => router.push("/home/chat")} />
             ) : (
               raffles.map((r, idx) => {
                 const st = String(r.status || "active");
@@ -769,16 +791,12 @@ export default function HomeAppClient() {
       ) : null}
 
 
-      <HomeSocialFab
-        visible={showApp && !showHomeBootLoader}
-        elevated={reservedCount > 0 || pendingReviewCount > 0}
-      />
-
       <AppBottomNav
         show={showApp}
         profileLetter={letter}
         authVerified={authVerified}
         showBlog
+        blogEnabled={blogEnabled}
         onChat={() => router.push("/home/chat")}
         onChatBlocked={() => toast("Войдите, чтобы написать в чат", "warning")}
       />
