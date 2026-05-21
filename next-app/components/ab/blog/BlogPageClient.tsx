@@ -256,6 +256,25 @@ function BlogPageClientInner() {
     }
   };
 
+  const scrollToComments = () => {
+    commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const toggleLike = async (post: BlogPost) => {
+    try {
+      const data = await abApiJson<{ liked: boolean; like_count: number }>(`/api/blog/posts/${post.id}/like`, {
+        method: "POST",
+        headers: adminHeaders,
+      });
+      const patch = (p: BlogPost) =>
+        p.id === post.id ? { ...p, liked_by_me: data.liked, like_count: data.like_count } : p;
+      setPosts((list) => list.map(patch));
+      if (readPost?.id === post.id) setReadPost((p) => (p ? patch(p) : p));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Ошибка", "error");
+    }
+  };
+
   const deleteComment = async (commentId: number) => {
     if (!readPost) return;
     if (!window.confirm("Удалить комментарий?")) return;
@@ -521,6 +540,25 @@ function BlogPageClientInner() {
 
           {readPost.excerpt ? <p className="blog-article__lead">{readPost.excerpt}</p> : null}
 
+          {readPost.status === "published" ? (
+            <div className="blog-article__engage">
+              <button
+                type="button"
+                className={"blog-engage-btn blog-engage-btn--like" + (readPost.liked_by_me ? " is-liked" : "")}
+                onClick={() => void toggleLike(readPost)}
+                aria-pressed={readPost.liked_by_me}
+                aria-label="Нравится"
+              >
+                <Heart size={18} fill={readPost.liked_by_me ? "currentColor" : "none"} />
+                <span>{readPost.like_count}</span>
+              </button>
+              <button type="button" className="blog-engage-btn" onClick={scrollToComments} aria-label="Комментарии">
+                <MessageCircle size={18} />
+                <span>{readPost.comment_count}</span>
+              </button>
+            </div>
+          ) : null}
+
           {articleBodyHtml ? (
             <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: articleBodyHtml }} />
           ) : null}
@@ -601,6 +639,23 @@ function BlogPageClientInner() {
             </div>
           </section>
         </div>
+
+        {readPost.status === "published" ? (
+          <footer className="blog-article__bar">
+            <button
+              type="button"
+              className={"blog-article__bar-btn" + (readPost.liked_by_me ? " is-liked" : "")}
+              onClick={() => void toggleLike(readPost)}
+              aria-label="Нравится"
+              aria-pressed={readPost.liked_by_me}
+            >
+              <Heart size={22} fill={readPost.liked_by_me ? "currentColor" : "none"} />
+            </button>
+            <button type="button" className="blog-article__bar-btn" onClick={scrollToComments} aria-label="Комментарии">
+              <MessageCircle size={22} />
+            </button>
+          </footer>
+        ) : null}
       </article>,
     );
   }
