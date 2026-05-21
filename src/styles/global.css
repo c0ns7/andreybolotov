@@ -7831,6 +7831,11 @@ html.theme-dark .auth-tabs__btn.is-active {
 /* Модальное окно профиля */
 .modal-overlay--profile {
   z-index: 105;
+  background: rgba(0, 0, 0, 0.52);
+  transition:
+    opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.42s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .profile-modal {
@@ -7847,12 +7852,17 @@ html.theme-dark .auth-tabs__btn.is-active {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  transform: translateY(12px);
-  transition: transform 0.25s ease;
+  opacity: 0;
+  transform: translateY(18px) scale(0.97);
+  transition:
+    transform 0.48s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
 }
 
 .modal-overlay--profile.is-open .profile-modal {
-  transform: translateY(0);
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .profile-modal__sheet-handle {
@@ -8346,6 +8356,31 @@ html.theme-dark .auth-tabs__btn.is-active {
   font-weight: 700;
 }
 
+.history-card__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.history-entry {
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.history-entry:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.history-entry__when {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
 .history-row {
   margin: 4px 0;
   font-size: 0.78rem;
@@ -8415,17 +8450,190 @@ html.theme-dark .auth-tabs__btn.is-active {
   font-size: 0.84rem;
 }
 
-/* Шторка истории: минимум половина экрана, растет по контенту, скролл внутри */
-#modal-participation-history .modal.modal--tickets-sheet {
-  min-height: 50vh;
-  min-height: 50dvh;
-  max-height: min(90dvh, 94vh);
+/* История участий — центрированное модальное окно */
+.history-modal.modal-overlay {
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
 }
 
-#modal-participation-history .tickets-sheet__body {
+.history-modal.is-open .history-modal__dialog {
+  animation: blog-stub-dialog-in 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.history-modal__dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 384px);
+  max-height: min(88dvh, 90vh);
+  margin: 0 auto;
+  padding: 24px;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 32px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+  box-sizing: border-box;
+}
+
+.history-modal__close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.history-modal__close:hover {
+  color: #111827;
+  background: #e5e7eb;
+}
+
+.history-modal__inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  max-height: 100%;
+}
+
+.history-modal__head {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.history-modal__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: -8px;
+  padding: 8px;
+  border: none;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.history-modal__back:hover {
+  color: #111827;
+}
+
+.history-modal__title {
+  flex: 1;
+  margin: 0;
+  padding-right: 28px;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+
+.history-modal__body {
+  flex: 1;
+  min-height: 0;
+  margin: 8px 0 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+.history-modal__status {
+  margin: 0;
+  padding: 40px 0;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.history-modal__status--error {
+  color: #dc2626;
+}
+
+.history-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 24px 0 16px;
+  text-align: center;
+}
+
+.history-modal__empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #d1d5db;
+}
+
+.history-modal__empty-title {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.history-modal__empty-text {
+  margin: 0;
+  max-width: 260px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #9ca3af;
+}
+
+.history-modal__btn-back {
+  flex-shrink: 0;
+  width: 100%;
+  margin: 0;
+  padding: 16px;
+  border: none;
+  border-radius: 18px;
+  background: #111827;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.15s;
+}
+
+.history-modal__btn-back:active {
+  transform: scale(0.98);
+}
+
+.history-modal__btn-back:hover {
+  background: #1f2937;
+}
+
+#modal-participation-history .history-card {
+  margin-bottom: 8px;
+}
+
+#modal-participation-history .history-card:last-child {
+  margin-bottom: 0;
 }
 
 #modal-promo-5-plus-1 .modal.modal--tickets-sheet {
@@ -8580,8 +8788,9 @@ html.theme-dark .auth-tabs__btn.is-active {
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.12);
     overflow: hidden;
     -webkit-overflow-scrolling: touch;
+    opacity: 1;
     transform: translateY(calc(100% + 24px + var(--sheet-drag-y, 0px)));
-    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .modal-overlay--profile.is-open .profile-modal {
@@ -12514,6 +12723,10 @@ html.theme-dark .tickets-sheet__hint-dismiss::before {
   box-shadow: inset 0 0 0 3px rgba(30, 58, 138, 0.9);
 }
 
+html.theme-dark .modal-overlay--profile {
+  background: rgba(0, 0, 0, 0.68);
+}
+
 html.theme-dark .profile-modal {
   background: var(--surface);
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.55);
@@ -12673,6 +12886,59 @@ html.theme-dark .profile-modal__tickets-history-btn:hover {
   background: rgba(30, 64, 175, 0.24);
 }
 
+html.theme-dark .history-modal__dialog {
+  background: var(--surface, #1a1f2b);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+}
+
+html.theme-dark .history-modal__close {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(248, 250, 252, 0.55);
+}
+
+html.theme-dark .history-modal__close:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html.theme-dark .history-modal__title {
+  color: #f8fafc;
+}
+
+html.theme-dark .history-modal__back {
+  color: rgba(248, 250, 252, 0.45);
+}
+
+html.theme-dark .history-modal__back:hover {
+  color: #f8fafc;
+}
+
+html.theme-dark .history-modal__status {
+  color: rgba(248, 250, 252, 0.55);
+}
+
+html.theme-dark .history-modal__empty-icon {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 250, 252, 0.25);
+}
+
+html.theme-dark .history-modal__empty-title {
+  color: rgba(248, 250, 252, 0.65);
+}
+
+html.theme-dark .history-modal__empty-text {
+  color: rgba(248, 250, 252, 0.4);
+}
+
+html.theme-dark .history-modal__btn-back {
+  background: #f8fafc;
+  color: #111827;
+}
+
+html.theme-dark .history-modal__btn-back:hover {
+  background: #e2e8f0;
+}
+
 html.theme-dark .history-card {
   background: var(--surface);
   border-color: var(--hairline);
@@ -12682,7 +12948,12 @@ html.theme-dark .history-card__title {
   color: var(--text);
 }
 
+html.theme-dark .history-entry {
+  border-top-color: #334155;
+}
+
 html.theme-dark .history-card__meta,
+html.theme-dark .history-entry__when,
 html.theme-dark .history-row {
   color: var(--text-muted);
 }

@@ -190,33 +190,33 @@ export default function AppDockModalsLegacy() {
 
       <div
         id="modal-participation-history"
-        className="modal-overlay modal-overlay--tickets"
+        className="modal-overlay history-modal"
         aria-hidden="true"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-participation-history-title"
       >
-        <div className="modal modal--tickets-sheet">
-          <div className="cart-sheet__grabber" aria-hidden="true" />
-          <div className="tickets-sheet__header">
-            <div className="tickets-sheet__header-text">
-              <h2 id="modal-participation-history-title" className="tickets-sheet__title">
+        <div className="history-modal__dialog" role="document">
+          <button type="button" className="history-modal__close" id="modal-participation-history-close" aria-label="Закрыть">
+            ✕
+          </button>
+          <div className="history-modal__inner">
+            <div className="history-modal__head">
+              <button type="button" className="history-modal__back" aria-label="Назад" data-history-modal-back="1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m12 19-7-7 7-7" />
+                  <path d="M19 12H5" />
+                </svg>
+              </button>
+              <h2 id="modal-participation-history-title" className="history-modal__title">
                 История участий
               </h2>
-              <p className="tickets-sheet__subtitle">Все акции и ваши номерки по ним</p>
             </div>
-            <button
-              type="button"
-              className="tickets-sheet__close"
-              id="modal-participation-history-close"
-              aria-label="Закрыть"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+            <div className="history-modal__body custom-scrollbar" id="modal-participation-history-body" />
+            <button type="button" className="history-modal__btn-back" data-history-modal-back="1">
+              Назад
             </button>
           </div>
-          <div className="tickets-sheet__body custom-scrollbar" id="modal-participation-history-body" />
         </div>
       </div>
 

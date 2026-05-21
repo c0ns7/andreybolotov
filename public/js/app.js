@@ -3484,6 +3484,46 @@
     return '<p class="history-row' + (cls ? " " + cls : "") + '"><strong>' + escapeHtml(title) + ":</strong> " + escapeHtml(s) + "</p>";
   }
 
+  function historyTimelineStatusLabel(st) {
+    var x = String(st || "");
+    if (x === "reserved") return "В брони";
+    if (x === "pending_review") return "На проверке";
+    if (x === "confirmed") return "Закреплено";
+    if (x === "bonus_5plus1") return "Бонус 5+1";
+    if (x === "bonus_5plus2") return "Бонус 5+2";
+    return "Участие";
+  }
+
+  function historyTimelineRowClass(st) {
+    var x = String(st || "");
+    if (x === "pending_review") return "history-row--pending";
+    if (x === "confirmed") return "history-row--confirmed";
+    if (x === "bonus_5plus1" || x === "bonus_5plus2") return "history-row--bonus";
+    return "";
+  }
+
+  function historyTimelineEntryHtml(entry, idx) {
+    var nums = Array.isArray(entry && entry.numbers) ? entry.numbers : [];
+    var clean = nums
+      .map(function (n) {
+        return Math.floor(Number(n));
+      })
+      .filter(function (n) {
+        return Number.isFinite(n) && n > 0;
+      });
+    if (!clean.length) return "";
+    var when = formatReceiptArchiveTs(Number(entry && entry.at));
+    var st = String((entry && entry.status) || "");
+    return (
+      '<div class="history-entry">' +
+      '<p class="history-entry__when">' +
+      escapeHtml(when) +
+      "</p>" +
+      historyNumbersLine(historyTimelineStatusLabel(st), clean, historyTimelineRowClass(st)) +
+      "</div>"
+    );
+  }
+
   function historyStatusLabel(st) {
     var x = String(st || "active");
     if (x === "closed") return "Закрыта";
@@ -3496,43 +3536,60 @@
     if (!body) return;
     var list = (payload && Array.isArray(payload.raffles) ? payload.raffles : []).slice();
     if (!list.length) {
-      body.innerHTML = '<p class="history-empty">История участия пока пуста.</p>';
+      body.innerHTML =
+        '<div class="history-modal__empty">' +
+        '<div class="history-modal__empty-icon" aria-hidden="true">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>' +
+        '<path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path>' +
+        "</svg></div>" +
+        '<p class="history-modal__empty-title">История участия пока пуста</p>' +
+        '<p class="history-modal__empty-text">Здесь появятся ваши номерки по акциям — с датой брони, проверки и закрепления</p>' +
+        "</div>";
       return;
     }
     body.innerHTML = list
-      .map(function (it) {
+      .map(function (it, idx) {
         var raffle = (it && it.raffle) || {};
         var nums = (it && it.numbers) || {};
-        var dtRaw = Number(it && it.last_activity_at);
-        var dt = Number.isFinite(dtRaw) && dtRaw > 0 ? formatReceiptArchiveTs(dtRaw) : "—";
+        var timeline = Array.isArray(it && it.timeline) ? it.timeline : [];
+        var bodyHtml = "";
+        if (timeline.length) {
+          bodyHtml =
+            '<div class="history-card__timeline">' +
+            timeline
+              .map(function (entry, eidx) {
+                return historyTimelineEntryHtml(entry, idx + "_" + String(eidx));
+              })
+              .join("") +
+            "</div>";
+        } else {
+          bodyHtml =
+            historyNumbersLine("В брони", nums.reserved, "") +
+            historyNumbersLine("На проверке", nums.pending_review, "history-row--pending") +
+            historyNumbersLine("Закреплено", nums.confirmed, "history-row--confirmed") +
+            (function () {
+              var b1 = nums.bonus_5plus1_confirmed;
+              var b2 = nums.bonus_5plus2_confirmed;
+              var hasSplit =
+                (Array.isArray(b1) && b1.length) || (Array.isArray(b2) && b2.length);
+              if (hasSplit) {
+                return (
+                  historyNumbersLine("Бонус 5+1", Array.isArray(b1) ? b1 : [], "history-row--bonus") +
+                  historyNumbersLine("Бонус 5+2", Array.isArray(b2) ? b2 : [], "history-row--bonus")
+                );
+              }
+              return historyNumbersLine("Бонус по акции", nums.bonus_confirmed || [], "history-row--bonus");
+            })();
+        }
         return (
           '<article class="history-card">' +
           '<div class="history-card__head">' +
           '<h3 class="history-card__title">' +
           escapeHtml(String(raffle.title || "Акция")) +
           "</h3>" +
-          '<span class="history-card__meta">' +
-          escapeHtml(historyStatusLabel(raffle.status)) +
-          " · " +
-          escapeHtml(dt) +
-          "</span>" +
           "</div>" +
-          historyNumbersLine("В брони", nums.reserved, "") +
-          historyNumbersLine("На проверке", nums.pending_review, "history-row--pending") +
-          historyNumbersLine("Закреплено", nums.confirmed, "history-row--confirmed") +
-          (function () {
-            var b1 = nums.bonus_5plus1_confirmed;
-            var b2 = nums.bonus_5plus2_confirmed;
-            var hasSplit =
-              (Array.isArray(b1) && b1.length) || (Array.isArray(b2) && b2.length);
-            if (hasSplit) {
-              return (
-                historyNumbersLine("Бонус 5+1", Array.isArray(b1) ? b1 : [], "history-row--bonus") +
-                historyNumbersLine("Бонус 5+2", Array.isArray(b2) ? b2 : [], "history-row--bonus")
-              );
-            }
-            return historyNumbersLine("Бонус по акции", nums.bonus_confirmed || [], "history-row--bonus");
-          })() +
+          bodyHtml +
           "</article>"
         );
       })
@@ -6986,8 +7043,6 @@
       return;
     }
     if (overlay.id === "modal-participation-history") {
-      var hs = modalParticipationHistory && modalParticipationHistory.querySelector(".modal--tickets-sheet");
-      if (hs) hs.style.removeProperty("--sheet-drag-y");
       return;
     }
     if (overlay.id === "modal-promo-5-plus-1") {
@@ -7148,7 +7203,7 @@
     var THRESHOLD = 100;
     var cartSheet = document.getElementById("modal-cart-sheet");
     var ticketsSheet = modalTickets && modalTickets.querySelector(".modal--tickets-sheet");
-    var historySheet = modalParticipationHistory && modalParticipationHistory.querySelector(".modal--tickets-sheet");
+    var historySheet = null;
     var promoSheet = modalPromo5Plus1 && modalPromo5Plus1.querySelector(".modal--tickets-sheet");
     var searchSheet = modalTicketSearch && modalTicketSearch.querySelector(".ticket-search-sheet");
     var profileSheet = modalProfile && modalProfile.querySelector(".profile-modal");
@@ -7219,7 +7274,6 @@
 
     bind(modalCart, cartSheet, closeCartModal, ".cart-sheet__grabber, .cart-sheet__head");
     bind(modalTickets, ticketsSheet, closeTicketsModal, ".cart-sheet__grabber, .tickets-sheet__header");
-    bind(modalParticipationHistory, historySheet, closeParticipationHistoryModal, ".cart-sheet__grabber, .tickets-sheet__header");
     bind(modalPromo5Plus1, promoSheet, closePromo5Plus1Modal, ".cart-sheet__grabber, .tickets-sheet__header");
     bind(modalTicketSearch, searchSheet, closeTicketSearchModal, ".ticket-search-sheet__grabber, .ticket-search-sheet__head");
     bind(modalProfile, profileSheet, closeProfileModal, ".profile-modal__sheet-handle");
@@ -7590,6 +7644,11 @@
     ?.addEventListener("click", function () {
       closeParticipationHistoryModal();
     });
+  document.querySelectorAll("[data-history-modal-back]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      closeParticipationHistoryModal();
+    });
+  });
   document.getElementById("promo-5-plus-1-input")?.addEventListener("input", function () {
     updatePromo5Plus1Calc();
   });

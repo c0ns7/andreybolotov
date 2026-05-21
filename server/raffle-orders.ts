@@ -1593,9 +1593,24 @@ export async function listConfirmedTicketGroupsForUser(userId: number): Promise<
   );
 }
 
+export type ParticipationHistoryTimelineStatus =
+  | "reserved"
+  | "pending_review"
+  | "confirmed"
+  | "bonus_5plus1"
+  | "bonus_5plus2";
+
+export type ParticipationHistoryTimelineEntry = {
+  at: number;
+  status: ParticipationHistoryTimelineStatus;
+  numbers: number[];
+};
+
 export type ParticipationHistoryRaffle = {
   raffle: { id: number; title: string; status: string };
   last_activity_at: number;
+  /** Хронология: дата/время и номерки по этапу (бронь, проверка, закрепление). */
+  timeline: ParticipationHistoryTimelineEntry[];
   numbers: {
     reserved: number[];
     pending_review: number[];
@@ -1605,6 +1620,34 @@ export type ParticipationHistoryRaffle = {
     bonus_5plus2_confirmed: number[];
   };
 };
+
+function participationHistoryTimelineKey(
+  raffleId: number,
+  status: ParticipationHistoryTimelineStatus,
+  at: number,
+): string {
+  return `${raffleId}:${status}:${at}`;
+}
+
+function pushParticipationHistoryTimelineNumber(
+  map: Map<string, ParticipationHistoryTimelineEntry>,
+  raffleId: number,
+  status: ParticipationHistoryTimelineStatus,
+  at: number,
+  ticketNumber: number,
+): void {
+  const ts = Math.floor(Number(at) || 0);
+  if (!Number.isFinite(ts) || ts < 1) return;
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n) || n < 1) return;
+  const key = participationHistoryTimelineKey(raffleId, status, ts);
+  let row = map.get(key);
+  if (!row) {
+    row = { at: ts, status, numbers: [] };
+    map.set(key, row);
+  }
+  if (!row.numbers.includes(n)) row.numbers.push(n);
+}
 
 /** История участий пользователя по всем акциям: какие номерки закреплялись в каждом статусе. */
 export async function listParticipationHistoryForUser(userId: number): Promise<ParticipationHistoryRaffle[]> {
@@ -1617,6 +1660,9 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     ticket_number: number;
     is_bonus: number;
     bonus_promo_kind: string | null;
+    hold_created_at: number;
+    receipt_submitted_at: number | null;
+    confirmed_at: number | null;
   };
   const rows = await pgAll<Row>(
     `SELECT
@@ -1627,7 +1673,12 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
          o.updated_at AS ord_updated_at,
          h.ticket_number AS ticket_number,
          COALESCE(h.is_bonus, 0) AS is_bonus,
-         h.bonus_promo_kind AS bonus_promo_kind
+         h.bonus_promo_kind AS bonus_promo_kind,
+         h.created_at AS hold_created_at,
+         (SELECT MAX(e.created_at) FROM raffle_order_events e
+            WHERE e.order_id = o.id AND e.kind = 'receipt_submitted') AS receipt_submitted_at,
+         (SELECT MAX(e.created_at) FROM raffle_order_events e
+            WHERE e.order_id = o.id AND e.kind = 'confirmed') AS confirmed_at
        FROM raffle_orders o
        INNER JOIN raffles r ON r.id = o.raffle_id
        INNER JOIN raffle_ticket_holds h ON h.order_id = o.id
@@ -1637,6 +1688,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
   );
 
   const map = new Map<number, ParticipationHistoryRaffle>();
+  const timelineByRaffle = new Map<number, Map<string, ParticipationHistoryTimelineEntry>>();
   for (const row of rows) {
     const rid = Number(row.raffle_id);
     if (!Number.isFinite(rid) || rid < 1) continue;
@@ -1649,6 +1701,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
           status: String(row.raffle_status || "active"),
         },
         last_activity_at: Number(row.ord_updated_at) || 0,
+        timeline: [],
         numbers: {
           reserved: [],
           pending_review: [],
@@ -1659,18 +1712,26 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
         },
       };
       map.set(rid, entry);
+      timelineByRaffle.set(rid, new Map());
     } else if ((Number(row.ord_updated_at) || 0) > entry.last_activity_at) {
       entry.last_activity_at = Number(row.ord_updated_at) || 0;
     }
     const n = Math.floor(Number(row.ticket_number));
     if (!Number.isFinite(n) || n < 1) continue;
+    const holdAt = Number(row.hold_created_at) || 0;
+    const receiptAt = row.receipt_submitted_at != null ? Number(row.receipt_submitted_at) : 0;
+    const confirmedAt = row.confirmed_at != null ? Number(row.confirmed_at) : 0;
+    const ordUpdatedAt = Number(row.ord_updated_at) || 0;
     const st = String(row.order_status || "");
+    const tlMap = timelineByRaffle.get(rid)!;
     if (st === "reserved") {
       if (!entry.numbers.reserved.includes(n)) entry.numbers.reserved.push(n);
+      pushParticipationHistoryTimelineNumber(tlMap, rid, "reserved", holdAt || ordUpdatedAt, n);
       continue;
     }
     if (st === "pending_review") {
       if (!entry.numbers.pending_review.includes(n)) entry.numbers.pending_review.push(n);
+      pushParticipationHistoryTimelineNumber(tlMap, rid, "pending_review", receiptAt || ordUpdatedAt || holdAt, n);
       continue;
     }
     if (st === "confirmed") {
@@ -1679,11 +1740,26 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
         const kind = String(row.bonus_promo_kind || "").trim();
         if (kind === "5plus2") {
           if (!entry.numbers.bonus_5plus2_confirmed.includes(n)) entry.numbers.bonus_5plus2_confirmed.push(n);
+          pushParticipationHistoryTimelineNumber(
+            tlMap,
+            rid,
+            "bonus_5plus2",
+            holdAt || confirmedAt || ordUpdatedAt,
+            n,
+          );
         } else {
           if (!entry.numbers.bonus_5plus1_confirmed.includes(n)) entry.numbers.bonus_5plus1_confirmed.push(n);
+          pushParticipationHistoryTimelineNumber(
+            tlMap,
+            rid,
+            "bonus_5plus1",
+            holdAt || confirmedAt || ordUpdatedAt,
+            n,
+          );
         }
-      } else if (!entry.numbers.confirmed.includes(n)) {
-        entry.numbers.confirmed.push(n);
+      } else {
+        if (!entry.numbers.confirmed.includes(n)) entry.numbers.confirmed.push(n);
+        pushParticipationHistoryTimelineNumber(tlMap, rid, "confirmed", confirmedAt || ordUpdatedAt || holdAt, n);
       }
     }
   }
@@ -1696,6 +1772,11 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     it.numbers.bonus_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus1_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus2_confirmed.sort((a, b) => a - b);
+    const tlMap = timelineByRaffle.get(it.raffle.id);
+    const timeline = tlMap ? [...tlMap.values()] : [];
+    for (const row of timeline) row.numbers.sort((a, b) => a - b);
+    timeline.sort((a, b) => b.at - a.at || a.status.localeCompare(b.status));
+    it.timeline = timeline;
   }
   out.sort((a, b) => b.last_activity_at - a.last_activity_at);
   return out;

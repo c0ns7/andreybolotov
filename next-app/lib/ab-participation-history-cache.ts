@@ -3,9 +3,23 @@
 import { abAuthHeaders } from "./ab-api";
 import { loadAbSession } from "./ab-session";
 
+export type AbParticipationHistoryTimelineStatus =
+  | "reserved"
+  | "pending_review"
+  | "confirmed"
+  | "bonus_5plus1"
+  | "bonus_5plus2";
+
+export type AbParticipationHistoryTimelineEntry = {
+  at?: number;
+  status?: AbParticipationHistoryTimelineStatus;
+  numbers?: number[];
+};
+
 export type AbParticipationHistoryPayload = {
   raffles?: Array<{
     raffle?: { title?: string; status?: string };
+    timeline?: AbParticipationHistoryTimelineEntry[];
     numbers?: {
       reserved?: number[];
       pending_review?: number[];
@@ -20,7 +34,7 @@ export type AbParticipationHistoryPayload = {
 
 let historyCache: { ts: number; data: AbParticipationHistoryPayload } | null = null;
 let historyInFlight: Promise<AbParticipationHistoryPayload> | null = null;
-const HISTORY_CACHE_KEY = "ab_participation_history_cache_v1";
+const HISTORY_CACHE_KEY = "ab_participation_history_cache_v2";
 
 function getStorageKey(): string {
   const s = loadAbSession();
