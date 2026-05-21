@@ -11,6 +11,16 @@ function isNextLocalApi(pathname: string): boolean {
   return pathname.startsWith("/api/auth/forgot") || pathname.startsWith("/api/auth/reset-password");
 }
 
+/** Загрузки — через Route Handler (стрим на Fastify), не rewrite (избегаем обрезания тела). */
+function isApiUploadPath(pathname: string): boolean {
+  return (
+    pathname === "/api/admin/raffles/upload" ||
+    pathname === "/api/admin/blog/upload" ||
+    pathname === "/api/chat/upload" ||
+    pathname === "/api/raffles/receipt-upload"
+  );
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname.startsWith("/_next") || pathname.startsWith("/static-proxy")) {
@@ -18,7 +28,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/")) {
-    if (isNextLocalApi(pathname)) return NextResponse.next();
+    if (isNextLocalApi(pathname) || isApiUploadPath(pathname)) return NextResponse.next();
     const base = upstreamOrigin();
     const target = new URL(pathname + request.nextUrl.search, base);
     return NextResponse.rewrite(target);

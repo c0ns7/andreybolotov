@@ -272,7 +272,9 @@ await app.register(cors, {
 await app.register(multipart, {
   limits: {
     fileSize: 35 * 1024 * 1024,
-    files: 1,
+    files: 2,
+    fields: 20,
+    fieldSize: 1024 * 1024,
   },
 });
 
@@ -360,7 +362,11 @@ app.post("/api/admin/raffles/upload", async (request, reply) => {
   let part;
   try {
     part = await request.file();
-  } catch {
+  } catch (err) {
+    const code = err && typeof err === "object" && "statusCode" in err ? Number(err.statusCode) : 0;
+    if (code === 413) {
+      return reply.code(413).send({ error: "Файл слишком большой (видео — до 30 МБ)" });
+    }
     return reply.code(400).send({ error: "Не удалось прочитать файл" });
   }
   if (!part) {

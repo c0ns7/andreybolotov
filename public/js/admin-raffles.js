@@ -112,6 +112,15 @@
     if (file.size > 5 * 1024 * 1024) throw new Error("Файл не больше 5 МБ");
   }
 
+  function raffleUploadApiUrl() {
+    var direct =
+      typeof window.__AB_HTTP_ORIGIN__ === "string" && window.__AB_HTTP_ORIGIN__
+        ? String(window.__AB_HTTP_ORIGIN__).replace(/\/$/, "")
+        : "";
+    if (direct) return direct + "/api/admin/raffles/upload";
+    return "/api/admin/raffles/upload";
+  }
+
   function uploadFileWithProgress(file, kind) {
     return new Promise(function (resolve, reject) {
       var st = raffleUploadState[kind];
@@ -121,7 +130,7 @@
       paintRaffleUploadProgress(kind);
       updateRaffleFormSaveState();
       var xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/admin/raffles/upload");
+      xhr.open("POST", raffleUploadApiUrl());
       var headers = authHeaders();
       Object.keys(headers).forEach(function (k) {
         xhr.setRequestHeader(k, headers[k]);
@@ -152,9 +161,16 @@
           resolve(data.url);
           return;
         }
-        var errMsg =
-          data.error ||
-          (xhr.status === 413 ? "Файл слишком большой для сервера" : "Ошибка загрузки (" + xhr.status + ")");
+        var errMsg = data.error || "Ошибка загрузки (" + xhr.status + ")";
+        if (xhr.status === 413) {
+          errMsg =
+            data.error ||
+            "Сервер отклонил файл (413). Файл " +
+            (file.size < 1024 * 1024
+              ? Math.round(file.size / 1024) + " КБ"
+              : (file.size / (1024 * 1024)).toFixed(1) + " МБ") +
+            " — проверьте nginx: client_max_body_size 50M (см. deploy/nginx-upload-body-limit.conf).";
+        }
         st.error = errMsg;
         st.progress = 0;
         paintRaffleUploadProgress(kind);

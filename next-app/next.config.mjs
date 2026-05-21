@@ -7,6 +7,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   experimental: {
     externalDir: true,
+    /** proxy.ts буферизует тело запроса; без этого лимит по умолчанию может резать загрузки */
+    proxyClientMaxBodySize: "50mb",
   },
   turbopack: {
     root: path.resolve(here, ".."),
@@ -17,6 +19,8 @@ const nextConfig = {
    */
   env: {
     NEXT_PUBLIC_AB_WS_ORIGIN: (process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "").replace(/\/$/, ""),
+    /** Прямой URL API для загрузок (обход nginx 1 МБ), например https://api.example.com */
+    NEXT_PUBLIC_AB_HTTP_ORIGIN: (process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "").replace(/\/$/, ""),
   },
 };
 

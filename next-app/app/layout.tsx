@@ -94,6 +94,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="ab-api-ws" strategy="beforeInteractive">
           {`try{var o=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "")};if(o){window.__AB_WS_ORIGIN__=String(o).replace(/\\/$/,"");}}catch(_){}`}
         </Script>
+        <Script id="ab-api-http" strategy="beforeInteractive">
+          {`try{var h=${JSON.stringify(process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "")};if(h){window.__AB_HTTP_ORIGIN__=String(h).replace(/\\/$/,"");}}catch(_){}`}
+        </Script>
         <AbSessionProvider>
           <AbToastHost />
           <SiteOnlineBadge />
