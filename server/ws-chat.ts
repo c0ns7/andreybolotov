@@ -243,6 +243,21 @@ export function broadcastMaintenanceStatusUpdated(enabled: boolean) {
 }
 
 /** Уведомление клиентам: включён или выключен публичный блог */
+/** Новый или обновлённый опубликованный пост в блоге — обновить счётчик непросмотренных в навигации. */
+export function broadcastBlogPostsUpdated() {
+  const payload = JSON.stringify({ type: "blog_posts_updated" });
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "blog_posts_updated" });
+}
+
 export function broadcastBlogEnabledUpdated(enabled: boolean) {
   const payload = JSON.stringify({ type: "site_blog_enabled_updated", blog_enabled: Boolean(enabled) });
   for (const ws of adminSockets) {

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, BadgeCheck, Clock3, Gift, HandHeart, Hash, Hourglass, MapPin, Ticket } from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
+import { getAbBlogUnreadCached, invalidateAbBlogUnreadCache } from "../../lib/ab-blog-unread-cache";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
 import { getAbMyTicketsCached, invalidateAbMyTicketsCache } from "../../lib/ab-my-tickets-cache";
 import {
@@ -94,6 +95,17 @@ function numChips(nums?: number[], readonly = true) {
 
 function BlogNavIcon() {
   return <HandHeart size={22} strokeWidth={2} aria-hidden="true" />;
+}
+
+function BlogNavIconWithBadge({ unread }: { unread: number }) {
+  return (
+    <span className="bottom-nav-btn__icon">
+      <BlogNavIcon />
+      <span className="bottom-nav-btn__badge" hidden={unread <= 0}>
+        {unread > 99 ? "99+" : String(unread)}
+      </span>
+    </span>
+  );
 }
 
 function blurIfFocusInsideModalRoot(rootId: string) {
@@ -300,6 +312,7 @@ export default function AppBottomNav({
   const [history, setHistory] = useState<HistoryPayload>({});
   const [profileTicketsBadge, setProfileTicketsBadge] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
+  const [blogUnread, setBlogUnread] = useState(0);
   const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
   const [latestVisibleRaffleId, setLatestVisibleRaffleId] = useState(0);
   const historyOpenRef = useRef(false);
@@ -407,6 +420,24 @@ export default function AppBottomNav({
     }
   }, [authVerified]);
 
+  const refreshBlogUnread = useCallback(async () => {
+    const cur = loadAbSession();
+    if (!cur?.token || !authVerified || !showBlog) {
+      setBlogUnread(0);
+      return;
+    }
+    if (!blogEnabled && String(cur.role || session?.role || "") !== "admin") {
+      setBlogUnread(0);
+      return;
+    }
+    try {
+      const unread = await getAbBlogUnreadCached();
+      setBlogUnread(unread);
+    } catch {
+      /* ignore */
+    }
+  }, [authVerified, showBlog, blogEnabled, session?.role]);
+
   const refreshLatestVisibleRaffle = useCallback(async () => {
     const cur = loadAbSession();
     if (!cur?.token || !authVerified) {
@@ -454,6 +485,10 @@ export default function AppBottomNav({
   }, [refreshChatUnread]);
 
   useEffect(() => {
+    void refreshBlogUnread();
+  }, [refreshBlogUnread]);
+
+  useEffect(() => {
     void refreshLatestVisibleRaffle();
   }, [refreshLatestVisibleRaffle]);
 
@@ -472,6 +507,8 @@ export default function AppBottomNav({
   refreshHistorySummaryRef.current = refreshHistorySummary;
   const refreshChatUnreadRef = useRef(refreshChatUnread);
   refreshChatUnreadRef.current = refreshChatUnread;
+  const refreshBlogUnreadRef = useRef(refreshBlogUnread);
+  refreshBlogUnreadRef.current = refreshBlogUnread;
   const refreshLatestVisibleRaffleRef = useRef(refreshLatestVisibleRaffle);
   refreshLatestVisibleRaffleRef.current = refreshLatestVisibleRaffle;
 
@@ -496,6 +533,10 @@ export default function AppBottomNav({
         invalidateAbChatUnreadCache();
         void refreshChatUnreadRef.current();
       }
+      if (d.type === "blog_posts_updated" || d.type === "site_blog_enabled_updated") {
+        invalidateAbBlogUnreadCache();
+        void refreshBlogUnreadRef.current();
+      }
     };
     window.addEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
     return () => window.removeEventListener(AB_USER_WS_EVENT, onUserWs as EventListener);
@@ -515,8 +556,18 @@ export default function AppBottomNav({
     return () => window.clearInterval(t);
   }, [pathname, refreshChatUnread]);
 
+  useEffect(() => {
+    if (!showBlog || !authVerified) return;
+    void refreshBlogUnread();
+    const t = window.setInterval(() => {
+      void refreshBlogUnread();
+    }, 45_000);
+    return () => window.clearInterval(t);
+  }, [pathname, showBlog, authVerified, refreshBlogUnread]);
+
   const isAdmin = mounted && String(session?.role || "") === "admin";
   const isBlogRoute = pathname === "/home/blog" || pathname.startsWith("/home/blog/");
+  const showBlogUnreadBadge = showBlog && (blogEnabled || isAdmin) && blogUnread > 0;
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
@@ -611,14 +662,16 @@ export default function AppBottomNav({
             blogEnabled || isAdmin ? (
               <Link
                 href="/home/blog"
-                className={"bottom-nav-btn" + (isBlogRoute ? " bottom-nav-btn--active" : "")}
+                className={
+                  "bottom-nav-btn" +
+                  (isBlogRoute ? " bottom-nav-btn--active" : "") +
+                  (showBlogUnreadBadge ? " bottom-nav-btn--blog-unread" : "")
+                }
                 id="tab-blog"
-                aria-label="Блог"
+                aria-label={blogUnread > 0 ? `Блог, ${blogUnread} новых постов` : "Блог"}
                 aria-current={isBlogRoute ? "page" : undefined}
               >
-                <span className="bottom-nav-btn__icon">
-                  <BlogNavIcon />
-                </span>
+                <BlogNavIconWithBadge unread={blogUnread} />
                 <span className="bottom-nav-btn__label">Блог</span>
               </Link>
             ) : (
@@ -630,9 +683,7 @@ export default function AppBottomNav({
                 aria-expanded={blogOpen}
                 onClick={() => setBlogOpen(true)}
               >
-                <span className="bottom-nav-btn__icon">
-                  <BlogNavIcon />
-                </span>
+                <BlogNavIconWithBadge unread={0} />
                 <span className="bottom-nav-btn__label">Блог</span>
               </button>
             )

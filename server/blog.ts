@@ -1,4 +1,5 @@
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
+import { broadcastBlogPostsUpdated } from "./ws-chat.js";
 
 export type BlogPostRow = {
   id: number;
@@ -452,6 +453,7 @@ export async function createBlogPost(authorUserId: number, input: SaveBlogPostIn
     const mediaRes = await setPostMedia(row.id, mediaItems);
     if (!mediaRes.ok) return { ok: false as const, error: mediaRes.error };
   }
+  if (status === "published") broadcastBlogPostsUpdated();
   return { ok: true as const, post: await getBlogPostById(row.id, authorUserId) };
 }
 
@@ -504,12 +506,32 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
     const mediaRes = await setPostMedia(postId, mediaItems);
     if (!mediaRes.ok) return { ok: false as const, error: mediaRes.error };
   }
+  if (status === "published") broadcastBlogPostsUpdated();
   return { ok: true as const, post: await getBlogPostById(postId) };
 }
 
 export async function deleteBlogPost(postId: number) {
+  const row = await pgGet<{ status: string }>(`SELECT status FROM blog_posts WHERE id = ?`, [postId]);
   await pgExec(`DELETE FROM blog_posts WHERE id = ?`, [postId]);
+  if (String(row?.status || "") === "published") broadcastBlogPostsUpdated();
   return { ok: true as const };
+}
+
+/** Опубликованные посты, которые пользователь ещё не открывал (или пост обновили после просмотра). */
+export async function getBlogUnreadPostCount(viewerUserId: number): Promise<number> {
+  const uid = Math.floor(Number(viewerUserId) || 0);
+  if (uid < 1) return 0;
+  const row = await pgGet<{ cnt: number }>(
+    `SELECT COUNT(*)::int AS cnt FROM blog_posts p
+     WHERE p.status = 'published'
+       AND (
+         SELECT COALESCE(MAX(v.viewed_at), 0)
+         FROM blog_post_views v
+         WHERE v.post_id = p.id AND v.viewer_user_id = ?
+       ) < COALESCE(p.updated_at, p.published_at, p.created_at)`,
+    [uid],
+  );
+  return Math.max(0, Math.floor(Number(row?.cnt) || 0));
 }
 
 export async function recordBlogPostView(postId: number, viewerUserId?: number) {
@@ -589,10 +611,27 @@ export async function hideBlogComment(commentId: number) {
     `SELECT post_id, hidden FROM blog_comments WHERE id = ?`,
     [commentId],
   );
-  if (!row || row.hidden) return { ok: false as const };
+  if (!row || row.hidden) return { ok: false as const, error: "Комментарий не найден" };
   await pgExec(`UPDATE blog_comments SET hidden = 1 WHERE id = ?`, [commentId]);
   await pgExec(`UPDATE blog_posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = ?`, [
     row.post_id,
   ]);
-  return { ok: true as const };
+  return { ok: true as const, post_id: row.post_id };
+}
+
+export async function deleteBlogCommentForUser(
+  commentId: number,
+  userId: number,
+  isAdmin: boolean,
+) {
+  const row = await pgGet<{ user_id: number; post_id: number; hidden: number }>(
+    `SELECT user_id, post_id, hidden FROM blog_comments WHERE id = ?`,
+    [commentId],
+  );
+  if (!row) return { ok: false as const, error: "Комментарий не найден" };
+  if (row.hidden) return { ok: false as const, error: "Комментарий уже удалён" };
+  if (!isAdmin && Number(row.user_id) !== Number(userId)) {
+    return { ok: false as const, error: "Недостаточно прав" };
+  }
+  return hideBlogComment(commentId);
 }

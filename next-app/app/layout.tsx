@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
 import AbRouteHtmlClasses from "../components/ab/AbRouteHtmlClasses";
@@ -73,6 +73,15 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
@@ -87,6 +96,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           })}
         </Script>
         {/* Синхронно до React: классы страниц акции */}
+        <Script id="ab-no-zoom" strategy="beforeInteractive">
+          {`!function(){try{var p=function(e){e.preventDefault()};document.addEventListener("gesturestart",p,{passive:!1});document.addEventListener("gesturechange",p,{passive:!1});document.addEventListener("gestureend",p,{passive:!1});document.addEventListener("wheel",function(e){if(e.ctrlKey)e.preventDefault()},{passive:!1})}catch(_){}}();`}
+        </Script>
         <Script id="ab-route-html-classes" strategy="beforeInteractive">
           {`!function(){try{var p=location.pathname||"";while(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);if(p==="/home/raffle"||p.indexOf("/raffle/")===0){document.documentElement.classList.add("raffle-purchase-page","raffle-grid-page");}else if(p.indexOf("/home/raffle/confirm")===0){document.documentElement.classList.add("raffle-confirm-page");}}catch(_){}}();`}
         </Script>

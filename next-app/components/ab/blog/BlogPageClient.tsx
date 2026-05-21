@@ -11,8 +11,10 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
+import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
+import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
 import { blogHtmlHasContent, resolveBlogBodyHtml, stripBlogBodyDuplicateMedia } from "../../../lib/ab-blog-html";
 import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
@@ -21,6 +23,7 @@ import { useAbSession } from "../AbSessionContext";
 import BlogPageHeader from "./BlogPageHeader";
 import BlogMediaUploader, { type BlogUploadProgress } from "./BlogMediaUploader";
 import { BlogMediaCarousel, BlogMediaLightbox } from "./BlogMediaGallery";
+import PullToRefresh from "../PullToRefresh";
 import BlogRichEditor, { type BlogRichEditorHandle } from "./BlogRichEditor";
 
 type Tab = "feed" | "manage";
@@ -86,6 +89,7 @@ function BlogPageClientInner() {
   const { blog_enabled: blogEnabled, loaded: siteFlagsLoaded } = useSiteFlags();
   const searchParams = useSearchParams();
   const isAdmin = authVerified && String(session?.role || "") === "admin";
+  const sessionUserId = Number(session?.id) || 0;
   const canUseBlog = blogEnabled || isAdmin;
   const token = session?.token || "";
 
@@ -174,6 +178,11 @@ function BlogPageClientInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [readPost]);
 
+  const syncBlogUnreadNav = () => {
+    invalidateAbBlogUnreadCache();
+    window.dispatchEvent(new CustomEvent(AB_USER_WS_EVENT, { detail: { type: "blog_posts_updated" } }));
+  };
+
   const openPost = async (post: BlogPost) => {
     setReadPost(post);
     setReadLoading(true);
@@ -182,6 +191,7 @@ function BlogPageClientInner() {
     try {
       if (post.status === "published") {
         await abApiJson(`/api/blog/posts/${post.id}/view`, { method: "POST", headers: adminHeaders });
+        syncBlogUnreadNav();
         const [full, commentsData] = await Promise.all([
           abApiJson<{ post: BlogPost }>(`/api/blog/posts/${encodeURIComponent(post.slug)}`, { headers: adminHeaders }),
           abApiJson<{ comments: BlogComment[] }>(`/api/blog/posts/${post.id}/comments`, { headers: adminHeaders }),
@@ -225,25 +235,6 @@ function BlogPageClientInner() {
     void openPost(post);
   };
 
-  const scrollToComments = () => {
-    commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const toggleLike = async (post: BlogPost) => {
-    try {
-      const data = await abApiJson<{ liked: boolean; like_count: number }>(`/api/blog/posts/${post.id}/like`, {
-        method: "POST",
-        headers: adminHeaders,
-      });
-      const patch = (p: BlogPost) =>
-        p.id === post.id ? { ...p, liked_by_me: data.liked, like_count: data.like_count } : p;
-      setPosts((list) => list.map(patch));
-      if (readPost?.id === post.id) setReadPost((p) => (p ? patch(p) : p));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Ошибка", "error");
-    }
-  };
-
   const sendComment = async () => {
     if (!readPost || !commentDraft.trim() || commentSending) return;
     setCommentSending(true);
@@ -262,6 +253,24 @@ function BlogPageClientInner() {
       toast(e instanceof Error ? e.message : "Ошибка", "error");
     } finally {
       setCommentSending(false);
+    }
+  };
+
+  const deleteComment = async (commentId: number) => {
+    if (!readPost) return;
+    if (!window.confirm("Удалить комментарий?")) return;
+    try {
+      await abApiJson(`/api/blog/comments/${commentId}`, {
+        method: "DELETE",
+        headers: adminHeaders,
+      });
+      setComments((list) => list.filter((c) => c.id !== commentId));
+      const nextCount = Math.max(0, readPost.comment_count - 1);
+      setReadPost((p) => (p ? { ...p, comment_count: nextCount } : p));
+      setPosts((list) => list.map((p) => (p.id === readPost.id ? { ...p, comment_count: nextCount } : p)));
+      toast("Комментарий удалён", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Не удалось удалить", "error");
     }
   };
 
@@ -417,6 +426,23 @@ function BlogPageClientInner() {
     }
   };
 
+  const pullDisabled = editorOpen || !!lightbox || readLoading;
+
+  const handlePullRefresh = useCallback(async () => {
+    if (readPost) {
+      await openPost(readPost);
+      return;
+    }
+    await loadPosts();
+    if (isAdmin) await loadTags();
+  }, [readPost, openPost, loadPosts, isAdmin, loadTags]);
+
+  const wrapPtr = (node: ReactNode) => (
+    <PullToRefresh onRefresh={handlePullRefresh} disabled={pullDisabled} className="blog-page__ptr">
+      {node}
+    </PullToRefresh>
+  );
+
   const deletePost = async (id: number) => {
     if (!window.confirm("Удалить пост безвозвратно?")) return;
     try {
@@ -430,11 +456,11 @@ function BlogPageClientInner() {
   };
 
   if (!authVerified || !siteFlagsLoaded) {
-    return <p className="blog-loading">Загрузка…</p>;
+    return wrapPtr(<p className="blog-loading">Загрузка…</p>);
   }
 
   if (!canUseBlog) {
-    return <BlogDisabledStub />;
+    return wrapPtr(<BlogDisabledStub />);
   }
 
   if (readPost) {
@@ -445,7 +471,7 @@ function BlogPageClientInner() {
         : [];
     const articleBodyHtml = stripBlogBodyDuplicateMedia(readPost.body_html, articleMedia);
     const readMin = estimateReadMinutes(articleBodyHtml || readPost.body_html);
-    return (
+    return wrapPtr(
       <article className="blog-article">
         <BlogPageHeader title={readPost.title} backOnClick={() => setReadPost(null)} backLabel="К ленте блога" />
 
@@ -495,22 +521,6 @@ function BlogPageClientInner() {
 
           {readPost.excerpt ? <p className="blog-article__lead">{readPost.excerpt}</p> : null}
 
-          <div className="blog-article__engage">
-            <button
-              type="button"
-              className={"blog-engage-btn blog-engage-btn--like" + (readPost.liked_by_me ? " is-liked" : "")}
-              onClick={() => void toggleLike(readPost)}
-              aria-pressed={readPost.liked_by_me}
-            >
-              <Heart size={18} fill={readPost.liked_by_me ? "currentColor" : "none"} />
-              <span>{readPost.like_count}</span>
-            </button>
-            <button type="button" className="blog-engage-btn" onClick={scrollToComments}>
-              <MessageCircle size={18} />
-              <span>{readPost.comment_count}</span>
-            </button>
-          </div>
-
           {articleBodyHtml ? (
             <div className="blog-article__body" dangerouslySetInnerHTML={{ __html: articleBodyHtml }} />
           ) : null}
@@ -536,7 +546,10 @@ function BlogPageClientInner() {
 
             {comments.length ? (
               <ul className="blog-comments__list">
-                {comments.map((c) => (
+                {comments.map((c) => {
+                  const canDeleteComment =
+                    isAdmin || (sessionUserId > 0 && Number(c.user_id) === sessionUserId);
+                  return (
                   <li key={c.id} className="blog-comment">
                     <div className="blog-comment__avatar" aria-hidden="true">
                       {(c.user_name || "?").charAt(0).toUpperCase()}
@@ -545,11 +558,22 @@ function BlogPageClientInner() {
                       <div className="blog-comment__head">
                         <strong>{c.user_name}</strong>
                         <time className="blog-comment__time">{formatDate(c.created_at)}</time>
+                        {canDeleteComment ? (
+                          <button
+                            type="button"
+                            className="blog-comment__delete"
+                            aria-label="Удалить комментарий"
+                            onClick={() => void deleteComment(c.id)}
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
+                          </button>
+                        ) : null}
                       </div>
                       <p className="blog-comment__text">{c.body}</p>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="blog-article__comments-empty">Пока нет комментариев — будьте первым.</p>
@@ -577,26 +601,11 @@ function BlogPageClientInner() {
             </div>
           </section>
         </div>
-
-        <footer className="blog-article__bar">
-          <button
-            type="button"
-            className={"blog-article__bar-btn" + (readPost.liked_by_me ? " is-liked" : "")}
-            onClick={() => void toggleLike(readPost)}
-            aria-label="Нравится"
-          >
-            <Heart size={22} fill={readPost.liked_by_me ? "currentColor" : "none"} />
-          </button>
-          <button type="button" className="blog-article__bar-btn" onClick={scrollToComments} aria-label="Комментарии">
-            <MessageCircle size={22} />
-          </button>
-        </footer>
-      </article>
-
+      </article>,
     );
   }
 
-  return (
+  return wrapPtr(
     <div className="blog-page blog-page--feed">
       <BlogPageHeader
         title="Блог"
@@ -675,12 +684,6 @@ function BlogPageClientInner() {
             </select>
           ) : null}
         </div>
-        {isAdmin ? (
-          <button type="button" className="btn btn--primary blog-toolbar__create" onClick={() => openEditor()}>
-            <Plus size={18} aria-hidden="true" />
-            Новый пост
-          </button>
-        ) : null}
       </div>
 
       {loading ? (
@@ -842,7 +845,7 @@ function BlogPageClientInner() {
       {lightbox && !readPost ? (
         <BlogMediaLightbox media={lightbox.media} startIndex={lightbox.index} onClose={() => setLightbox(null)} />
       ) : null}
-    </div>
+    </div>,
   );
 }
 

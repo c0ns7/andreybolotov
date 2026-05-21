@@ -95,6 +95,15 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
+  -ms-touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+html,
+body {
+  /* Как в нативном приложении: без pinch-zoom и двойного тапа для масштаба */
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
 }
 
 /* iOS Safari: при font-size поля < 16px страница «подъезжает» при фокусе */
@@ -112,6 +121,7 @@ body {
   line-height: 1.45;
   color: var(--text);
   background: var(--bg);
+  overscroll-behavior-y: contain;
 }
 
 /* Центрирующая оболочка: максимум 520px */
@@ -593,6 +603,61 @@ html.js-intro-done #welcome-splash {
 .home-inner {
   padding: 0 16px 16px;
   flex: 1;
+}
+
+/* Pull-to-refresh (главная, блог) */
+.ptr {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ptr__indicator {
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: height 0.18s ease-out;
+}
+
+.ptr__indicator-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 10px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ptr__spinner {
+  color: var(--apple-blue);
+  flex-shrink: 0;
+}
+
+.ptr__spinner--spin {
+  animation: ptr-spin 0.85s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ptr__body {
+  flex: 1;
+  min-height: 0;
+}
+
+html.theme-dark .ptr__indicator-inner {
+  color: var(--text-muted);
+}
+
+html.theme-dark .ptr__spinner {
+  color: #60a5fa;
 }
 
 .home-sticky {
@@ -3426,6 +3491,30 @@ html.bottom-nav-hidden-by-fast-input .cart-action-strip {
   box-shadow: inherit;
   animation: none;
 }
+.bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) {
+  position: relative;
+}
+
+.bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__icon {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.12);
+  border-radius: 14px;
+}
+
+.bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__label {
+  color: #6d28d9;
+  font-weight: 600;
+}
+
+html.theme-dark .bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__icon {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.16);
+}
+
+html.theme-dark .bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__label {
+  color: #c4b5fd;
+}
+
 .bottom-nav-btn--chat-unread:not(.bottom-nav-btn--active) .bottom-nav-btn__label {
   color: inherit;
 }

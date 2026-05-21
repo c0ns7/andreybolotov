@@ -82,8 +82,9 @@ import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
 import {
   addBlogComment,
   getBlogPostBySlug,
-  hideBlogComment,
+  deleteBlogCommentForUser,
   listBlogComments,
+  getBlogUnreadPostCount,
   listBlogPosts,
   recordBlogPostView,
   toggleBlogPostLike,
@@ -1649,6 +1650,14 @@ async function requireBlogPublic(request: import("fastify").FastifyRequest, repl
   return false;
 }
 
+app.get("/api/blog/unread", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
+  const unread = await getBlogUnreadPostCount(user.id);
+  return { unread };
+});
+
 app.get("/api/blog/posts", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
@@ -1734,11 +1743,18 @@ app.post("/api/blog/posts/:id/comments", async (request, reply) => {
 app.delete("/api/blog/comments/:commentId", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
-  if (String(user.role) !== "admin") return reply.code(403).send({ error: "Недостаточно прав" });
   const commentId = Number((request.params as { commentId?: string }).commentId);
   if (!Number.isFinite(commentId)) return reply.code(400).send({ error: "Некорректный id" });
-  await hideBlogComment(commentId);
-  return { ok: true };
+  const res = await deleteBlogCommentForUser(
+    commentId,
+    user.id,
+    String(user.role) === "admin",
+  );
+  if (!res.ok) {
+    const code = res.error === "Недостаточно прав" ? 403 : 404;
+    return reply.code(code).send({ error: res.error });
+  }
+  return { ok: true, post_id: res.post_id };
 });
 
 app.get("/api/prizes/:id", async (request, reply) => {

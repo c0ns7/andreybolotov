@@ -10,6 +10,7 @@ import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
 import AppBottomNav from "./AppBottomNav";
 import { useSiteFlags } from "../../lib/use-site-flags";
 import HomeFeedEmpty from "./HomeFeedEmpty";
+import PullToRefresh from "./PullToRefresh";
 import HomeSocialLinks from "./HomeSocialLinks";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
@@ -339,6 +340,11 @@ export default function HomeAppClient() {
   const showApp = !!(mounted && session?.token && session?.phone && (authVerified || authCheckInFlight));
   const showHomeBootLoader = !!(authCheckInFlight || (session?.token && authVerified && !feedBootstrapped));
 
+  const handlePullRefresh = useCallback(async () => {
+    await loadFeed();
+    refreshTicketStrip();
+  }, [loadFeed, refreshTicketStrip]);
+
   return (
     <>
       {showHomeBootLoader ? (
@@ -349,6 +355,11 @@ export default function HomeAppClient() {
         </div>
       ) : null}
       <div id="screen-app" className={"screen home-screen" + (showApp ? "" : " screen--hidden")}>
+        <PullToRefresh
+          onRefresh={handlePullRefresh}
+          disabled={!showApp || showHomeBootLoader || localityModalOpen || !!closedRaffleModal}
+          className="home-screen__ptr"
+        >
         <div id="view-app-feed" className="app-view home-inner">
           <header className="home-sticky">
             <div className="home-brand-row">
@@ -593,7 +604,7 @@ export default function HomeAppClient() {
             )}
           </div>
         </div>
-      </div>
+        </PullToRefresh>
 
       {showApp && (reservedCount > 0 || pendingReviewCount > 0) ? (
         <button
@@ -790,6 +801,7 @@ export default function HomeAppClient() {
         </div>
       ) : null}
 
+      </div>
 
       <AppBottomNav
         show={showApp}
