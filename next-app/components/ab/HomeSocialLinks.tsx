@@ -1,3 +1,5 @@
+import { AB_MAX_LOGO_SVG } from "../../lib/ab-support-links";
+
 const SOCIAL_LINKS = [
   {
     id: "vk",
@@ -24,9 +26,14 @@ const SOCIAL_LINKS = [
     href: "https://max.ru/join/Xfy4YvDujQD09ESpzRLrDvoxVXm0LmgdSyEJjD-I3fM",
     label: "MAX",
     icon: (
-      <span className="home-social-links__letter" aria-hidden="true">
-        M
-      </span>
+      <img
+        className="home-social-links__max-logo"
+        src={AB_MAX_LOGO_SVG}
+        alt=""
+        width={18}
+        height={18}
+        aria-hidden="true"
+      />
     ),
   },
 ] as const;

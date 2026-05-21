@@ -737,11 +737,11 @@ html.theme-dark .ptr__spinner {
   background: rgba(91, 33, 182, 0.1);
 }
 
-.home-social-links__letter {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1;
+.home-social-links__max-logo {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .home-brand-icon {
