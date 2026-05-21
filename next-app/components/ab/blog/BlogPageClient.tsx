@@ -288,7 +288,7 @@ export default function BlogPageClient() {
           ev.lengthComputable && ev.total > 0
             ? ev.loaded / ev.total
             : file.size > 0
-              ? Math.min(0.95, xhr.upload.loaded / file.size)
+              ? Math.min(0.95, ev.loaded / file.size)
               : 0.05;
         setMediaUploads((list) =>
           list.map((u) => (u.localId === localId ? { ...u, progress: Math.max(0.02, p), busy: true } : u)),
