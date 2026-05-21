@@ -2297,8 +2297,6 @@ html.theme-dark .home-faq-item__a {
 
 .raffle-card__media-play {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
   z-index: 4;
   display: flex;
   align-items: center;
@@ -2307,7 +2305,6 @@ html.theme-dark .home-faq-item__a {
   height: 44px;
   padding: 0;
   border: none;
-  border-radius: 50%;
   color: #fff;
   background: rgba(15, 23, 42, 0.52);
   backdrop-filter: blur(10px);
@@ -2315,6 +2312,10 @@ html.theme-dark .home-faq-item__a {
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease;
+  top: 0;
+  right: 0;
+  border-radius: 0 24px 0 24px;
+  background: rgba(0, 0, 0, 70%);
 }
 
 .raffle-card__media-play:hover {
@@ -2327,7 +2328,7 @@ html.theme-dark .home-faq-item__a {
 }
 
 .raffle-card__media-play-icon {
-  margin-left: 2px;
+  width: 20px;
 }
 
 .raffle-card__media-img--anim {
