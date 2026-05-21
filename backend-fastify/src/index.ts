@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { getRequestListener } from "@hono/node-server";
-import { adminSubApp } from "../../server/admin-subapp.js";
+import { adminSubApp, getAdminUserFromAuthHeader, saveRaffleUploadBuffer } from "../../server/admin-subapp.js";
 import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
@@ -347,6 +347,49 @@ async function sendPublicAsset(reply: FastifyReply, assetName: string): Promise<
   reply.header("Cache-Control", "public, max-age=86400");
   reply.send(buf);
 }
+
+app.post("/api/admin/raffles/upload", async (request, reply) => {
+  const auth = request.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return reply.code(401).send({ error: "Не авторизован" });
+  }
+  const admin = await getAdminUserFromAuthHeader(auth);
+  if (!admin) {
+    return reply.code(403).send({ error: "Недостаточно прав" });
+  }
+  let part;
+  try {
+    part = await request.file();
+  } catch {
+    return reply.code(400).send({ error: "Не удалось прочитать файл" });
+  }
+  if (!part) {
+    return reply.code(400).send({ error: "Нет файла" });
+  }
+  const mime = String(part.mimetype || "").toLowerCase();
+  const fileName = String(part.filename || "");
+  const chunks: Buffer[] = [];
+  let total = 0;
+  const streamCap = 35 * 1024 * 1024;
+  try {
+    for await (const chunk of part.file) {
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += b.length;
+      if (total > streamCap) {
+        return reply.code(413).send({ error: "Файл слишком большой (видео — до 30 МБ)" });
+      }
+      chunks.push(b);
+    }
+  } catch {
+    return reply.code(400).send({ error: "Не удалось прочитать файл" });
+  }
+  const buffer = Buffer.concat(chunks);
+  const saved = await saveRaffleUploadBuffer(buffer, mime, fileName);
+  if (!saved.ok) {
+    return reply.code(saved.status).send({ error: saved.error });
+  }
+  return { url: saved.url, mime: saved.mime };
+});
 
 await app.register(
   async function adminHonoBridge(f) {

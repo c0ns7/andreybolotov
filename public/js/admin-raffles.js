@@ -48,8 +48,29 @@
     updateRaffleFormSaveState();
   }
 
-  function paintRaffleUploadProgress(kind) {
+  function ensureRaffleUploadProgressUi(kind) {
     var wrap = document.querySelector('[data-raffle-upload-progress="' + kind + '"]');
+    if (wrap) return wrap;
+    var inputId =
+      kind === "cover" ? "raffle-cover-file" : kind === "gif" ? "raffle-cover-gif-file" : "raffle-qr-file";
+    var input = document.getElementById(inputId);
+    if (!input || !input.parentNode) return null;
+    wrap = document.createElement("div");
+    wrap.className = "admin-raffle-upload-progress";
+    wrap.setAttribute("data-raffle-upload-progress", kind);
+    wrap.hidden = true;
+    wrap.innerHTML =
+      '<div class="admin-raffle-upload-progress__track" aria-hidden="true">' +
+      '<div class="admin-raffle-upload-progress__bar"></div></div>' +
+      '<p class="admin-raffle-upload-progress__label"></p>';
+    var hint = input.parentNode.querySelector(".admin-raffle-field-hint");
+    if (hint) input.parentNode.insertBefore(wrap, hint);
+    else input.insertAdjacentElement("afterend", wrap);
+    return wrap;
+  }
+
+  function paintRaffleUploadProgress(kind) {
+    var wrap = ensureRaffleUploadProgressUi(kind);
     if (!wrap) return;
     var st = raffleUploadState[kind];
     var show = st.busy || st.error || st.progress >= 1;
@@ -95,7 +116,7 @@
     return new Promise(function (resolve, reject) {
       var st = raffleUploadState[kind];
       st.busy = true;
-      st.progress = 0;
+      st.progress = 0.02;
       st.error = "";
       paintRaffleUploadProgress(kind);
       updateRaffleFormSaveState();
@@ -106,8 +127,15 @@
         xhr.setRequestHeader(k, headers[k]);
       });
       xhr.upload.onprogress = function (ev) {
-        if (!ev.lengthComputable) return;
-        st.progress = ev.loaded / ev.total;
+        if (ev.lengthComputable && ev.total > 0) {
+          st.progress = Math.max(0.02, ev.loaded / ev.total);
+        } else if (ev.loaded > 0 && file.size > 0) {
+          st.progress = Math.min(0.95, Math.max(0.05, ev.loaded / file.size));
+        }
+        paintRaffleUploadProgress(kind);
+      };
+      xhr.upload.onloadstart = function () {
+        st.progress = 0.05;
         paintRaffleUploadProgress(kind);
       };
       xhr.onload = function () {
@@ -124,8 +152,9 @@
           resolve(data.url);
           return;
         }
-        var errMsg = data.error || "Ошибка загрузки";
-        if (xhr.status === 413) errMsg = "Файл слишком большой (видео — до 30 МБ)";
+        var errMsg =
+          data.error ||
+          (xhr.status === 413 ? "Файл слишком большой для сервера" : "Ошибка загрузки (" + xhr.status + ")");
         st.error = errMsg;
         st.progress = 0;
         paintRaffleUploadProgress(kind);
@@ -156,8 +185,8 @@
         var urlEl = document.getElementById(urlInputId);
         if (urlEl) urlEl.value = url;
       })
-      .catch(function (err) {
-        alert((err && err.message) || "Ошибка загрузки");
+      .catch(function () {
+        /* ошибка уже в st.error и на полоске прогресса */
       });
   }
 

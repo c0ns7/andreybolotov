@@ -196,6 +196,57 @@ async function readRaffleUploadBuffer(blob: RaffleUploadBlob): Promise<Buffer | 
   return null;
 }
 
+export type RaffleUploadSaveResult =
+  | { ok: true; url: string; mime: string }
+  | { ok: false; status: number; error: string };
+
+export async function saveRaffleUploadBuffer(
+  buffer: Buffer,
+  mimeRaw: string,
+  fileNameRaw: string,
+): Promise<RaffleUploadSaveResult> {
+  const mime = String(mimeRaw || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
+  const fileName = raffleUploadFileName({ name: fileNameRaw });
+  const isVideo = isRaffleUploadVideo(mime, fileName);
+  const maxBytes = isVideo ? RAFFLE_UPLOAD_MAX_VIDEO_BYTES : RAFFLE_UPLOAD_MAX_IMAGE_BYTES;
+  if (buffer.length > maxBytes) {
+    return {
+      ok: false,
+      status: 400,
+      error: isVideo ? "Видео не больше 30 МБ" : "Файл не больше 5 МБ",
+    };
+  }
+  const ext = extForRaffleUpload(mime, fileName);
+  if (!ext) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Допустимы JPEG, PNG, WebP, GIF или видео MP4, WebM, MOV",
+    };
+  }
+  const name = `${randomUUID()}${ext}`;
+  try {
+    await writeUploadToDirs(raffleUploadsDirs, name, buffer);
+  } catch {
+    return { ok: false, status: 500, error: "Не удалось сохранить файл на сервере" };
+  }
+  const url = `/uploads/raffles/${name}`;
+  return { ok: true, url, mime: mime || (isVideo ? "video/mp4" : "image/jpeg") };
+}
+
+export async function getAdminUserFromAuthHeader(
+  authHeader: string | undefined,
+): Promise<SessionUser | null> {
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) return null;
+  const u = (await getUserBySessionTokenPg(token)) ?? null;
+  if (!u || u.role !== "admin" || isBlockedUser(u)) return null;
+  return u;
+}
+
 function extForRaffleUpload(mime: string, fileName: string): string | null {
   const m = mime.toLowerCase().split(";")[0].trim();
   const byMime: Record<string, string> = {
@@ -207,14 +258,12 @@ function extForRaffleUpload(mime: string, fileName: string): string | null {
     "video/mp4": ".mp4",
     "video/webm": ".webm",
     "video/quicktime": ".mov",
-    "application/octet-stream": /\.mp4$/i.test(fileName)
-      ? ".mp4"
-      : /\.webm$/i.test(fileName)
-        ? ".webm"
-        : /\.mov$/i.test(fileName)
-          ? ".mov"
-          : null,
   };
+  if (m === "application/octet-stream") {
+    if (/\.mp4$/i.test(fileName)) return ".mp4";
+    if (/\.webm$/i.test(fileName)) return ".webm";
+    if (/\.mov$/i.test(fileName)) return ".mov";
+  }
   if (byMime[m]) return byMime[m];
   const low = fileName.toLowerCase();
   if (low.endsWith(".jpeg") || low.endsWith(".jpg")) return ".jpg";
@@ -1194,12 +1243,8 @@ adminSubApp.post("/raffles/upload", async (c) => {
   let body: Record<string, unknown>;
   try {
     body = await c.req.parseBody();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "";
-    if (/413|payload too large|entity too large|file too large|body exceeded/i.test(msg)) {
-      return c.json({ error: "Файл слишком большой (видео — до 30 МБ)" }, 413);
-    }
-    return c.json({ error: "Не удалось прочитать файл. Попробуйте снова." }, 400);
+  } catch {
+    return c.json({ error: "Не удалось прочитать файл. Обновите страницу и попробуйте снова." }, 400);
   }
   const blob = pickRaffleUploadFile(body);
   if (!blob) {
@@ -1209,25 +1254,12 @@ adminSubApp.post("/raffles/upload", async (c) => {
   if (!buffer) {
     return c.json({ error: "Не удалось прочитать файл" }, 400);
   }
-  const mime = String(blob.type || "").toLowerCase();
-  const fileName = raffleUploadFileName(blob);
-  const isVideo = isRaffleUploadVideo(mime, fileName);
-  const maxBytes = isVideo ? RAFFLE_UPLOAD_MAX_VIDEO_BYTES : RAFFLE_UPLOAD_MAX_IMAGE_BYTES;
-  if (buffer.length > maxBytes) {
-    return c.json({ error: isVideo ? "Видео не больше 30 МБ" : "Файл не больше 5 МБ" }, 400);
+  const saved = await saveRaffleUploadBuffer(buffer, String(blob.type || ""), raffleUploadFileName(blob));
+  if (!saved.ok) {
+    const code = saved.status === 500 ? 500 : 400;
+    return c.json({ error: saved.error }, code);
   }
-  const ext = extForRaffleUpload(mime, fileName);
-  if (!ext) {
-    return c.json({ error: "Допустимы JPEG, PNG, WebP, GIF или видео MP4, WebM, MOV" }, 400);
-  }
-  const name = `${randomUUID()}${ext}`;
-  try {
-    await writeUploadToDirs(raffleUploadsDirs, name, buffer);
-  } catch {
-    return c.json({ error: "Не удалось сохранить файл на сервере" }, 500);
-  }
-  const url = `/uploads/raffles/${name}`;
-  return c.json({ url, mime: mime || (isVideo ? "video/mp4" : "image/jpeg") });
+  return c.json({ url: saved.url, mime: saved.mime });
 });
 
 adminSubApp.post("/raffles", async (c) => {
