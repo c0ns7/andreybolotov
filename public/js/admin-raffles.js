@@ -713,7 +713,11 @@
     const data = await res.json().catch(function () {
       return {};
     });
-    if (!res.ok) throw new Error(data.error || "Ошибка загрузки");
+    if (!res.ok) {
+      var errMsg = data.error || "Ошибка загрузки";
+      if (res.status === 413) errMsg = "Файл слишком большой (видео — до 30 МБ)";
+      throw new Error(errMsg);
+    }
     return data.url;
   }
 
@@ -1631,13 +1635,18 @@
       if (coverFile) coverUrl = await uploadFile(coverFile);
       if (gifFile) {
         var gifMime = String(gifFile.type || "").toLowerCase();
-        var okAnim =
-          gifMime === "image/gif" ||
-          gifMime === "video/mp4" ||
-          gifMime === "video/webm" ||
-          gifMime === "video/quicktime";
+        var gifName = String(gifFile.name || "").toLowerCase();
+        var isAnimVideo =
+          gifMime.startsWith("video/") || /\.(mp4|webm|mov)$/.test(gifName);
+        var okAnim = gifMime === "image/gif" || isAnimVideo;
         if (!okAnim) {
           throw new Error("Анимация: загрузите GIF или видео MP4 / WebM / MOV");
+        }
+        if (isAnimVideo && gifFile.size > 30 * 1024 * 1024) {
+          throw new Error("Видео не больше 30 МБ");
+        }
+        if (!isAnimVideo && gifFile.size > 5 * 1024 * 1024) {
+          throw new Error("GIF не больше 5 МБ");
         }
         gifUrl = await uploadFile(gifFile);
       }

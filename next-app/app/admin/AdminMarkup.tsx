@@ -684,7 +684,7 @@ export default function AdminMarkup() {
                   accept="image/gif,video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm"
                 />
                 <p className="admin-raffle-field-hint">
-                  GIF до 5 МБ или MP4/WebM/MOV до 20 МБ. Сначала статичная обложка, затем анимация в фоне (видео без звука, с
+                  GIF до 5 МБ или MP4/WebM/MOV до 30 МБ. Сначала статичная обложка, затем анимация в фоне (видео без звука, с
                   повтором). Очистите поля, чтобы убрать.
                 </p>
               </div>
