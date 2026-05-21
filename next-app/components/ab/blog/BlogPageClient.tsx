@@ -256,10 +256,6 @@ function BlogPageClientInner() {
     }
   };
 
-  const scrollToComments = () => {
-    commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const toggleLike = async (post: BlogPost) => {
     try {
       const data = await abApiJson<{ liked: boolean; like_count: number }>(`/api/blog/posts/${post.id}/like`, {
@@ -552,10 +548,6 @@ function BlogPageClientInner() {
                 <Heart size={18} fill={readPost.liked_by_me ? "currentColor" : "none"} />
                 <span>{readPost.like_count}</span>
               </button>
-              <button type="button" className="blog-engage-btn" onClick={scrollToComments} aria-label="Комментарии">
-                <MessageCircle size={18} />
-                <span>{readPost.comment_count}</span>
-              </button>
             </div>
           ) : null}
 
@@ -639,23 +631,6 @@ function BlogPageClientInner() {
             </div>
           </section>
         </div>
-
-        {readPost.status === "published" ? (
-          <footer className="blog-article__bar">
-            <button
-              type="button"
-              className={"blog-article__bar-btn" + (readPost.liked_by_me ? " is-liked" : "")}
-              onClick={() => void toggleLike(readPost)}
-              aria-label="Нравится"
-              aria-pressed={readPost.liked_by_me}
-            >
-              <Heart size={22} fill={readPost.liked_by_me ? "currentColor" : "none"} />
-            </button>
-            <button type="button" className="blog-article__bar-btn" onClick={scrollToComments} aria-label="Комментарии">
-              <MessageCircle size={22} />
-            </button>
-          </footer>
-        ) : null}
       </article>,
     );
   }
