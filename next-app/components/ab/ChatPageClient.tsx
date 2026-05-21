@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
+import { prefetchMediaUrl } from "../../lib/ab-media-cache";
 import { useAbSession } from "./AbSessionContext";
 
 type ChatMsg = {
@@ -194,13 +195,24 @@ export default function ChatPageClient() {
     el.scrollTop = el.scrollHeight;
   }, []);
 
+  const cacheChatAttachments = useCallback((list: ChatMsg[]) => {
+    for (const m of list) {
+      const url = String(m.attachment_url || "").trim();
+      const mime = String(m.attachment_mime || "").toLowerCase();
+      if (!url) continue;
+      if (mime.startsWith("image/") || mime.startsWith("video/")) prefetchMediaUrl(url);
+    }
+  }, []);
+
   const loadLatest = useCallback(async () => {
     if (!session?.token || !authVerified) return;
     const data = await abApiJson<ChatListResponse>("/api/chat/messages?limit=40", { headers: abAuthHeaders(), cache: "no-store" });
-    setMessages(Array.isArray(data.messages) ? data.messages : []);
+    const list = Array.isArray(data.messages) ? data.messages : [];
+    setMessages(list);
+    cacheChatAttachments(list);
     setHasMore(Boolean(data.has_more));
     void markStaffRead();
-  }, [session?.token, authVerified, markStaffRead]);
+  }, [session?.token, authVerified, markStaffRead, cacheChatAttachments]);
 
   const loadOlder = useCallback(async () => {
     if (!session?.token || !authVerified || loadingOlder || !hasMore) return;
@@ -216,6 +228,7 @@ export default function ChatPageClient() {
       });
       const older = Array.isArray(data.messages) ? data.messages : [];
       if (older.length) {
+        cacheChatAttachments(older);
         setMessages((prev) => mergeById(older, prev));
       }
       setHasMore(Boolean(data.has_more));
@@ -228,7 +241,7 @@ export default function ChatPageClient() {
     } finally {
       setLoadingOlder(false);
     }
-  }, [session?.token, authVerified, loadingOlder, hasMore, messages]);
+  }, [session?.token, authVerified, loadingOlder, hasMore, messages, cacheChatAttachments]);
 
   useEffect(() => {
     const root = document.documentElement;

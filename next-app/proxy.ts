@@ -34,6 +34,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.rewrite(target);
   }
 
+  if (pathname.startsWith("/uploads/")) {
+    const base = upstreamOrigin();
+    const target = new URL(pathname + request.nextUrl.search, base);
+    return NextResponse.rewrite(target);
+  }
+
   if (STATIC_EXT_RE.test(pathname)) {
     // Serve static assets directly from Next/public.
     // Rewriting to /static-proxy can trigger self-proxy over wrong scheme in some prod setups.

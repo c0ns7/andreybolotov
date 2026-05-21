@@ -8,7 +8,7 @@ const nextConfig = {
   experimental: {
     externalDir: true,
     /** proxy.ts буферизует тело запроса; без этого лимит по умолчанию может резать загрузки */
-    proxyClientMaxBodySize: "50mb",
+    proxyClientMaxBodySize: "500mb",
   },
   turbopack: {
     root: path.resolve(here, ".."),

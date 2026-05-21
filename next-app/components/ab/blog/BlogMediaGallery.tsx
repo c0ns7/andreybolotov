@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Film, ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
+import { prefetchMediaList, prefetchMediaUrl } from "../../../lib/ab-media-cache";
 import type { BlogMediaItem } from "../../../lib/ab-blog-types";
 
 type Variant = "card" | "hero";
@@ -43,6 +44,14 @@ export function BlogMediaCarousel({
   useEffect(() => {
     setIndex(0);
   }, [items.map((m) => m.url).join("|")]);
+
+  useEffect(() => {
+    if (!count) return;
+    const cur = items[index]?.url;
+    if (cur) prefetchMediaUrl(cur);
+    const next = items[(index + 1) % count]?.url;
+    if (next) prefetchMediaUrl(next);
+  }, [index, count, items]);
 
   const go = useCallback(
     (delta: number) => {
@@ -170,6 +179,16 @@ export function BlogMediaLightbox({
     if (!v) return;
     void v.play().catch(() => {});
   }, [index]);
+
+  useEffect(() => {
+    if (!count) return;
+    prefetchMediaList(items.map((m) => m.url).filter(Boolean));
+  }, [count, items]);
+
+  useEffect(() => {
+    const cur = items[index]?.url;
+    if (cur) prefetchMediaUrl(cur);
+  }, [index, items]);
 
   if (!count) return null;
 

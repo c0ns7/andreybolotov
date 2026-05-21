@@ -1,5 +1,7 @@
+import { AB_MEDIA_CACHE_NAME, storeMediaInCache } from "./ab-media-cache";
+
 const META_PREFIX = "ab_raffle_gif_meta_v1";
-const CACHE_NAME = "ab_raffle_gif_v1";
+const CACHE_NAME = AB_MEDIA_CACHE_NAME;
 
 /** GIF или MP4/WebM/MOV в поле cover_gif_url. */
 export function isRaffleCoverAnimVideo(url: string): boolean {
@@ -86,13 +88,7 @@ async function blobUrlFromCache(url: string): Promise<string | null> {
 }
 
 async function storeGifInCache(url: string, response: Response): Promise<void> {
-  if (typeof window === "undefined" || !("caches" in window)) return;
-  try {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(url, response.clone());
-  } catch {
-    /* ignore */
-  }
+  await storeMediaInCache(url, response);
 }
 
 /** Фоновая подгрузка GIF/видео: сначала статичная обложка, затем swap из кэша или сети. */

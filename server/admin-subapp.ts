@@ -157,6 +157,9 @@ const raffleUploadsDirs = ensureUploadDirs("raffles");
 
 const RAFFLE_UPLOAD_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const RAFFLE_UPLOAD_MAX_VIDEO_BYTES = 30 * 1024 * 1024;
+/** Макс. размер видео в блоге (админ-загрузка). */
+export const BLOG_UPLOAD_MAX_VIDEO_BYTES = 500 * 1024 * 1024;
+const BLOG_UPLOAD_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 function raffleUploadFileName(blob: { name?: string }): string {
   return String(blob.name ?? "").trim();
@@ -1950,12 +1953,12 @@ export async function saveBlogUploadBuffer(buffer: Buffer, mimeRaw: string): Pro
     .split(";")[0]
     .trim();
   const isVideo = mime.startsWith("video/");
-  const max = isVideo ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+  const max = isVideo ? BLOG_UPLOAD_MAX_VIDEO_BYTES : BLOG_UPLOAD_MAX_IMAGE_BYTES;
   if (buffer.length > max) {
     return {
       ok: false,
       status: 400,
-      error: isVideo ? "Видео не больше 50 МБ" : "Файл не больше 8 МБ",
+      error: isVideo ? "Видео не больше 500 МБ" : "Файл не больше 8 МБ",
     };
   }
   const extMap: Record<string, string> = {

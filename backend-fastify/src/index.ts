@@ -5,6 +5,7 @@ import { getRequestListener } from "@hono/node-server";
 import {
   adminSubApp,
   getAdminUserFromAuthHeader,
+  BLOG_UPLOAD_MAX_VIDEO_BYTES,
   saveBlogUploadBuffer,
   saveRaffleUploadBuffer,
 } from "../../server/admin-subapp.js";
@@ -276,9 +277,11 @@ await app.register(cors, {
   credentials: true,
 });
 
+const MULTIPART_MAX_FILE_BYTES = BLOG_UPLOAD_MAX_VIDEO_BYTES + 5 * 1024 * 1024;
+
 await app.register(multipart, {
   limits: {
-    fileSize: 35 * 1024 * 1024,
+    fileSize: MULTIPART_MAX_FILE_BYTES,
     files: 2,
     fields: 20,
     fieldSize: 1024 * 1024,
@@ -425,12 +428,12 @@ app.post("/api/admin/blog/upload", async (request, reply) => {
   const mime = String(part.mimetype || "").toLowerCase();
   const chunks: Buffer[] = [];
   let total = 0;
-  const cap = 55 * 1024 * 1024;
+  const cap = MULTIPART_MAX_FILE_BYTES;
   try {
     for await (const chunk of part.file) {
       const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       total += b.length;
-      if (total > cap) return reply.code(413).send({ error: "Файл слишком большой" });
+      if (total > cap) return reply.code(413).send({ error: "Файл слишком большой (до 500 МБ)" });
       chunks.push(b);
     }
   } catch {
@@ -530,6 +533,62 @@ app.get("/img/*", async (request, reply) => {
   const clean = raw.split("?")[0] || "";
   const asset = clean.replace(/^\/+/, "");
   await sendPublicAsset(reply, asset);
+});
+
+const uploadServeRoots = [
+  path.resolve(process.cwd(), "public", "uploads"),
+  path.resolve(process.cwd(), "uploads"),
+  path.resolve(process.cwd(), "..", "public", "uploads"),
+  path.resolve(process.cwd(), "..", "uploads"),
+];
+const UPLOAD_SERVE_SUBDIRS = new Set(["blog", "raffles", "chat", "receipts"]);
+
+function mimeForUploadPath(relPath: string): string {
+  const n = String(relPath || "").toLowerCase();
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".webp")) return "image/webp";
+  if (n.endsWith(".gif")) return "image/gif";
+  if (n.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (n.endsWith(".mp4")) return "video/mp4";
+  if (n.endsWith(".webm")) return "video/webm";
+  if (n.endsWith(".mov")) return "video/quicktime";
+  return "application/octet-stream";
+}
+
+async function readUploadAsset(relPath: string): Promise<Buffer | null> {
+  const parts = String(relPath || "")
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter(Boolean);
+  if (parts.length < 2 || !UPLOAD_SERVE_SUBDIRS.has(parts[0]!)) return null;
+  if (parts.some((p) => p === ".." || p === ".")) return null;
+  const fileName = parts[parts.length - 1]!;
+  if (!/^[a-zA-Z0-9._-]+$/.test(fileName)) return null;
+  const subPath = parts.join(path.sep);
+  for (const root of uploadServeRoots) {
+    const rootAbs = path.resolve(root);
+    const full = path.resolve(rootAbs, subPath);
+    if (!full.startsWith(rootAbs + path.sep) && full !== rootAbs) continue;
+    if (!existsSync(full)) continue;
+    try {
+      return await readFile(full);
+    } catch {
+      /* try next root */
+    }
+  }
+  return null;
+}
+
+app.get("/uploads/*", async (request, reply) => {
+  const clean = String(request.url || "").split("?")[0] || "";
+  const rel = clean.replace(/^\/uploads\/?/, "");
+  if (!rel) return reply.code(404).send({ error: "Not Found" });
+  const buf = await readUploadAsset(rel);
+  if (!buf) return reply.code(404).send({ error: "Not Found" });
+  reply.header("Content-Type", mimeForUploadPath(rel));
+  reply.header("Cache-Control", "public, max-age=31536000, immutable");
+  return reply.send(buf);
 });
 
 const receiptUploadsDirs = [

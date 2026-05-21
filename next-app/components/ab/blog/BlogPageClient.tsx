@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
+import { prefetchMediaList } from "../../../lib/ab-media-cache";
 import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
 import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
 import { blogHtmlHasContent, resolveBlogBodyHtml, stripBlogBodyDuplicateMedia } from "../../../lib/ab-blog-html";
@@ -173,6 +174,15 @@ function BlogPageClientInner() {
     else root.classList.remove("js-blog-post-reading");
     return () => root.classList.remove("js-blog-post-reading");
   }, [readPost]);
+
+  useEffect(() => {
+    if (!readPost) return;
+    const urls = [
+      ...(readPost.media?.map((m) => m.url) || []),
+      readPost.cover_url,
+    ].filter(Boolean) as string[];
+    prefetchMediaList(urls);
+  }, [readPost?.id, readPost?.cover_url, readPost?.media]);
 
   useEffect(() => {
     if (!readPost) return;

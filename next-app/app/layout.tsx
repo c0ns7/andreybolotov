@@ -5,6 +5,7 @@ import Script from "next/script";
 import AbRouteHtmlClasses from "../components/ab/AbRouteHtmlClasses";
 import { AbSessionProvider } from "../components/ab/AbSessionContext";
 import AbToastHost from "../components/ab/AbToastHost";
+import AbServiceWorkerRegister from "../components/ab/AbServiceWorkerRegister";
 import IosInstallAppPrompt from "../components/ab/IosInstallAppPrompt";
 import SiteOnlineBadge from "../components/ab/SiteOnlineBadge";
 
@@ -113,6 +114,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <AbToastHost />
           <SiteOnlineBadge />
           <IosInstallAppPrompt />
+          <AbServiceWorkerRegister />
           {children}
         </AbSessionProvider>
       </body>

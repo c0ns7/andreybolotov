@@ -169,7 +169,7 @@
             (file.size < 1024 * 1024
               ? Math.round(file.size / 1024) + " КБ"
               : (file.size / (1024 * 1024)).toFixed(1) + " МБ") +
-            " — проверьте nginx: client_max_body_size 50M (см. deploy/nginx-upload-body-limit.conf).";
+            " — проверьте nginx: client_max_body_size 500M (см. deploy/nginx-upload-body-limit.conf).";
         }
         st.error = errMsg;
         st.progress = 0;
