@@ -11,14 +11,9 @@ function isNextLocalApi(pathname: string): boolean {
   return pathname.startsWith("/api/auth/forgot") || pathname.startsWith("/api/auth/reset-password");
 }
 
-/** Загрузки — через Route Handler (стрим на Fastify), не rewrite (избегаем обрезания тела). */
+/** Мелкие загрузки — Route Handler Next; крупные (blog/raffles) — rewrite на Fastify. */
 function isApiUploadPath(pathname: string): boolean {
-  return (
-    pathname === "/api/admin/raffles/upload" ||
-    pathname === "/api/admin/blog/upload" ||
-    pathname === "/api/chat/upload" ||
-    pathname === "/api/raffles/receipt-upload"
-  );
+  return pathname === "/api/chat/upload" || pathname === "/api/raffles/receipt-upload";
 }
 
 export function proxy(request: NextRequest) {

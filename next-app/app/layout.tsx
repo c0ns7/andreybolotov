@@ -110,6 +110,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="ab-api-http" strategy="beforeInteractive">
           {`try{var h=${JSON.stringify(process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "")};if(h){window.__AB_HTTP_ORIGIN__=String(h).replace(/\\/$/,"");}}catch(_){}`}
         </Script>
+        <Script id="ab-upload-http" strategy="beforeInteractive">
+          {`try{var u=${JSON.stringify(process.env.NEXT_PUBLIC_AB_UPLOAD_ORIGIN || "")};if(u){window.__AB_UPLOAD_ORIGIN__=String(u).replace(/\\/$/,"");}}catch(_){}`}
+        </Script>
         <AbSessionProvider>
           <AbToastHost />
           <SiteOnlineBadge />

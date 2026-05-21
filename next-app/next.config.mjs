@@ -21,6 +21,8 @@ const nextConfig = {
     NEXT_PUBLIC_AB_WS_ORIGIN: (process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "").replace(/\/$/, ""),
     /** Прямой URL API для загрузок (обход nginx 1 МБ), например https://api.example.com */
     NEXT_PUBLIC_AB_HTTP_ORIGIN: (process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "").replace(/\/$/, ""),
+    /** Только большие upload (поддомен без Cloudflare, nginx 500M). Пример: https://api.andreybolotov.ru */
+    NEXT_PUBLIC_AB_UPLOAD_ORIGIN: (process.env.NEXT_PUBLIC_AB_UPLOAD_ORIGIN || "").replace(/\/$/, ""),
   },
 };
 

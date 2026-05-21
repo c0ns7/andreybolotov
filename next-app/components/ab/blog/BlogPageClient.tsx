@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
-import { abDirectHttpOrigin, blogUploadApiUrl, uploadTimeoutMs } from "../../../lib/ab-upload-api";
+import { abUploadHttpOrigin, blogUploadApiUrl, uploadTimeoutMs } from "../../../lib/ab-upload-api";
 import { prefetchMediaList } from "../../../lib/ab-media-cache";
 import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
 import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
@@ -322,11 +322,15 @@ function BlogPageClientInner() {
         }
         let err = data.error || "Ошибка загрузки";
         if (xhr.status === 413) {
-          err = data.error || "Файл слишком большой. Проверьте nginx: client_max_body_size 500M.";
+          err =
+            data.error ||
+            "413: сервер отклонил размер файла. В nginx: client_max_body_size 500M для /api/. " +
+              "Если стоит Cloudflare — лимит ~100 МБ: поддомен api (DNS only) и NEXT_PUBLIC_AB_UPLOAD_ORIGIN. " +
+              "См. deploy/nginx-upload-location.conf";
         } else if (xhr.status === 0) {
-          err = abDirectHttpOrigin()
-            ? "Не удалось связаться с API. Проверьте NEXT_PUBLIC_AB_HTTP_ORIGIN и CORS."
-            : "Сервер не ответил. Для видео >50 МБ задайте NEXT_PUBLIC_AB_HTTP_ORIGIN на URL Fastify (порт 8787).";
+          err = abUploadHttpOrigin()
+            ? "Не удалось связаться с API загрузок. Проверьте NEXT_PUBLIC_AB_UPLOAD_ORIGIN и CORS."
+            : "Сервер не ответил. Задайте NEXT_PUBLIC_AB_UPLOAD_ORIGIN (например https://api.andreybolotov.ru).";
         }
         setMediaUploads((list) =>
           list.map((u) =>
