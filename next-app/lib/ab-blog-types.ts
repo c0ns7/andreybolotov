@@ -30,6 +30,8 @@ export type BlogPost = {
   liked_by_me?: boolean;
 };
 
+export type BlogCommentSort = "top" | "new";
+
 export type BlogComment = {
   id: number;
   post_id: number;
@@ -38,4 +40,6 @@ export type BlogComment = {
   parent_id: number | null;
   created_at: number;
   user_name: string;
+  like_count: number;
+  liked_by_me?: boolean;
 };

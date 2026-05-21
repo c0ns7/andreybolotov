@@ -84,6 +84,7 @@ import {
   getBlogPostBySlug,
   deleteBlogCommentForUser,
   listBlogComments,
+  toggleBlogCommentLike,
   getBlogUnreadPostCount,
   listBlogPosts,
   recordBlogPostView,
@@ -1714,18 +1715,21 @@ app.get("/api/blog/posts/:id/comments", async (request, reply) => {
   if (!(await requireBlogPublic(request, reply, user))) return;
   const id = Number((request.params as { id?: string }).id);
   if (!Number.isFinite(id)) return reply.code(400).send({ error: "Некорректный id" });
-  const comments = await listBlogComments(id);
-  return {
-    comments: comments.map((c) => ({
-      id: c.id,
-      post_id: c.post_id,
-      user_id: c.user_id,
-      body: c.body,
-      parent_id: c.parent_id,
-      created_at: c.created_at,
-      user_name: c.user_name,
-    })),
-  };
+  const q = (request.query ?? {}) as { sort?: string };
+  const sort = String(q.sort || "top") === "new" ? "new" : "top";
+  const comments = await listBlogComments(id, user.id, sort);
+  return { comments, sort };
+});
+
+app.post("/api/blog/comments/:commentId/like", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (!(await requireBlogPublic(request, reply, user))) return;
+  const commentId = Number((request.params as { commentId?: string }).commentId);
+  if (!Number.isFinite(commentId)) return reply.code(400).send({ error: "Некорректный id" });
+  const res = await toggleBlogCommentLike(commentId, user.id);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  return { liked: res.liked, like_count: res.like_count };
 });
 
 app.post("/api/blog/posts/:id/comments", async (request, reply) => {

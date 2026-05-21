@@ -16,7 +16,8 @@ import { abApiJson, abAuthHeaders } from "../../../lib/ab-api";
 import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
 import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
 import { blogHtmlHasContent, resolveBlogBodyHtml, stripBlogBodyDuplicateMedia } from "../../../lib/ab-blog-html";
-import type { BlogComment, BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
+import type { BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
+import BlogComments from "./BlogComments";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
 import { useSiteFlags } from "../../../lib/use-site-flags";
 import { useAbSession } from "../AbSessionContext";
@@ -102,10 +103,7 @@ function BlogPageClientInner() {
   const [loading, setLoading] = useState(false);
   const [readPost, setReadPost] = useState<BlogPost | null>(null);
   const [readLoading, setReadLoading] = useState(false);
-  const [comments, setComments] = useState<BlogComment[]>([]);
-  const [commentDraft, setCommentDraft] = useState("");
-  const [commentSending, setCommentSending] = useState(false);
-  const commentsRef = useRef<HTMLElement>(null);
+  const [commentsRefresh, setCommentsRefresh] = useState(0);
   const editorRef = useRef<BlogRichEditorHandle>(null);
   const [manageStatus, setManageStatus] = useState<"all" | "published" | "draft">("all");
 
@@ -186,21 +184,19 @@ function BlogPageClientInner() {
   const openPost = async (post: BlogPost) => {
     setReadPost(post);
     setReadLoading(true);
-    setComments([]);
-    setCommentDraft("");
+    setCommentsRefresh((k) => k + 1);
     try {
       if (post.status === "published") {
         await abApiJson(`/api/blog/posts/${post.id}/view`, { method: "POST", headers: adminHeaders });
         syncBlogUnreadNav();
-        const [full, commentsData] = await Promise.all([
-          abApiJson<{ post: BlogPost }>(`/api/blog/posts/${encodeURIComponent(post.slug)}`, { headers: adminHeaders }),
-          abApiJson<{ comments: BlogComment[] }>(`/api/blog/posts/${post.id}/comments`, { headers: adminHeaders }),
-        ]);
+        const full = await abApiJson<{ post: BlogPost }>(
+          `/api/blog/posts/${encodeURIComponent(post.slug)}`,
+          { headers: adminHeaders },
+        );
         if (full.post) {
           setReadPost(full.post);
           setPosts((list) => list.map((p) => (p.id === post.id ? { ...p, ...full.post, view_count: full.post.view_count } : p)));
         }
-        setComments(commentsData.comments || []);
       } else {
         setReadPost(post);
       }
@@ -235,25 +231,9 @@ function BlogPageClientInner() {
     void openPost(post);
   };
 
-  const sendComment = async () => {
-    if (!readPost || !commentDraft.trim() || commentSending) return;
-    setCommentSending(true);
-    try {
-      const data = await abApiJson<{ comment: BlogComment }>(`/api/blog/posts/${readPost.id}/comments`, {
-        method: "POST",
-        headers: { ...adminHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ body: commentDraft.trim() }),
-      });
-      if (data.comment) setComments((c) => [...c, data.comment!]);
-      setCommentDraft("");
-      const nextCount = readPost.comment_count + 1;
-      setReadPost((p) => (p ? { ...p, comment_count: nextCount } : p));
-      setPosts((list) => list.map((p) => (p.id === readPost.id ? { ...p, comment_count: nextCount } : p)));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Ошибка", "error");
-    } finally {
-      setCommentSending(false);
-    }
+  const patchPostCommentCount = (postId: number, count: number) => {
+    setReadPost((p) => (p && p.id === postId ? { ...p, comment_count: count } : p));
+    setPosts((list) => list.map((p) => (p.id === postId ? { ...p, comment_count: count } : p)));
   };
 
   const toggleLike = async (post: BlogPost) => {
@@ -268,24 +248,6 @@ function BlogPageClientInner() {
       if (readPost?.id === post.id) setReadPost((p) => (p ? patch(p) : p));
     } catch (e) {
       toast(e instanceof Error ? e.message : "Ошибка", "error");
-    }
-  };
-
-  const deleteComment = async (commentId: number) => {
-    if (!readPost) return;
-    if (!window.confirm("Удалить комментарий?")) return;
-    try {
-      await abApiJson(`/api/blog/comments/${commentId}`, {
-        method: "DELETE",
-        headers: adminHeaders,
-      });
-      setComments((list) => list.filter((c) => c.id !== commentId));
-      const nextCount = Math.max(0, readPost.comment_count - 1);
-      setReadPost((p) => (p ? { ...p, comment_count: nextCount } : p));
-      setPosts((list) => list.map((p) => (p.id === readPost.id ? { ...p, comment_count: nextCount } : p)));
-      toast("Комментарий удалён", "success");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Не удалось удалить", "error");
     }
   };
 
@@ -445,6 +407,7 @@ function BlogPageClientInner() {
 
   const handlePullRefresh = useCallback(async () => {
     if (readPost) {
+      setCommentsRefresh((k) => k + 1);
       await openPost(readPost);
       return;
     }
@@ -568,68 +531,18 @@ function BlogPageClientInner() {
           </div>
           ) : null}
 
-          <section ref={commentsRef} className="blog-article__comments" id="comments">
-            <header className="blog-article__comments-head">
-              <h2>Комментарии</h2>
-              <span className="blog-article__comments-count">{readPost.comment_count}</span>
-            </header>
-
-            {comments.length ? (
-              <ul className="blog-comments__list">
-                {comments.map((c) => {
-                  const canDeleteComment =
-                    isAdmin || (sessionUserId > 0 && Number(c.user_id) === sessionUserId);
-                  return (
-                  <li key={c.id} className="blog-comment">
-                    <div className="blog-comment__avatar" aria-hidden="true">
-                      {(c.user_name || "?").charAt(0).toUpperCase()}
-                    </div>
-                    <div className="blog-comment__body">
-                      <div className="blog-comment__head">
-                        <strong>{c.user_name}</strong>
-                        <time className="blog-comment__time">{formatDate(c.created_at)}</time>
-                        {canDeleteComment ? (
-                          <button
-                            type="button"
-                            className="blog-comment__delete"
-                            aria-label="Удалить комментарий"
-                            onClick={() => void deleteComment(c.id)}
-                          >
-                            <Trash2 size={15} aria-hidden="true" />
-                          </button>
-                        ) : null}
-                      </div>
-                      <p className="blog-comment__text">{c.body}</p>
-                    </div>
-                  </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="blog-article__comments-empty">Пока нет комментариев — будьте первым.</p>
-            )}
-
-            <div className="blog-comments__composer">
-              <textarea
-                className="input blog-comments__input"
-                rows={3}
-                placeholder="Написать комментарий…"
-                value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void sendComment();
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn--primary"
-                disabled={commentSending || !commentDraft.trim()}
-                onClick={() => void sendComment()}
-              >
-                {commentSending ? "Отправка…" : "Отправить"}
-              </button>
-            </div>
-          </section>
+          {readPost.status === "published" ? (
+            <BlogComments
+              postId={readPost.id}
+              totalCount={readPost.comment_count}
+              refreshKey={commentsRefresh}
+              headers={adminHeaders}
+              isAdmin={isAdmin}
+              sessionUserId={sessionUserId}
+              onCountChange={(n) => patchPostCommentCount(readPost.id, n)}
+              toast={toast}
+            />
+          ) : null}
         </div>
       </article>,
     );

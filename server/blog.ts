@@ -36,7 +36,53 @@ export type BlogCommentRow = {
   created_at: number;
   user_name: string;
   user_phone: string;
+  like_count: number;
+  liked_by_me: number;
 };
+
+export type BlogCommentSort = "top" | "new";
+
+export type BlogCommentDto = {
+  id: number;
+  post_id: number;
+  user_id: number;
+  body: string;
+  parent_id: number | null;
+  created_at: number;
+  user_name: string;
+  like_count: number;
+  liked_by_me: boolean;
+};
+
+function mapBlogCommentRow(row: BlogCommentRow): BlogCommentDto {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    user_id: row.user_id,
+    body: row.body,
+    parent_id: row.parent_id,
+    created_at: row.created_at,
+    user_name: row.user_name,
+    like_count: Number(row.like_count ?? 0),
+    liked_by_me: !!row.liked_by_me,
+  };
+}
+
+const BLOG_COMMENT_SELECT = `
+  SELECT c.id, c.post_id, c.user_id, c.body, c.parent_id, c.hidden, c.created_at,
+         u.name AS user_name, u.phone AS user_phone,
+         COALESCE(lc.cnt, 0) AS like_count,
+         CASE WHEN EXISTS (
+           SELECT 1 FROM blog_comment_likes cl2
+            WHERE cl2.comment_id = c.id AND cl2.user_id = ?
+         ) THEN 1 ELSE 0 END AS liked_by_me
+    FROM blog_comments c
+    INNER JOIN users u ON u.id = c.user_id
+    LEFT JOIN (
+      SELECT comment_id, COUNT(*)::bigint AS cnt
+        FROM blog_comment_likes
+       GROUP BY comment_id
+    ) lc ON lc.comment_id = c.id`;
 
 function stripBlogHtmlText(html: string): string {
   return String(html || "")
@@ -575,16 +621,65 @@ export async function toggleBlogPostLike(postId: number, userId: number) {
   return { ok: true as const, liked: true, like_count: Number(row?.like_count ?? 0) };
 }
 
-export async function listBlogComments(postId: number) {
-  return await pgAll<BlogCommentRow>(
-    `SELECT c.id, c.post_id, c.user_id, c.body, c.parent_id, c.hidden, c.created_at,
-            u.name AS user_name, u.phone AS user_phone
-       FROM blog_comments c
-       INNER JOIN users u ON u.id = c.user_id
-       WHERE c.post_id = ? AND c.hidden = 0
-       ORDER BY c.created_at ASC`,
-    [postId],
+export async function listBlogComments(
+  postId: number,
+  viewerUserId: number,
+  sort: BlogCommentSort = "top",
+) {
+  const order =
+    sort === "new"
+      ? "c.created_at DESC"
+      : "COALESCE(lc.cnt, 0) DESC, c.created_at DESC";
+  const rows = await pgAll<BlogCommentRow>(
+    `${BLOG_COMMENT_SELECT}
+     WHERE c.post_id = ? AND c.hidden = 0
+     ORDER BY ${order}`,
+    [viewerUserId, postId],
   );
+  return rows.map(mapBlogCommentRow);
+}
+
+export async function getBlogCommentById(commentId: number, viewerUserId: number) {
+  const row = await pgGet<BlogCommentRow>(
+    `${BLOG_COMMENT_SELECT}
+     WHERE c.id = ? AND c.hidden = 0`,
+    [viewerUserId, commentId],
+  );
+  return row ? mapBlogCommentRow(row) : null;
+}
+
+export async function toggleBlogCommentLike(commentId: number, userId: number) {
+  const row = await pgGet<{ id: number; hidden: number; status: string }>(
+    `SELECT c.id, c.hidden, p.status
+       FROM blog_comments c
+       INNER JOIN blog_posts p ON p.id = c.post_id
+      WHERE c.id = ?`,
+    [commentId],
+  );
+  if (!row || row.hidden) return { ok: false as const, error: "Комментарий недоступен" };
+  if (row.status !== "published") return { ok: false as const, error: "Пост недоступен" };
+  const existing = await pgGet<{ comment_id: number }>(
+    `SELECT comment_id FROM blog_comment_likes WHERE comment_id = ? AND user_id = ?`,
+    [commentId, userId],
+  );
+  const now = Date.now();
+  if (existing) {
+    await pgExec(`DELETE FROM blog_comment_likes WHERE comment_id = ? AND user_id = ?`, [
+      commentId,
+      userId,
+    ]);
+  } else {
+    await pgExec(
+      `INSERT INTO blog_comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)`,
+      [commentId, userId, now],
+    );
+  }
+  const cnt = await pgGet<{ cnt: number }>(
+    `SELECT COUNT(*)::bigint AS cnt FROM blog_comment_likes WHERE comment_id = ?`,
+    [commentId],
+  );
+  const liked = !existing;
+  return { ok: true as const, liked, like_count: Number(cnt?.cnt ?? 0) };
 }
 
 export async function addBlogComment(postId: number, userId: number, body: string, parentId?: number) {
@@ -601,9 +696,8 @@ export async function addBlogComment(postId: number, userId: number, body: strin
     [postId, userId, text, parentId ?? null, now],
   );
   await pgExec(`UPDATE blog_posts SET comment_count = comment_count + 1 WHERE id = ?`, [postId]);
-  const comments = await listBlogComments(postId);
-  const created = comments.find((c) => c.id === Number(row?.id));
-  return { ok: true as const, comment: created || null };
+  const created = await getBlogCommentById(Number(row?.id), userId);
+  return { ok: true as const, comment: created };
 }
 
 export async function hideBlogComment(commentId: number) {
