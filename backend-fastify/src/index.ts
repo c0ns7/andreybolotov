@@ -559,6 +559,7 @@ app.get("/api/raffles", async (request, reply) => {
       const myOrder = activeOrderByRaffle.get(r.id) ?? null;
       return {
         ...dto,
+        updated_at: Math.floor(Number(r.updated_at) || 0),
         occupied_count: occupied,
         free_count: Math.max(0, Number(dto.ticket_count) - occupied),
         viewers_count: getRaffleViewerCount(r.id),

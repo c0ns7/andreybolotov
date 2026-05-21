@@ -379,6 +379,7 @@ function normalizeRaffleStatus(s: string): "active" | "closed" | "paused" {
 type RaffleInput = {
   title: string;
   cover_image_url: string;
+  cover_gif_url: string;
   price_rub: number;
   cenopad_enabled: boolean;
   cenopad_price_rub: number;
@@ -466,6 +467,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   if (title.length > 500) return { ok: false, error: "Заголовок слишком длинный" };
 
   const cover_image_url = String(body.cover_image_url ?? "").trim();
+  const cover_gif_url = String(body.cover_gif_url ?? "").trim();
   const collection_url = String(body.collection_url ?? "").trim();
   const tbank_collection_url = String(body.tbank_collection_url ?? "").trim();
   const collection_recipient = String(body.collection_recipient ?? "").trim();
@@ -622,6 +624,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     value: {
       title,
       cover_image_url,
+      cover_gif_url,
       price_rub,
       cenopad_enabled,
       cenopad_price_rub,
@@ -1130,20 +1133,25 @@ adminSubApp.post("/raffles/upload", async (c) => {
   }
   const ab = await blob.arrayBuffer();
   const buffer = Buffer.from(ab);
-  if (buffer.length > 5 * 1024 * 1024) {
-    return c.json({ error: "Файл не больше 5 МБ" }, 400);
-  }
   const mime = String(blob.type || "").toLowerCase();
+  const isVideo = mime.startsWith("video/");
+  const maxBytes = isVideo ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (buffer.length > maxBytes) {
+    return c.json({ error: isVideo ? "Видео не больше 20 МБ" : "Файл не больше 5 МБ" }, 400);
+  }
   const extMap: Record<string, string> = {
     "image/jpeg": ".jpg",
     "image/jpg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
   };
   const ext = extMap[mime];
   if (!ext) {
-    return c.json({ error: "Допустимы JPEG, PNG, WebP, GIF" }, 400);
+    return c.json({ error: "Допустимы JPEG, PNG, WebP, GIF или видео MP4, WebM, MOV" }, 400);
   }
   const name = `${randomUUID()}${ext}`;
   await writeUploadToDirs(raffleUploadsDirs, name, buffer);
@@ -1168,6 +1176,7 @@ adminSubApp.post("/raffles", async (c) => {
   const id = await insertRaffle({
     title: v.title,
     cover_image_url: v.cover_image_url,
+    cover_gif_url: v.cover_gif_url,
     price_rub: v.price_rub,
     cenopad_enabled: v.cenopad_enabled ? 1 : 0,
     cenopad_price_rub: v.cenopad_price_rub,
@@ -1233,6 +1242,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
   await updateRaffle(id, {
     title: v.title,
     cover_image_url: v.cover_image_url,
+    cover_gif_url: v.cover_gif_url,
     price_rub: v.price_rub,
     cenopad_enabled: v.cenopad_enabled ? 1 : 0,
     cenopad_price_rub: v.cenopad_price_rub,

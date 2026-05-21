@@ -2338,7 +2338,8 @@ html.theme-dark .home-faq-item__a {
   overflow: hidden;
 }
 
-.raffle-card__media img {
+.raffle-card__media img,
+.raffle-card__media video {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -2347,22 +2348,42 @@ html.theme-dark .home-faq-item__a {
   opacity: 0.85;
 }
 
-.raffle-card--active .raffle-card__media img {
+.raffle-card--active .raffle-card__media img,
+.raffle-card--active .raffle-card__media video {
   filter: none;
   transform: none;
   opacity: 0.96;
 }
 
-.raffle-card[data-status="paused"] .raffle-card__media img {
+.raffle-card[data-status="paused"] .raffle-card__media img,
+.raffle-card[data-status="paused"] .raffle-card__media video {
   filter: none;
   transform: none;
   opacity: 0.98;
 }
 
-.raffle-card[data-status="closed"] .raffle-card__media img {
+.raffle-card[data-status="closed"] .raffle-card__media img,
+.raffle-card[data-status="closed"] .raffle-card__media video {
   filter: none;
   transform: none;
   opacity: 0.98;
+}
+
+.raffle-card__media-img--video {
+  pointer-events: none;
+}
+
+.raffle-card__media-img--anim {
+  animation: raffle-cover-gif-in 0.35s ease-out;
+}
+
+@keyframes raffle-cover-gif-in {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .raffle-card__grad {
@@ -8073,12 +8094,12 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .profile-modal__tickets-history-btn {
-  border: 1px solid #bfdbfe;
-  background: #eaf2ff;
-  color: #2563eb;
+  border: 1px solid #ddd6fe;
+  background: #f5f3ff;
+  color: #8b5cf6;
   border-radius: 10px;
   padding: 6px 10px;
-  font-size: 0.78rem;
+  font-size: 0.62rem;
   font-weight: 800;
   line-height: 1;
   font-family: inherit;
@@ -8091,8 +8112,9 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .profile-modal__tickets-history-btn:hover {
-  background: #dbeafe;
-  border-color: #93c5fd;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #7c3aed;
 }
 
 .profile-modal__tickets-history-btn:active {
@@ -12877,13 +12899,14 @@ html.theme-dark .profile-modal__icon-settings--admin:hover {
 }
 
 html.theme-dark .profile-modal__tickets-history-btn {
-  background: rgba(30, 64, 175, 0.28);
-  border-color: rgba(96, 165, 250, 0.45);
-  color: #bfdbfe;
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #a78bfa;
 }
 
 html.theme-dark .profile-modal__tickets-history-btn:hover {
-  background: rgba(30, 64, 175, 0.24);
+  background: rgba(139, 92, 246, 0.26);
+  color: #c4b5fd;
 }
 
 html.theme-dark .history-modal__dialog {

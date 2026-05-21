@@ -148,6 +148,7 @@ async function main() {
       "raffle_hash",
       "title",
       "cover_image_url",
+      "cover_gif_url",
       "price_rub",
       "cenopad_enabled",
       "cenopad_price_rub",

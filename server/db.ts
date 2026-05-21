@@ -732,6 +732,7 @@ export type RaffleRow = {
   raffle_hash?: string;
   title: string;
   cover_image_url: string;
+  cover_gif_url?: string;
   price_rub: number;
   base_price_rub: number;
   cenopad_enabled?: number;
@@ -780,6 +781,7 @@ export type RaffleDto = {
   raffle_hash: string;
   title: string;
   cover_image_url: string;
+  cover_gif_url: string;
   price_rub: number;
   /** Базовая цена билета без учёта активной второй цены (ценопада) — для отображения и расчётов. */
   base_price_rub: number;
@@ -850,6 +852,7 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     raffle_hash: String((r as RaffleRow).raffle_hash ?? ""),
     title: r.title,
     cover_image_url: r.cover_image_url,
+    cover_gif_url: String((r as RaffleRow).cover_gif_url ?? "").trim(),
     price_rub: effectivePrice,
     base_price_rub: Math.max(0, Math.floor(Number(r.price_rub ?? 0))),
     cenopad_enabled: cenopadEnabled,
@@ -1028,6 +1031,7 @@ export async function getRaffleByHash(hash: string): Promise<RaffleRow | undefin
 export async function insertRaffle(data: {
   title: string;
   cover_image_url: string;
+  cover_gif_url?: string;
   price_rub: number;
   cenopad_enabled: number;
   cenopad_price_rub: number;
@@ -1064,17 +1068,18 @@ export async function insertRaffle(data: {
   const now = Date.now();
   const row = await pgGet<{ id: number }>(
     `INSERT INTO raffles (
-      raffle_hash, title, cover_image_url, price_rub, cenopad_enabled, cenopad_price_rub, old_price_rub, ticket_count,
+      raffle_hash, title, cover_image_url, cover_gif_url, price_rub, cenopad_enabled, cenopad_price_rub, old_price_rub, ticket_count,
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
       sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
       status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
       data.title,
       data.cover_image_url,
+      String(data.cover_gif_url ?? ""),
       data.price_rub,
       data.cenopad_enabled,
       data.cenopad_price_rub,
@@ -1119,6 +1124,7 @@ export async function updateRaffle(
   data: {
     title: string;
     cover_image_url: string;
+    cover_gif_url: string;
     price_rub: number;
     cenopad_enabled: number;
     cenopad_price_rub: number;
@@ -1155,7 +1161,7 @@ export async function updateRaffle(
 ): Promise<void> {
   await pgExec(
     `UPDATE raffles SET
-      title = ?, cover_image_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
+      title = ?, cover_image_url = ?, cover_gif_url = ?, price_rub = ?, old_price_rub = ?, ticket_count = ?,
       cenopad_enabled = ?, cenopad_price_rub = ?,
       cenopad_start_at = ?, cenopad_end_at = ?,
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
@@ -1166,6 +1172,7 @@ export async function updateRaffle(
     [
       data.title,
       data.cover_image_url,
+      data.cover_gif_url,
       data.price_rub,
       data.old_price_rub,
       data.ticket_count,

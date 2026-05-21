@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   raffle_hash TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   cover_image_url TEXT NOT NULL DEFAULT '',
+  cover_gif_url TEXT NOT NULL DEFAULT '',
   price_rub INTEGER NOT NULL DEFAULT 0,
   cenopad_enabled INTEGER NOT NULL DEFAULT 0,
   cenopad_price_rub INTEGER NOT NULL DEFAULT 0,

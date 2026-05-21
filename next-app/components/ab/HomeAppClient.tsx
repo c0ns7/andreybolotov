@@ -9,6 +9,7 @@ import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
 import AppBottomNav from "./AppBottomNav";
 import HomeSocialFab from "./HomeSocialFab";
+import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 
 type RaffleRow = {
@@ -17,6 +18,8 @@ type RaffleRow = {
   title?: string;
   status?: string;
   cover_image_url?: string;
+  cover_gif_url?: string;
+  updated_at?: number;
   price_rub?: number;
   base_price_rub?: number;
   cenopad_enabled?: number | boolean;
@@ -422,9 +425,13 @@ export default function HomeAppClient() {
                     }}
                   >
                     <div className="raffle-card__media">
-                      {r.cover_image_url?.trim() ? (
-                        <img src={String(r.cover_image_url)} alt="" width={480} height={160} loading={idx < 2 ? "eager" : "lazy"} />
-                      ) : null}
+                      <RaffleCardMedia
+                        raffleId={Math.floor(Number(r.id) || 0)}
+                        coverUrl={r.cover_image_url}
+                        gifUrl={r.cover_gif_url}
+                        updatedAt={Math.floor(Number(r.updated_at) || 0)}
+                        loading={idx < 2 ? "eager" : "lazy"}
+                      />
                       <div className="raffle-card__grad" />
                       {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}
                       {hasSecondPriceActive ? (

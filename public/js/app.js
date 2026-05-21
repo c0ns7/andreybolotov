@@ -4123,12 +4123,15 @@
     var pr = Number(r.price_rub ?? 0);
     var basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? pr)));
     var hasSecondPrice = basePrice > pr && pr > 0;
+    var coverImgSrc = r.cover_image_url && String(r.cover_image_url).trim() ? String(r.cover_image_url).trim() : "";
+    var coverGifSrc = r.cover_gif_url && String(r.cover_gif_url).trim() ? String(r.cover_gif_url).trim() : "";
+    var coverUpdatedAt = Math.floor(Number(r.updated_at) || 0);
     var cover = "";
-    if (r.cover_image_url && String(r.cover_image_url).trim()) {
+    if (coverImgSrc || coverGifSrc) {
       cover =
-        '<img src="' +
-        escapeHtml(String(r.cover_image_url)) +
-        '" alt="" width="480" height="160" loading="lazy" />';
+        '<img class="raffle-card__media-img" src="' +
+        escapeHtml(coverImgSrc || coverGifSrc) +
+        '" alt="" width="480" height="160" loading="lazy" data-raffle-media-img="1" />';
     }
     var hasPromo5plus1 = Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true;
     var hasPromo5plus2 = Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true;
@@ -4203,7 +4206,19 @@
       '" data-status="' +
       escapeHtml(st) +
       '">' +
-      '<div class="raffle-card__media">' +
+      '<div class="raffle-card__media"' +
+      (coverGifSrc
+        ? ' data-gif-url="' +
+          escapeHtml(coverGifSrc) +
+          '" data-raffle-id="' +
+          escapeHtml(String(r.id)) +
+          '" data-updated-at="' +
+          escapeHtml(String(coverUpdatedAt)) +
+          '" data-static-url="' +
+          escapeHtml(coverImgSrc) +
+          '"'
+        : "") +
+      ">" +
       cover +
       '<div class="raffle-card__grad"></div>' +
       viewersBlock +
@@ -4257,6 +4272,189 @@
       promoInfoBtn +
       "</div></article>"
     );
+  }
+
+  var AB_RAFFLE_GIF_META_PREFIX = "ab_raffle_gif_meta_v1";
+  var AB_RAFFLE_GIF_CACHE_NAME = "ab_raffle_gif_v1";
+
+  function readAbRaffleGifMeta(raffleId) {
+    try {
+      var raw = localStorage.getItem(AB_RAFFLE_GIF_META_PREFIX + ":" + String(Math.floor(Number(raffleId) || 0)));
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      var url = String((p && p.url) || "").trim();
+      var updatedAt = Math.floor(Number(p && p.updatedAt) || 0);
+      if (!url) return null;
+      return { url: url, updatedAt: updatedAt };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeAbRaffleGifMeta(raffleId, url, updatedAt) {
+    try {
+      localStorage.setItem(
+        AB_RAFFLE_GIF_META_PREFIX + ":" + String(Math.floor(Number(raffleId) || 0)),
+        JSON.stringify({ url: url, updatedAt: updatedAt }),
+      );
+    } catch (_) {}
+  }
+
+  function isAbRaffleGifMetaCurrent(meta, gifUrl, updatedAt) {
+    if (!meta || !gifUrl) return false;
+    return meta.url === gifUrl && meta.updatedAt === Math.floor(Number(updatedAt) || 0);
+  }
+
+  function isAbRaffleCoverAnimVideo(url) {
+    var path = String(url || "")
+      .trim()
+      .toLowerCase()
+      .split("?")[0]
+      .split("#")[0];
+    return /\.(mp4|webm|mov)$/.test(path);
+  }
+
+  function applyAbRaffleCoverAnim(media, url) {
+    if (!media || !url) return;
+    var isVideo = isAbRaffleCoverAnimVideo(url);
+    var img = media.querySelector("[data-raffle-media-img]");
+    var video = media.querySelector("[data-raffle-media-video]");
+    if (isVideo) {
+      if (img) img.hidden = true;
+      if (!video) {
+        video = document.createElement("video");
+        video.className = "raffle-card__media-img raffle-card__media-img--anim raffle-card__media-img--video";
+        video.setAttribute("data-raffle-media-video", "1");
+        video.setAttribute("width", "480");
+        video.setAttribute("height", "160");
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.autoplay = true;
+        video.setAttribute("aria-hidden", "true");
+        video.preload = "metadata";
+        media.insertBefore(video, media.firstChild || null);
+      }
+      video.src = url;
+      video.classList.add("raffle-card__media-img--anim");
+      void video.play().catch(function () {});
+      return;
+    }
+    if (video) {
+      try {
+        video.pause();
+      } catch (_) {}
+      video.remove();
+    }
+    if (img) {
+      img.hidden = false;
+      img.src = url;
+      img.classList.add("raffle-card__media-img--anim");
+    }
+  }
+
+  function abBlobUrlFromGifCache(url, cb) {
+    if (!("caches" in window)) {
+      cb(null);
+      return;
+    }
+    caches
+      .open(AB_RAFFLE_GIF_CACHE_NAME)
+      .then(function (cache) {
+        return cache.match(url);
+      })
+      .then(function (hit) {
+        if (!hit) {
+          cb(null);
+          return;
+        }
+        return hit.blob();
+      })
+      .then(function (blob) {
+        if (!blob || !blob.size) {
+          cb(null);
+          return;
+        }
+        cb(URL.createObjectURL(blob));
+      })
+      .catch(function () {
+        cb(null);
+      });
+  }
+
+  function abPreloadRaffleCoverGif(opts) {
+    var raffleId = Math.floor(Number(opts.raffleId) || 0);
+    var gifUrl = String(opts.gifUrl || "").trim();
+    var updatedAt = Math.floor(Number(opts.updatedAt) || 0);
+    var media = opts.media;
+    if (raffleId < 1 || !gifUrl || !media) return function () {};
+
+    var cancelled = false;
+    var revokeUrl = null;
+
+    function applySrc(url) {
+      if (cancelled) return;
+      applyAbRaffleCoverAnim(media, url);
+    }
+
+    var meta = readAbRaffleGifMeta(raffleId);
+    if (isAbRaffleGifMetaCurrent(meta, gifUrl, updatedAt)) {
+      abBlobUrlFromGifCache(gifUrl, function (cached) {
+        if (cached) {
+          revokeUrl = cached;
+          applySrc(cached);
+        }
+      });
+    }
+
+    fetch(gifUrl, { credentials: "same-origin", cache: "force-cache" })
+      .then(function (res) {
+        if (!res.ok || cancelled) return null;
+        if ("caches" in window) {
+          return caches.open(AB_RAFFLE_GIF_CACHE_NAME).then(function (cache) {
+            return cache.put(gifUrl, res.clone()).then(function () {
+              return res.blob();
+            });
+          });
+        }
+        return res.blob();
+      })
+      .then(function (blob) {
+        if (!blob || !blob.size || cancelled) return;
+        writeAbRaffleGifMeta(raffleId, gifUrl, updatedAt);
+        if (revokeUrl) {
+          try {
+            URL.revokeObjectURL(revokeUrl);
+          } catch (_) {}
+        }
+        revokeUrl = URL.createObjectURL(blob);
+        applySrc(revokeUrl);
+      })
+      .catch(function () {});
+
+    return function () {
+      cancelled = true;
+      if (revokeUrl) {
+        try {
+          URL.revokeObjectURL(revokeUrl);
+        } catch (_) {}
+        revokeUrl = null;
+      }
+    };
+  }
+
+  function initRaffleCardGifMedia(rootEl) {
+    var root = rootEl || document;
+    root.querySelectorAll(".raffle-card__media[data-gif-url]").forEach(function (media) {
+      var gifUrl = String(media.getAttribute("data-gif-url") || "").trim();
+      if (!gifUrl) return;
+      var staticUrl = String(media.getAttribute("data-static-url") || "").trim();
+      var raffleId = Math.floor(Number(media.getAttribute("data-raffle-id") || 0));
+      var updatedAt = Math.floor(Number(media.getAttribute("data-updated-at") || 0));
+      var img = media.querySelector("[data-raffle-media-img]");
+      if (staticUrl && img) img.src = staticUrl;
+      abPreloadRaffleCoverGif({ raffleId: raffleId, gifUrl: gifUrl, updatedAt: updatedAt, media: media });
+    });
   }
 
   function renderRaffleCards(containerId, list) {
@@ -4321,6 +4519,7 @@
       });
     });
     updateRaffleStreamCountdowns(el);
+    initRaffleCardGifMedia(el);
   }
 
   function updateRaffleStreamCountdowns(rootEl) {

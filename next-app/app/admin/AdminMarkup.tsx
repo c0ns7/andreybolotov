@@ -669,7 +669,24 @@ export default function AdminMarkup() {
               <div className="form-group">
                 <label htmlFor="raffle-cover-file">Обложка — файл</label>
                 <input id="raffle-cover-file" className="input input--file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
-                <p className="admin-raffle-field-hint">JPEG, PNG, WebP или GIF, до 5 МБ.</p>
+                <p className="admin-raffle-field-hint">JPEG, PNG, WebP или GIF, до 5 МБ. Показывается сразу на главной.</p>
+              </div>
+              <div className="form-group">
+                <label htmlFor="raffle-cover-gif-url">Анимация (GIF / MP4) — ссылка</label>
+                <input id="raffle-cover-gif-url" className="input" type="url" inputMode="url" placeholder="https://… или /uploads/…" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="raffle-cover-gif-file">Анимация (GIF / MP4) — файл</label>
+                <input
+                  id="raffle-cover-gif-file"
+                  className="input input--file"
+                  type="file"
+                  accept="image/gif,video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm"
+                />
+                <p className="admin-raffle-field-hint">
+                  GIF до 5 МБ или MP4/WebM/MOV до 20 МБ. Сначала статичная обложка, затем анимация в фоне (видео без звука, с
+                  повтором). Очистите поля, чтобы убрать.
+                </p>
               </div>
             </section>
             <section className="admin-raffle-section" aria-labelledby="raffle-sec-price">

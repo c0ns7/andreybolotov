@@ -724,6 +724,8 @@
     document.getElementById("raffle-edit-id").value = edit ? String(edit.id) : "";
     document.getElementById("raffle-title").value = edit ? edit.title : "";
     document.getElementById("raffle-cover-url").value = edit ? edit.cover_image_url || "" : "";
+    var gifUrlEl = document.getElementById("raffle-cover-gif-url");
+    if (gifUrlEl) gifUrlEl.value = edit ? edit.cover_gif_url || "" : "";
     document.getElementById("raffle-price").value = edit ? String(edit.price_rub) : "0";
     var cenopadEnabledEl = document.getElementById("raffle-cenopad-enabled");
     if (cenopadEnabledEl) cenopadEnabledEl.checked = edit ? !!edit.cenopad_enabled : false;
@@ -846,8 +848,10 @@
     var hidEl = document.getElementById("raffle-hidden-from-public");
     if (hidEl) hidEl.checked = edit ? !!edit.hidden_from_public : false;
     var cf = document.getElementById("raffle-cover-file");
+    var gf = document.getElementById("raffle-cover-gif-file");
     var qf = document.getElementById("raffle-qr-file");
     if (cf) cf.value = "";
+    if (gf) gf.value = "";
     if (qf) qf.value = "";
     renderBankCardsFromEdit(edit);
     setPayTab("sber");
@@ -1614,12 +1618,29 @@
     e.preventDefault();
     const editId = document.getElementById("raffle-edit-id").value.trim();
     let coverUrl = document.getElementById("raffle-cover-url").value.trim();
+    let gifUrl = (function () {
+      var el = document.getElementById("raffle-cover-gif-url");
+      return el ? String(el.value || "").trim() : "";
+    })();
     let qrUrl = document.getElementById("raffle-qr-url").value.trim();
     let coverFile = document.getElementById("raffle-cover-file").files[0];
+    let gifFile = document.getElementById("raffle-cover-gif-file") && document.getElementById("raffle-cover-gif-file").files[0];
     let qrFile = document.getElementById("raffle-qr-file").files[0];
     setFormLoading(true);
     try {
       if (coverFile) coverUrl = await uploadFile(coverFile);
+      if (gifFile) {
+        var gifMime = String(gifFile.type || "").toLowerCase();
+        var okAnim =
+          gifMime === "image/gif" ||
+          gifMime === "video/mp4" ||
+          gifMime === "video/webm" ||
+          gifMime === "video/quicktime";
+        if (!okAnim) {
+          throw new Error("Анимация: загрузите GIF или видео MP4 / WebM / MOV");
+        }
+        gifUrl = await uploadFile(gifFile);
+      }
       if (qrFile) qrUrl = await uploadFile(qrFile);
     } catch (err) {
       setFormLoading(false);
@@ -1637,6 +1658,7 @@
     const payload = {
       title: document.getElementById("raffle-title").value.trim(),
       cover_image_url: coverUrl,
+      cover_gif_url: gifUrl,
       price_rub: Number(document.getElementById("raffle-price").value),
       cenopad_enabled: (function () {
         var el = document.getElementById("raffle-cenopad-enabled");

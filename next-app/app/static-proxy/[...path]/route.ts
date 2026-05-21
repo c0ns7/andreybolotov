@@ -15,6 +15,9 @@ function contentTypeByExt(filePath: string): string {
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
   if (ext === ".webp") return "image/webp";
   if (ext === ".gif") return "image/gif";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".webm") return "video/webm";
+  if (ext === ".mov") return "video/quicktime";
   if (ext === ".ico") return "image/x-icon";
   if (ext === ".json") return "application/json; charset=utf-8";
   return "application/octet-stream";
