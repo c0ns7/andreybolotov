@@ -46,10 +46,14 @@ export async function getCachedMediaBlobUrl(url: string): Promise<string | null>
   }
 }
 
+function canCacheMediaResponse(res: Response): boolean {
+  return res.status === 200 && !res.headers.get("content-range");
+}
+
 export async function storeMediaInCache(url: string, response: Response): Promise<void> {
   if (typeof window === "undefined" || !("caches" in window)) return;
   const href = resolveAbMediaHref(url);
-  if (!href || !response.ok) return;
+  if (!href || !canCacheMediaResponse(response)) return;
   try {
     const cache = await caches.open(AB_MEDIA_CACHE_NAME);
     await cache.put(href, response.clone());

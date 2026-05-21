@@ -13,6 +13,26 @@ function isMediaUrl(url) {
   }
 }
 
+/** Cache API не поддерживает 206 Partial Content (запросы Range у <video>). */
+function canCacheResponse(res, request) {
+  if (!res || res.status !== 200) return false;
+  if (request && request.headers && request.headers.get("range")) return false;
+  if (res.headers && res.headers.get("content-range")) return false;
+  return true;
+}
+
+function safeCachePut(cache, request, response) {
+  if (!canCacheResponse(response, request)) return Promise.resolve();
+  return cache.put(request, response.clone()).then(
+    function () {
+      return trimCache(cache);
+    },
+    function () {
+      return undefined;
+    },
+  );
+}
+
 function trimCache(cache) {
   return cache.keys().then(function (keys) {
     if (keys.length <= MAX_ENTRIES) return;
@@ -64,11 +84,7 @@ self.addEventListener("message", function (event) {
       return cache.match(url).then(function (hit) {
         if (hit) return hit;
         return fetch(url, { credentials: "same-origin" }).then(function (res) {
-          if (res && res.ok) {
-            return cache.put(url, res.clone()).then(function () {
-              return trimCache(cache);
-            });
-          }
+          return safeCachePut(cache, url, res);
         });
       });
     }),
@@ -78,17 +94,14 @@ self.addEventListener("message", function (event) {
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
   if (!isMediaUrl(event.request.url)) return;
+  if (event.request.headers.get("range")) return;
 
   event.respondWith(
     caches.open(CACHE).then(function (cache) {
       return cache.match(event.request).then(function (cached) {
         var network = fetch(event.request)
           .then(function (res) {
-            if (res && res.ok) {
-              cache.put(event.request, res.clone()).then(function () {
-                return trimCache(cache);
-              });
-            }
+            safeCachePut(cache, event.request, res);
             return res;
           })
           .catch(function () {
