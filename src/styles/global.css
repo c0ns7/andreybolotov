@@ -688,7 +688,6 @@ html.theme-dark .ptr__spinner {
   margin: 0;
   border-radius: 0 0 32px 32px;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   max-width: 520px;
   margin: 0 auto;
 }
