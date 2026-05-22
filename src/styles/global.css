@@ -676,7 +676,6 @@ html.theme-dark .ptr__spinner {
 .home-brand-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: 0;
   margin-top: 0;
@@ -689,62 +688,84 @@ html.theme-dark .ptr__spinner {
   min-width: 0;
 }
 
-.home-social-links {
-  flex-shrink: 0;
+.home-section-title--social {
+  margin-top: 24px;
+  margin-bottom: 10px;
 }
 
-.home-social-links__list {
+.home-social-block {
+  margin-bottom: 8px;
+}
+
+.home-social-links--row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.home-social-links__btn {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.home-social-links__link {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  color: #64748b;
+  gap: 6px;
+  min-height: 72px;
+  padding: 10px 6px;
+  border-radius: 14px;
   text-decoration: none;
-  background: rgba(15, 23, 42, 0.05);
+  color: #475569;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.06);
   transition:
     color 0.15s ease,
     background 0.15s ease,
+    border-color 0.15s ease,
     transform 0.12s ease;
 }
 
-.home-social-links__link:hover {
+.home-social-links__btn:hover {
   transform: translateY(-1px);
 }
 
-.home-social-links__link:active {
-  transform: scale(0.94);
+.home-social-links__btn:active {
+  transform: scale(0.98);
 }
 
-.home-social-links__link--vk:hover {
+.home-social-links__btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.home-social-links__btn-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-social-links__btn--vk:hover {
   color: #1d4ed8;
-  background: rgba(29, 78, 216, 0.1);
+  background: rgba(29, 78, 216, 0.08);
+  border-color: rgba(29, 78, 216, 0.2);
 }
 
-.home-social-links__link--tg:hover {
+.home-social-links__btn--tg:hover {
   color: #0284c7;
-  background: rgba(2, 132, 199, 0.1);
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.2);
 }
 
-.home-social-links__link--max:hover {
-  color: #5b21b6;
-  background: rgba(91, 33, 182, 0.1);
+.home-social-links__btn--max:hover {
+  background: rgba(91, 33, 182, 0.06);
+  border-color: rgba(91, 33, 182, 0.18);
 }
 
 .home-social-links__max-logo {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
@@ -13228,24 +13249,27 @@ html.theme-dark .home-brand-title {
   color: var(--text);
 }
 
-html.theme-dark .home-social-links__link {
+html.theme-dark .home-social-links__btn {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border);
 }
 
-html.theme-dark .home-social-links__link--vk:hover {
+html.theme-dark .home-social-links__btn--vk:hover {
   color: #60a5fa;
-  background: rgba(96, 165, 250, 0.14);
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.28);
 }
 
-html.theme-dark .home-social-links__link--tg:hover {
+html.theme-dark .home-social-links__btn--tg:hover {
   color: #38bdf8;
-  background: rgba(56, 189, 248, 0.14);
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.28);
 }
 
-html.theme-dark .home-social-links__link--max:hover {
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.14);
+html.theme-dark .home-social-links__btn--max:hover {
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.28);
 }
 
 html.theme-dark .home-push-permission {

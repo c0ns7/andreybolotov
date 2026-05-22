@@ -8,4 +8,4 @@ export const AB_PASSWORD_RESET_ADMIN_TEXT =
 export const AB_ADMIN_MAX_LINK_LABEL = "Написать в MAX";
 
 /** Официальная иконка MAX (SVG). */
-export const AB_MAX_LOGO_SVG = "https://maxicons.ru/icons/Max_logo.svg";
+export const AB_MAX_LOGO_SVG = "https://maxicons.ru/icons/MAX.svg";

@@ -374,9 +374,9 @@ export default function HomeAppClient() {
                 </div>
                 <h1 className="home-brand-title">Быть добру!</h1>
               </div>
-              <HomeSocialLinks />
             </div>
           </header>
+          <h2 className="home-section-title">Активные акции</h2>
           <div className="home-cards" id="home-cards-app">
             {feedErr ? (
               <HomeFeedEmpty
@@ -603,6 +603,8 @@ export default function HomeAppClient() {
               })
             )}
           </div>
+          <h2 className="home-section-title home-section-title--social">Мы в социальных сетях</h2>
+          <HomeSocialLinks />
         </div>
         </PullToRefresh>
 
