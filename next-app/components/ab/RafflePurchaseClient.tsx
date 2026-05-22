@@ -275,11 +275,13 @@ function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: bo
     if (kind === "taken") {
       const labelTaken = String(n);
       html +=
-        '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято, номер ' +
+        '<button type="button" class="raffle-cell raffle-cell--taken" data-kind="taken" data-ticket="' +
+        esc(labelTaken) +
+        '" aria-label="Занято, номер ' +
         esc(labelTaken) +
         '">' +
         esc(labelTaken) +
-        "</div>";
+        "</button>";
       continue;
     }
     const label = String(n);
@@ -305,6 +307,8 @@ function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: bo
         cls +
         '" data-kind="' +
         esc(kind) +
+        '" data-ticket="' +
+        esc(label) +
         '" aria-label="Ваш номер ' +
         esc(label) +
         '"><span>' +
@@ -332,6 +336,8 @@ function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: bo
         cls +
         '" data-kind="' +
         esc(kind) +
+        '" data-ticket="' +
+        esc(label) +
         '" aria-label="Номер ' +
         esc(label) +
         '"><span>' +
@@ -1355,7 +1361,21 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toast("Сначала завершите оплату по брони.", "info");
         return;
       }
-      const btn = (e.target as HTMLElement).closest?.("[data-ticket]") as HTMLElement | null;
+      const cell = (e.target as HTMLElement).closest?.(".raffle-cell") as HTMLElement | null;
+      if (!cell) return;
+      const cellKind = cell.getAttribute("data-kind");
+      if (cell.classList.contains("raffle-cell--taken") || cellKind === "taken") {
+        toast("Это уже занятый номерок. Свободные номерки помечены белым цветом.", "info");
+        return;
+      }
+      const ticketBtn = cell.matches("button[data-ticket]")
+        ? cell
+        : ((cell.closest?.("button[data-ticket]") as HTMLElement | null) ?? null);
+      if (cell.classList.contains("raffle-cell--mine") && !ticketBtn) {
+        toast("Это ваш номерок", "info");
+        return;
+      }
+      const btn = ticketBtn;
       if (!btn) return;
       const kind = btn.getAttribute("data-kind");
       if (kind !== "free" && kind !== "self_reserved") return;

@@ -9790,10 +9790,13 @@ html.theme-dark .auth-tabs__btn.is-active {
   color: #ffffff80;
   border: none;
   border-radius: 12px;
-  cursor: not-allowed;
-  pointer-events: none;
+  cursor: pointer;
   font-weight: 600;
   box-shadow: none;
+}
+
+.raffle-cell--free.raffle-cell--mine:not(button) {
+  cursor: pointer;
 }
 
 .raffle-cell__dot {
@@ -12074,8 +12077,7 @@ html.raffle-purchase-page .raffle-cell--taken {
   background: rgb(142 142 147);
   color: #ffffff80;
   border: none;
-  cursor: not-allowed;
-  pointer-events: none;
+  cursor: pointer;
 }
 
 html.raffle-purchase-page .raffle-range-tabs {

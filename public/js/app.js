@@ -5116,11 +5116,13 @@
       if (kind === "taken") {
         var takenLabel = String(n);
         html +=
-          '<div class="raffle-cell raffle-cell--taken" title="Занято" aria-label="Занято, номер ' +
+          '<button type="button" class="raffle-cell raffle-cell--taken" data-kind="taken" data-ticket="' +
+          escapeHtml(takenLabel) +
+          '" aria-label="Занято, номер ' +
           escapeHtml(takenLabel) +
           '">' +
           escapeHtml(takenLabel) +
-          "</div>";
+          "</button>";
         continue;
       }
       var label = String(n);
@@ -5151,6 +5153,8 @@
           cls +
           '" data-kind="' +
           escapeHtml(kind) +
+          '" data-ticket="' +
+          escapeHtml(label) +
           '" aria-label="Ваш номер ' +
           escapeHtml(label) +
           '"><span>' +
@@ -5178,6 +5182,8 @@
           cls +
           '" data-kind="' +
           escapeHtml(kind) +
+          '" data-ticket="' +
+          escapeHtml(label) +
           '" aria-label="Номер ' +
           escapeHtml(label) +
           '"><span>' +
@@ -5699,12 +5705,25 @@
     });
 
     document.getElementById("raffle-page-grid")?.addEventListener("click", function (e) {
-      var btn = e.target.closest("[data-ticket]");
-      if (!btn) return;
+      var cell = e.target.closest(".raffle-cell");
+      if (!cell) return;
       if (isRaffleLockedByReceiptPending()) {
         openWaitReceiptModal();
         return;
       }
+      var cellKind = cell.getAttribute("data-kind");
+      if (cell.classList.contains("raffle-cell--taken") || cellKind === "taken") {
+        showToast("Это уже занятый номерок. Свободные номерки помечены белым цветом.", "info");
+        return;
+      }
+      var ticketBtn =
+        cell.matches("button[data-ticket]") ? cell : cell.closest("button[data-ticket]");
+      if (cell.classList.contains("raffle-cell--mine") && !ticketBtn) {
+        showToast("Это ваш номерок", "info");
+        return;
+      }
+      var btn = ticketBtn;
+      if (!btn) return;
       var kind = btn.getAttribute("data-kind");
       if (kind !== "free" && kind !== "self_reserved") return;
       var n = Number(btn.getAttribute("data-ticket"));
