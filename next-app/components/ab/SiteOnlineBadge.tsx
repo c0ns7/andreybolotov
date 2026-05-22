@@ -47,9 +47,11 @@ export default function SiteOnlineBadge() {
 
   if (!shouldShowSiteOnline(pathname) || count === null || count < 1) return null;
 
+  const isHomeFeed = (pathname.replace(/\/$/, "") || "/") === "/home";
+
   return (
     <div
-      className="site-online-badge"
+      className={"site-online-badge" + (isHomeFeed ? " site-online-badge--home-feed" : "")}
       style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       aria-live="polite"
     >

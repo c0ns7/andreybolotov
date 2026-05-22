@@ -673,6 +673,30 @@ html.theme-dark .ptr__spinner {
   box-shadow: none;
 }
 
+/* Главная лента — фиксированная шапка с размытием */
+#screen-app.home-screen .home-sticky {
+  box-shadow: none;
+  background: 0 0;
+  border: none;
+  position: fixed;
+  height: 60px;
+  top: 0;
+  right: 0;
+  left: 0;
+  padding: 10px;
+  z-index: 100;
+  margin: 0;
+  border-radius: 0 0 32px 32px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+#screen-app.home-screen .home-inner {
+  margin-top: 70px;
+}
+
 .home-brand-row {
   display: flex;
   align-items: center;
@@ -734,8 +758,7 @@ html.theme-dark .ptr__spinner {
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1;
-  min-height: 56px;
+  min-height: 70px;
   padding: 14px;
   border-radius: 16px;
   text-decoration: none;
@@ -15091,6 +15114,10 @@ html.theme-dark .raffle-range-swipe-hint__pull-fill {
     transform: scale(2);
     opacity: 0;
   }
+}
+
+.site-online-badge--home-feed {
+  z-index: 101;
 }
 
 .site-online-badge {
