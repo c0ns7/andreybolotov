@@ -19,6 +19,8 @@ import { useAbSession } from "./AbSessionContext";
 const RAFFLE_MAX_SELECT = 25;
 const DRAFT_PREFIX = "ab_raffle_draft_";
 const LOW_STOCK_FREE_THRESHOLD = 500;
+/** Карточка «мало свободных» — только если у пользователя в акции меньше 3 своих номерков. */
+const LOW_STOCK_USER_TICKETS_MAX = 3;
 
 type RaffleDto = Record<string, unknown> & {
   id?: number;
@@ -176,6 +178,19 @@ function countFreeInRange(
     if (String(c.kind) === "free") n += 1;
   }
   return n;
+}
+
+function countUserOwnedTickets(sliceCache: Map<string, { ts: number; cells: Cell[] }>): number {
+  const seen = new Set<number>();
+  for (const { cells } of sliceCache.values()) {
+    for (const c of cells) {
+      const kind = String(c.kind || "");
+      if (kind !== "self_reserved" && kind !== "self_pending" && kind !== "self_confirmed") continue;
+      const n = Math.floor(Number(c.n));
+      if (Number.isFinite(n) && n > 0) seen.add(n);
+    }
+  }
+  return seen.size;
 }
 
 function pickRangeWithMostFree(
@@ -572,7 +587,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const best = pickRangeWithMostFree(parts, sliceCacheRef.current, raffleId);
       switchRangeTabRef.current(best.from, best.to);
       const totalFree = collectGlobalFreeNumbers(sliceCacheRef.current, new Set()).length;
-      if (totalFree > 0 && totalFree < LOW_STOCK_FREE_THRESHOLD) {
+      const userTickets = countUserOwnedTickets(sliceCacheRef.current);
+      if (
+        totalFree > 0 &&
+        totalFree < LOW_STOCK_FREE_THRESHOLD &&
+        userTickets < LOW_STOCK_USER_TICKETS_MAX
+      ) {
         setLowStockModal({ freeCount: totalFree });
       }
     },
@@ -2829,26 +2849,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           }}
         >
           <div className="raffle-low-stock-modal__card" role="document">
-            <div className="raffle-low-stock-modal__glow" aria-hidden="true" />
-            <div className="raffle-low-stock-modal__icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-            </div>
             <h2 id="raffle-low-stock-title" className="raffle-low-stock-modal__title">
-              Свободных номерков осталось мало
+              Свободно <span className="raffle-low-stock-modal__count">{lowStockFreeLabel}</span>
             </h2>
-            <p className="raffle-low-stock-modal__text">
-              Возможно, интернет тормозит загрузку — но главное: свободных мест уже немного. Удобнее сразу смотреть только
-              свободные номерки и переключаться между таблицами диапазонов.
-            </p>
-            <div className="raffle-low-stock-modal__stat" role="status">
-              <span className="raffle-low-stock-modal__stat-label">Свободно сейчас</span>
-              <span className="raffle-low-stock-modal__stat-value">{lowStockFreeLabel}</span>
-              <span className="raffle-low-stock-modal__stat-hint">меньше {formatRub(LOW_STOCK_FREE_THRESHOLD)}</span>
-            </div>
+            <p className="raffle-low-stock-modal__text">Мест мало. Показать только свободные?</p>
             <div className="raffle-low-stock-modal__actions">
               <button
                 type="button"
@@ -2858,10 +2862,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
                   setLowStockModal(null);
                 }}
               >
-                Показать только свободные
+                Только свободные
               </button>
               <button type="button" className="btn btn--ghost raffle-low-stock-modal__btn" onClick={() => setLowStockModal(null)}>
-                Понятно
+                Закрыть
               </button>
             </div>
           </div>
