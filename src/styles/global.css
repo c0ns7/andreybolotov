@@ -15115,10 +15115,6 @@ html.theme-dark .raffle-range-swipe-hint__pull-fill {
   }
 }
 
-.site-online-badge {
-  z-index: 101;
-}
-
 .site-online-badge--home-feed {
   z-index: 101;
 }
@@ -15126,7 +15122,7 @@ html.theme-dark .raffle-range-swipe-hint__pull-fill {
 .site-online-badge {
   position: fixed;
   right: 1rem;
-  z-index: 70;
+  z-index: 101;
   display: flex;
   align-items: center;
   gap: 6px;
