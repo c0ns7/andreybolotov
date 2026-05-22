@@ -18,6 +18,7 @@ import { useAbSession } from "./AbSessionContext";
 
 const RAFFLE_MAX_SELECT = 25;
 const DRAFT_PREFIX = "ab_raffle_draft_";
+const LOW_STOCK_FREE_THRESHOLD = 500;
 
 type RaffleDto = Record<string, unknown> & {
   id?: number;
@@ -160,6 +161,39 @@ function collectGlobalFreeNumbers(sliceCache: Map<string, { ts: number; cells: C
     }
   }
   return out;
+}
+
+function countFreeInRange(
+  sliceCache: Map<string, { ts: number; cells: Cell[] }>,
+  raffleId: number,
+  from: number,
+  to: number,
+): number {
+  const cached = sliceCache.get(sliceCacheKey(raffleId, from, to));
+  if (!cached) return 0;
+  let n = 0;
+  for (const c of cached.cells) {
+    if (String(c.kind) === "free") n += 1;
+  }
+  return n;
+}
+
+function pickRangeWithMostFree(
+  parts: { from: number; to: number }[],
+  sliceCache: Map<string, { ts: number; cells: Cell[] }>,
+  raffleId: number,
+): { from: number; to: number } {
+  if (!parts.length) return { from: 1, to: 500 };
+  let best = parts[0]!;
+  let bestFree = -1;
+  for (const p of parts) {
+    const freeN = countFreeInRange(sliceCache, raffleId, p.from, p.to);
+    if (freeN > bestFree) {
+      bestFree = freeN;
+      best = p;
+    }
+  }
+  return best;
 }
 
 function syncCartFlowRail(totalNums: number) {
@@ -354,6 +388,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [mainStep, setMainStep] = useState<"grid" | "wait">("grid");
+  const [lowStockModal, setLowStockModal] = useState<{ freeCount: number } | null>(null);
   const [navHiddenByInput, setNavHiddenByInput] = useState(false);
 
   const reserveDraftRef = useRef<{
@@ -521,6 +556,28 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
   const syncRangeTabsVisibilityRef = useRef(syncRangeTabsVisibility);
   syncRangeTabsVisibilityRef.current = syncRangeTabsVisibility;
+
+  const setOnlyFreeViewEnabled = useCallback((enabled: boolean) => {
+    setOnlyFreeView(enabled);
+    const eye = document.getElementById("raffle-page-only-free");
+    if (eye) {
+      eye.setAttribute("aria-pressed", enabled ? "true" : "false");
+      eye.classList.toggle("raffle-range-eye--active", enabled);
+    }
+    syncRangeTabsVisibilityRef.current();
+  }, []);
+
+  const finishRaffleGridBootstrap = useCallback(
+    (parts: { from: number; to: number }[], raffleId: number) => {
+      const best = pickRangeWithMostFree(parts, sliceCacheRef.current, raffleId);
+      switchRangeTabRef.current(best.from, best.to);
+      const totalFree = collectGlobalFreeNumbers(sliceCacheRef.current, new Set()).length;
+      if (totalFree > 0 && totalFree < LOW_STOCK_FREE_THRESHOLD) {
+        setLowStockModal({ freeCount: totalFree });
+      }
+    },
+    [],
+  );
   const rangePartsRef = useRef<{ from: number; to: number }[]>([]);
   rangePartsRef.current = rangeParts;
   const mainStepRef = useRef(mainStep);
@@ -828,6 +885,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           return;
         }
         if (cancelled) return;
+        setLowStockModal(null);
         raffleRef.current = r;
         setRaffle(r);
         const parts = buildRangeParts(Number(r.ticket_count) || 1);
@@ -865,12 +923,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         const tabs = document.getElementById("raffle-page-tabs");
         if (tabs) {
           tabs.innerHTML = parts
-            .map((p, idx) => {
+            .map((p) => {
               const label = String(p.from) + "–" + String(p.to);
               return (
-                '<button type="button" role="tab" class="raffle-range-tab' +
-                (idx === 0 ? " raffle-range-tab--active" : "") +
-                '" data-from="' +
+                '<button type="button" role="tab" class="raffle-range-tab" data-from="' +
                 String(p.from) +
                 '" data-to="' +
                 String(p.to) +
@@ -908,6 +964,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         sliceCacheRef.current.clear();
         rangeHasFreeRef.current.clear();
         await loadAllSlicesRef.current({ parts });
+        finishRaffleGridBootstrap(parts, Number(r.id));
         if (
           shouldAutoOpenPayment &&
           !autoOpenPaymentTriggeredRef.current &&
@@ -926,7 +983,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     return () => {
       cancelled = true;
     };
-  }, [authVerified, session?.token, raffleId, hash, router, toast, shouldAutoOpenPayment, onHashRoute]);
+  }, [authVerified, session?.token, raffleId, hash, router, toast, shouldAutoOpenPayment, onHashRoute, finishRaffleGridBootstrap]);
 
   useEffect(() => {
     const grid = document.getElementById("raffle-page-grid");
@@ -1318,17 +1375,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   useEffect(() => {
     const eye = document.getElementById("raffle-page-only-free");
     if (!eye) return;
-    const onEye = () => {
-      setOnlyFreeView((v) => {
-        const n = !v;
-        eye.setAttribute("aria-pressed", n ? "true" : "false");
-        eye.classList.toggle("raffle-range-eye--active", n);
-        return n;
-      });
-    };
+    const onEye = () => setOnlyFreeViewEnabled(!onlyFreeViewRef.current);
     eye.addEventListener("click", onEye);
     return () => eye.removeEventListener("click", onEye);
-  }, []);
+  }, [setOnlyFreeViewEnabled]);
 
   useEffect(() => {
     const g = document.getElementById("raffle-page-step-grid");
@@ -2763,9 +2813,60 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     );
   }
 
+  const lowStockFreeLabel = lowStockModal ? formatRub(lowStockModal.freeCount) : "";
+
   return (
     <>
       <AbRafflePurchaseShellMarkup />
+      {lowStockModal ? (
+        <div
+          className="modal-overlay raffle-low-stock-modal is-open"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="raffle-low-stock-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLowStockModal(null);
+          }}
+        >
+          <div className="raffle-low-stock-modal__card" role="document">
+            <div className="raffle-low-stock-modal__glow" aria-hidden="true" />
+            <div className="raffle-low-stock-modal__icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <h2 id="raffle-low-stock-title" className="raffle-low-stock-modal__title">
+              Свободных номерков осталось мало
+            </h2>
+            <p className="raffle-low-stock-modal__text">
+              Возможно, интернет тормозит загрузку — но главное: свободных мест уже немного. Удобнее сразу смотреть только
+              свободные номерки и переключаться между таблицами диапазонов.
+            </p>
+            <div className="raffle-low-stock-modal__stat" role="status">
+              <span className="raffle-low-stock-modal__stat-label">Свободно сейчас</span>
+              <span className="raffle-low-stock-modal__stat-value">{lowStockFreeLabel}</span>
+              <span className="raffle-low-stock-modal__stat-hint">меньше {formatRub(LOW_STOCK_FREE_THRESHOLD)}</span>
+            </div>
+            <div className="raffle-low-stock-modal__actions">
+              <button
+                type="button"
+                className="btn btn--primary raffle-low-stock-modal__btn"
+                onClick={() => {
+                  setOnlyFreeViewEnabled(true);
+                  setLowStockModal(null);
+                }}
+              >
+                Показать только свободные
+              </button>
+              <button type="button" className="btn btn--ghost raffle-low-stock-modal__btn" onClick={() => setLowStockModal(null)}>
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <AppBottomNav
         show={!!(session?.token && session?.phone)}
         profileLetter={letter}
