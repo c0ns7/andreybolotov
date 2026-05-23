@@ -101,9 +101,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="ab-no-zoom" strategy="beforeInteractive">
           {`!function(){try{var p=function(e){e.preventDefault()};document.addEventListener("gesturestart",p,{passive:!1});document.addEventListener("gesturechange",p,{passive:!1});document.addEventListener("gestureend",p,{passive:!1});document.addEventListener("wheel",function(e){if(e.ctrlKey)e.preventDefault()},{passive:!1})}catch(_){}}();`}
         </Script>
-        <Script id="ab-in-app-browser-detect" strategy="beforeInteractive">
-          {`!function(){try{var ua=navigator.userAgent||"";if(/Telegram/i.test(ua)||/VKClient|VKApp|VKAndroid|VK\\/[\\d.]+|VkApp|vk\\.com/i.test(ua)||/\\bMax\\/|MaxApp|OnemeApp|OKApp|OKAndroid/i.test(ua)){document.documentElement.classList.add("js-in-app-browser");}}catch(_){}}();`}
-        </Script>
         <Script id="ab-route-html-classes" strategy="beforeInteractive">
           {`!function(){try{var p=location.pathname||"";while(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);if(p==="/home/raffle"||p.indexOf("/raffle/")===0){document.documentElement.classList.add("raffle-purchase-page","raffle-grid-page");}else if(p.indexOf("/home/raffle/confirm")===0){document.documentElement.classList.add("raffle-confirm-page");}if(p==="/"||p==="/home"||p==="/home/blog"||p.indexOf("/home/blog/")===0||p==="/home/raffle"||p.indexOf("/home/raffle/")===0||p.indexOf("/raffle/")===0){document.documentElement.classList.add("ab-ui-no-select");}}catch(_){}}();`}
         </Script>

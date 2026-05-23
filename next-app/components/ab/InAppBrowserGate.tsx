@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildEscapeNavigateUrl,
@@ -10,17 +11,44 @@ import {
   inAppBrowserInstructions,
   type InAppBrowserInfo,
 } from "../../lib/ab-in-app-browser";
+import { useAbSession } from "./AbSessionContext";
+
+function isGuestLandingPath(pathname: string): boolean {
+  const p = pathname.replace(/\/+$/, "") || "/";
+  return p === "/";
+}
 
 export default function InAppBrowserGate() {
+  const pathname = usePathname() || "/";
+  const { session, authVerified, authCheckInFlight } = useAbSession();
   const [info, setInfo] = useState<InAppBrowserInfo | null>(null);
   const [copied, setCopied] = useState(false);
   const [pageUrl, setPageUrl] = useState("https://andreybolotov.ru/");
 
+  const showAuthedUi = !!(session?.token && session?.phone && authVerified);
+  const shouldGateGuestLanding =
+    isGuestLandingPath(pathname) &&
+    !showAuthedUi &&
+    (!authCheckInFlight || !(session?.token && session?.phone));
+
   useEffect(() => {
+    document.documentElement.classList.toggle("js-in-app-browser", !!(info && shouldGateGuestLanding));
+    return () => {
+      document.documentElement.classList.remove("js-in-app-browser");
+    };
+  }, [info, shouldGateGuestLanding]);
+
+  useEffect(() => {
+    if (!shouldGateGuestLanding) {
+      setInfo(null);
+      return;
+    }
     const detected = detectInAppBrowser();
-    if (!detected) return;
+    if (!detected) {
+      setInfo(null);
+      return;
+    }
     setInfo(detected);
-    document.documentElement.classList.add("js-in-app-browser");
     try {
       setPageUrl(buildPageUrlForExternalOpen(window.location.href, detected.kind));
     } catch {
@@ -50,7 +78,7 @@ export default function InAppBrowserGate() {
         /* gate stays visible */
       }
     }, 120);
-  }, []);
+  }, [shouldGateGuestLanding]);
 
   const escapeHref = useMemo(() => {
     if (!info) return pageUrl;
@@ -83,7 +111,7 @@ export default function InAppBrowserGate() {
     }
   }, [pageUrl]);
 
-  if (!info) return null;
+  if (!shouldGateGuestLanding || !info) return null;
 
   return (
     <div className="ab-in-app-gate" role="dialog" aria-modal="true" aria-labelledby="ab-in-app-gate-title">
