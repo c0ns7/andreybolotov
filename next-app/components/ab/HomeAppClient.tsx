@@ -12,6 +12,7 @@ import { useSiteFlags } from "../../lib/use-site-flags";
 import HomeFeedEmpty from "./HomeFeedEmpty";
 import PullToRefresh from "./PullToRefresh";
 import HomeSocialLinks from "./HomeSocialLinks";
+import HomeBeginnerOnboarding from "./HomeBeginnerOnboarding";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 
@@ -605,6 +606,7 @@ export default function HomeAppClient() {
           </div>
           <h2 className="home-section-title home-section-title--social">Мы в социальных сетях</h2>
           <HomeSocialLinks />
+          <HomeBeginnerOnboarding authVerified={authVerified} sessionToken={session?.token} />
         </div>
         </PullToRefresh>
 
