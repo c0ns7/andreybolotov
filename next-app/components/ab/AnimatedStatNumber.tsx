@@ -12,18 +12,15 @@ function formatGrouped(n: number): string {
 
 type Props = {
   value: number;
-  className?: string;
   /** Макс. шагов «перебора» по одному числу; при большем скачке — плавная интерполяция */
   maxStepThrough?: number;
 };
 
-export default function AnimatedStatNumber({ value, className = "", maxStepThrough = 48 }: Props) {
+export default function AnimatedStatNumber({ value, maxStepThrough = 48 }: Props) {
   const target = Math.max(0, Math.round(Number(value) || 0));
   const [display, setDisplay] = useState(target);
-  const [pulse, setPulse] = useState<"up" | "down" | null>(null);
   const displayRef = useRef(target);
   const rafRef = useRef<number | null>(null);
-  const pulseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     displayRef.current = display;
@@ -39,10 +36,6 @@ export default function AnimatedStatNumber({ value, className = "", maxStepThrou
     const durationMs = stepThrough ? Math.min(1400, 48 * absDelta + 220) : 720;
 
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-
-    setPulse(delta > 0 ? "up" : "down");
-    if (pulseTimerRef.current != null) window.clearTimeout(pulseTimerRef.current);
-    pulseTimerRef.current = window.setTimeout(() => setPulse(null), durationMs + 80);
 
     const t0 = performance.now();
 
@@ -77,19 +70,8 @@ export default function AnimatedStatNumber({ value, className = "", maxStepThrou
     };
   }, [target, maxStepThrough]);
 
-  useEffect(() => {
-    return () => {
-      if (pulseTimerRef.current != null) window.clearTimeout(pulseTimerRef.current);
-    };
-  }, []);
-
-  const cls =
-    "ab-stat-number" +
-    (pulse === "up" ? " ab-stat-number--pulse-up" : pulse === "down" ? " ab-stat-number--pulse-down" : "") +
-    (className ? " " + className : "");
-
   return (
-    <span className={cls} aria-label={String(target)}>
+    <span aria-label={String(target)}>
       {formatGrouped(display)}
     </span>
   );

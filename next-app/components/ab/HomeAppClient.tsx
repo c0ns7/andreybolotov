@@ -521,10 +521,10 @@ export default function HomeAppClient() {
                       <div className="raffle-card__progress-wrap">
                         <div className="raffle-card__progress-meta">
                           <span>
-                            Занято: <AnimatedStatNumber value={occupied} className="ab-stat-number--occupied" />
+                            Занято: <AnimatedStatNumber value={occupied} />
                           </span>
                           <span>
-                            Осталось: <AnimatedStatNumber value={free} className="ab-stat-number--free" />
+                            Осталось: <AnimatedStatNumber value={free} />
                           </span>
                         </div>
                         <div className="raffle-card__progress-track" role="img" aria-label={"Осталось " + Math.round(freePct) + " процентов"}>

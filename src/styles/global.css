@@ -3381,76 +3381,6 @@ html.theme-dark .home-faq-item__a {
   margin-bottom: 5px;
 }
 
-.ab-stat-number {
-  display: inline-block;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  transition: color 0.35s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.ab-stat-number--occupied {
-  color: #64748b;
-}
-
-.ab-stat-number--free {
-  color: #16a34a;
-  font-weight: 700;
-}
-
-.ab-stat-number--pulse-up.ab-stat-number--free {
-  color: #15803d;
-}
-
-.ab-stat-number--pulse-down.ab-stat-number--free {
-  color: #22c55e;
-}
-
-.ab-stat-number--pulse-up.ab-stat-number--occupied {
-  color: #475569;
-}
-
-.ab-stat-number--pulse-down.ab-stat-number--occupied {
-  color: #94a3b8;
-}
-
-@keyframes abStatNumberPulseUp {
-  0% {
-    transform: translateY(0.14em);
-    opacity: 0.72;
-  }
-  45% {
-    transform: translateY(-0.06em);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes abStatNumberPulseDown {
-  0% {
-    transform: translateY(-0.12em);
-    opacity: 0.72;
-  }
-  45% {
-    transform: translateY(0.05em);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.ab-stat-number--pulse-up {
-  animation: abStatNumberPulseUp 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.ab-stat-number--pulse-down {
-  animation: abStatNumberPulseDown 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 .raffle-card__progress-track {
   width: 100%;
   height: 6px;
@@ -3464,7 +3394,7 @@ html.theme-dark .home-faq-item__a {
   display: block;
   height: 100%;
   border-radius: 999px;
-  transition: width 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.25s ease;
 }
 
 .raffle-card__progress-fill--ok {
@@ -14172,22 +14102,6 @@ html.theme-dark .raffle-card__progress-track {
 
 html.theme-dark .raffle-card__progress-meta {
   color: #94a3b8;
-}
-
-html.theme-dark .ab-stat-number--occupied {
-  color: #94a3b8;
-}
-
-html.theme-dark .ab-stat-number--free {
-  color: #4ade80;
-}
-
-html.theme-dark .ab-stat-number--pulse-up.ab-stat-number--free {
-  color: #86efac;
-}
-
-html.theme-dark .ab-stat-number--pulse-down.ab-stat-number--free {
-  color: #4ade80;
 }
 
 html.theme-dark .raffle-card__promo-badge {
