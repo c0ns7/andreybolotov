@@ -13,6 +13,7 @@ import HomeFeedEmpty from "./HomeFeedEmpty";
 import PullToRefresh from "./PullToRefresh";
 import HomeSocialLinks from "./HomeSocialLinks";
 import HomeBeginnerOnboarding from "./HomeBeginnerOnboarding";
+import AnimatedStatNumber from "./AnimatedStatNumber";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 
@@ -519,8 +520,12 @@ export default function HomeAppClient() {
                     <div className="raffle-card__foot">
                       <div className="raffle-card__progress-wrap">
                         <div className="raffle-card__progress-meta">
-                          <span>Занято: {occupied}</span>
-                          <span>Осталось: {free}</span>
+                          <span>
+                            Занято: <AnimatedStatNumber value={occupied} className="ab-stat-number--occupied" />
+                          </span>
+                          <span>
+                            Осталось: <AnimatedStatNumber value={free} className="ab-stat-number--free" />
+                          </span>
                         </div>
                         <div className="raffle-card__progress-track" role="img" aria-label={"Осталось " + Math.round(freePct) + " процентов"}>
                           <span
