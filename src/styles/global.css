@@ -135,6 +135,45 @@ body {
   flex-direction: column;
 }
 
+/* Запрет выделения: главная (/), /home, акция (/raffle), корзина, профиль, история участий */
+html.ab-ui-no-select #app-shell,
+html.ab-ui-no-select #app-shell * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html.ab-ui-no-select #app-shell input,
+html.ab-ui-no-select #app-shell textarea,
+html.ab-ui-no-select #app-shell [contenteditable="true"],
+html.ab-ui-no-select #app-shell .input {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+#modal-cart,
+#modal-cart *,
+#modal-profile,
+#modal-profile *,
+#modal-participation-history,
+#modal-participation-history * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#modal-cart input,
+#modal-cart textarea,
+#modal-profile input,
+#modal-profile textarea,
+#modal-participation-history input,
+#modal-participation-history textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 .app-shell.app-shell--table-public {
   max-width: 1400px;
 }
@@ -354,6 +393,8 @@ html.js-intro-done #welcome-splash {
   border: none;
   border-radius: 999px;
   cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
   transition: transform 0.12s ease, background 0.15s;
 }
 

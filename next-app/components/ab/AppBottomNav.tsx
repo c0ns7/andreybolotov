@@ -282,6 +282,59 @@ function mergeTicketGroupsByRaffle(groups: TicketGroup[]): TicketGroup[] {
   return Array.from(map.values()).filter((x) => Array.isArray(x.numbers) && x.numbers.length > 0);
 }
 
+function collectUserRaffleIds(
+  reserved: TicketGroup[],
+  pending: TicketGroup[],
+  confirmed: TicketGroup[],
+  wholesaleSlots: WholesaleSlotRow[],
+): Set<number> {
+  const ids = new Set<number>();
+  const ingest = (groups: TicketGroup[]) => {
+    for (const g of groups) {
+      const id = Math.floor(Number(g?.raffle?.id) || 0);
+      if (id > 0) ids.add(id);
+    }
+  };
+  ingest(reserved);
+  ingest(pending);
+  ingest(confirmed);
+  for (const s of wholesaleSlots) {
+    const id = Math.floor(Number(s?.raffle_id) || 0);
+    if (id > 0) ids.add(id);
+  }
+  return ids;
+}
+
+/** Акция для блока «Мои билеты»: бронь → участие пользователя → последняя видимая. */
+function resolveProfileRaffleId(
+  latestVisibleId: number,
+  reservedRaffleId: number | null,
+  reserved: TicketGroup[],
+  pending: TicketGroup[],
+  confirmed: TicketGroup[],
+  wholesaleSlots: WholesaleSlotRow[],
+): number {
+  const reservedId = Math.floor(Number(reservedRaffleId) || 0);
+  if (reservedId > 0) return reservedId;
+  const userIds = collectUserRaffleIds(reserved, pending, confirmed, wholesaleSlots);
+  const latest = Math.floor(Number(latestVisibleId) || 0);
+  if (latest > 0 && userIds.has(latest)) return latest;
+  if (userIds.size > 0) return Math.max(...Array.from(userIds));
+  return latest > 0 ? latest : 0;
+}
+
+function filterTicketGroupsForProfile(
+  groups: TicketGroup[],
+  profileRaffleId: number,
+  allGroups: TicketGroup[],
+): TicketGroup[] {
+  if (profileRaffleId <= 0) return groups;
+  const filtered = groups.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === profileRaffleId);
+  const hasAnyTickets = allGroups.some((g) => Array.isArray(g?.numbers) && g.numbers!.length > 0);
+  if (!filtered.length && hasAnyTickets) return groups;
+  return filtered;
+}
+
 export default function AppBottomNav({
   show,
   profileLetter,
@@ -315,6 +368,7 @@ export default function AppBottomNav({
   const [blogUnread, setBlogUnread] = useState(0);
   const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
   const [latestVisibleRaffleId, setLatestVisibleRaffleId] = useState(0);
+  const [reservedRaffleIdSummary, setReservedRaffleIdSummary] = useState<number | null>(null);
   const historyOpenRef = useRef(false);
   historyOpenRef.current = historyOpen;
 
@@ -349,7 +403,12 @@ export default function AppBottomNav({
         if (withLoading) {
           invalidateAbMyTicketsCache();
         }
-        const data = await getAbMyTicketsCached({ force: withLoading });
+        const [data, summaryRes] = await Promise.all([
+          getAbMyTicketsCached({ force: withLoading }),
+          fetch("/api/raffles/my-tickets?mode=summary", { cache: "no-store", headers: abAuthHeaders() }).catch(
+            () => null,
+          ),
+        ]);
         const next: TicketsPayload = {
           reserved: Array.isArray(data.reserved) ? data.reserved : [],
           pending_review: Array.isArray(data.pending_review) ? data.pending_review : [],
@@ -357,6 +416,11 @@ export default function AppBottomNav({
           wholesale_slots: Array.isArray(data.wholesale_slots) ? data.wholesale_slots : [],
         };
         setTickets(next);
+        if (summaryRes?.ok) {
+          const summary = (await summaryRes.json().catch(() => ({}))) as { reserved_raffle_id?: number | null };
+          const rid = Math.floor(Number(summary.reserved_raffle_id ?? 0));
+          setReservedRaffleIdSummary(Number.isFinite(rid) && rid > 0 ? rid : null);
+        }
         const reservedCount = next.reserved.reduce((acc, it) => acc + (Array.isArray(it?.numbers) ? it.numbers.length : 0), 0);
         const pendingCount = next.pending_review.reduce((acc, it) => acc + (Array.isArray(it?.numbers) ? it.numbers.length : 0), 0);
         setProfileTicketsBadge(Math.max(0, reservedCount + pendingCount));
@@ -469,8 +533,8 @@ export default function AppBottomNav({
 
   useEffect(() => {
     if (!profileOpen) return;
-    void refreshMyTickets(false);
-  }, [profileOpen, refreshMyTickets]);
+    void Promise.all([refreshMyTickets(true), refreshLatestVisibleRaffle()]);
+  }, [profileOpen, refreshMyTickets, refreshLatestVisibleRaffle]);
 
   useEffect(() => {
     void refreshMyTickets(false);
@@ -489,8 +553,12 @@ export default function AppBottomNav({
   }, [refreshBlogUnread]);
 
   useEffect(() => {
+    if (!authVerified) {
+      setReservedRaffleIdSummary(null);
+      return;
+    }
     void refreshLatestVisibleRaffle();
-  }, [refreshLatestVisibleRaffle]);
+  }, [authVerified, refreshLatestVisibleRaffle]);
 
   useEffect(() => {
     blurIfFocusInsideModalRoot("modal-profile");
@@ -572,22 +640,26 @@ export default function AppBottomNav({
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
   const wholesaleSlotsAll = Array.isArray(tickets.wholesale_slots) ? tickets.wholesale_slots : [];
+  const profileRaffleId = useMemo(
+    () =>
+      resolveProfileRaffleId(
+        latestVisibleRaffleId,
+        reservedRaffleIdSummary,
+        reserved,
+        pending,
+        confirmed,
+        wholesaleSlotsAll,
+      ),
+    [latestVisibleRaffleId, reservedRaffleIdSummary, reserved, pending, confirmed, wholesaleSlotsAll],
+  );
+  const allProfileTicketGroups = useMemo(() => [...reserved, ...pending, ...confirmed], [reserved, pending, confirmed]);
   const wholesaleSlots =
-    latestVisibleRaffleId > 0
-      ? wholesaleSlotsAll.filter((s) => Math.floor(Number(s?.raffle_id) || 0) === latestVisibleRaffleId)
-      : [];
-  const profileReservedRaw =
-    latestVisibleRaffleId > 0
-      ? reserved.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
-      : [];
-  const profilePendingRaw =
-    latestVisibleRaffleId > 0
-      ? pending.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
-      : [];
-  const profileConfirmedRaw =
-    latestVisibleRaffleId > 0
-      ? confirmed.filter((it) => Math.floor(Number(it?.raffle?.id) || 0) === latestVisibleRaffleId)
-      : [];
+    profileRaffleId > 0
+      ? wholesaleSlotsAll.filter((s) => Math.floor(Number(s?.raffle_id) || 0) === profileRaffleId)
+      : wholesaleSlotsAll;
+  const profileReservedRaw = filterTicketGroupsForProfile(reserved, profileRaffleId, allProfileTicketGroups);
+  const profilePendingRaw = filterTicketGroupsForProfile(pending, profileRaffleId, allProfileTicketGroups);
+  const profileConfirmedRaw = filterTicketGroupsForProfile(confirmed, profileRaffleId, allProfileTicketGroups);
   const profileReserved = useMemo(() => mergeTicketGroupsByRaffle(profileReservedRaw), [profileReservedRaw]);
   const profilePending = useMemo(() => mergeTicketGroupsByRaffle(profilePendingRaw), [profilePendingRaw]);
   const profileConfirmed = useMemo(() => mergeTicketGroupsByRaffle(profileConfirmedRaw), [profileConfirmedRaw]);
@@ -729,6 +801,7 @@ export default function AppBottomNav({
               blurIfFocusInsideModalRoot("modal-participation-history");
               setHistoryOpen(false);
               setProfileOpen(true);
+              void Promise.all([refreshMyTickets(true), refreshLatestVisibleRaffle()]);
             }}
           >
             <span className="bottom-nav-btn__icon">

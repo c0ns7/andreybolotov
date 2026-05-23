@@ -5,10 +5,19 @@ import { useLayoutEffect } from "react";
 
 const RAFFLE_PURCHASE = ["raffle-purchase-page", "raffle-grid-page"] as const;
 const RAFFLE_CONFIRM = ["raffle-confirm-page"] as const;
+const UI_NO_SELECT = "ab-ui-no-select";
 
 function clearRouteClasses(root: HTMLElement) {
   for (const c of RAFFLE_PURCHASE) root.classList.remove(c);
   for (const c of RAFFLE_CONFIRM) root.classList.remove(c);
+  root.classList.remove(UI_NO_SELECT);
+}
+
+function shouldDisableTextSelect(pathNorm: string): boolean {
+  if (pathNorm === "/" || pathNorm === "/home") return true;
+  if (pathNorm === "/home/raffle" || pathNorm.startsWith("/home/raffle/")) return true;
+  if (pathNorm.startsWith("/raffle/")) return true;
+  return false;
 }
 
 /**
@@ -28,6 +37,9 @@ export default function AbRouteHtmlClasses() {
       root.classList.add(...RAFFLE_PURCHASE);
     } else if (pathNorm.startsWith("/home/raffle/confirm")) {
       root.classList.add(...RAFFLE_CONFIRM);
+    }
+    if (shouldDisableTextSelect(pathNorm)) {
+      root.classList.add(UI_NO_SELECT);
     }
     return () => {
       clearRouteClasses(root);

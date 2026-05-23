@@ -56,7 +56,8 @@ export default function LandingClient() {
   const [loginPass, setLoginPass] = useState("");
   const [showLoginPass, setShowLoginPass] = useState(false);
 
-  const showAuthedUi = !!(session?.token && session?.phone && (authVerified || authCheckInFlight));
+  // Не скрываем заставку, пока сессия не подтверждена — иначе кнопка «Войти» пропадает при проверке токена.
+  const showAuthedUi = !!(session?.token && session?.phone && authVerified);
 
   const beginAuthFlow = useCallback(() => {
     setModal("auth");
@@ -213,7 +214,12 @@ export default function LandingClient() {
               <p className="welcome-splash__sub">Участвуйте, выигрывайте и помогайте!</p>
             </div>
             <div className="welcome-splash__actions">
-              <button type="button" className="welcome-splash__btn welcome-splash__btn--primary" onClick={beginAuthFlow}>
+              <button
+                type="button"
+                id="btn-splash-login"
+                className="welcome-splash__btn welcome-splash__btn--primary"
+                onClick={beginAuthFlow}
+              >
                 Войти
               </button>
             </div>
