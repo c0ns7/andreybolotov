@@ -79,6 +79,10 @@ import {
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import { tickReserveExpiryEmailReminders, warnIfNoSmtpOnce } from "./notify-email.js";
+import {
+  startRaffleFreeTicketsPushInterval,
+  tickRaffleFreeTicketsPushReminders,
+} from "./raffle-free-tickets-push.js";
 import { adminSubApp } from "./admin-subapp.js";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -526,6 +530,14 @@ app.get("/api/internal/cron/raffle-mail-tick", async (c) => {
   return c.json({ ok: true, at: Date.now() });
 });
 
+app.get("/api/internal/cron/raffle-free-tickets-push-tick", async (c) => {
+  const want = process.env.CRON_SECRET?.trim();
+  const got = String(c.req.query("secret") ?? "").trim();
+  if (!want || got !== want) return c.json({ error: "Forbidden" }, 403);
+  const result = await tickRaffleFreeTicketsPushReminders();
+  return c.json({ ok: true, at: Date.now(), ...result });
+});
+
 app.post("/api/auth/register", async (c) => {
   let body: { phone?: string; name?: string; locality?: string; password?: string };
   try {
@@ -863,5 +875,13 @@ server.listen(PORT, () => {
     setInterval(() => void tickReserveExpiryEmailReminders(), 60_000);
   } else {
     console.log("[mail] INTERVAL отключён — используйте CRON → GET /api/internal/cron/raffle-mail-tick?secret=…");
+  }
+  if (String(process.env.DISABLE_RAFFLE_FREE_TICKETS_PUSH_INTERVAL ?? "").trim() !== "1") {
+    startRaffleFreeTicketsPushInterval();
+    console.log("[push] Напоминания об остатке номерков: каждые 30 мин (остановка при < 25)");
+  } else {
+    console.log(
+      "[push] Интервал остатка номерков отключён — CRON → GET /api/internal/cron/raffle-free-tickets-push-tick?secret=…",
+    );
   }
 });

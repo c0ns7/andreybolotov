@@ -3173,6 +3173,16 @@ export async function appendRandomTicketsToReservedOrder(
   return { ok: true, picked };
 }
 
+/** Сколько номерков свободно для брони (без активного hold и без предназначения по телефону). */
+export async function getRaffleFreeTicketsCount(raffleId: number): Promise<number> {
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return 0;
+  const maxN = Math.max(0, Math.floor(Number(raffle.ticket_count)));
+  if (maxN < 1) return 0;
+  const occupied = await getRaffleOccupiedCount(raffleId);
+  return Math.max(0, maxN - occupied);
+}
+
 /** Сколько номерков уже занято по акции (бронь/проверка/подтверждено + предназначения по телефону). */
 export async function getRaffleOccupiedCount(raffleId: number): Promise<number> {
   await cleanupExpiredRaffleOrders();

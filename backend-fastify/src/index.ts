@@ -107,6 +107,10 @@ import {
   broadcastRaffleViewersUpdated,
   broadcastTypingUserToAdmins,
 } from "../../server/ws-chat.js";
+import {
+  startRaffleFreeTicketsPushInterval,
+  tickRaffleFreeTicketsPushReminders,
+} from "../../server/raffle-free-tickets-push.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 async function raffleDtoWithBankCardMeta(r: RaffleRow) {
@@ -636,6 +640,14 @@ app.get("/health", async () => {
     service: "backend-fastify",
     ts: Date.now(),
   };
+});
+
+app.get("/api/internal/cron/raffle-free-tickets-push-tick", async (request, reply) => {
+  const want = process.env.CRON_SECRET?.trim();
+  const got = String((request.query as { secret?: string })?.secret ?? "").trim();
+  if (!want || got !== want) return reply.code(403).send({ error: "Forbidden" });
+  const result = await tickRaffleFreeTicketsPushReminders();
+  return { ok: true, at: Date.now(), ...result };
 });
 
 app.get("/api/health", async () => {
@@ -1897,6 +1909,12 @@ try {
   const logHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   app.log.info(`Fastify API on http://${logHost}:${port} (bind ${host}:${port})`);
   app.log.info(`WebSocket ws://127.0.0.1:${port}/ws`);
+  if (String(process.env.DISABLE_RAFFLE_FREE_TICKETS_PUSH_INTERVAL ?? "").trim() !== "1") {
+    startRaffleFreeTicketsPushInterval();
+    app.log.info("[push] Напоминания об остатке номерков: каждые 30 мин (остановка при < 25)");
+  } else {
+    app.log.info("[push] Интервал остатка номерков отключён — CRON /api/internal/cron/raffle-free-tickets-push-tick");
+  }
 } catch (error) {
   app.log.error(error);
   process.exit(1);

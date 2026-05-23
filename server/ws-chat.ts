@@ -203,6 +203,38 @@ export function broadcastRafflesFeedUpdated() {
   broadcastJsonToPublicRaffleFeed({ type: "raffles_feed_updated" });
 }
 
+/** Периодическое напоминание: остаток свободных номерков в активной акции. */
+export function broadcastRaffleFreeTicketsReminder(
+  raffleId: number,
+  freeCount: number,
+  raffleTitle?: string,
+) {
+  const rid = Math.floor(Number(raffleId));
+  const free = Math.max(0, Math.floor(Number(freeCount)));
+  if (!Number.isFinite(rid) || rid < 1 || free < 1) return;
+  const payload = JSON.stringify({
+    type: "raffle_free_tickets_reminder",
+    raffle_id: rid,
+    free_count: free,
+    raffle_title: String(raffleTitle ?? "").trim().slice(0, 180),
+  });
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({
+    type: "raffle_free_tickets_reminder",
+    raffle_id: rid,
+    free_count: free,
+    raffle_title: String(raffleTitle ?? "").trim().slice(0, 180),
+  });
+}
+
 /** Явное оповещение о запуске акции (только по кнопке администратора). */
 export function broadcastRaffleLaunchNotified(raffleId: number) {
   const rid = Math.floor(Number(raffleId));

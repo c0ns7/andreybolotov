@@ -5,7 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { abApiJson, AbApiError } from "../../lib/ab-api";
 import { clearAbSession, loadAbSession, saveAbSession, type AbSession } from "../../lib/ab-session";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
+import {
+  formatRaffleFreeTicketsReminderPush,
+  showAbBrowserNotification,
+} from "../../lib/ab-browser-push";
 import { buildAbPublicWebSocketUrl, buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
+
+/** Должен совпадать с server/raffle-free-tickets-push.ts (30 мин). */
+const RAFFLE_FREE_TICKETS_PUSH_INTERVAL_MS = 30 * 60 * 1000;
 
 type AbSessionContextValue = {
   session: AbSession | null;
@@ -202,6 +209,21 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
           detail = JSON.parse(String(ev.data || "{}"));
         } catch {
           return;
+        }
+        const msg = detail as {
+          type?: string;
+          free_count?: number;
+          raffle_id?: number;
+          raffle_title?: string;
+        };
+        if (msg.type === "raffle_free_tickets_reminder") {
+          const free = Math.max(0, Math.floor(Number(msg.free_count) || 0));
+          const rid = Math.floor(Number(msg.raffle_id) || 0);
+          if (free > 0 && rid > 0) {
+            const push = formatRaffleFreeTicketsReminderPush(free, msg.raffle_title);
+            const ttl = Math.max(60_000, RAFFLE_FREE_TICKETS_PUSH_INTERVAL_MS - 120_000);
+            showAbBrowserNotification(push.title, push.body, `push_free_tickets_${rid}`, ttl);
+          }
         }
         try {
           window.dispatchEvent(new CustomEvent(AB_USER_WS_EVENT, { detail }));
