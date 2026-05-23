@@ -135,7 +135,7 @@ body {
   flex-direction: column;
 }
 
-/* Запрет выделения: главная (/), /home, акция (/raffle), корзина, профиль, история участий */
+/* Запрет выделения: главная (/), /home, блог, акция (/raffle), корзина, профиль, история участий */
 html.ab-ui-no-select #app-shell,
 html.ab-ui-no-select #app-shell * {
   -webkit-user-select: none;
@@ -8025,9 +8025,12 @@ html.theme-dark .auth-tabs__btn.is-active {
   transform: scale(0.98);
 }
 
-/* Модальное окно профиля */
+/* Модальное окно профиля — по центру, с отступами сверху и снизу */
 .modal-overlay--profile {
   z-index: 105;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.52);
   transition:
     opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1),
@@ -8037,13 +8040,15 @@ html.theme-dark .auth-tabs__btn.is-active {
 
 .profile-modal {
   position: relative;
-  width: 100%;
+  width: min(24rem, calc(100vw - 32px));
   max-width: 24rem;
-  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px);
+  max-height: min(680px, calc(100dvh - max(40px, env(safe-area-inset-top, 0px)) - max(40px, env(safe-area-inset-bottom, 0px))));
+  height: auto;
+  flex: 0 1 auto;
   overflow: hidden;
   margin: 0 auto;
   background: #fff;
-  border-radius: 32px;
+  border-radius: 28px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   padding: 24px;
   display: flex;
@@ -8090,7 +8095,7 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .profile-modal__body {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -8227,7 +8232,7 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .profile-modal__tickets-card {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -8269,6 +8274,17 @@ html.theme-dark .auth-tabs__btn.is-active {
   color: #6b7280;
 }
 
+.profile-modal__tickets-count {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .profile-modal__tickets-history-btn {
   border: 1px solid #ddd6fe;
   background: #f5f3ff;
@@ -8298,16 +8314,33 @@ html.theme-dark .auth-tabs__btn.is-active {
 }
 
 .profile-modal__tickets-body {
-  flex: 1 1 auto;
+  --profile-ticket-chip-row: 2.375rem;
+  flex: 0 1 auto;
   min-height: 0;
-  max-height: min(52dvh, 420px);
   overflow-x: hidden;
+  overflow-y: visible;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: none;
+}
+
+.profile-modal__tickets-body:not(:has(.profile-tickets-empty)) {
+  max-height: calc(var(--profile-ticket-chip-row) * 3 + 0.5rem * 2 + 0.75rem);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 16px;
-  background: #f9fafb;
-  border: none;
+}
+
+.profile-modal__tickets-body .tickets-chips {
+  margin-bottom: 8px;
+}
+
+.profile-modal__tickets-body .tickets-section {
+  margin-bottom: 10px;
+}
+
+.profile-modal__tickets-body .tickets-section:last-child {
+  margin-bottom: 0;
 }
 
 .profile-tickets-empty {
@@ -8962,62 +8995,30 @@ html.theme-dark .auth-tabs__btn.is-active {
   filter: brightness(1.06);
 }
 
-/* Профиль на телефонах — шторка на всю высоту экрана, прокрутка внутри + отдельный скролл «Мои билеты» */
+/* Профиль на телефонах — то же центрированное окно, чуть компактнее */
 @media (max-width: 640px) {
   .modal-overlay--profile {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-end;
-    padding: 0;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding: max(16px, env(safe-area-inset-top, 0px)) 12px max(16px, env(safe-area-inset-bottom, 0px));
   }
 
   .modal-overlay--profile .profile-modal {
-    max-width: none;
-    width: 100%;
-    flex: 1 1 auto;
-    min-height: 0;
-    max-height: none;
-    height: auto;
-    margin: 0;
-    padding: 10px 14px 12px;
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.12);
-    overflow: hidden;
-    -webkit-overflow-scrolling: touch;
-    opacity: 1;
-    transform: translateY(calc(100% + 24px + var(--sheet-drag-y, 0px)));
-    transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+    width: min(24rem, calc(100vw - 24px));
+    max-height: min(640px, calc(100dvh - max(32px, env(safe-area-inset-top, 0px)) - max(32px, env(safe-area-inset-bottom, 0px))));
+    padding: 18px 16px 16px;
+    border-radius: 24px;
+    transform: translateY(14px) scale(0.97);
   }
 
   .modal-overlay--profile.is-open .profile-modal {
-    transform: translateY(var(--sheet-drag-y, 0px));
+    transform: translateY(0) scale(1);
   }
 
   .profile-modal__sheet-handle {
-    flex-shrink: 0;
-    display: flex;
-    justify-content: center;
-    padding: 2px 0 6px;
-    touch-action: none;
-  }
-
-  .profile-modal__sheet-handle .cart-sheet__grabber {
-    margin-bottom: 0;
+    display: none;
   }
 
   .profile-modal__body {
-    flex: 1 1 auto;
-    min-height: 0;
-    justify-content: flex-start;
-    padding-top: 0;
-  }
-
-  .profile-modal__tickets-body {
-    max-height: none;
-    flex: 1 1 auto;
-    min-height: 120px;
+    padding-top: 4px;
   }
 
   .profile-modal__close {
@@ -13070,6 +13071,10 @@ html.theme-dark .profile-modal__tickets-card-head {
 }
 
 html.theme-dark .profile-modal__tickets-card-label {
+  color: var(--text-muted);
+}
+
+html.theme-dark .profile-modal__tickets-count {
   color: var(--text-muted);
 }
 

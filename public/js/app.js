@@ -6615,7 +6615,8 @@
         openReserveSuccessFlow(ord, raffleDetailState.orderNumbers, raffle, data && data.payment_participation);
         var released = data && Array.isArray(data.released_after_cleanup) ? data.released_after_cleanup : [];
         var skipped = data && Array.isArray(data.skipped_still_occupied) ? data.skipped_still_occupied : [];
-        if (released.length || skipped.length) {
+        var replaced = data && Array.isArray(data.replaced_tickets) ? data.replaced_tickets : [];
+        if (released.length || skipped.length || replaced.length) {
           var fmt = function (arr) {
             return arr
               .map(function (x) {
@@ -6631,10 +6632,29 @@
                 : "Номерки " + fmt(released) + ": у прежних участников истекла бронь — освободились и включены в вашу.",
             );
           }
-          if (skipped.length) {
-            parts.push("Не вошли в бронь (уже заняты): " + fmt(skipped) + ".");
+          if (replaced.length) {
+            var repFmt = replaced
+              .map(function (r) {
+                return "№" + String(r.from) + "→№" + String(r.to);
+              })
+              .join(", ");
+            parts.push(
+              replaced.length === 1
+                ? "Номерок №" +
+                  String(replaced[0].from) +
+                  " уже занят — в бронь подставлен ближайший свободный №" +
+                  String(replaced[0].to) +
+                  "."
+                : "Занятые номерки заменены на ближайшие свободные: " + repFmt + ".",
+            );
           }
-          showToast(parts.join(" "), released.length && !skipped.length ? "success" : skipped.length ? "warning" : "neutral");
+          if (skipped.length) {
+            parts.push("Не удалось подобрать замену (заняты): " + fmt(skipped) + ".");
+          }
+          showToast(
+            parts.join(" "),
+            skipped.length ? "warning" : replaced.length || released.length ? "info" : "neutral",
+          );
         }
         emitUxEvent("raffle_checkout_reserved_success", {
           order_id: Number(ord.id) || 0,

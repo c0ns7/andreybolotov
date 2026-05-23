@@ -101,7 +101,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {`!function(){try{var p=function(e){e.preventDefault()};document.addEventListener("gesturestart",p,{passive:!1});document.addEventListener("gesturechange",p,{passive:!1});document.addEventListener("gestureend",p,{passive:!1});document.addEventListener("wheel",function(e){if(e.ctrlKey)e.preventDefault()},{passive:!1})}catch(_){}}();`}
         </Script>
         <Script id="ab-route-html-classes" strategy="beforeInteractive">
-          {`!function(){try{var p=location.pathname||"";while(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);if(p==="/home/raffle"||p.indexOf("/raffle/")===0){document.documentElement.classList.add("raffle-purchase-page","raffle-grid-page");}else if(p.indexOf("/home/raffle/confirm")===0){document.documentElement.classList.add("raffle-confirm-page");}if(p==="/"||p==="/home"||p==="/home/raffle"||p.indexOf("/home/raffle/")===0||p.indexOf("/raffle/")===0){document.documentElement.classList.add("ab-ui-no-select");}}catch(_){}}();`}
+          {`!function(){try{var p=location.pathname||"";while(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);if(p==="/home/raffle"||p.indexOf("/raffle/")===0){document.documentElement.classList.add("raffle-purchase-page","raffle-grid-page");}else if(p.indexOf("/home/raffle/confirm")===0){document.documentElement.classList.add("raffle-confirm-page");}if(p==="/"||p==="/home"||p==="/home/blog"||p.indexOf("/home/blog/")===0||p==="/home/raffle"||p.indexOf("/home/raffle/")===0||p.indexOf("/raffle/")===0){document.documentElement.classList.add("ab-ui-no-select");}}catch(_){}}();`}
         </Script>
         <AbRouteHtmlClasses />
         <Script id="ab-api-ws" strategy="beforeInteractive">

@@ -446,6 +446,80 @@ export async function listGloballyFreeTicketNumbers(
   return free;
 }
 
+export type RaffleTicketReplacement = { from: number; to: number };
+
+/** Ближайший свободный номерок: сначала anchor−d, затем anchor+d. */
+export function findNearestFreeTicketNumber(
+  anchor: number,
+  ticketCount: number,
+  blocked: Set<number>,
+): number | null {
+  const n = Math.floor(Number(anchor));
+  const maxN = Math.max(0, Math.floor(Number(ticketCount)));
+  if (!Number.isFinite(n) || n < 1 || maxN < 1) return null;
+  for (let d = 1; d <= maxN; d++) {
+    const low = n - d;
+    const high = n + d;
+    if (low >= 1 && low <= maxN && !blocked.has(low)) return low;
+    if (high >= 1 && high <= maxN && !blocked.has(high)) return high;
+  }
+  return null;
+}
+
+async function buildBlockedTicketSetForRaffle(
+  raffleId: number,
+  ticketCount: number,
+  client?: PoolClient,
+): Promise<Set<number>> {
+  const free = await listGloballyFreeTicketNumbers(raffleId, client);
+  const freeSet = new Set(free);
+  const blocked = new Set<number>();
+  const maxN = Math.max(0, Math.floor(Number(ticketCount)));
+  for (let n = 1; n <= maxN; n++) {
+    if (!freeSet.has(n)) blocked.add(n);
+  }
+  return blocked;
+}
+
+/** Занятые номерки из wanted заменяются на ближайшие свободные, чтобы сохранить количество в брони. */
+async function applyNearestReplacementsForBlocked(
+  raffleId: number,
+  ticketCount: number,
+  wantedOrdered: number[],
+  alreadyReserved: number[],
+  blockedOccupied: number[],
+  client?: PoolClient,
+): Promise<{
+  toReserve: number[];
+  skipped_still_occupied: number[];
+  replaced_tickets: RaffleTicketReplacement[];
+}> {
+  const blocked = await buildBlockedTicketSetForRaffle(raffleId, ticketCount, client);
+  const toReserve = [...alreadyReserved];
+  const toReserveSet = new Set(toReserve);
+  for (const n of toReserve) blocked.add(n);
+
+  const blockedSet = new Set(blockedOccupied.map((x) => Math.floor(Number(x))));
+  const replaced_tickets: RaffleTicketReplacement[] = [];
+  const stillSkipped: number[] = [];
+
+  for (const anchor of wantedOrdered) {
+    if (!blockedSet.has(anchor)) continue;
+    const repl = findNearestFreeTicketNumber(anchor, ticketCount, blocked);
+    if (repl === null) {
+      stillSkipped.push(anchor);
+      continue;
+    }
+    toReserve.push(repl);
+    toReserveSet.add(repl);
+    blocked.add(repl);
+    replaced_tickets.push({ from: anchor, to: repl });
+  }
+
+  toReserve.sort((a, b) => a - b);
+  return { toReserve, skipped_still_occupied: stillSkipped, replaced_tickets };
+}
+
 async function getPreassignmentPhone(
   raffleId: number,
   ticketNumber: number,
@@ -646,6 +720,7 @@ export async function createReservation(
       reserved_until: number;
       skipped_still_occupied: number[];
       released_after_cleanup: number[];
+      replaced_tickets: RaffleTicketReplacement[];
     }
   | { ok: false; error: string }
 > {
@@ -692,18 +767,29 @@ export async function createReservation(
   for (const n of hadExpiredReserveHold) {
     if (!(await isRaffleTicketBlocked(raffleId, n))) released_after_cleanup.push(n);
   }
-  const toReserve: number[] = [];
+  const toReserveDirect: number[] = [];
   for (const n of uniq) {
-    if (!(await isRaffleTicketBlocked(raffleId, n))) toReserve.push(n);
+    if (!(await isRaffleTicketBlocked(raffleId, n))) toReserveDirect.push(n);
   }
 
+  const replacement = await applyNearestReplacementsForBlocked(
+    raffleId,
+    raffle.ticket_count,
+    uniq,
+    toReserveDirect,
+    skipped_still_occupied,
+  );
+  const toReserve = replacement.toReserve;
+  const replaced_tickets = replacement.replaced_tickets;
+  const skippedFinal = replacement.skipped_still_occupied;
+
   if (toReserve.length === 0) {
-    const sample = skipped_still_occupied.slice(0, 8).join(", ");
-    const tail = skipped_still_occupied.length > 8 ? "…" : "";
+    const sample = skippedFinal.slice(0, 8).join(", ");
+    const tail = skippedFinal.length > 8 ? "…" : "";
     return {
       ok: false,
       error:
-        skipped_still_occupied.length > 0
+        skippedFinal.length > 0
           ? `Выбранные номерки уже заняты: ${sample}${tail}. Обновите сетку и выберите свободные.`
           : "Не удалось забронировать номерки. Попробуйте снова.",
     };
@@ -745,8 +831,9 @@ export async function createReservation(
       ok: true,
       order_id: orderId,
       reserved_until: reservedUntil,
-      skipped_still_occupied,
+      skipped_still_occupied: skippedFinal,
       released_after_cleanup,
+      replaced_tickets,
     };
   } catch (e) {
     try {
@@ -2948,7 +3035,7 @@ export async function addTicketsToReservedOrder(
   orderId: number,
   userId: number,
   newNumbers: number[],
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; replaced_tickets: RaffleTicketReplacement[] } | { ok: false; error: string }> {
   await cleanupExpiredRaffleOrders();
   const o = await getOrderByIdForUser(orderId, userId);
   if (!o) return { ok: false, error: "Заявка не найдена" };
@@ -2961,13 +3048,34 @@ export async function addTicketsToReservedOrder(
   const uniq = [...new Set(newNumbers.map((x) => Math.floor(Number(x))))].filter((n) =>
     Number.isFinite(n),
   );
-  const toAdd: number[] = [];
+  const requested: number[] = [];
   for (const n of uniq) {
     if (n < 1 || n > raffle.ticket_count) return { ok: false, error: "Некорректный номер" };
     if (existing.has(n)) continue;
-    toAdd.push(n);
+    requested.push(n);
   }
-  if (toAdd.length === 0) return { ok: false, error: "Укажите новые номера" };
+  if (requested.length === 0) return { ok: false, error: "Укажите новые номера" };
+  if (existing.size + requested.length > RAFFLE_MAX_SELECT) {
+    return { ok: false, error: `Не больше ${RAFFLE_MAX_SELECT} номерков в брони` };
+  }
+
+  const blockedNow: number[] = [];
+  for (const n of requested) {
+    if (await isRaffleTicketBlocked(o.raffle_id, n)) blockedNow.push(n);
+  }
+  const freeDirect = requested.filter((n) => !blockedNow.includes(n));
+  const replacement = await applyNearestReplacementsForBlocked(
+    o.raffle_id,
+    raffle.ticket_count,
+    requested,
+    freeDirect,
+    blockedNow,
+  );
+  const toAdd = replacement.toReserve.filter((n) => !existing.has(n));
+  const replaced_tickets = replacement.replaced_tickets;
+  if (toAdd.length === 0) {
+    return { ok: false, error: "Не удалось добавить номерки — рядом нет свободных" };
+  }
   if (existing.size + toAdd.length > RAFFLE_MAX_SELECT) {
     return { ok: false, error: `Не больше ${RAFFLE_MAX_SELECT} номерков в брони` };
   }
@@ -2998,7 +3106,7 @@ export async function addTicketsToReservedOrder(
       orderId,
     ], client);
     await client.query("COMMIT");
-    return { ok: true };
+    return { ok: true, replaced_tickets };
   } catch (e) {
     try {
       await client.query("ROLLBACK");

@@ -1510,6 +1510,7 @@ app.post("/api/raffles/:id/reserve", async (request, reply) => {
     server_time_ms: Date.now(),
     skipped_still_occupied: res.skipped_still_occupied,
     released_after_cleanup: res.released_after_cleanup,
+    replaced_tickets: res.replaced_tickets,
     payment_participation: await buildRafflePaymentParticipationContext(user.id, id, order.id),
   };
 });
@@ -1528,6 +1529,7 @@ app.post("/api/raffles/orders/:orderId/add-tickets", async (request, reply) => {
   return {
     order: order ? orderToDto(order) : null,
     numbers: await getTicketNumbersForOrder(orderId),
+    replaced_tickets: res.replaced_tickets,
     server_time_ms: Date.now(),
   };
 });

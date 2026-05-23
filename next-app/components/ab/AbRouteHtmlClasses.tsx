@@ -15,6 +15,7 @@ function clearRouteClasses(root: HTMLElement) {
 
 function shouldDisableTextSelect(pathNorm: string): boolean {
   if (pathNorm === "/" || pathNorm === "/home") return true;
+  if (pathNorm === "/home/blog" || pathNorm.startsWith("/home/blog/")) return true;
   if (pathNorm === "/home/raffle" || pathNorm.startsWith("/home/raffle/")) return true;
   if (pathNorm.startsWith("/raffle/")) return true;
   return false;

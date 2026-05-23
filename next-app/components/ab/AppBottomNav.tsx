@@ -666,6 +666,21 @@ export default function AppBottomNav({
   const hasWholesaleNumbers = wholesaleSlots.some(
     (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
   );
+  const profileTicketsCount = useMemo(() => {
+    let total = 0;
+    const addGroups = (groups: TicketGroup[]) => {
+      for (const g of groups) {
+        total += Array.isArray(g?.numbers) ? g.numbers.length : 0;
+      }
+    };
+    addGroups(profileReserved);
+    addGroups(profilePending);
+    addGroups(profileConfirmed);
+    for (const s of wholesaleSlots) {
+      total += Array.isArray(s?.wholesale_numbers) ? s.wholesale_numbers.length : 0;
+    }
+    return total;
+  }, [profileReserved, profilePending, profileConfirmed, wholesaleSlots]);
   const raffleTitleById = useMemo(() => {
     const m = new Map<number, string>();
     const ingest = (groups: TicketGroup[]) => {
@@ -897,6 +912,11 @@ export default function AppBottomNav({
                   </svg>
                   <span className="profile-modal__tickets-card-label">Мои билеты</span>
                 </div>
+                {profileTicketsCount > 0 ? (
+                  <span className="profile-modal__tickets-count" aria-label={"Номерков: " + String(profileTicketsCount)}>
+                    {profileTicketsCount} шт.
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="profile-modal__tickets-history-btn"

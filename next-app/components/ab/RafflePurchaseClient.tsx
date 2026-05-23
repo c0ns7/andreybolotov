@@ -265,6 +265,50 @@ function closeOverlay(el: HTMLElement | null) {
   if (!document.querySelector(".modal-overlay.is-open")) document.body.style.overflow = "";
 }
 
+type ReserveAdjustPayload = {
+  replaced_tickets?: Array<{ from?: number; to?: number }>;
+  skipped_still_occupied?: number[];
+  released_after_cleanup?: number[];
+};
+
+function toastRaffleReserveAdjustments(
+  toast: (message: string, kind?: "success" | "error" | "warning" | "info" | "neutral") => void,
+  data: ReserveAdjustPayload,
+) {
+  const replaced = Array.isArray(data.replaced_tickets) ? data.replaced_tickets : [];
+  const skipped = Array.isArray(data.skipped_still_occupied) ? data.skipped_still_occupied : [];
+  const released = Array.isArray(data.released_after_cleanup) ? data.released_after_cleanup : [];
+  const parts: string[] = [];
+  if (released.length) {
+    const fmt = released.map((x) => "№" + String(x)).join(", ");
+    parts.push(
+      released.length === 1
+        ? "Номерок " + fmt + ": у прежнего участника истекла бронь — освободился и включён в вашу."
+        : "Номерки " + fmt + ": у прежних участников истекла бронь — освободились и включены в вашу.",
+    );
+  }
+  if (replaced.length) {
+    const fmt = replaced
+      .map((r) => "№" + String(r.from) + "→№" + String(r.to))
+      .join(", ");
+    parts.push(
+      replaced.length === 1
+        ? "Номерок №" +
+          String(replaced[0]?.from) +
+          " уже занят — в бронь подставлен ближайший свободный №" +
+          String(replaced[0]?.to) +
+          "."
+        : "Занятые номерки заменены на ближайшие свободные: " + fmt + ".",
+    );
+  }
+  if (skipped.length) {
+    parts.push("Не удалось подобрать замену (заняты): " + skipped.map((x) => "№" + String(x)).join(", ") + ".");
+  }
+  if (!parts.length) return;
+  const kind = skipped.length ? "warning" : replaced.length || released.length ? "info" : "neutral";
+  toast(parts.join(" "), kind);
+}
+
 function renderRaffleGridHtml(cells: Cell[], selected: Set<number>, onlyFree: boolean) {
   const draw = onlyFree ? cells.filter((c) => String(c.kind) === "free") : cells;
   let html = "";
@@ -1207,7 +1251,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const toRemove = cur.filter((n) => !desiredSet.has(n));
       if (toAdd.length) {
         reload = true;
-        const added = await abApiJson<{ order?: OrderDto; numbers?: number[]; server_time_ms?: number }>(
+        const added = await abApiJson<{
+          order?: OrderDto;
+          numbers?: number[];
+          server_time_ms?: number;
+          replaced_tickets?: Array<{ from?: number; to?: number }>;
+        }>(
           "/api/raffles/orders/" + String(oid) + "/add-tickets",
           { method: "POST", headers: { ...abAuthHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ numbers: toAdd }) },
         );
@@ -1216,6 +1265,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         if (Array.isArray(added.numbers)) {
           cur = added.numbers;
           setOrderNumbers(cur);
+          setSelected(cur.slice());
+        }
+        if (Array.isArray(added.replaced_tickets) && added.replaced_tickets.length) {
+          toastRaffleReserveAdjustments(toast, { replaced_tickets: added.replaced_tickets });
         }
       }
       for (const n of toRemove) {
@@ -1233,7 +1286,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     } catch {
       /* silent */
     }
-  }, [raffle?.id, order, orderNumbers, selected, applySkewFromPayload]);
+  }, [raffle?.id, order, orderNumbers, selected, applySkewFromPayload, toast]);
 
   const scheduleSelectionSync = useCallback(() => {
     if (selectionSyncTimer.current) clearTimeout(selectionSyncTimer.current);
@@ -1858,7 +1911,15 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const sp = document.getElementById("modal-cart-checkout-spinner");
       if (sp) sp.hidden = false;
       try {
-        const data = await abApiJson<{ order?: OrderDto; numbers?: number[]; server_time_ms?: number; payment_participation?: unknown }>(
+        const data = await abApiJson<{
+          order?: OrderDto;
+          numbers?: number[];
+          server_time_ms?: number;
+          payment_participation?: unknown;
+          replaced_tickets?: Array<{ from?: number; to?: number }>;
+          skipped_still_occupied?: number[];
+          released_after_cleanup?: number[];
+        }>(
           "/api/raffles/" + String(rid) + "/reserve",
           { method: "POST", headers: { ...abAuthHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ numbers: nums }) },
         );
@@ -1868,6 +1929,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         setSelected([]);
         persistDraft(rid, []);
         closeCart();
+        toastRaffleReserveAdjustments(toast, data);
         const ord = data.order as OrderDto;
         const numsF = (data.numbers as number[]) || [];
         reserveDraftRef.current = {
