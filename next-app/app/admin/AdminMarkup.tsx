@@ -508,6 +508,49 @@ export default function AdminMarkup() {
         </div>
       </div>
 
+      <div id="modal-prize-edit" className="modal-overlay modal-overlay--prize-form modal-overlay--prize-edit" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-prize-edit-title">
+        <div className="modal-overlay__backdrop" id="modal-prize-edit-backdrop"></div>
+        <div className="modal admin-prize-edit-modal">
+          <header className="modal__top admin-prize-edit-modal__top">
+            <span className="admin-prize-edit-modal__top-spacer" aria-hidden="true" />
+            <div className="admin-prize-edit-modal__title-wrap">
+              <h2 id="modal-prize-edit-title" className="modal__top-title admin-prize-edit-modal__title">Редактировать приз</h2>
+              <p className="admin-prize-edit-modal__subtitle">Акция, номерок и название</p>
+            </div>
+            <button type="button" className="modal__close admin-prize-edit-modal__close" id="modal-prize-edit-close" aria-label="Закрыть">×</button>
+          </header>
+          <div className="admin-prize-edit-modal__body">
+            <p className="admin-prize-edit-modal__hint">Можно привязать приз к акции или исправить данные, если указали неверно при создании.</p>
+            <label className="form-group">
+              <span>Акция</span>
+              <select id="admin-prize-edit-raffle" className="input" defaultValue="">
+                <option value="">— без акции —</option>
+              </select>
+            </label>
+            <label className="form-group">
+              <span>Номерок</span>
+              <input id="admin-prize-edit-ticket" className="input" type="number" min={1} step={1} placeholder="Необязательно" />
+            </label>
+            <label className="form-group">
+              <span>Название приза</span>
+              <input id="admin-prize-edit-title" className="input" type="text" autoComplete="off" />
+            </label>
+            <label className="form-group">
+              <span>Что указать в ответе</span>
+              <textarea id="admin-prize-edit-hint" className="input" rows={3} placeholder="Телефон, банк, адрес…" />
+            </label>
+          </div>
+          <footer className="admin-prize-edit-modal__foot">
+            <button type="button" className="btn btn--secondary" id="modal-prize-edit-cancel">
+              Отмена
+            </button>
+            <button type="button" className="btn btn--primary" id="admin-prize-save-edit">
+              Сохранить
+            </button>
+          </footer>
+        </div>
+      </div>
+
       <div id="modal-prize-chat" className="modal-overlay modal-overlay--prize-chat" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-prize-chat-title">
         <div className="modal-overlay__backdrop" id="modal-prize-chat-backdrop"></div>
         <div className="modal admin-prize-chat-modal">

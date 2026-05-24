@@ -21,6 +21,7 @@
   let chatModalPrizeTitle = "";
   let rafflesCache = [];
   let ticketPreviewTimer = null;
+  let editModalPrizeId = null;
 
   function loadSession() {
     try {
@@ -93,10 +94,24 @@
       const key = p.raffle_id ? String(p.raffle_id) : "none";
       const title = p.raffle_title || (p.raffle_id ? "Акция #" + p.raffle_id : "Без акции");
       if (!map.has(key)) {
-        map.set(key, { key: key, title: title, items: [] });
+        map.set(key, { key: key, title: title, raffleId: p.raffle_id ? Number(p.raffle_id) : 0, items: [] });
         groups.push(map.get(key));
       }
       map.get(key).items.push(p);
+    });
+    groups.sort(function (a, b) {
+      if (a.key === "none") return 1;
+      if (b.key === "none") return -1;
+      return (b.raffleId || 0) - (a.raffleId || 0);
+    });
+    groups.forEach(function (group) {
+      group.items.sort(function (x, y) {
+        const statusOrder = { claimed: 0, processing: 1, pending: 2, done: 3, cancelled: 4 };
+        const sx = statusOrder[x.status] != null ? statusOrder[x.status] : 5;
+        const sy = statusOrder[y.status] != null ? statusOrder[y.status] : 5;
+        if (sx !== sy) return sx - sy;
+        return Number(y.created_at || 0) - Number(x.created_at || 0);
+      });
     });
     return groups;
   }
@@ -199,6 +214,7 @@
 
       panel.innerHTML =
         '<div class="admin-prize-detail__head">' +
+        '<div class="admin-prize-detail__head-main">' +
         "<h3>" +
         esc(p.title) +
         "</h3>" +
@@ -207,6 +223,12 @@
         '">' +
         esc(STATUS_LABELS[p.status] || p.status) +
         "</span>" +
+        "</div>" +
+        '<button type="button" class="admin-prize-detail__edit-btn" id="admin-prize-open-edit" aria-label="Редактировать приз" title="Редактировать">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>' +
+        '<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>' +
+        "</svg></button>" +
         "</div>" +
         (p.raffle_title || p.ticket_number
           ? '<p class="admin-prize-detail__raffle">' +
@@ -223,7 +245,6 @@
         '" data-prize-title="' +
         esc(p.title) +
         '">Чат</button></p>' +
-        renderPrizeEditSection(p) +
         '<section class="admin-prize-detail__section admin-prize-detail__section--response"><h4>Ответ пользователя</h4>' +
         renderResponse(p) +
         "</section>" +
@@ -239,22 +260,15 @@
         "</div>" +
         "</section>";
 
-      void loadRafflesForCreate()
-        .then(function () {
-          fillRaffleSelect("admin-prize-edit-raffle", p.raffle_id || "", "— без акции —");
-        })
-        .catch(function () {});
+      document.getElementById("admin-prize-open-edit")?.addEventListener("click", function () {
+        openPrizeEditModal(p);
+      });
 
       panel.querySelector("[data-user-id]")?.addEventListener("click", function () {
         const btn = panel.querySelector("[data-user-id]");
         const uid = Number(btn?.getAttribute("data-user-id"));
         const title = btn?.getAttribute("data-prize-title") || p.title;
         openPrizeChatModal(uid, title, p.user_name, p.user_phone);
-      });
-      document.getElementById("admin-prize-save-edit")?.addEventListener("click", function () {
-        void savePrizeEdit(p.id).catch(function (err) {
-          alert(err.message || "Не удалось сохранить");
-        });
       });
       document.getElementById("admin-prize-set-processing")?.addEventListener("click", function () {
         void setProcessing(p.id);
@@ -491,41 +505,42 @@
     if (current) sel.value = current;
   }
 
-  function renderPrizeEditSection(p) {
-    return (
-      '<section class="admin-prize-detail__section admin-prize-detail__section--edit">' +
-      "<h4>Редактирование</h4>" +
-      '<p class="admin-prize-detail__hint">Можно привязать приз к акции или исправить название, если указали неверно при создании.</p>' +
-      '<label class="admin-prize-detail__field">' +
-      "<span>Акция</span>" +
-      '<select id="admin-prize-edit-raffle" class="input">' +
-      '<option value="">— без акции —</option>' +
-      "</select>" +
-      "</label>" +
-      '<label class="admin-prize-detail__field">' +
-      "<span>Номерок</span>" +
-      '<input id="admin-prize-edit-ticket" class="input" type="number" min="1" step="1" placeholder="Необязательно" value="' +
-      (p.ticket_number != null && p.ticket_number !== "" ? esc(String(p.ticket_number)) : "") +
-      '" />' +
-      "</label>" +
-      '<label class="admin-prize-detail__field">' +
-      "<span>Название приза</span>" +
-      '<input id="admin-prize-edit-title" class="input" type="text" value="' +
-      esc(p.title || "") +
-      '" autocomplete="off" />' +
-      "</label>" +
-      '<label class="admin-prize-detail__field">' +
-      "<span>Что указать в ответе</span>" +
-      '<textarea id="admin-prize-edit-hint" class="input" rows="3" placeholder="Телефон, банк, адрес…">' +
-      esc(p.description || "") +
-      "</textarea>" +
-      "</label>" +
-      '<button type="button" class="btn btn--secondary admin-prize-detail__save-edit" id="admin-prize-save-edit">Сохранить изменения</button>' +
-      "</section>"
-    );
+  function openPrizeEditModal(p) {
+    const modal = document.getElementById("modal-prize-edit");
+    if (!modal || !p) return;
+    editModalPrizeId = p.id;
+    const titleEl = document.getElementById("admin-prize-edit-title");
+    const hintEl = document.getElementById("admin-prize-edit-hint");
+    const ticketEl = document.getElementById("admin-prize-edit-ticket");
+    if (titleEl && "value" in titleEl) titleEl.value = p.title || "";
+    if (hintEl && "value" in hintEl) hintEl.value = p.description || "";
+    if (ticketEl && "value" in ticketEl) {
+      ticketEl.value =
+        p.ticket_number != null && p.ticket_number !== "" ? String(p.ticket_number) : "";
+    }
+    void loadRafflesForCreate()
+      .then(function () {
+        fillRaffleSelect("admin-prize-edit-raffle", p.raffle_id || "", "— без акции —");
+      })
+      .catch(function () {});
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    titleEl?.focus();
+  }
+
+  function closePrizeEditModal() {
+    const modal = document.getElementById("modal-prize-edit");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    editModalPrizeId = null;
   }
 
   async function savePrizeEdit(id) {
+    const prizeId = id != null ? id : editModalPrizeId;
+    if (!prizeId) return;
     const raffleSel = document.getElementById("admin-prize-edit-raffle");
     const ticketEl = document.getElementById("admin-prize-edit-ticket");
     const titleEl = document.getElementById("admin-prize-edit-title");
@@ -550,7 +565,7 @@
     const btn = document.getElementById("admin-prize-save-edit");
     if (btn) btn.disabled = true;
     try {
-      await apiJson("/api/admin/prizes/" + id, {
+      await apiJson("/api/admin/prizes/" + prizeId, {
         method: "PATCH",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -560,8 +575,9 @@
           ticket_number: ticketNumber,
         }),
       });
+      closePrizeEditModal();
       await loadPrizes();
-      await openDetail(id, true);
+      await openDetail(prizeId, true);
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -782,6 +798,15 @@
       ticketPreviewTimer = setTimeout(function () {
         void previewTicketHolders();
       }, 400);
+    });
+
+    document.getElementById("modal-prize-edit-close")?.addEventListener("click", closePrizeEditModal);
+    document.getElementById("modal-prize-edit-backdrop")?.addEventListener("click", closePrizeEditModal);
+    document.getElementById("modal-prize-edit-cancel")?.addEventListener("click", closePrizeEditModal);
+    document.getElementById("admin-prize-save-edit")?.addEventListener("click", function () {
+      void savePrizeEdit().catch(function (err) {
+        alert(err.message || "Не удалось сохранить");
+      });
     });
 
     document.getElementById("modal-prize-chat-close")?.addEventListener("click", closePrizeChatModal);

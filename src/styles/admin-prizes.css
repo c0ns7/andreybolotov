@@ -274,12 +274,21 @@
 
 .admin-prize-detail__head {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 10px 12px;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
   padding-bottom: 14px;
   border-bottom: 1px solid #f1f5f9;
+}
+
+.admin-prize-detail__head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .admin-prize-detail__head h3 {
@@ -289,6 +298,37 @@
   font-weight: 800;
   line-height: 1.3;
   color: #0f172a;
+}
+
+.admin-prize-detail__edit-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.admin-prize-detail__edit-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #2563eb;
+}
+
+.admin-prize-detail__edit-btn:active {
+  transform: scale(0.96);
 }
 
 .admin-prize-detail__user {
@@ -419,30 +459,6 @@
   margin: 10px 0 0;
   font-size: 0.78rem;
   color: #94a3b8;
-}
-
-.admin-prize-detail__section--edit {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.admin-prize-detail__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 12px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #475569;
-}
-
-.admin-prize-detail__field .input {
-  font-weight: 400;
-}
-
-.admin-prize-detail__save-edit {
-  width: 100%;
-  margin-top: 4px;
 }
 
 .admin-prize-detail__section--actions {
@@ -928,6 +944,105 @@
 .admin-prize-create-tickets-preview__loading {
   margin: 0;
   color: #64748b;
+}
+
+/* ——— Модалка «Редактировать приз» ——— */
+
+.modal-overlay--prize-edit .modal.admin-prize-edit-modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  width: 100%;
+  max-height: min(90dvh, 640px);
+  border-radius: 20px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.admin-prize-edit-modal__top {
+  display: grid !important;
+  grid-template-columns: 42px 1fr 44px !important;
+  align-items: center !important;
+  padding: 14px 16px 16px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%) !important;
+}
+
+.admin-prize-edit-modal__top-spacer {
+  width: 42px;
+  height: 42px;
+}
+
+.admin-prize-edit-modal__title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+
+.admin-prize-edit-modal__title.modal__top-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-prize-edit-modal__subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.admin-prize-edit-modal__close.modal__close {
+  border-radius: 12px;
+  color: #64748b;
+}
+
+.admin-prize-edit-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-prize-edit-modal__hint {
+  margin: 0 0 4px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.admin-prize-edit-modal__foot {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.admin-prize-edit-modal__foot .btn {
+  flex: 1;
+  min-height: 44px;
+}
+
+@media (max-width: 560px) {
+  .modal-overlay--prize-edit {
+    align-items: flex-end;
+    padding: 0;
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  .modal-overlay--prize-edit .modal.admin-prize-edit-modal {
+    max-height: min(92dvh, 100%);
+    border-radius: 20px 20px 0 0;
+  }
 }
 
 .modal-overlay--prize-chat {

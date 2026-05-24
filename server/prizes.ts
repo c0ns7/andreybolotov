@@ -454,8 +454,9 @@ export async function listPrizeAwardsForAdmin(opts: {
      LEFT JOIN raffles r ON r.id = p.raffle_id
      WHERE ${whereSql}
      ORDER BY
-       COALESCE(r.title, 'яяяя') ASC,
-       COALESCE(p.raffle_id, 0) DESC,
+       CASE WHEN p.raffle_id IS NULL THEN 1 ELSE 0 END ASC,
+       COALESCE(r.created_at, 0) DESC,
+       COALESCE(r.id, 0) DESC,
        CASE p.status
          WHEN 'claimed' THEN 0
          WHEN 'processing' THEN 1
@@ -463,8 +464,8 @@ export async function listPrizeAwardsForAdmin(opts: {
          WHEN 'done' THEN 3
          ELSE 4
        END,
-       COALESCE(p.ticket_number, 999999) ASC,
-       COALESCE(p.claimed_at, p.created_at) DESC
+       p.created_at DESC,
+       COALESCE(p.ticket_number, 999999) ASC
      LIMIT ? OFFSET ?`,
     [...params, limit, offset],
   );
