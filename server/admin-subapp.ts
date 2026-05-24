@@ -86,11 +86,14 @@ import {
 import {
   createPrizeAward,
   createPrizeAwardsBulk,
+  createPrizeAwardsFromTickets,
   deletePrizeAward,
   getPrizeAwardById,
   listPrizeAwardsForAdmin,
+  parseTicketNumbersInput,
   prizeAwardToDto,
   prizeAwardToDtoAsync,
+  resolveRaffleTicketHolders,
   updatePrizeAwardAdmin,
 } from "./prizes.js";
 import type {
@@ -120,6 +123,7 @@ import {
   getPublicSiteMusicPayload,
   insertSiteMusicTrack,
   listSiteMusicTracks,
+  reorderSiteMusicTracks,
   updateSiteMusicTrack,
 } from "./site-music.js";
 import {
@@ -888,6 +892,25 @@ adminSubApp.delete("/music/tracks/:id", async (c) => {
   await notifySiteMusicChanged();
   c.header("Cache-Control", "no-store");
   return c.json({ ok: true });
+});
+
+adminSubApp.post("/music/tracks/reorder", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: { ids?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const ids = Array.isArray(body.ids)
+    ? body.ids.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)
+    : [];
+  if (!ids.length) return c.json({ error: "Укажите порядок треков" }, 400);
+  await reorderSiteMusicTracks(ids);
+  await notifySiteMusicChanged();
+  c.header("Cache-Control", "no-store");
+  return c.json({ tracks: await listSiteMusicTracks() });
 });
 
 export const MUSIC_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
@@ -2188,12 +2211,32 @@ adminSubApp.get("/prizes", async (c) => {
   const limit = Number(c.req.query("limit") || 40);
   const page = await listPrizeAwardsForAdmin({ status, q, offset, limit });
   return c.json({
-    prizes: page.prizes.map((p) => prizeAwardToDto(p, page.users.get(p.user_id))),
+    prizes: page.prizes.map((p) =>
+      prizeAwardToDto(
+        p,
+        page.users.get(p.user_id),
+        p.raffle_id ? page.raffles.get(p.raffle_id) ?? null : null,
+      ),
+    ),
     total: page.total,
     offset,
     limit,
     has_more: offset + page.prizes.length < page.total,
   });
+});
+
+adminSubApp.get("/prizes/ticket-holders/preview", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  const raffleId = Math.floor(Number(c.req.query("raffle_id")));
+  if (!Number.isFinite(raffleId) || raffleId < 1) {
+    return c.json({ error: "Выберите акцию" }, 400);
+  }
+  const ticketNumbers = parseTicketNumbersInput(String(c.req.query("ticket_numbers") || ""));
+  if (!ticketNumbers.length) return c.json({ holders: [], not_found: [] });
+  const resolved = await resolveRaffleTicketHolders(raffleId, ticketNumbers);
+  return c.json(resolved);
 });
 
 adminSubApp.get("/prizes/:id", async (c) => {
@@ -2222,6 +2265,51 @@ adminSubApp.post("/prizes", async (c) => {
   const description = String(body.description || "");
   const introMessage = String(body.intro_message || "");
   const sendChat = body.send_chat !== false;
+
+  const raffleIdRaw = body.raffle_id;
+  const ticketNumbersRaw = body.ticket_numbers;
+  const hasTicketMode =
+    raffleIdRaw != null &&
+    Number.isFinite(Number(raffleIdRaw)) &&
+    Number(raffleIdRaw) > 0 &&
+    (Array.isArray(ticketNumbersRaw) || String(ticketNumbersRaw ?? "").trim());
+
+  if (hasTicketMode) {
+    const raffleId = Math.floor(Number(raffleIdRaw));
+    const ticketNumbers = parseTicketNumbersInput(ticketNumbersRaw);
+    const bulk = await createPrizeAwardsFromTickets({
+      raffleId,
+      ticketNumbers,
+      title,
+      description,
+      createdByUserId: auth.id,
+      introMessage,
+      sendChat,
+    });
+    if (!bulk.ok) return c.json({ error: bulk.error }, 400);
+    for (const prize of bulk.prizes) {
+      if (!prize.chat_message_id) continue;
+      const uid = prize.user_id;
+      await markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = await getSupportMessageById(prize.chat_message_id);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      notifyUserEmailStaffReply(uid, { body: "", attachmentName: null, attachmentMime: null });
+    }
+    const users = new Map<number, { name: string; phone: string }>();
+    for (const p of bulk.prizes) {
+      const u = await getUserById(p.user_id);
+      if (u) users.set(p.user_id, { name: u.name, phone: u.phone });
+    }
+    return c.json({
+      created: bulk.created,
+      failed: bulk.failed,
+      not_found: bulk.not_found,
+      prizes: await Promise.all(
+        bulk.prizes.map((p) => prizeAwardToDtoAsync(p, users.get(p.user_id))),
+      ),
+    });
+  }
 
   if (Array.isArray(body.user_ids)) {
     const userIds = body.user_ids
@@ -2297,11 +2385,22 @@ adminSubApp.patch("/prizes/:id", async (c) => {
   const res = await updatePrizeAwardAdmin(id, {
     admin_notes: body.admin_notes != null ? String(body.admin_notes) : undefined,
     mark_done: Boolean(body.mark_done),
+    status: body.status != null ? String(body.status) as "processing" | "cancelled" : undefined,
+    notify_chat: body.notify_chat !== false,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
+  if (res.stage_message_id) {
+    const uid = res.prize.user_id;
+    await markThreadReadByStaff(uid);
+    broadcastThreadReadByStaff(uid);
+    const row = await getSupportMessageById(res.stage_message_id);
+    if (row) broadcastChatMessage(uid, messageToDto(row));
+    notifyUserEmailStaffReply(uid, { body: "", attachmentName: null, attachmentMime: null });
+  }
   const user = await getUserById(res.prize.user_id);
   return c.json({
     prize: await prizeAwardToDtoAsync(res.prize, user ? { name: user.name, phone: user.phone } : undefined),
+    status_changed: res.status_changed,
   });
 });
 

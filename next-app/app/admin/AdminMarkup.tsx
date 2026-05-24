@@ -423,6 +423,7 @@ export default function AdminMarkup() {
           <button type="button" className="admin-prizes-tab is-active" data-status="all" aria-selected="true">Все</button>
           <button type="button" className="admin-prizes-tab" data-status="pending" aria-selected="false">Ожидают</button>
           <button type="button" className="admin-prizes-tab" data-status="claimed" aria-selected="false">Ответ получен</button>
+          <button type="button" className="admin-prizes-tab" data-status="processing" aria-selected="false">На выполнении</button>
           <button type="button" className="admin-prizes-tab" data-status="done" aria-selected="false">Готово</button>
         </div>
         <div className="admin-prizes-panel">
@@ -459,8 +460,23 @@ export default function AdminMarkup() {
           </header>
           <div className="admin-prize-create-modal__body">
             <section className="admin-prize-create-modal__section">
-              <h3 className="admin-prize-create-modal__section-title">Получатели</h3>
-              <p className="admin-prize-create-modal__hint">Можно выбрать до 20 человек — каждому уйдёт своё сообщение в чат.</p>
+              <h3 className="admin-prize-create-modal__section-title">Акция и номерки</h3>
+              <p className="admin-prize-create-modal__hint">Выберите акцию и укажите выигравшие номерки — приз получат их владельцы (до 20 номерков за раз).</p>
+              <label className="form-group">
+                <span>Акция</span>
+                <select id="prize-create-raffle" className="input" defaultValue="">
+                  <option value="">— выберите акцию —</option>
+                </select>
+              </label>
+              <label className="form-group">
+                <span>Номерки победителей</span>
+                <textarea id="prize-create-tickets" className="input" rows={3} placeholder="Например: 12, 45, 108 или по одному на строку" />
+              </label>
+              <div id="prize-create-tickets-preview" className="admin-prize-create-tickets-preview" aria-live="polite"></div>
+            </section>
+            <section className="admin-prize-create-modal__section admin-prize-create-modal__section--optional">
+              <h3 className="admin-prize-create-modal__section-title">Или вручную</h3>
+              <p className="admin-prize-create-modal__hint">Если номерок не в системе — добавьте пользователя поиском.</p>
               <label className="form-group">
                 <span>Добавить пользователя</span>
                 <input id="prize-create-user-q" className="input" type="search" placeholder="Имя или телефон…" autoComplete="off" />
@@ -486,8 +502,28 @@ export default function AdminMarkup() {
           </div>
           <footer className="admin-prize-create-modal__foot">
             <button type="button" className="btn btn--primary admin-prize-create-modal__submit" id="prize-create-submit">
-              Отправить приз выбранным
+              Отправить призы
             </button>
+          </footer>
+        </div>
+      </div>
+
+      <div id="modal-prize-chat" className="modal-overlay modal-overlay--prize-chat" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-prize-chat-title">
+        <div className="modal-overlay__backdrop" id="modal-prize-chat-backdrop"></div>
+        <div className="modal admin-prize-chat-modal">
+          <header className="modal__top admin-prize-chat-modal__top">
+            <div className="admin-prize-chat-modal__title-wrap">
+              <h2 id="modal-prize-chat-title" className="modal__top-title">Чат с победителем</h2>
+              <p id="modal-prize-chat-sub" className="admin-prize-chat-modal__subtitle"></p>
+            </div>
+            <button type="button" className="modal__close" id="modal-prize-chat-close" aria-label="Закрыть">×</button>
+          </header>
+          <div id="modal-prize-chat-messages" className="admin-prize-chat-modal__messages"></div>
+          <footer className="admin-prize-chat-modal__foot">
+            <form id="modal-prize-chat-form" className="admin-prize-chat-modal__form">
+              <textarea id="modal-prize-chat-input" className="input admin-prize-chat-modal__input" rows={2} placeholder="Сообщение пользователю…" />
+              <button type="submit" className="btn btn--primary admin-prize-chat-modal__send" id="modal-prize-chat-send">Отправить</button>
+            </form>
           </footer>
         </div>
       </div>
@@ -558,8 +594,9 @@ export default function AdminMarkup() {
           </div>
         </header>
 
-        <div className="admin-settings-panel admin-music-panel">
-          <div className="admin-settings-card admin-music-card">
+        <div className="admin-music-layout">
+          <div className="admin-music-layout__top">
+            <div className="admin-settings-card admin-music-card">
             <h2 className="admin-settings-card__title">Общие настройки</h2>
             <label className="admin-settings-toggle">
               <input type="checkbox" id="admin-music-enabled" className="admin-settings-toggle__input" role="switch" />
@@ -587,10 +624,11 @@ export default function AdminMarkup() {
               <p className="admin-music-drop__progress" id="admin-music-upload-progress" aria-live="polite"></p>
             </div>
           </div>
+          </div>
 
-          <div className="admin-settings-card admin-music-card">
+          <div className="admin-settings-card admin-music-card admin-music-card--playlist">
             <h2 className="admin-settings-card__title">Плейлист</h2>
-            <p className="admin-settings-card__text">Включённые треки играют по очереди. Выключенные остаются в списке, но не попадают пользователям.</p>
+            <p className="admin-settings-card__text">Стрелками меняйте порядок воспроизведения. Выключенные треки остаются в списке, но не попадают пользователям.</p>
             <p id="admin-music-empty" className="admin-music-empty" hidden>
               Пока нет треков — загрузите первый файл выше.
             </p>

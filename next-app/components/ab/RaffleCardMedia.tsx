@@ -11,6 +11,8 @@ type Props = {
   loading?: "eager" | "lazy";
   width?: number;
   height?: number;
+  /** false — только обложка (без GIF/видео), например при паузе или закрытых продажах */
+  animEnabled?: boolean;
 };
 
 function PlayIcon() {
@@ -32,9 +34,10 @@ export default function RaffleCardMedia({
   loading = "lazy",
   width = 480,
   height = 160,
+  animEnabled = true,
 }: Props) {
   const staticSrc = String(coverUrl || "").trim();
-  const animSrc = String(gifUrl || "").trim();
+  const animSrc = animEnabled ? String(gifUrl || "").trim() : "";
   const animIsVideoUrl = Boolean(animSrc && isRaffleCoverAnimVideo(animSrc));
 
   const [animDisplaySrc, setAnimDisplaySrc] = useState("");
@@ -167,7 +170,22 @@ export default function RaffleCardMedia({
     [startVideo],
   );
 
-  const showPlayBtn = animIsVideoUrl && !showVideo;
+  const showPlayBtn = animEnabled && animIsVideoUrl && !showVideo;
+
+  if (!animEnabled) {
+    if (!staticSrc) return null;
+    return (
+      <img
+        className="raffle-card__media-img raffle-card__media-img--cover raffle-card__media-img--static-only"
+        src={staticSrc}
+        alt=""
+        width={width}
+        height={height}
+        loading={loading}
+        decoding="async"
+      />
+    );
+  }
 
   if (animIsVideo && animDisplaySrc) {
     const coverImg = staticSrc ? (

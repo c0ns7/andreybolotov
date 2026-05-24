@@ -263,4 +263,5 @@ export async function ensurePgRuntimeSchema(): Promise<void> {
   await pgPool.query(
     `ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS allows_ticket_exchange INTEGER NOT NULL DEFAULT 0`,
   );
+  await pgPool.query(`ALTER TABLE prize_awards ADD COLUMN IF NOT EXISTS ticket_number INTEGER`);
 }

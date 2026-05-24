@@ -3261,22 +3261,51 @@ html.theme-dark .home-faq-item__a {
   margin: 10px;
 }
 
+.raffle-card[data-status="paused"] .raffle-card__grad,
+.raffle-card[data-status="closed"] .raffle-card__grad {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.52) 0%, rgba(0, 0, 0, 0.12) 42%, transparent 78%);
+}
+
+.raffle-card[data-status="paused"] .raffle-card__media-img--static-only,
+.raffle-card[data-status="closed"] .raffle-card__media-img--static-only {
+  opacity: 1;
+  filter: none;
+}
+
 .raffle-card__badge-wrap--paused {
-  inset: 0;
+  inset: auto;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: calc(100% - 24px);
   margin: 0;
-  border-radius: 0;
-  background: rgba(0, 0, 0, 0.78);
-  border: none;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   justify-content: center;
+  padding: 10px 14px 8px;
+  pointer-events: none;
 }
 
 .raffle-card__badge-wrap--closed {
-  inset: 0;
+  inset: auto;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: calc(100% - 24px);
   margin: 0;
-  border-radius: 0;
-  background: rgba(0, 0, 0, 0.78);
-  border: none;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   justify-content: center;
+  padding: 10px 14px 8px;
+  pointer-events: none;
 }
 
 .raffle-card__badge-wrap--flat {
@@ -3306,12 +3335,14 @@ html.theme-dark .home-faq-item__a {
 }
 
 .raffle-card__badge--pause {
-  margin-bottom: 10px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  color: #fde68a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .raffle-card__badge-wrap--flat .raffle-card__badge {
@@ -3347,11 +3378,12 @@ html.theme-dark .home-faq-item__a {
 }
 
 .raffle-card__sub {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   animation: raffleSubPulse 2s ease-in-out infinite;
 }
 
@@ -3367,6 +3399,11 @@ html.theme-dark .home-faq-item__a {
   50% {
     opacity: 0.55;
   }
+}
+
+.raffle-card[data-status="paused"] .raffle-card__title,
+.raffle-card[data-status="closed"] .raffle-card__title {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
 }
 
 .raffle-card__title {

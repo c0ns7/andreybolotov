@@ -83,6 +83,57 @@
       });
   }
 
+  let reorderBusy = false;
+
+  function reorderTracks(ids) {
+    return fetch("/api/admin/music/tracks/reorder", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+      body: JSON.stringify({ ids: ids }),
+      cache: "no-store",
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        return { ok: r.ok, d: d };
+      });
+    });
+  }
+
+  function moveTrack(id, dir) {
+    if (reorderBusy) return;
+    const idx = state.tracks.findIndex(function (t) {
+      return Number(t.id) === id;
+    });
+    if (idx < 0) return;
+    const nextIdx = dir === "up" ? idx - 1 : idx + 1;
+    if (nextIdx < 0 || nextIdx >= state.tracks.length) return;
+    const next = state.tracks.slice();
+    const tmp = next[idx];
+    next[idx] = next[nextIdx];
+    next[nextIdx] = tmp;
+    const ids = next.map(function (t) {
+      return Number(t.id);
+    });
+    const prev = state.tracks.slice();
+    state.tracks = next;
+    paintMusic();
+    reorderBusy = true;
+    reorderTracks(ids)
+      .then(function (x) {
+        if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+        state.tracks = Array.isArray(x.d.tracks) ? x.d.tracks : next;
+        paintMusic();
+        setStatus("Порядок треков обновлён", false);
+      })
+      .catch(function (err) {
+        state.tracks = prev;
+        paintMusic();
+        setStatus(String((err && err.message) || "Не удалось изменить порядок"), true);
+      })
+      .finally(function () {
+        reorderBusy = false;
+      });
+  }
+
   function paintMusic() {
     const toggle = document.getElementById("admin-music-enabled");
     const vol = document.getElementById("admin-music-volume");
@@ -100,15 +151,36 @@
     }
     if (empty) empty.hidden = true;
     list.innerHTML = state.tracks
-      .map(function (t) {
+      .map(function (t, idx) {
         const id = Number(t.id);
         const title = esc(t.title || "Трек");
         const url = esc(t.file_url || "");
         const on = !!t.enabled;
+        const upDisabled = idx === 0 ? " disabled" : "";
+        const downDisabled = idx === state.tracks.length - 1 ? " disabled" : "";
         return (
           '<article class="admin-music-track" data-track-id="' +
           String(id) +
           '">' +
+          '<div class="admin-music-track__order">' +
+          '<button type="button" class="admin-music-track__move" data-dir="up" data-track-id="' +
+          String(id) +
+          '"' +
+          upDisabled +
+          ' aria-label="Поднять выше">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>' +
+          "</button>" +
+          '<span class="admin-music-track__num">' +
+          String(idx + 1) +
+          "</span>" +
+          '<button type="button" class="admin-music-track__move" data-dir="down" data-track-id="' +
+          String(id) +
+          '"' +
+          downDisabled +
+          ' aria-label="Опустить ниже">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          "</button>" +
+          "</div>" +
           '<div class="admin-music-track__main">' +
           '<input type="text" class="admin-music-track__title" value="' +
           title +
@@ -279,6 +351,16 @@
     }
 
     root.addEventListener("click", function (e) {
+      const move = e.target.closest(".admin-music-track__move");
+      if (move) {
+        if (move.disabled) return;
+        const id = Number(move.getAttribute("data-track-id"));
+        const dir = move.getAttribute("data-dir");
+        if (!Number.isFinite(id) || (dir !== "up" && dir !== "down")) return;
+        moveTrack(id, dir);
+        return;
+      }
+
       const del = e.target.closest(".admin-music-track__delete");
       if (del) {
         const id = Number(del.getAttribute("data-track-id"));

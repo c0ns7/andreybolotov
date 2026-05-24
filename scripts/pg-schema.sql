@@ -312,6 +312,7 @@ CREATE TABLE IF NOT EXISTS prize_awards (
   review_received INTEGER NOT NULL DEFAULT 0,
   chat_message_id BIGINT,
   raffle_id BIGINT REFERENCES raffles(id) ON DELETE SET NULL,
+  ticket_number INTEGER,
   money_amount_rub INTEGER NOT NULL DEFAULT 0,
   exchange_ticket_count INTEGER NOT NULL DEFAULT 0,
   allows_ticket_exchange INTEGER NOT NULL DEFAULT 0

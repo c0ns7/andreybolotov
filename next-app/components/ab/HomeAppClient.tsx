@@ -472,6 +472,7 @@ export default function HomeAppClient() {
                         gifUrl={r.cover_gif_url}
                         updatedAt={Math.floor(Number(r.updated_at) || 0)}
                         loading={idx < 2 ? "eager" : "lazy"}
+                        animEnabled={st === "active"}
                       />
                       <div className="raffle-card__grad" />
                       {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}

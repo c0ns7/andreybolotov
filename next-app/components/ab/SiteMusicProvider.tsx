@@ -149,6 +149,32 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
   }, [payload.tracks, payload.music_default_volume, shouldPlay]);
 
   useEffect(() => {
+    if (!loaded || !shouldPlay || userOff) return;
+
+    const tryAutoplay = () => {
+      void playCurrent();
+    };
+
+    tryAutoplay();
+    const t1 = window.setTimeout(tryAutoplay, 400);
+    const t2 = window.setTimeout(tryAutoplay, 1200);
+
+    const unlock = () => {
+      tryAutoplay();
+    };
+    const opts: AddEventListenerOptions = { once: true, passive: true };
+    document.addEventListener("pointerdown", unlock, opts);
+    document.addEventListener("touchstart", unlock, opts);
+    document.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("scroll", unlock, opts);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [loaded, shouldPlay, userOff, playCurrent]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (!shouldPlay) {
@@ -204,7 +230,7 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
 
   return (
     <SiteMusicContext.Provider value={value}>
-      <audio ref={audioRef} preload="metadata" className="ab-site-music-audio" aria-hidden="true" />
+      <audio ref={audioRef} preload="auto" className="ab-site-music-audio" aria-hidden="true" />
       {needsGesture && shouldPlay ? (
         <span className="ab-site-music-sr" aria-live="polite">
           Нажмите иконку музыки, чтобы включить звук

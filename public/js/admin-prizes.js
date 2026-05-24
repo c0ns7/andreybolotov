@@ -5,7 +5,7 @@
   const STATUS_LABELS = {
     pending: "Ждёт ответа",
     claimed: "Ответ получен",
-    processing: "Ответ получен",
+    processing: "На выполнении",
     done: "Готово",
     cancelled: "Отменён",
   };
@@ -16,8 +16,11 @@
   let selectedId = null;
   let searchTimer = null;
   const MAX_RECIPIENTS = 20;
-  /** @type {{ id: number, name: string, phone: string }[]} */
   let selectedUsers = [];
+  let chatModalUserId = null;
+  let chatModalPrizeTitle = "";
+  let rafflesCache = [];
+  let ticketPreviewTimer = null;
 
   function loadSession() {
     try {
@@ -79,7 +82,23 @@
   }
 
   function statusClass(s) {
-    return "admin-prize-card__status admin-prize-card__status--" + esc(String(s === "processing" ? "claimed" : s || "pending"));
+    const key = s === "processing" ? "processing" : s || "pending";
+    return "admin-prize-card__status admin-prize-card__status--" + esc(key);
+  }
+
+  function groupPrizesByRaffle(list) {
+    const groups = [];
+    const map = new Map();
+    list.forEach(function (p) {
+      const key = p.raffle_id ? String(p.raffle_id) : "none";
+      const title = p.raffle_title || (p.raffle_id ? "Акция #" + p.raffle_id : "Без акции");
+      if (!map.has(key)) {
+        map.set(key, { key: key, title: title, items: [] });
+        groups.push(map.get(key));
+      }
+      map.get(key).items.push(p);
+    });
+    return groups;
   }
 
   function renderResponse(prize) {
@@ -104,11 +123,25 @@
       list.innerHTML = '<p class="admin-prizes-empty">Нет призов по выбранному фильтру.</p>';
       return;
     }
-    list.innerHTML = prizesCache
-      .map(function (p) {
+    const groups = groupPrizesByRaffle(prizesCache);
+    let html = "";
+    groups.forEach(function (group) {
+      html +=
+        '<div class="admin-prizes-raffle-group">' +
+        '<h3 class="admin-prizes-raffle-group__title">' +
+        esc(group.title) +
+        '<span class="admin-prizes-raffle-group__count">' +
+        String(group.items.length) +
+        "</span></h3>" +
+        '<div class="admin-prizes-raffle-group__list">';
+      group.items.forEach(function (p) {
         const active = selectedId === p.id ? " is-active" : "";
         const needs = p.status === "claimed" || p.status === "processing";
-        return (
+        const ticket =
+          p.ticket_number != null && p.ticket_number !== ""
+            ? '<span class="admin-prize-card__ticket">№' + esc(String(p.ticket_number)) + "</span>"
+            : "";
+        html +=
           '<button type="button" class="admin-prize-card' +
           active +
           (needs ? " admin-prize-card--attention" : "") +
@@ -121,6 +154,7 @@
           '">' +
           esc(STATUS_LABELS[p.status] || p.status) +
           "</span>" +
+          ticket +
           "</div>" +
           '<h3 class="admin-prize-card__title">' +
           esc(p.title) +
@@ -133,10 +167,11 @@
           '<p class="admin-prize-card__meta">' +
           (p.claimed_at ? "Ответ: " + esc(formatDateTime(p.claimed_at)) : "Создан: " + esc(formatDateTime(p.created_at))) +
           "</p>" +
-          "</button>"
-        );
-      })
-      .join("");
+          "</button>";
+      });
+      html += "</div></div>";
+    });
+    list.innerHTML = html;
   }
 
   async function loadPrizes() {
@@ -173,12 +208,20 @@
         esc(STATUS_LABELS[p.status] || p.status) +
         "</span>" +
         "</div>" +
+        (p.raffle_title || p.ticket_number
+          ? '<p class="admin-prize-detail__raffle">' +
+            esc(p.raffle_title || "Акция") +
+            (p.ticket_number ? " · номерок №" + esc(String(p.ticket_number)) : "") +
+            "</p>"
+          : "") +
         '<p class="admin-prize-detail__user">' +
         esc(p.user_name) +
         " · " +
         esc(formatRuPhone(p.user_phone)) +
         ' · <button type="button" class="admin-prize-detail__chat-link" data-user-id="' +
         String(p.user_id) +
+        '" data-prize-title="' +
+        esc(p.title) +
         '">Чат</button></p>' +
         (p.description
           ? '<section class="admin-prize-detail__section"><h4>Сообщение пользователю</h4><p class="admin-prize-detail__hint">' +
@@ -190,6 +233,9 @@
         "</section>" +
         '<section class="admin-prize-detail__section admin-prize-detail__section--actions">' +
         '<div class="admin-prize-detail__actions">' +
+        (p.status !== "processing" && p.status !== "done"
+          ? '<button type="button" class="btn btn--secondary" id="admin-prize-set-processing">На выполнение</button>'
+          : "") +
         '<button type="button" class="btn btn--primary" id="admin-prize-mark-done"' +
         (p.status === "done" ? " disabled" : "") +
         ">Отметить выполненным</button>" +
@@ -198,8 +244,13 @@
         "</section>";
 
       panel.querySelector("[data-user-id]")?.addEventListener("click", function () {
-        const uid = Number(panel.querySelector("[data-user-id]")?.getAttribute("data-user-id"));
-        if (window.abAdminOpenSupportChat) window.abAdminOpenSupportChat(uid);
+        const btn = panel.querySelector("[data-user-id]");
+        const uid = Number(btn?.getAttribute("data-user-id"));
+        const title = btn?.getAttribute("data-prize-title") || p.title;
+        openPrizeChatModal(uid, title, p.user_name, p.user_phone);
+      });
+      document.getElementById("admin-prize-set-processing")?.addEventListener("click", function () {
+        void setProcessing(p.id);
       });
       document.getElementById("admin-prize-mark-done")?.addEventListener("click", function () {
         void markDone(p.id);
@@ -210,6 +261,16 @@
     } catch (err) {
       panel.innerHTML = '<p class="admin-prizes-empty is-error">' + esc(err.message || "Ошибка") + "</p>";
     }
+  }
+
+  async function setProcessing(id) {
+    await apiJson("/api/admin/prizes/" + id, {
+      method: "PATCH",
+      headers: authHeaders(),
+      body: JSON.stringify({ status: "processing" }),
+    });
+    await loadPrizes();
+    await openDetail(id, true);
   }
 
   async function markDone(id) {
@@ -311,6 +372,170 @@
     if (results) results.innerHTML = "";
   }
 
+  function formatChatTime(ts) {
+    const d = new Date(Number(ts));
+    return (
+      String(d.getDate()).padStart(2, "0") +
+      "." +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      " " +
+      String(d.getHours()).padStart(2, "0") +
+      ":" +
+      String(d.getMinutes()).padStart(2, "0")
+    );
+  }
+
+  function renderChatModalMessages(messages) {
+    const box = document.getElementById("modal-prize-chat-messages");
+    if (!box) return;
+    if (!messages || !messages.length) {
+      box.innerHTML = '<p class="admin-prize-chat-empty">Нет сообщений</p>';
+      return;
+    }
+    box.innerHTML = messages
+      .map(function (m) {
+        const staff = !!m.is_staff;
+        return (
+          '<div class="admin-prize-chat-msg admin-prize-chat-msg--' +
+          (staff ? "staff" : "user") +
+          '">' +
+          '<div class="admin-prize-chat-msg__meta">' +
+          (staff ? "Поддержка" : "Пользователь") +
+          " · " +
+          esc(formatChatTime(m.created_at)) +
+          "</div>" +
+          '<div class="admin-prize-chat-msg__body">' +
+          esc(String(m.body || "").replace(/\[\[AB_CARD:[^\]]+\]\]\s*$/m, "").trim()).replace(/\n/g, "<br>") +
+          "</div></div>"
+        );
+      })
+      .join("");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function loadChatModalMessages(userId) {
+    const data = await apiJson("/api/admin/users/" + String(userId) + "/messages", { headers: authHeaders() });
+    renderChatModalMessages(data.messages || []);
+  }
+
+  function openPrizeChatModal(userId, prizeTitle, userName, userPhone) {
+    const modal = document.getElementById("modal-prize-chat");
+    if (!modal) return;
+    chatModalUserId = Number(userId);
+    chatModalPrizeTitle = String(prizeTitle || "");
+    const sub = document.getElementById("modal-prize-chat-sub");
+    if (sub) {
+      sub.textContent =
+        String(userName || "") + " · " + formatRuPhone(userPhone || "") + (prizeTitle ? " · «" + prizeTitle + "»" : "");
+    }
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    const box = document.getElementById("modal-prize-chat-messages");
+    if (box) box.innerHTML = '<p class="admin-prize-chat-empty">Загрузка…</p>';
+    void loadChatModalMessages(chatModalUserId).catch(function (e) {
+      if (box) box.innerHTML = '<p class="admin-prize-chat-empty is-error">' + esc(e.message || "Ошибка") + "</p>";
+    });
+  }
+
+  function closePrizeChatModal() {
+    const modal = document.getElementById("modal-prize-chat");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    chatModalUserId = null;
+    chatModalPrizeTitle = "";
+  }
+
+  async function sendChatModalMessage(text) {
+    if (!chatModalUserId) return;
+    const body = String(text || "").trim();
+    if (!body) return;
+    await apiJson("/api/admin/users/" + String(chatModalUserId) + "/messages", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ body: body }),
+    });
+    await loadChatModalMessages(chatModalUserId);
+  }
+
+  async function loadRafflesForCreate() {
+    if (rafflesCache.length) return rafflesCache;
+    const data = await apiJson("/api/admin/raffles", { headers: authHeaders() });
+    rafflesCache = Array.isArray(data.raffles) ? data.raffles : [];
+    return rafflesCache;
+  }
+
+  function fillRaffleSelect() {
+    const sel = document.getElementById("prize-create-raffle");
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— выберите акцию —</option>';
+    rafflesCache.forEach(function (r) {
+      const opt = document.createElement("option");
+      opt.value = String(r.id);
+      opt.textContent = String(r.title || "Акция #" + r.id);
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  }
+
+  async function previewTicketHolders() {
+    const preview = document.getElementById("prize-create-tickets-preview");
+    const sel = document.getElementById("prize-create-raffle");
+    const tickets = document.getElementById("prize-create-tickets");
+    if (!preview || !sel || !tickets) return;
+    const raffleId = Math.floor(Number(sel.value));
+    const nums = String(tickets.value || "").trim();
+    if (!Number.isFinite(raffleId) || raffleId < 1 || !nums) {
+      preview.innerHTML = "";
+      return;
+    }
+    preview.innerHTML = '<p class="admin-prize-create-tickets-preview__loading">Проверка номерков…</p>';
+    try {
+      const data = await apiJson(
+        "/api/admin/prizes/ticket-holders/preview?raffle_id=" +
+          encodeURIComponent(String(raffleId)) +
+          "&ticket_numbers=" +
+          encodeURIComponent(nums),
+        { headers: authHeaders() },
+      );
+      const holders = data.holders || [];
+      const notFound = data.not_found || [];
+      let html = "";
+      if (holders.length) {
+        html +=
+          '<p class="admin-prize-create-tickets-preview__ok">Найдено ' +
+          String(holders.length) +
+          ':</p><ul class="admin-prize-create-tickets-preview__list">';
+        holders.forEach(function (h) {
+          html +=
+            "<li>№" +
+            esc(String(h.ticket_number)) +
+            " — " +
+            esc(h.user_name) +
+            " · " +
+            esc(formatRuPhone(h.user_phone)) +
+            "</li>";
+        });
+        html += "</ul>";
+      }
+      if (notFound.length) {
+        html +=
+          '<p class="admin-prize-create-tickets-preview__warn">Не найдены: ' +
+          notFound.map(function (n) {
+            return "№" + n;
+          }).join(", ") +
+          "</p>";
+      }
+      if (!html) html = '<p class="admin-prize-create-tickets-preview__warn">Номерки не распознаны</p>';
+      preview.innerHTML = html;
+    } catch (e) {
+      preview.innerHTML = '<p class="admin-prize-create-tickets-preview__warn">' + esc(e.message || "Ошибка") + "</p>";
+    }
+  }
+
   function openCreateModal() {
     const modal = document.getElementById("modal-prize-create");
     if (!modal) return;
@@ -318,10 +543,19 @@
     modal.setAttribute("aria-hidden", "false");
     const q = document.getElementById("prize-create-user-q");
     if (q && "value" in q) q.value = "";
+    const tickets = document.getElementById("prize-create-tickets");
+    if (tickets && "value" in tickets) tickets.value = "";
+    const preview = document.getElementById("prize-create-tickets-preview");
+    if (preview) preview.innerHTML = "";
     const results = document.getElementById("prize-create-user-results");
     if (results) results.innerHTML = "";
     selectedUsers = [];
     renderSelectedUsers();
+    void loadRafflesForCreate()
+      .then(function () {
+        fillRaffleSelect();
+      })
+      .catch(function () {});
   }
 
   function closeCreateModal() {
@@ -376,39 +610,56 @@
   }
 
   async function submitCreate() {
-    if (!selectedUsers.length) {
-      alert("Добавьте хотя бы одного получателя.");
-      return;
-    }
     const title = document.getElementById("prize-create-title");
     const intro = document.getElementById("prize-create-intro");
     const hint = document.getElementById("prize-create-hint");
+    const raffleSel = document.getElementById("prize-create-raffle");
+    const ticketsEl = document.getElementById("prize-create-tickets");
     const t = title && "value" in title ? String(title.value).trim() : "";
     if (!t) {
       alert("Укажите название приза.");
       return;
     }
+
+    const raffleId = raffleSel && "value" in raffleSel ? Math.floor(Number(raffleSel.value)) : NaN;
+    const ticketText = ticketsEl && "value" in ticketsEl ? String(ticketsEl.value).trim() : "";
+    const useTickets = Number.isFinite(raffleId) && raffleId > 0 && ticketText;
+
+    if (!useTickets && !selectedUsers.length) {
+      alert("Выберите акцию с номерками или добавьте получателей вручную.");
+      return;
+    }
+
     const submitBtn = document.getElementById("prize-create-submit");
     if (submitBtn) submitBtn.disabled = true;
     try {
+      const payload = {
+        title: t,
+        intro_message: intro && "value" in intro ? intro.value : "",
+        description: hint && "value" in hint ? hint.value : "",
+        send_chat: true,
+      };
+      if (useTickets) {
+        payload.raffle_id = raffleId;
+        payload.ticket_numbers = ticketText;
+      } else {
+        payload.user_ids = selectedUsers.map(function (u) {
+          return u.id;
+        });
+      }
       const data = await apiJson("/api/admin/prizes", {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({
-          user_ids: selectedUsers.map(function (u) {
-            return u.id;
-          }),
-          title: t,
-          intro_message: intro && "value" in intro ? intro.value : "",
-          description: hint && "value" in hint ? hint.value : "",
-          send_chat: true,
-        }),
+        body: JSON.stringify(payload),
       });
       closeCreateModal();
       await loadPrizes();
-      let msg = "Отправлено " + String(data.created || selectedUsers.length) + " сообщений в чат.";
+      let msg = "Отправлено " + String(data.created || (useTickets ? 0 : selectedUsers.length)) + " призов в чат.";
+      if (data.not_found && data.not_found.length) {
+        msg += " Не найдены номерки: " + data.not_found.join(", ") + ".";
+      }
       if (data.failed && data.failed.length) {
-        msg += " Не удалось для " + data.failed.length + " чел.";
+        msg += " Ошибки: " + data.failed.length + ".";
       }
       alert(msg);
     } finally {
@@ -435,6 +686,37 @@
       searchTimer = setTimeout(function () {
         void searchUsersForPrize(v).catch(function () {});
       }, 280);
+    });
+
+    document.getElementById("prize-create-raffle")?.addEventListener("change", function () {
+      void previewTicketHolders();
+    });
+    document.getElementById("prize-create-tickets")?.addEventListener("input", function () {
+      if (ticketPreviewTimer) clearTimeout(ticketPreviewTimer);
+      ticketPreviewTimer = setTimeout(function () {
+        void previewTicketHolders();
+      }, 400);
+    });
+
+    document.getElementById("modal-prize-chat-close")?.addEventListener("click", closePrizeChatModal);
+    document.getElementById("modal-prize-chat-backdrop")?.addEventListener("click", closePrizeChatModal);
+    document.getElementById("modal-prize-chat-form")?.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const inp = document.getElementById("modal-prize-chat-input");
+      const text = inp && "value" in inp ? String(inp.value).trim() : "";
+      if (!text) return;
+      const btn = document.getElementById("modal-prize-chat-send");
+      if (btn) btn.disabled = true;
+      void sendChatModalMessage(text)
+        .then(function () {
+          if (inp && "value" in inp) inp.value = "";
+        })
+        .catch(function (err) {
+          alert(err.message || "Не удалось отправить");
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
     });
 
     document.querySelectorAll(".admin-prizes-tab").forEach(function (tab) {

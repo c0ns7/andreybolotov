@@ -1,4 +1,4 @@
-import { deleteSupportStaffMessageForUser, getUserById, insertSupportMessage, messageToDto } from "./db.js";
+import { deleteSupportStaffMessageForUser, getRaffleById, getUserById, getUserByPhone, insertSupportMessage, messageToDto } from "./db.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 
 export type PrizeType = "physical" | "money";
@@ -25,6 +25,7 @@ export type PrizeAwardRow = {
   review_received: number;
   chat_message_id: number | null;
   raffle_id: number | null;
+  ticket_number: number | null;
   money_amount_rub: number;
   exchange_ticket_count: number;
   allows_ticket_exchange: number;
@@ -33,6 +34,101 @@ export type PrizeAwardRow = {
 export type PrizeClaimData = {
   message: string;
 };
+
+export const PRIZE_STAGE_LABELS: Record<PrizeStatus, string> = {
+  pending: "Ждёт ответа",
+  claimed: "Ответ получен",
+  processing: "На выполнении",
+  done: "Выполнен",
+  cancelled: "Отменён",
+};
+
+export function getPrizeStageLabel(status: PrizeStatus | string): string {
+  const s = String(status || "pending") as PrizeStatus;
+  return PRIZE_STAGE_LABELS[s] || s;
+}
+
+export function parseTicketNumbersInput(raw: unknown): number[] {
+  if (Array.isArray(raw)) {
+    return [
+      ...new Set(
+        raw.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ];
+  }
+  const s = String(raw ?? "").trim();
+  if (!s) return [];
+  return [
+    ...new Set(
+      s
+        .split(/[,;\s]+/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => Math.floor(Number(p.replace(/^№?#?/, ""))))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ];
+}
+
+export type RaffleTicketHolder = {
+  ticket_number: number;
+  user_id: number;
+  user_name: string;
+  user_phone: string;
+};
+
+export async function resolveRaffleTicketHolders(
+  raffleId: number,
+  ticketNumbers: number[],
+): Promise<{ holders: RaffleTicketHolder[]; not_found: number[] }> {
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return { holders: [], not_found: ticketNumbers };
+
+  const holders: RaffleTicketHolder[] = [];
+  const not_found: number[] = [];
+
+  for (const num of ticketNumbers) {
+    const row = await pgGet<{ ticket_number: number; user_id: number; user_name: string; user_phone: string }>(
+      `SELECT h.ticket_number, h.user_id, u.name AS user_name, u.phone AS user_phone
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN users u ON u.id = h.user_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ?
+         AND o.status NOT IN ('expired', 'rejected')
+       ORDER BY CASE WHEN o.status = 'confirmed' THEN 0 WHEN o.status = 'pending_review' THEN 1 ELSE 2 END, o.id DESC
+       LIMIT 1`,
+      [raffleId, num],
+    );
+    if (row) {
+      holders.push({
+        ticket_number: row.ticket_number,
+        user_id: row.user_id,
+        user_name: row.user_name,
+        user_phone: row.user_phone,
+      });
+      continue;
+    }
+    const pre = await pgGet<{ phone: string }>(
+      `SELECT phone FROM raffle_phone_preassignments WHERE raffle_id = ? AND ticket_number = ?`,
+      [raffleId, num],
+    );
+    if (pre?.phone) {
+      const user = await getUserByPhone(pre.phone);
+      if (user) {
+        holders.push({
+          ticket_number: num,
+          user_id: user.id,
+          user_name: user.name,
+          user_phone: user.phone,
+        });
+        continue;
+      }
+    }
+    not_found.push(num);
+  }
+
+  return { holders, not_found };
+}
 
 function nowMs() {
   return Date.now();
@@ -64,7 +160,11 @@ export function formatPrizeClaimMessage(claim: Record<string, unknown> | null): 
   return parts.join("\n");
 }
 
-export function prizeAwardToDto(row: PrizeAwardRow, user?: { name: string; phone: string }) {
+export function prizeAwardToDto(
+  row: PrizeAwardRow,
+  user?: { name: string; phone: string },
+  raffle?: { id: number; title: string } | null,
+) {
   const claim = parseClaimData(row);
   const response_message = formatPrizeClaimMessage(claim);
   return {
@@ -76,6 +176,7 @@ export function prizeAwardToDto(row: PrizeAwardRow, user?: { name: string; phone
     description: row.description,
     prize_type: row.prize_type,
     status: row.status,
+    status_label: getPrizeStageLabel(row.status),
     claim_data: claim,
     response_message,
     admin_notes: row.admin_notes,
@@ -84,11 +185,22 @@ export function prizeAwardToDto(row: PrizeAwardRow, user?: { name: string; phone
     claimed_at: row.claimed_at,
     admin_marked_done_at: row.admin_marked_done_at,
     chat_message_id: row.chat_message_id,
+    raffle_id: row.raffle_id,
+    raffle_title: raffle?.title ?? "",
+    ticket_number: row.ticket_number,
   };
 }
 
-export async function prizeAwardToDtoAsync(row: PrizeAwardRow, user?: { name: string; phone: string }) {
-  return prizeAwardToDto(row, user);
+export async function prizeAwardToDtoAsync(
+  row: PrizeAwardRow,
+  user?: { name: string; phone: string },
+  raffle?: { id: number; title: string } | null,
+) {
+  if (!raffle && row.raffle_id) {
+    const r = await getRaffleById(row.raffle_id);
+    if (r) raffle = { id: r.id, title: r.title };
+  }
+  return prizeAwardToDto(row, user, raffle);
 }
 
 export function buildPrizeClaimChatBody(
@@ -125,6 +237,16 @@ export function buildPrizeClaimChatBody(
   return lines.join("\n") + `\n\n[[AB_CARD:${encoded}]]`;
 }
 
+export function buildPrizeStageChatBody(title: string, stageLabel: string): string {
+  const safeTitle = String(title || "Приз").trim() || "Приз";
+  const safeStage = String(stageLabel || "").trim() || "обновлён";
+  return (
+    `📦 Обновление по призу «${safeTitle}».\n\n` +
+    `Этап: ${safeStage}.\n\n` +
+    "Если остались вопросы — напишите в этот чат."
+  );
+}
+
 export async function createPrizeAward(input: {
   userId: number;
   title: string;
@@ -132,19 +254,29 @@ export async function createPrizeAward(input: {
   createdByUserId: number | null;
   introMessage?: string;
   sendChat?: boolean;
+  raffleId?: number | null;
+  ticketNumber?: number | null;
 }): Promise<{ ok: true; prize: PrizeAwardRow; messageId?: number } | { ok: false; error: string }> {
   const user = await getUserById(input.userId);
   if (!user) return { ok: false, error: "Пользователь не найден" };
   const title = String(input.title || "").trim();
   if (!title) return { ok: false, error: "Укажите название приза" };
   const description = String(input.description || "").trim();
+  const raffleId =
+    input.raffleId != null && Number.isFinite(Number(input.raffleId)) && Number(input.raffleId) > 0
+      ? Math.floor(Number(input.raffleId))
+      : null;
+  const ticketNumber =
+    input.ticketNumber != null && Number.isFinite(Number(input.ticketNumber)) && Number(input.ticketNumber) > 0
+      ? Math.floor(Number(input.ticketNumber))
+      : null;
   const ts = nowMs();
   const inserted = await pgGet<{ id: number }>(
     `INSERT INTO prize_awards (
       user_id, title, description, prize_type, status, claim_data, admin_notes,
-      created_by_user_id, created_at, updated_at
-    ) VALUES (?, ?, ?, 'physical', 'pending', '', '', ?, ?, ?) RETURNING id`,
-    [input.userId, title, description, input.createdByUserId, ts, ts],
+      created_by_user_id, created_at, updated_at, raffle_id, ticket_number
+    ) VALUES (?, ?, ?, 'physical', 'pending', '', '', ?, ?, ?, ?, ?) RETURNING id`,
+    [input.userId, title, description, input.createdByUserId, ts, ts, raffleId, ticketNumber],
   );
   const id = Number(inserted?.id || 0);
   if (!id) return { ok: false, error: "Не удалось создать приз" };
@@ -212,12 +344,79 @@ export async function createPrizeAwardsBulk(input: {
   return { ok: true, created: prizes.length, prizes, failed };
 }
 
+export async function createPrizeAwardsFromTickets(input: {
+  raffleId: number;
+  ticketNumbers: number[];
+  title: string;
+  description?: string;
+  createdByUserId: number | null;
+  introMessage?: string;
+  sendChat?: boolean;
+}): Promise<
+  | {
+      ok: true;
+      created: number;
+      prizes: PrizeAwardRow[];
+      failed: { ticket_number: number; error: string }[];
+      not_found: number[];
+    }
+  | { ok: false; error: string }
+> {
+  const raffleId = Math.floor(Number(input.raffleId));
+  if (!Number.isFinite(raffleId) || raffleId < 1) return { ok: false, error: "Выберите акцию" };
+  const ticketNumbers = parseTicketNumbersInput(input.ticketNumbers);
+  if (!ticketNumbers.length) return { ok: false, error: "Укажите номерки победителей" };
+  if (ticketNumbers.length > MAX_PRIZE_RECIPIENTS) {
+    return { ok: false, error: `Можно указать не больше ${MAX_PRIZE_RECIPIENTS} номерков за раз` };
+  }
+
+  const resolved = await resolveRaffleTicketHolders(raffleId, ticketNumbers);
+  if (!resolved.holders.length) {
+    return {
+      ok: false,
+      error:
+        resolved.not_found.length > 0
+          ? `Номерки не найдены: ${resolved.not_found.map((n) => `№${n}`).join(", ")}`
+          : "Не удалось найти владельцев номерков",
+    };
+  }
+
+  const prizes: PrizeAwardRow[] = [];
+  const failed: { ticket_number: number; error: string }[] = [];
+
+  for (const holder of resolved.holders) {
+    const res = await createPrizeAward({
+      userId: holder.user_id,
+      title: input.title,
+      description: input.description,
+      createdByUserId: input.createdByUserId,
+      introMessage: input.introMessage,
+      sendChat: input.sendChat,
+      raffleId,
+      ticketNumber: holder.ticket_number,
+    });
+    if (res.ok) prizes.push(res.prize);
+    else failed.push({ ticket_number: holder.ticket_number, error: res.error });
+  }
+
+  if (!prizes.length) {
+    return { ok: false, error: failed[0]?.error || "Не удалось создать призы" };
+  }
+
+  return { ok: true, created: prizes.length, prizes, failed, not_found: resolved.not_found };
+}
+
 export async function listPrizeAwardsForAdmin(opts: {
   status?: string;
   q?: string;
   offset?: number;
   limit?: number;
-}): Promise<{ prizes: PrizeAwardRow[]; users: Map<number, { name: string; phone: string }>; total: number }> {
+}): Promise<{
+  prizes: PrizeAwardRow[];
+  users: Map<number, { name: string; phone: string }>;
+  raffles: Map<number, { id: number; title: string }>;
+  total: number;
+}> {
   const offset = Math.max(0, Math.floor(Number(opts.offset ?? 0)));
   const limit = Math.min(80, Math.max(1, Math.floor(Number(opts.limit ?? 40))));
   const q = String(opts.q ?? "").trim().toLowerCase();
@@ -246,30 +445,41 @@ export async function listPrizeAwardsForAdmin(opts: {
   );
   const total = countRow?.c ?? 0;
 
-  const rows = await pgAll<PrizeAwardRow & { user_name: string; user_phone: string }>(
-    `SELECT p.*, u.name AS user_name, u.phone AS user_phone
+  const rows = await pgAll<
+    PrizeAwardRow & { user_name: string; user_phone: string; raffle_title: string | null }
+  >(
+    `SELECT p.*, u.name AS user_name, u.phone AS user_phone, r.title AS raffle_title
      FROM prize_awards p
      INNER JOIN users u ON u.id = p.user_id
+     LEFT JOIN raffles r ON r.id = p.raffle_id
      WHERE ${whereSql}
      ORDER BY
+       COALESCE(r.title, 'яяяя') ASC,
+       COALESCE(p.raffle_id, 0) DESC,
        CASE p.status
          WHEN 'claimed' THEN 0
-         WHEN 'pending' THEN 1
-         WHEN 'done' THEN 2
-         ELSE 3
+         WHEN 'processing' THEN 1
+         WHEN 'pending' THEN 2
+         WHEN 'done' THEN 3
+         ELSE 4
        END,
+       COALESCE(p.ticket_number, 999999) ASC,
        COALESCE(p.claimed_at, p.created_at) DESC
      LIMIT ? OFFSET ?`,
     [...params, limit, offset],
   );
 
   const users = new Map<number, { name: string; phone: string }>();
+  const raffles = new Map<number, { id: number; title: string }>();
   const prizes: PrizeAwardRow[] = [];
   for (const r of rows) {
     users.set(r.user_id, { name: r.user_name, phone: r.user_phone });
+    if (r.raffle_id && r.raffle_title) {
+      raffles.set(r.raffle_id, { id: r.raffle_id, title: r.raffle_title });
+    }
     prizes.push(r);
   }
-  return { prizes, users, total };
+  return { prizes, users, raffles, total };
 }
 
 export async function getPrizeAwardById(id: number): Promise<PrizeAwardRow | null> {
@@ -316,15 +526,32 @@ export async function updatePrizeAwardAdmin(
   patch: {
     admin_notes?: string;
     mark_done?: boolean;
+    status?: PrizeStatus;
+    notify_chat?: boolean;
   },
-): Promise<{ ok: true; prize: PrizeAwardRow } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; prize: PrizeAwardRow; stage_message_id?: number; status_changed: boolean }
+  | { ok: false; error: string }
+> {
   const row = await getPrizeAwardById(id);
   if (!row) return { ok: false, error: "Приз не найден" };
 
   const ts = nowMs();
   const markDone = !!patch.mark_done;
-  const status: PrizeStatus = markDone ? "done" : row.status;
-  const admin_marked_done_at = markDone ? ts : row.admin_marked_done_at;
+  let nextStatus: PrizeStatus = row.status;
+
+  if (markDone) {
+    nextStatus = "done";
+  } else if (patch.status) {
+    const s = String(patch.status) as PrizeStatus;
+    if (s === "processing" || s === "cancelled") {
+      if (row.status === "done") return { ok: false, error: "Приз уже выполнен" };
+      nextStatus = s;
+    }
+  }
+
+  const statusChanged = nextStatus !== row.status;
+  const admin_marked_done_at = markDone || nextStatus === "done" ? (row.admin_marked_done_at ?? ts) : row.admin_marked_done_at;
 
   await pgExec(
     `UPDATE prize_awards SET
@@ -334,7 +561,7 @@ export async function updatePrizeAwardAdmin(
       updated_at = ?
      WHERE id = ?`,
     [
-      status,
+      nextStatus,
       patch.admin_notes !== undefined ? String(patch.admin_notes) : row.admin_notes,
       admin_marked_done_at,
       ts,
@@ -344,7 +571,15 @@ export async function updatePrizeAwardAdmin(
 
   const updated = await getPrizeAwardById(id);
   if (!updated) return { ok: false, error: "Ошибка сохранения" };
-  return { ok: true, prize: updated };
+
+  let stage_message_id: number | undefined;
+  const shouldNotify = patch.notify_chat !== false && statusChanged && nextStatus !== "cancelled";
+  if (shouldNotify && (nextStatus === "processing" || nextStatus === "done")) {
+    const body = buildPrizeStageChatBody(updated.title, getPrizeStageLabel(nextStatus));
+    stage_message_id = await insertSupportMessage(updated.user_id, body, true, null);
+  }
+
+  return { ok: true, prize: updated, stage_message_id, status_changed: statusChanged };
 }
 
 export async function deletePrizeAward(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
