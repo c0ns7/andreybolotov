@@ -145,6 +145,75 @@ function parseChatActionCard(rawBody?: string): { text: string; card: ChatAction
   }
 }
 
+function ChatMessageAttachment({
+  url,
+  name,
+  mime,
+  onOpenImage,
+}: {
+  url: string;
+  name: string;
+  mime: string;
+  onOpenImage: (imageUrl: string) => void;
+}) {
+  const safeUrl = String(url || "").trim();
+  if (!safeUrl) return null;
+  const mimeLower = String(mime || "").toLowerCase();
+  const isImage = mimeLower.startsWith("image/");
+
+  if (isImage) {
+    return (
+      <div className="chat-bubble__attachment chat-bubble__attachment--img">
+        <button
+          type="button"
+          className="chat-attachment-img-btn"
+          onClick={() => onOpenImage(safeUrl)}
+          aria-label={`Открыть изображение: ${name || "вложение"}`}
+        >
+          <img src={safeUrl} alt="" loading="lazy" className="chat-attachment-img-btn__img" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-bubble__attachment chat-bubble__attachment--file">
+      <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="chat-attachment-file-link" download>
+        📎 {name || "Вложение"}
+      </a>
+    </div>
+  );
+}
+
+function ChatImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="chat-image-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр изображения">
+      <button type="button" className="chat-image-lightbox__backdrop" onClick={onClose} aria-label="Закрыть" />
+      <div className="chat-image-lightbox__panel">
+        <button type="button" className="chat-image-lightbox__close" onClick={onClose} aria-label="Закрыть">
+          ×
+        </button>
+        <div className="chat-image-lightbox__body">
+          <img src={url} alt="" className="chat-image-lightbox__img" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function splitChatTextParts(text: string): ChatTextPart[] {
   const lines = String(text || "").split(/\n/g);
   const maxJoinRe = /^https:\/\/max\.ru\/join\/[A-Za-z0-9_-]+$/;
@@ -166,6 +235,7 @@ export default function ChatPageClient() {
   const [sending, setSending] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachmentDto | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -455,16 +525,12 @@ export default function ChatPageClient() {
                               </div>
                             ) : null}
                             {item.msg.attachment_url ? (
-                              <div className="chat-bubble__text">
-                                <a
-                                  href={String(item.msg.attachment_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="chat-max-join-btn"
-                                >
-                                  📎 {String(item.msg.attachment_name || "Вложение")}
-                                </a>
-                              </div>
+                              <ChatMessageAttachment
+                                url={String(item.msg.attachment_url)}
+                                name={String(item.msg.attachment_name || "Вложение")}
+                                mime={String(item.msg.attachment_mime || "")}
+                                onOpenImage={setLightboxImageUrl}
+                              />
                             ) : null}
                             {card?.kind === "prize_claim" ? (
                               <div className="chat-action-card chat-action-card--prize">
@@ -596,6 +662,7 @@ export default function ChatPageClient() {
           </form>
         </div>
       </div>
+      {lightboxImageUrl ? <ChatImageLightbox url={lightboxImageUrl} onClose={() => setLightboxImageUrl(null)} /> : null}
     </>
   );
 }

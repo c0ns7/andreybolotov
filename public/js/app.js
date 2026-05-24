@@ -409,21 +409,82 @@
     var mime = String(m.attachment_mime || "");
     if (/^image\//i.test(mime)) {
       return (
-        '<div class="chat-attachment chat-attachment--img"><a href="' +
+        '<div class="chat-bubble__attachment chat-bubble__attachment--img">' +
+        '<button type="button" class="chat-attachment-img-btn" data-chat-image-url="' +
         url +
-        '" target="_blank" rel="noopener noreferrer"><img src="' +
+        '" aria-label="Открыть изображение">' +
+        '<img src="' +
         url +
-        '" alt="" loading="lazy"/></a></div>'
+        '" alt="" loading="lazy" class="chat-attachment-img-btn__img"/></button></div>'
       );
     }
     return (
-      '<div class="chat-attachment chat-attachment--file"><a class="chat-attachment__link" href="' +
+      '<div class="chat-bubble__attachment chat-bubble__attachment--file"><a class="chat-attachment-file-link" href="' +
       url +
       '" target="_blank" rel="noopener noreferrer" download>📎 ' +
       name +
       "</a></div>"
     );
   }
+
+  var chatImageLightboxBound = false;
+  function ensureChatImageLightboxEl() {
+    var el = document.getElementById("chat-image-lightbox");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "chat-image-lightbox";
+    el.className = "chat-image-lightbox";
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML =
+      '<button type="button" class="chat-image-lightbox__backdrop" data-chat-lightbox-close aria-label="Закрыть"></button>' +
+      '<div class="chat-image-lightbox__panel" role="dialog" aria-modal="true" aria-label="Просмотр изображения">' +
+      '<button type="button" class="chat-image-lightbox__close" data-chat-lightbox-close aria-label="Закрыть">×</button>' +
+      '<div class="chat-image-lightbox__body"><img src="" alt="" class="chat-image-lightbox__img" data-chat-lightbox-img /></div>' +
+      "</div>";
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function openChatImageLightbox(url) {
+    var el = ensureChatImageLightboxEl();
+    var img = el.querySelector("[data-chat-lightbox-img]");
+    if (img) img.setAttribute("src", String(url || ""));
+    el.hidden = false;
+    el.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeChatImageLightbox() {
+    var el = document.getElementById("chat-image-lightbox");
+    if (!el) return;
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    var img = el.querySelector("[data-chat-lightbox-img]");
+    if (img) img.setAttribute("src", "");
+    document.body.style.overflow = "";
+  }
+
+  function bindChatImageLightbox() {
+    if (chatImageLightboxBound) return;
+    chatImageLightboxBound = true;
+    document.addEventListener("click", function (e) {
+      var btn = e.target && e.target.closest && e.target.closest("[data-chat-image-url]");
+      if (btn) {
+        e.preventDefault();
+        openChatImageLightbox(btn.getAttribute("data-chat-image-url"));
+        return;
+      }
+      if (e.target && e.target.closest && e.target.closest("[data-chat-lightbox-close]")) {
+        e.preventDefault();
+        closeChatImageLightbox();
+      }
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeChatImageLightbox();
+    });
+  }
+  bindChatImageLightbox();
 
   function chatBubbleHtml(m) {
     const out = !m.is_staff;
