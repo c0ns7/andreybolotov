@@ -2178,6 +2178,11 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (altBtn) altBtn.hidden = modesN.length === 0;
     };
 
+    const paintTransferredHint = (show: boolean) => {
+      const wrap = document.getElementById("reserve-payment-transferred-wrap");
+      if (wrap) wrap.classList.toggle("pay-sheet-transferred-wrap--hint-off", !show);
+    };
+
     const switchPayStep = (step: "requisites" | "confirm") => {
       paymentStepRef.current = step;
       const req = document.getElementById("reserve-payment-step-requisites");
@@ -2199,6 +2204,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (fill && isC) fill.style.width = "100%";
       paintFlowSteps("reserve-payment-steps", isC ? "confirm" : "requisites");
       syncPaySheetFlow(isC ? "receipt" : "pay");
+      paintTransferredHint(!isC);
     };
 
     const startPayTimer = (untilTs: number) => {
@@ -2362,7 +2368,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const elCancelConfirmBtn = document.getElementById("reserve-payment-cancel-confirm");
     elCancelConfirmBtn?.addEventListener("click", onCancelReservation);
 
-    const onPayDone = () => switchPayStep("confirm");
+    const onPayDone = () => {
+      paintTransferredHint(false);
+      switchPayStep("confirm");
+    };
     const elPayDone = document.getElementById("reserve-payment-done");
     elPayDone?.addEventListener("click", onPayDone);
 

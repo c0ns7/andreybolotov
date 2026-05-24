@@ -2041,6 +2041,11 @@
     }
   }
 
+  function paintReservePaymentTransferredHint(show) {
+    var wrap = document.getElementById("reserve-payment-transferred-wrap");
+    if (wrap) wrap.classList.toggle("pay-sheet-transferred-wrap--hint-off", !show);
+  }
+
   function switchReservePaymentStep(step) {
     var title = document.getElementById("reserve-payment-title");
     var backBtn = document.getElementById("reserve-payment-back");
@@ -2058,6 +2063,7 @@
         : "Шаг 2 из 3: переведите сумму снизу, затем нажмите «Я перевёл — загрузить чек».";
     }
     paintPaymentFlowSteps("reserve-payment-steps", isConfirm ? "confirm" : "requisites");
+    paintReservePaymentTransferredHint(!isConfirm);
   }
 
   function paintReserveDeadlineLine(untilTs) {
@@ -6214,6 +6220,7 @@
     }
   });
   document.getElementById("reserve-payment-done")?.addEventListener("click", function () {
+    paintReservePaymentTransferredHint(false);
     switchReservePaymentStep("confirm");
     emitUxEvent("raffle_payment_marked_done", { order_id: reserveFlowState.orderId });
   });

@@ -579,12 +579,25 @@ export default function AbRafflePurchaseShellMarkup() {
             0 ₽
           </p>
 
-          <button type="button" className="pay-sheet-btn-transferred" id="reserve-payment-done">
-            Я перевёл
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m9 18 6-6-6-6"></path>
-            </svg>
-          </button>
+          <div className="pay-sheet-transferred-wrap" id="reserve-payment-transferred-wrap">
+            <div
+              className="pay-sheet-transferred-hint"
+              id="reserve-payment-transferred-hint"
+              role="note"
+              aria-live="polite"
+            >
+              <span className="pay-sheet-transferred-hint__icon" aria-hidden="true">
+                👇
+              </span>
+              <span className="pay-sheet-transferred-hint__text">Перевели? Нажмите кнопку ниже</span>
+            </div>
+            <button type="button" className="pay-sheet-btn-transferred" id="reserve-payment-done">
+              Я перевёл
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </button>
+          </div>
           <p className="pay-sheet-warn-foot">
             ⚠️ Нажмите эту кнопку ПОСЛЕ перевода, иначе бронь сгорит
           </p>
