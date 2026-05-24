@@ -18,6 +18,7 @@ export type BlogPostRow = {
   comment_count: number;
   created_at: number;
   updated_at: number;
+  pinned_at: number | null;
 };
 
 export type BlogTagRow = {
@@ -235,6 +236,8 @@ export function postToDto(
     comment_count: Number(row.comment_count ?? 0),
     created_at: row.created_at,
     updated_at: row.updated_at,
+    pinned_at: row.pinned_at,
+    pinned: row.pinned_at != null && Number(row.pinned_at) > 0,
     tags: tags.map((t) => ({ id: t.id, slug: t.slug, label: t.label })),
     media: mediaDto,
     liked_by_me: likedByMe,
@@ -361,10 +364,11 @@ export async function listBlogPosts(opts: ListBlogPostsOpts = {}) {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const pinOrder = `(CASE WHEN p.pinned_at IS NOT NULL THEN 0 ELSE 1 END), p.pinned_at DESC NULLS LAST, `;
   const orderSql =
     sort === "popular"
-      ? `ORDER BY p.like_count DESC, p.view_count DESC, COALESCE(p.published_at, p.created_at) DESC`
-      : `ORDER BY COALESCE(p.published_at, p.created_at) DESC, p.id DESC`;
+      ? `ORDER BY ${pinOrder}p.like_count DESC, p.view_count DESC, COALESCE(p.published_at, p.created_at) DESC`
+      : `ORDER BY ${pinOrder}COALESCE(p.published_at, p.created_at) DESC, p.id DESC`;
 
   const rows = await pgAll<BlogPostRow>(
     `SELECT p.* FROM blog_posts p ${whereSql} ${orderSql} LIMIT ? OFFSET ?`,
@@ -520,6 +524,7 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   let publishedAt = existing.published_at;
   if (status === "published" && !publishedAt) publishedAt = now;
   if (status === "draft") publishedAt = null;
+  const pinnedAt = status === "draft" ? null : existing.pinned_at;
   const slug = input.slug
     ? await ensureUniqueBlogSlug(input.slug, postId)
     : existing.slug;
@@ -532,7 +537,7 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   }
   await pgExec(
     `UPDATE blog_posts SET slug = ?, title = ?, excerpt = ?, body_html = ?, cover_url = ?, cover_mime = ?,
-     keywords = ?, status = ?, published_at = ?, updated_at = ? WHERE id = ?`,
+     keywords = ?, status = ?, published_at = ?, pinned_at = ?, updated_at = ? WHERE id = ?`,
     [
       slug,
       title,
@@ -543,6 +548,7 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
       String(input.keywords ?? existing.keywords).trim().slice(0, 500),
       status,
       publishedAt,
+      pinnedAt,
       now,
       postId,
     ],
@@ -554,6 +560,24 @@ export async function updateBlogPost(postId: number, input: SaveBlogPostInput) {
   }
   if (status === "published") broadcastBlogPostsUpdated();
   return { ok: true as const, post: await getBlogPostById(postId) };
+}
+
+export async function setBlogPostPinned(
+  postId: number,
+  pinned: boolean,
+): Promise<{ ok: true; post: NonNullable<Awaited<ReturnType<typeof getBlogPostById>>> } | { ok: false; error: string }> {
+  const existing = await pgGet<BlogPostRow>(`SELECT * FROM blog_posts WHERE id = ?`, [postId]);
+  if (!existing) return { ok: false, error: "Пост не найден" };
+  if (existing.status !== "published") {
+    return { ok: false, error: "Закрепить можно только опубликованный пост" };
+  }
+  const now = Date.now();
+  const pinnedAt = pinned ? now : null;
+  await pgExec(`UPDATE blog_posts SET pinned_at = ?, updated_at = ? WHERE id = ?`, [pinnedAt, now, postId]);
+  broadcastBlogPostsUpdated();
+  const post = await getBlogPostById(postId);
+  if (!post) return { ok: false, error: "Пост не найден" };
+  return { ok: true, post };
 }
 
 export async function deleteBlogPost(postId: number) {

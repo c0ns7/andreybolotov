@@ -25,6 +25,8 @@ export type BlogPost = {
   comment_count: number;
   created_at: number;
   updated_at: number;
+  pinned_at: number | null;
+  pinned: boolean;
   tags: BlogTag[];
   media: BlogMediaItem[];
   liked_by_me?: boolean;

@@ -7,6 +7,7 @@ import {
   Heart,
   MessageCircle,
   PenLine,
+  Pin,
   Plus,
   Search,
   Trash2,
@@ -506,6 +507,22 @@ function BlogPageClientInner() {
     }
   };
 
+  const togglePin = async (post: BlogPost, pinned?: boolean) => {
+    const next = pinned ?? !post.pinned;
+    try {
+      const data = (await abApiJson(`/api/admin/blog/posts/${post.id}/pin`, {
+        method: "PATCH",
+        headers: { ...adminHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: next }),
+      })) as { post?: BlogPost };
+      toast(next ? "Пост закреплён в ленте" : "Закрепление снято", "success");
+      if (readPost?.id === post.id && data.post) setReadPost(data.post);
+      void loadPosts();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Ошибка", "error");
+    }
+  };
+
   if (!authVerified || !siteFlagsLoaded) {
     return wrapPtr(<p className="blog-loading">Загрузка…</p>);
   }
@@ -593,6 +610,16 @@ function BlogPageClientInner() {
 
           {isAdmin ? (
           <div className="blog-article__admin">
+            {readPost.status === "published" ? (
+              <button
+                type="button"
+                className={"blog-article__admin-btn" + (readPost.pinned ? " is-pinned" : "")}
+                onClick={() => void togglePin(readPost)}
+              >
+                <Pin size={16} />
+                {readPost.pinned ? "Открепить" : "Закрепить"}
+              </button>
+            ) : null}
             <button type="button" className="blog-article__admin-btn" onClick={() => openEditor(readPost)}>
               <PenLine size={16} />
               Редактировать
@@ -741,7 +768,7 @@ function BlogPageClientInner() {
         {posts.map((p) => (
           <li key={p.id}>
             <article
-              className="blog-card blog-card--clickable"
+              className={"blog-card blog-card--clickable" + (p.pinned ? " blog-card--pinned" : "")}
               role="button"
               tabIndex={0}
               onClick={() => handleCardOpen(p)}
@@ -767,6 +794,12 @@ function BlogPageClientInner() {
                 <span className={"blog-card__status blog-card__status--" + p.status}>
                   {p.status === "published" ? "Опубликован" : "Черновик"}
                 </span>
+                ) : null}
+                {p.pinned ? (
+                  <span className={"blog-card__pinned" + (tab === "manage" ? " blog-card__pinned--manage" : "")}>
+                    <Pin size={12} aria-hidden="true" />
+                    Закреплено
+                  </span>
                 ) : null}
               </div>
               <div className="blog-card__body">
@@ -800,6 +833,16 @@ function BlogPageClientInner() {
               </div>
               {tab === "manage" ? (
                 <div className="blog-card__actions" onClick={(e) => e.stopPropagation()}>
+                  {p.status === "published" ? (
+                    <button
+                      type="button"
+                      className={"btn btn--ghost btn--sm" + (p.pinned ? " blog-card__pin--active" : "")}
+                      onClick={() => void togglePin(p)}
+                    >
+                      <Pin size={14} aria-hidden="true" />
+                      {p.pinned ? "Открепить" : "Закрепить"}
+                    </button>
+                  ) : null}
                   <button type="button" className="btn btn--ghost btn--sm" onClick={() => openEditor(p)}>
                     Изменить
                   </button>

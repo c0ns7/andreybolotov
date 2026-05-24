@@ -3002,20 +3002,6 @@ html.theme-dark .home-faq-item__a {
   opacity: 0.96;
 }
 
-.raffle-card[data-status="paused"] .raffle-card__media img,
-.raffle-card[data-status="paused"] .raffle-card__media video {
-  filter: none;
-  transform: none;
-  opacity: 0.98;
-}
-
-.raffle-card[data-status="closed"] .raffle-card__media img,
-.raffle-card[data-status="closed"] .raffle-card__media video {
-  filter: none;
-  transform: none;
-  opacity: 0.98;
-}
-
 .raffle-card__media-img--video {
   position: absolute;
   inset: 0;
@@ -3259,17 +3245,6 @@ html.theme-dark .home-faq-item__a {
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
   margin: 10px;
-}
-
-.raffle-card[data-status="paused"] .raffle-card__grad,
-.raffle-card[data-status="closed"] .raffle-card__grad {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.52) 0%, rgba(0, 0, 0, 0.12) 42%, transparent 78%);
-}
-
-.raffle-card[data-status="paused"] .raffle-card__media-img--static-only,
-.raffle-card[data-status="closed"] .raffle-card__media-img--static-only {
-  opacity: 1;
-  filter: none;
 }
 
 .raffle-card__badge-wrap--paused {

@@ -229,9 +229,11 @@ CREATE TABLE IF NOT EXISTS blog_posts (
   like_count BIGINT NOT NULL DEFAULT 0,
   comment_count BIGINT NOT NULL DEFAULT 0,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  pinned_at BIGINT
 );
 CREATE INDEX IF NOT EXISTS idx_blog_posts_status_pub ON blog_posts(status, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_pinned ON blog_posts(status, pinned_at DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_blog_posts_popular ON blog_posts(like_count DESC, view_count DESC);
 
 CREATE TABLE IF NOT EXISTS blog_tags (

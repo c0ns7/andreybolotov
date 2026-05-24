@@ -81,6 +81,7 @@ import {
   getBlogPostById,
   listAllBlogTags,
   listBlogPosts,
+  setBlogPostPinned,
   updateBlogPost,
 } from "./blog.js";
 import {
@@ -2121,6 +2122,22 @@ adminSubApp.patch("/blog/posts/:id", async (c) => {
     tag_labels: Array.isArray(body.tag_labels) ? body.tag_labels.map(String) : [],
     slug: body.slug != null ? String(body.slug) : undefined,
   });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ post: res.post });
+});
+
+adminSubApp.patch("/blog/posts/:id/pin", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await setBlogPostPinned(id, body.pinned !== false);
   if (!res.ok) return c.json({ error: res.error }, 400);
   return c.json({ post: res.post });
 });
