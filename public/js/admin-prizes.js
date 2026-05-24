@@ -22,6 +22,8 @@
   let rafflesCache = [];
   let ticketPreviewTimer = null;
   let editModalPrizeId = null;
+  let markDoneModalPrizeId = null;
+  let markDonePreviewUrl = null;
 
   function loadSession() {
     try {
@@ -274,7 +276,7 @@
         void setProcessing(p.id);
       });
       document.getElementById("admin-prize-mark-done")?.addEventListener("click", function () {
-        void markDone(p.id);
+        openMarkDoneModal(p);
       });
       document.getElementById("admin-prize-delete")?.addEventListener("click", function () {
         void removePrize(p.id);
@@ -294,14 +296,120 @@
     await openDetail(id, true);
   }
 
-  async function markDone(id) {
-    await apiJson("/api/admin/prizes/" + id, {
-      method: "PATCH",
+  function clearMarkDonePreview() {
+    if (markDonePreviewUrl) {
+      try {
+        URL.revokeObjectURL(markDonePreviewUrl);
+      } catch (_) {}
+      markDonePreviewUrl = null;
+    }
+    const preview = document.getElementById("admin-prize-mark-done-preview");
+    if (preview) {
+      preview.innerHTML = "";
+      preview.hidden = true;
+    }
+  }
+
+  function renderMarkDoneFilePreview(file) {
+    const preview = document.getElementById("admin-prize-mark-done-preview");
+    const nameEl = document.getElementById("admin-prize-mark-done-file-name");
+    clearMarkDonePreview();
+    if (!file || !preview) {
+      if (nameEl) nameEl.hidden = true;
+      return;
+    }
+    if (nameEl) {
+      nameEl.textContent = file.name || "Скриншот";
+      nameEl.hidden = false;
+    }
+    if (String(file.type || "").indexOf("image/") === 0) {
+      markDonePreviewUrl = URL.createObjectURL(file);
+      preview.innerHTML =
+        '<img src="' + markDonePreviewUrl + '" alt="" class="admin-prize-mark-done-modal__preview-img" />';
+      preview.hidden = false;
+    } else if (nameEl) {
+      nameEl.hidden = false;
+    }
+  }
+
+  function openMarkDoneModal(p) {
+    const modal = document.getElementById("modal-prize-mark-done");
+    if (!modal || !p) return;
+    markDoneModalPrizeId = p.id;
+    const sub = document.getElementById("modal-prize-mark-done-sub");
+    if (sub) {
+      sub.textContent =
+        (p.title ? "«" + String(p.title) + "»" : "Приз") +
+        " · " +
+        (p.user_name || "—") +
+        " · " +
+        formatRuPhone(p.user_phone || "");
+    }
+    const fileInput = document.getElementById("admin-prize-mark-done-file");
+    if (fileInput && "value" in fileInput) fileInput.value = "";
+    const nameEl = document.getElementById("admin-prize-mark-done-file-name");
+    if (nameEl) {
+      nameEl.textContent = "";
+      nameEl.hidden = true;
+    }
+    clearMarkDonePreview();
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeMarkDoneModal() {
+    const modal = document.getElementById("modal-prize-mark-done");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    markDoneModalPrizeId = null;
+    const fileInput = document.getElementById("admin-prize-mark-done-file");
+    if (fileInput && "value" in fileInput) fileInput.value = "";
+    clearMarkDonePreview();
+  }
+
+  async function uploadMarkDoneScreenshot(file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/admin/chat/upload", {
+      method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ mark_done: true }),
+      body: fd,
     });
-    await loadPrizes();
-    await openDetail(id, true);
+    const data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) throw new Error(data.error || data.message || "Не удалось загрузить файл");
+    return { url: data.url, name: data.name, mime: data.mime };
+  }
+
+  async function confirmMarkDone() {
+    const id = markDoneModalPrizeId;
+    if (!id) return;
+    const fileInput = document.getElementById("admin-prize-mark-done-file");
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    const btn = document.getElementById("admin-prize-mark-done-confirm");
+    if (btn) btn.disabled = true;
+    try {
+      let doneAttachment = null;
+      if (file && file.size) {
+        doneAttachment = await uploadMarkDoneScreenshot(file);
+      }
+      const payload = { mark_done: true };
+      if (doneAttachment) payload.done_attachment = doneAttachment;
+      await apiJson("/api/admin/prizes/" + id, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      closeMarkDoneModal();
+      await loadPrizes();
+      await openDetail(id, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function removePrize(id) {
@@ -798,6 +906,20 @@
       ticketPreviewTimer = setTimeout(function () {
         void previewTicketHolders();
       }, 400);
+    });
+
+    document.getElementById("modal-prize-mark-done-close")?.addEventListener("click", closeMarkDoneModal);
+    document.getElementById("modal-prize-mark-done-backdrop")?.addEventListener("click", closeMarkDoneModal);
+    document.getElementById("modal-prize-mark-done-cancel")?.addEventListener("click", closeMarkDoneModal);
+    document.getElementById("admin-prize-mark-done-confirm")?.addEventListener("click", function () {
+      void confirmMarkDone().catch(function (err) {
+        alert(err.message || "Не удалось отметить приз");
+      });
+    });
+    document.getElementById("admin-prize-mark-done-file")?.addEventListener("change", function (e) {
+      const input = e.target;
+      const file = input && input.files && input.files[0] ? input.files[0] : null;
+      renderMarkDoneFilePreview(file);
     });
 
     document.getElementById("modal-prize-edit-close")?.addEventListener("click", closePrizeEditModal);

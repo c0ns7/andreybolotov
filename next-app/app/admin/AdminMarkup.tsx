@@ -551,6 +551,46 @@ export default function AdminMarkup() {
         </div>
       </div>
 
+      <div id="modal-prize-mark-done" className="modal-overlay modal-overlay--prize-form modal-overlay--prize-mark-done" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-prize-mark-done-title">
+        <div className="modal-overlay__backdrop" id="modal-prize-mark-done-backdrop"></div>
+        <div className="modal admin-prize-mark-done-modal">
+          <header className="modal__top admin-prize-mark-done-modal__top">
+            <span className="admin-prize-mark-done-modal__top-spacer" aria-hidden="true" />
+            <div className="admin-prize-mark-done-modal__title-wrap">
+              <h2 id="modal-prize-mark-done-title" className="modal__top-title admin-prize-mark-done-modal__title">Отметить выполненным?</h2>
+              <p id="modal-prize-mark-done-sub" className="admin-prize-mark-done-modal__subtitle"></p>
+            </div>
+            <button type="button" className="modal__close admin-prize-mark-done-modal__close" id="modal-prize-mark-done-close" aria-label="Закрыть">×</button>
+          </header>
+          <div className="admin-prize-mark-done-modal__body">
+            <p className="admin-prize-mark-done-modal__lead">
+              Пользователю уйдёт сообщение в чат поддержки с просьбой оставить отзыв в приватном чате.
+            </p>
+            <label className="admin-prize-mark-done-modal__upload">
+              <span className="admin-prize-mark-done-modal__upload-label">Загрузить скриншот?</span>
+              <span className="admin-prize-mark-done-modal__upload-hint">Необязательно — например, скрин перевода или подтверждения отправки.</span>
+              <input
+                id="admin-prize-mark-done-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="admin-prize-mark-done-modal__file-input"
+              />
+              <span className="btn btn--secondary admin-prize-mark-done-modal__pick">Выбрать файл</span>
+            </label>
+            <p id="admin-prize-mark-done-file-name" className="admin-prize-mark-done-modal__file-name" hidden></p>
+            <div id="admin-prize-mark-done-preview" className="admin-prize-mark-done-modal__preview" hidden></div>
+          </div>
+          <footer className="admin-prize-mark-done-modal__foot">
+            <button type="button" className="btn btn--secondary" id="modal-prize-mark-done-cancel">
+              Отмена
+            </button>
+            <button type="button" className="btn btn--primary" id="admin-prize-mark-done-confirm">
+              Выполнить
+            </button>
+          </footer>
+        </div>
+      </div>
+
       <div id="modal-prize-chat" className="modal-overlay modal-overlay--prize-chat" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-prize-chat-title">
         <div className="modal-overlay__backdrop" id="modal-prize-chat-backdrop"></div>
         <div className="modal admin-prize-chat-modal">

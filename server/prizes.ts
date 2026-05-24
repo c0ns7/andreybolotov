@@ -1,3 +1,4 @@
+import { parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import { deleteSupportStaffMessageForUser, getRaffleById, getUserById, getUserByPhone, insertSupportMessage, messageToDto } from "./db.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 
@@ -243,6 +244,16 @@ export function buildPrizeStageChatBody(title: string, stageLabel: string): stri
   return (
     `📦 Обновление по призу «${safeTitle}».\n\n` +
     `Этап: ${safeStage}.\n\n` +
+    "Если остались вопросы — напишите в этот чат."
+  );
+}
+
+/** Сообщение в чат при отметке «Выполнен» (с просьбой об отзыве в приватном чате). */
+export function buildPrizeDoneChatBody(title: string): string {
+  const safeTitle = String(title || "Приз").trim() || "Приз";
+  return (
+    `✅ Приз «${safeTitle}» выполнен!\n\n` +
+    "Пожалуйста, оставьте отзыв в нашем приватном чате.\n\n" +
     "Если остались вопросы — напишите в этот чат."
   );
 }
@@ -549,6 +560,7 @@ export async function updatePrizeAwardAdmin(
     description?: string;
     raffle_id?: number | null;
     ticket_number?: number | null;
+    done_attachment?: unknown;
   },
 ): Promise<
   | { ok: true; prize: PrizeAwardRow; stage_message_id?: number; status_changed: boolean }
@@ -621,6 +633,12 @@ export async function updatePrizeAwardAdmin(
     }
   }
 
+  let doneAttachment: { url: string; name: string; mime: string } | null = null;
+  if (markDone && patch.done_attachment !== undefined && patch.done_attachment !== null) {
+    doneAttachment = parseChatAttachmentFromMessage(patch.done_attachment);
+    if (!doneAttachment) return { ok: false, error: "Некорректное вложение" };
+  }
+
   const statusChanged = nextStatus !== row.status;
   const admin_marked_done_at = markDone || nextStatus === "done" ? (row.admin_marked_done_at ?? ts) : row.admin_marked_done_at;
 
@@ -653,9 +671,12 @@ export async function updatePrizeAwardAdmin(
 
   let stage_message_id: number | undefined;
   const shouldNotify = patch.notify_chat !== false && statusChanged && nextStatus !== "cancelled";
-  if (shouldNotify && (nextStatus === "processing" || nextStatus === "done")) {
+  if (shouldNotify && nextStatus === "processing") {
     const body = buildPrizeStageChatBody(updated.title, getPrizeStageLabel(nextStatus));
     stage_message_id = await insertSupportMessage(updated.user_id, body, true, null);
+  } else if (shouldNotify && nextStatus === "done") {
+    const body = buildPrizeDoneChatBody(updated.title);
+    stage_message_id = await insertSupportMessage(updated.user_id, body, true, doneAttachment);
   }
 
   return { ok: true, prize: updated, stage_message_id, status_changed: statusChanged };

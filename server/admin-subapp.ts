@@ -2410,6 +2410,9 @@ adminSubApp.patch("/prizes/:id", async (c) => {
     ticket_number: Object.prototype.hasOwnProperty.call(body, "ticket_number")
       ? body.ticket_number
       : undefined,
+    done_attachment: Object.prototype.hasOwnProperty.call(body, "done_attachment")
+      ? body.done_attachment
+      : undefined,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (res.stage_message_id) {
@@ -2417,8 +2420,16 @@ adminSubApp.patch("/prizes/:id", async (c) => {
     await markThreadReadByStaff(uid);
     broadcastThreadReadByStaff(uid);
     const row = await getSupportMessageById(res.stage_message_id);
-    if (row) broadcastChatMessage(uid, messageToDto(row));
-    notifyUserEmailStaffReply(uid, { body: "", attachmentName: null, attachmentMime: null });
+    if (row) {
+      broadcastChatMessage(uid, messageToDto(row));
+      notifyUserEmailStaffReply(uid, {
+        body: row.body,
+        attachmentName: row.attachment_name,
+        attachmentMime: row.attachment_mime,
+      });
+    } else {
+      notifyUserEmailStaffReply(uid, { body: "", attachmentName: null, attachmentMime: null });
+    }
   }
   const user = await getUserById(res.prize.user_id);
   return c.json({
