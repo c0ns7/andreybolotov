@@ -14,6 +14,7 @@ import PullToRefresh from "./PullToRefresh";
 import HomeSocialLinks from "./HomeSocialLinks";
 import HomeBeginnerOnboarding from "./HomeBeginnerOnboarding";
 import HomeMusicToggle from "./HomeMusicToggle";
+import HomeHeaderOnline from "./HomeHeaderOnline";
 import AnimatedStatNumber from "./AnimatedStatNumber";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
@@ -377,7 +378,10 @@ export default function HomeAppClient() {
                 </div>
                 <h1 className="home-brand-title">Быть добру!</h1>
               </div>
-              <HomeMusicToggle />
+              <div className="home-brand-row__actions">
+                <HomeHeaderOnline />
+                <HomeMusicToggle />
+              </div>
             </div>
           </header>
           <h2 className="home-section-title">Активные акции</h2>

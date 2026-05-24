@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
-import { AB_USER_WS_EVENT } from "../lib/ab-user-ws-events";
+import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 
 const LS_OFF_KEY = "ab_bg_music_off";
 
