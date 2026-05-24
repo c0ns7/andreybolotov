@@ -3240,7 +3240,7 @@ html.theme-dark .home-faq-item__a {
   align-items: center;
   justify-content: center;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.78);
+  /* background: rgba(0, 0, 0, 0.78); */
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
@@ -3274,8 +3274,8 @@ html.theme-dark .home-faq-item__a {
   max-width: calc(100% - 24px);
   margin: 0;
   border-radius: 14px;
-  background: rgba(15, 23, 42, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  /* background: rgba(15, 23, 42, 0.78); */
+  /* border: 1px solid rgba(255, 255, 255, 0.16); */
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   justify-content: center;
