@@ -594,15 +594,49 @@
     }
   }
 
+  var adminMobileChatScrollLocked = false;
+  var adminMobileChatScrollY = 0;
+
+  function lockAdminPageScrollForMobileChat() {
+    if (adminMobileChatScrollLocked) return;
+    adminMobileChatScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.position = "fixed";
+    document.body.style.top = "-" + adminMobileChatScrollY + "px";
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    adminMobileChatScrollLocked = true;
+    window.scrollTo(0, 0);
+  }
+
+  function unlockAdminPageScrollForMobileChat() {
+    if (!adminMobileChatScrollLocked) return;
+    var restoreY = adminMobileChatScrollY || 0;
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    adminMobileChatScrollLocked = false;
+    adminMobileChatScrollY = 0;
+    window.scrollTo(0, restoreY);
+  }
+
   function syncAdminMobileChatShell() {
     try {
       var threadEl = document.getElementById("admin-thread");
       var supportVisible = getAdminTab() === "support" && app && !app.hidden;
       var threadOpen = !!(threadEl && !threadEl.hidden);
-      document.documentElement.classList.toggle(
-        "admin-mobile-chat-active",
-        supportVisible && threadOpen && isAdminMobileChatLayout(),
-      );
+      var active = supportVisible && threadOpen && isAdminMobileChatLayout();
+      document.documentElement.classList.toggle("admin-mobile-chat-active", active);
+      if (active) {
+        lockAdminPageScrollForMobileChat();
+        window.scrollTo(0, 0);
+        var page = document.querySelector(".admin-page");
+        if (page && "scrollTop" in page) page.scrollTop = 0;
+      } else {
+        unlockAdminPageScrollForMobileChat();
+      }
     } catch (_) {}
   }
 

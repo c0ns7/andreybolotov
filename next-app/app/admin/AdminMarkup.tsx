@@ -512,11 +512,12 @@ export default function AdminMarkup() {
         <div className="modal-overlay__backdrop" id="modal-prize-chat-backdrop"></div>
         <div className="modal admin-prize-chat-modal">
           <header className="modal__top admin-prize-chat-modal__top">
+            <span className="admin-prize-chat-modal__top-spacer" aria-hidden="true" />
             <div className="admin-prize-chat-modal__title-wrap">
-              <h2 id="modal-prize-chat-title" className="modal__top-title">Чат с победителем</h2>
+              <h2 id="modal-prize-chat-title" className="modal__top-title admin-prize-chat-modal__title">Чат с победителем</h2>
               <p id="modal-prize-chat-sub" className="admin-prize-chat-modal__subtitle"></p>
             </div>
-            <button type="button" className="modal__close" id="modal-prize-chat-close" aria-label="Закрыть">×</button>
+            <button type="button" className="modal__close admin-prize-chat-modal__close" id="modal-prize-chat-close" aria-label="Закрыть">×</button>
           </header>
           <div id="modal-prize-chat-messages" className="admin-prize-chat-modal__messages"></div>
           <footer className="admin-prize-chat-modal__foot">

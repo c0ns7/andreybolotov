@@ -15,10 +15,10 @@ export default function AdminPage() {
   return (
     <>
       <AdminMarkup />
-      <Script src="/static-proxy/js/admin.js?v=20260425" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin.js?v=20260526" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-raffles.js?v=20260524" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-payments.js?v=20260518" strategy="afterInteractive" />
-      <Script src="/static-proxy/js/admin-prizes.js?v=20260524" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-prizes.js?v=20260526" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-users.js?v=20260518" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-settings.js?v=20260425" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-music.js?v=20260523" strategy="afterInteractive" />

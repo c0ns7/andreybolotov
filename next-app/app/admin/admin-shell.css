@@ -455,10 +455,18 @@
       box-shadow: none;
     }
 
-    html.admin-mobile-chat-active .admin-thread {
-      flex: 1;
-      min-height: 0;
+    html.admin-mobile-chat-active .admin-thread:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      z-index: 160;
+      display: flex !important;
+      flex-direction: column;
+      width: 100%;
+      max-width: 100%;
       height: 100dvh;
+      max-height: 100dvh;
+      min-height: 0;
+      background: #fff;
     }
 
     html.admin-mobile-chat-active .admin-thread__body {

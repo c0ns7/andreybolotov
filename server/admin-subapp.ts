@@ -2404,6 +2404,12 @@ adminSubApp.patch("/prizes/:id", async (c) => {
     mark_done: Boolean(body.mark_done),
     status: body.status != null ? String(body.status) as "processing" | "cancelled" : undefined,
     notify_chat: body.notify_chat !== false,
+    title: body.title != null ? String(body.title) : undefined,
+    description: body.description != null ? String(body.description) : undefined,
+    raffle_id: Object.prototype.hasOwnProperty.call(body, "raffle_id") ? body.raffle_id : undefined,
+    ticket_number: Object.prototype.hasOwnProperty.call(body, "ticket_number")
+      ? body.ticket_number
+      : undefined,
   });
   if (!res.ok) return c.json({ error: res.error }, 400);
   if (res.stage_message_id) {

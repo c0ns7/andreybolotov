@@ -521,6 +521,22 @@ export async function submitPrizeClaim(
   return { ok: true, prize: updated };
 }
 
+function parseOptionalRaffleId(raw: unknown): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return null;
+  return n;
+}
+
+function parseOptionalTicketNumber(raw: unknown): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return null;
+  return n;
+}
+
 export async function updatePrizeAwardAdmin(
   id: number,
   patch: {
@@ -528,6 +544,10 @@ export async function updatePrizeAwardAdmin(
     mark_done?: boolean;
     status?: PrizeStatus;
     notify_chat?: boolean;
+    title?: string;
+    description?: string;
+    raffle_id?: number | null;
+    ticket_number?: number | null;
   },
 ): Promise<
   | { ok: true; prize: PrizeAwardRow; stage_message_id?: number; status_changed: boolean }
@@ -550,18 +570,76 @@ export async function updatePrizeAwardAdmin(
     }
   }
 
+  let nextTitle = row.title;
+  if (patch.title !== undefined) {
+    const title = String(patch.title || "").trim();
+    if (!title) return { ok: false, error: "Укажите название приза" };
+    nextTitle = title;
+  }
+
+  let nextDescription = row.description;
+  if (patch.description !== undefined) {
+    nextDescription = String(patch.description || "").trim();
+  }
+
+  let nextRaffleId = row.raffle_id;
+  const raffleIdPatch = parseOptionalRaffleId(patch.raffle_id);
+  if (raffleIdPatch !== undefined) {
+    if (raffleIdPatch != null) {
+      const raffle = await getRaffleById(raffleIdPatch);
+      if (!raffle) return { ok: false, error: "Акция не найдена" };
+    }
+    nextRaffleId = raffleIdPatch;
+  }
+
+  let nextTicketNumber = row.ticket_number;
+  const ticketPatch = parseOptionalTicketNumber(patch.ticket_number);
+  if (ticketPatch !== undefined) {
+    nextTicketNumber = ticketPatch;
+  }
+
+  if (raffleIdPatch !== undefined && raffleIdPatch === null) {
+    nextTicketNumber = null;
+  }
+
+  if (nextTicketNumber != null && nextRaffleId == null) {
+    return { ok: false, error: "Сначала выберите акцию для номерка" };
+  }
+
+  if (nextRaffleId != null && nextTicketNumber != null) {
+    const resolved = await resolveRaffleTicketHolders(nextRaffleId, [nextTicketNumber]);
+    const holder = resolved.holders[0];
+    if (!holder) {
+      return { ok: false, error: `Номерок №${nextTicketNumber} не найден в этой акции` };
+    }
+    if (holder.user_id !== row.user_id) {
+      return {
+        ok: false,
+        error: `Номерок №${nextTicketNumber} принадлежит другому участнику (${holder.user_name})`,
+      };
+    }
+  }
+
   const statusChanged = nextStatus !== row.status;
   const admin_marked_done_at = markDone || nextStatus === "done" ? (row.admin_marked_done_at ?? ts) : row.admin_marked_done_at;
 
   await pgExec(
     `UPDATE prize_awards SET
       status = ?,
+      title = ?,
+      description = ?,
+      raffle_id = ?,
+      ticket_number = ?,
       admin_notes = ?,
       admin_marked_done_at = ?,
       updated_at = ?
      WHERE id = ?`,
     [
       nextStatus,
+      nextTitle,
+      nextDescription,
+      nextRaffleId,
+      nextTicketNumber,
       patch.admin_notes !== undefined ? String(patch.admin_notes) : row.admin_notes,
       admin_marked_done_at,
       ts,
