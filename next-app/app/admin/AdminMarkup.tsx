@@ -114,6 +114,16 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Настройки</span>
             </a>
+            <a href="/admin?tab=music" className="admin-nav__link" id="nav-link-music">
+              <span className="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+              </span>
+              <span className="admin-nav__text">Музыка</span>
+            </a>
             <a href="/admin?tab=stats" className="admin-nav__link" id="nav-link-stats">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -529,6 +539,64 @@ export default function AdminMarkup() {
           </label>
         </div>
         <div id="admin-users-list" className="admin-users-list-wrap"></div>
+      </div>
+
+      <div id="admin-music-app" className="admin-music-app" hidden>
+        <header className="admin-settings-hero admin-music-hero">
+          <div className="admin-settings-hero__icon admin-music-hero__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+          </div>
+          <div className="admin-settings-hero__text">
+            <h2 className="admin-settings-hero__title">Фоновая музыка</h2>
+            <p className="admin-settings-hero__lead">
+              Загружайте треки, настраивайте громкость и включайте музыку для пользователей. Если музыка выключена — иконки на сайте не будет.
+            </p>
+          </div>
+        </header>
+
+        <div className="admin-settings-panel admin-music-panel">
+          <div className="admin-settings-card admin-music-card">
+            <h2 className="admin-settings-card__title">Общие настройки</h2>
+            <label className="admin-settings-toggle">
+              <input type="checkbox" id="admin-music-enabled" className="admin-settings-toggle__input" role="switch" />
+              <span className="admin-settings-toggle__track" aria-hidden="true"></span>
+              <span className="admin-settings-toggle__label">Музыка включена на сайте</span>
+            </label>
+            <div className="admin-music-volume">
+              <label htmlFor="admin-music-volume" className="admin-music-volume__label">
+                Громкость по умолчанию: <strong id="admin-music-volume-val">35%</strong>
+              </label>
+              <input type="range" id="admin-music-volume" className="admin-music-volume__range" min={0} max={100} step={1} defaultValue={35} />
+            </div>
+            <p className="admin-settings-card__status admin-music-status" id="admin-music-status" role="status"></p>
+          </div>
+
+          <div className="admin-settings-card admin-music-card">
+            <h2 className="admin-settings-card__title">Загрузка треков</h2>
+            <p className="admin-settings-card__text">MP3, M4A, AAC, OGG, WAV или WebM — до 20 МБ. Можно перетащить файлы в область ниже.</p>
+            <div id="admin-music-drop" className="admin-music-drop">
+              <input id="admin-music-file" type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.webm" multiple hidden />
+              <button type="button" id="admin-music-upload-btn" className="admin-music-drop__btn">
+                Выбрать аудиофайлы
+              </button>
+              <p className="admin-music-drop__hint">или перетащите сюда</p>
+              <p className="admin-music-drop__progress" id="admin-music-upload-progress" aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div className="admin-settings-card admin-music-card">
+            <h2 className="admin-settings-card__title">Плейлист</h2>
+            <p className="admin-settings-card__text">Включённые треки играют по очереди. Выключенные остаются в списке, но не попадают пользователям.</p>
+            <p id="admin-music-empty" className="admin-music-empty" hidden>
+              Пока нет треков — загрузите первый файл выше.
+            </p>
+            <div id="admin-music-tracks" className="admin-music-tracks"></div>
+          </div>
+        </div>
       </div>
 
       <div id="admin-stats-app" className="admin-stats-app" hidden>

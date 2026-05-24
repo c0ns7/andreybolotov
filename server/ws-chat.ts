@@ -311,6 +311,32 @@ export function broadcastBlogEnabledUpdated(enabled: boolean) {
   broadcastJsonToPublicRaffleFeed({ type: "site_blog_enabled_updated", blog_enabled: Boolean(enabled) });
 }
 
+/** Фоновая музыка: настройки и плейлист изменились. */
+export function broadcastSiteMusicUpdated(payload: {
+  music_enabled: boolean;
+  music_default_volume: number;
+  tracks: Array<{ id: number; title: string; file_url: string; mime: string }>;
+}) {
+  const body = JSON.stringify({ type: "site_music_updated", ...payload });
+  for (const ws of adminSockets) {
+    try {
+      if (ws.readyState === OPEN) ws.send(body);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const set of userSockets.values()) {
+    for (const ws of set) {
+      try {
+        if (ws.readyState === OPEN) ws.send(body);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  broadcastJsonToPublicRaffleFeed({ type: "site_music_updated", ...payload });
+}
+
 /** Уведомление всем клиентам: изменилось количество онлайн в акции */
 export function broadcastRaffleViewersUpdated(raffleId: number) {
   const rid = Math.floor(Number(raffleId));

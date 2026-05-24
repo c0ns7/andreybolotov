@@ -15,6 +15,8 @@ import {
   getRaffleById,
   getSiteSettings,
   setBlogEnabled,
+  setMusicEnabled,
+  setMusicDefaultVolume,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -102,6 +104,7 @@ import {
   broadcastChatMessage,
   broadcastBlogEnabledUpdated,
   broadcastMaintenanceStatusUpdated,
+  broadcastSiteMusicUpdated,
   broadcastRaffleLaunchNotified,
   broadcastRafflesFeedUpdated,
   broadcastRaffleGridUpdated,
@@ -112,6 +115,13 @@ import {
 import { getStaffTypingForUser, getUserTypingForThread } from "./typing-state.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
+import {
+  deleteSiteMusicTrack,
+  getPublicSiteMusicPayload,
+  insertSiteMusicTrack,
+  listSiteMusicTracks,
+  updateSiteMusicTrack,
+} from "./site-music.js";
 import {
   maybeSendRaffleLaunchEmails,
   notifyUserEmailStaffReply,
@@ -282,6 +292,7 @@ function extForRaffleUpload(mime: string, fileName: string): string | null {
 }
 const chatUploadsDirs = ensureUploadDirs("chat");
 const blogUploadsDirs = ensureUploadDirs("blog");
+const musicUploadsDirs = ensureUploadDirs("music");
 const prizeUploadsDirs = ensureUploadDirs("prizes");
 
 function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
@@ -803,6 +814,163 @@ adminSubApp.get("/settings", async (c) => {
   if (auth instanceof Response) return auth;
   c.header("Cache-Control", "no-store");
   return c.json(await getSiteSettings());
+});
+
+async function notifySiteMusicChanged() {
+  const payload = await getPublicSiteMusicPayload();
+  broadcastSiteMusicUpdated(payload);
+}
+
+adminSubApp.get("/music", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  const settings = await getSiteSettings();
+  const tracks = await listSiteMusicTracks();
+  return c.json({
+    music_enabled: settings.music_enabled,
+    music_default_volume: settings.music_default_volume,
+    tracks,
+  });
+});
+
+adminSubApp.patch("/music/settings", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: { music_enabled?: unknown; music_default_volume?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  if (body.music_enabled !== undefined) {
+    await setMusicEnabled(Boolean(body.music_enabled));
+  }
+  if (body.music_default_volume !== undefined) {
+    await setMusicDefaultVolume(Number(body.music_default_volume));
+  }
+  await notifySiteMusicChanged();
+  c.header("Cache-Control", "no-store");
+  const settings = await getSiteSettings();
+  return c.json({
+    music_enabled: settings.music_enabled,
+    music_default_volume: settings.music_default_volume,
+  });
+});
+
+adminSubApp.patch("/music/tracks/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Math.floor(Number(c.req.param("id")));
+  if (!Number.isFinite(id) || id < 1) return c.json({ error: "Некорректный id" }, 400);
+  let body: { title?: unknown; enabled?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const patch: { title?: string; enabled?: boolean } = {};
+  if (body.title !== undefined) patch.title = String(body.title ?? "");
+  if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
+  const track = await updateSiteMusicTrack(id, patch);
+  if (!track) return c.json({ error: "Трек не найден" }, 404);
+  await notifySiteMusicChanged();
+  c.header("Cache-Control", "no-store");
+  return c.json({ track });
+});
+
+adminSubApp.delete("/music/tracks/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Math.floor(Number(c.req.param("id")));
+  if (!Number.isFinite(id) || id < 1) return c.json({ error: "Некорректный id" }, 400);
+  await deleteSiteMusicTrack(id);
+  await notifySiteMusicChanged();
+  c.header("Cache-Control", "no-store");
+  return c.json({ ok: true });
+});
+
+export const MUSIC_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+
+export async function saveMusicUploadBuffer(
+  buffer: Buffer,
+  mimeRaw: string,
+  originalName?: string,
+): Promise<BlogUploadSaveResult> {
+  const mime = String(mimeRaw || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
+  if (buffer.length > MUSIC_UPLOAD_MAX_BYTES) {
+    return { ok: false, status: 400, error: "Аудиофайл не больше 20 МБ" };
+  }
+  const extMap: Record<string, string> = {
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/ogg": ".ogg",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/webm": ".webm",
+  };
+  const ext = extMap[mime];
+  if (!ext) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Допустимы MP3, M4A, AAC, OGG, WAV, WebM",
+    };
+  }
+  const name = `${randomUUID()}${ext}`;
+  try {
+    await writeUploadToDirs(musicUploadsDirs, name, buffer);
+  } catch {
+    return { ok: false, status: 500, error: "Не удалось сохранить файл" };
+  }
+  const titleFromName = String(originalName || "")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .slice(0, 180);
+  return {
+    ok: true,
+    url: `/uploads/music/${name}`,
+    mime: mime || "audio/mpeg",
+    ...(titleFromName ? { title: titleFromName } : {}),
+  } as BlogUploadSaveResult & { title?: string };
+}
+
+adminSubApp.post("/music/upload", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.parseBody();
+  } catch {
+    return c.json({ error: "Некорректные данные" }, 400);
+  }
+  const blob = pickRaffleUploadFile(body);
+  if (!blob) return c.json({ error: "Нет файла" }, 400);
+  const buffer = await readRaffleUploadBuffer(blob);
+  if (!buffer) return c.json({ error: "Некорректный файл" }, 400);
+  const originalName = typeof blob === "object" && blob && "name" in blob ? String((blob as File).name || "") : "";
+  const saved = await saveMusicUploadBuffer(buffer, String(blob.type || ""), originalName);
+  if (!saved.ok) return c.json({ error: saved.error }, saved.status === 500 ? 500 : 400);
+  const titleRaw =
+    String(body.title ?? "").trim() ||
+    (saved as { title?: string }).title ||
+    originalName.replace(/\.[^.]+$/, "").trim() ||
+    "Трек";
+  const track = await insertSiteMusicTrack({
+    title: titleRaw,
+    file_url: saved.url,
+    mime: saved.mime,
+    enabled: true,
+  });
+  await notifySiteMusicChanged();
+  return c.json({ track, url: saved.url, mime: saved.mime });
 });
 
 adminSubApp.patch("/settings", async (c) => {

@@ -350,6 +350,7 @@
   let prizesApp = null;
   let usersApp = null;
   let settingsApp = null;
+  let musicApp = null;
   let statsApp = null;
   let listEl = null;
   let empty = null;
@@ -407,6 +408,7 @@
     prizesApp = document.getElementById("admin-prizes-app");
     usersApp = document.getElementById("admin-users-app");
     settingsApp = document.getElementById("admin-settings-app");
+    musicApp = document.getElementById("admin-music-app");
     statsApp = document.getElementById("admin-stats-app");
     listEl = document.getElementById("admin-user-list");
     empty = document.getElementById("admin-empty");
@@ -563,6 +565,7 @@
     if (prizesApp) prizesApp.hidden = true;
     if (usersApp) usersApp.hidden = true;
     if (settingsApp) settingsApp.hidden = true;
+    if (musicApp) musicApp.hidden = true;
     if (statsApp) statsApp.hidden = true;
   }
 
@@ -575,6 +578,7 @@
       if (t === "prizes") return "prizes";
       if (t === "users") return "users";
       if (t === "settings") return "settings";
+      if (t === "music") return "music";
       if (t === "stats") return "stats";
       return "support";
     } catch (_) {
@@ -612,6 +616,7 @@
     var navRaffles = document.getElementById("nav-link-raffles");
     var navPayments = document.getElementById("nav-link-payments");
     var navPrizes = document.getElementById("nav-link-prizes");
+    var navMusic = document.getElementById("nav-link-music");
     var navSettings = document.getElementById("nav-link-settings");
     var navStats = document.getElementById("nav-link-stats");
 
@@ -621,6 +626,7 @@
     if (prizesApp) prizesApp.hidden = tab !== "prizes";
     if (usersApp) usersApp.hidden = tab !== "users";
     if (settingsApp) settingsApp.hidden = tab !== "settings";
+    if (musicApp) musicApp.hidden = tab !== "music";
     if (statsApp) statsApp.hidden = tab !== "stats";
 
     if (heading) {
@@ -635,6 +641,8 @@
               ? "Пользователи"
               : tab === "settings"
                 ? "Настройки"
+                : tab === "music"
+                  ? "Музыка"
                 : tab === "stats"
                   ? "Статистика"
                 : "Поддержка";
@@ -649,8 +657,10 @@
               ? "Выдача призов и ответы победителей"
               : tab === "users"
               ? "Все зарегистрированные пользователи"
-              : tab === "settings"
+                : tab === "settings"
                 ? "Режим технических работ и параметры сайта"
+                : tab === "music"
+                  ? "Фоновая музыка и плейлист для пользователей"
                 : tab === "stats"
                   ? "Аналитика по пользователям и акциям"
                 : "Пользователи и переписка";
@@ -662,6 +672,7 @@
     if (navPayments) navPayments.setAttribute("aria-current", tab === "payments" ? "page" : "false");
     if (navPrizes) navPrizes.setAttribute("aria-current", tab === "prizes" ? "page" : "false");
     if (navSettings) navSettings.setAttribute("aria-current", tab === "settings" ? "page" : "false");
+    if (navMusic) navMusic.setAttribute("aria-current", tab === "music" ? "page" : "false");
     if (navStats) navStats.setAttribute("aria-current", tab === "stats" ? "page" : "false");
 
     if (tab === "raffles" && typeof window.abInitRaffles === "function") {
@@ -678,6 +689,9 @@
     }
     if (tab === "settings" && typeof window.abInitSettings === "function") {
       window.abInitSettings();
+    }
+    if (tab === "music" && typeof window.abInitMusic === "function") {
+      window.abInitMusic();
     }
     if (tab === "stats" && typeof window.abInitStats === "function") {
       window.abInitStats();

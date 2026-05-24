@@ -111,6 +111,7 @@ import {
   startRaffleFreeTicketsPushInterval,
   tickRaffleFreeTicketsPushReminders,
 } from "../../server/raffle-free-tickets-push.js";
+import { getPublicSiteMusicPayload } from "../../server/site-music.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 async function raffleDtoWithBankCardMeta(r: RaffleRow) {
@@ -663,7 +664,13 @@ app.get("/api/site/status", async (_request, reply) => {
   return {
     maintenance: settings.maintenance_enabled,
     blog_enabled: settings.blog_enabled,
+    music_enabled: settings.music_enabled,
   };
+});
+
+app.get("/api/site/music", async (_request, reply) => {
+  reply.header("Cache-Control", "no-store");
+  return getPublicSiteMusicPayload();
 });
 
 app.get("/api/raffles", async (request, reply) => {

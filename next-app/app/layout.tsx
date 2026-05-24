@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 import AbRouteHtmlClasses from "../components/ab/AbRouteHtmlClasses";
 import { AbSessionProvider } from "../components/ab/AbSessionContext";
+import { SiteMusicProvider } from "../components/ab/SiteMusicProvider";
 import AbToastHost from "../components/ab/AbToastHost";
 import AbServiceWorkerRegister from "../components/ab/AbServiceWorkerRegister";
 import InAppBrowserGate from "../components/ab/InAppBrowserGate";
@@ -115,12 +116,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {`try{var u=${JSON.stringify(process.env.NEXT_PUBLIC_AB_UPLOAD_ORIGIN || "")};if(u){window.__AB_UPLOAD_ORIGIN__=String(u).replace(/\\/$/,"");}}catch(_){}`}
         </Script>
         <AbSessionProvider>
-          <InAppBrowserGate />
-          <AbToastHost />
-          <SiteOnlineBadge />
-          <IosInstallAppPrompt />
-          <AbServiceWorkerRegister />
-          {children}
+          <SiteMusicProvider>
+            <InAppBrowserGate />
+            <AbToastHost />
+            <SiteOnlineBadge />
+            <IosInstallAppPrompt />
+            <AbServiceWorkerRegister />
+            {children}
+          </SiteMusicProvider>
         </AbSessionProvider>
       </body>
     </html>

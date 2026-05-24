@@ -79,6 +79,7 @@ import {
 } from "./raffle-orders.js";
 import { sendPasswordResetEmail, isSmtpReady } from "./mail.js";
 import { tickReserveExpiryEmailReminders, warnIfNoSmtpOnce } from "./notify-email.js";
+import { getPublicSiteMusicPayload } from "./site-music.js";
 import {
   startRaffleFreeTicketsPushInterval,
   tickRaffleFreeTicketsPushReminders,
@@ -389,7 +390,7 @@ app.use(
 );
 
 function maintenanceBypassPath(path: string): boolean {
-  if (path === "/api/health" || path === "/api/site/status") return true;
+  if (path === "/api/health" || path === "/api/site/status" || path === "/api/site/music") return true;
   return (
     path === "/api/auth/register" ||
     path === "/api/auth/check-phone" ||
@@ -427,7 +428,13 @@ app.get("/api/site/status", async (c) => {
   return c.json({
     maintenance: site.maintenance_enabled,
     blog_enabled: site.blog_enabled,
+    music_enabled: site.music_enabled,
   });
+});
+
+app.get("/api/site/music", async (c) => {
+  c.header("Cache-Control", "no-store");
+  return c.json(await getPublicSiteMusicPayload());
 });
 
 async function authUser(c: Context): Promise<SessionUser | null> {

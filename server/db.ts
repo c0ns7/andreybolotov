@@ -1224,13 +1224,24 @@ export async function setRafflePromoGiftLockedCounts(
   );
 }
 
-export async function getSiteSettings(): Promise<{ maintenance_enabled: boolean; blog_enabled: boolean }> {
-  const row = await pgGet<{ maintenance_enabled: number; blog_enabled?: number }>(
-    `SELECT maintenance_enabled, blog_enabled FROM site_settings WHERE id = 1`,
-  );
+export async function getSiteSettings(): Promise<{
+  maintenance_enabled: boolean;
+  blog_enabled: boolean;
+  music_enabled: boolean;
+  music_default_volume: number;
+}> {
+  const row = await pgGet<{
+    maintenance_enabled: number;
+    blog_enabled?: number;
+    music_enabled?: number;
+    music_default_volume?: number;
+  }>(`SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume FROM site_settings WHERE id = 1`);
+  const vol = Math.floor(Number(row?.music_default_volume ?? 35));
   return {
     maintenance_enabled: Boolean(Number(row?.maintenance_enabled)),
     blog_enabled: Boolean(Number(row?.blog_enabled)),
+    music_enabled: Boolean(Number(row?.music_enabled)),
+    music_default_volume: Math.max(0, Math.min(100, Number.isFinite(vol) ? vol : 35)),
   };
 }
 
@@ -1240,6 +1251,15 @@ export async function setMaintenanceEnabled(on: boolean): Promise<void> {
 
 export async function setBlogEnabled(on: boolean): Promise<void> {
   await pgExec(`UPDATE site_settings SET blog_enabled = ? WHERE id = 1`, [on ? 1 : 0]);
+}
+
+export async function setMusicEnabled(on: boolean): Promise<void> {
+  await pgExec(`UPDATE site_settings SET music_enabled = ? WHERE id = 1`, [on ? 1 : 0]);
+}
+
+export async function setMusicDefaultVolume(volume: number): Promise<void> {
+  const v = Math.max(0, Math.min(100, Math.floor(Number(volume) || 0)));
+  await pgExec(`UPDATE site_settings SET music_default_volume = ? WHERE id = 1`, [v]);
 }
 
 export async function deleteRaffle(id: number): Promise<void> {
