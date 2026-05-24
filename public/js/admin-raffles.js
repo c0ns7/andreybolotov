@@ -548,6 +548,7 @@
     if (phoneEl) phoneEl.textContent = ctx.user_phone || "Не указано";
     if (localityEl) localityEl.textContent = ctx.user_locality || "Не указано";
     if (raffleBuyerReveal) raffleBuyerReveal.classList.remove("is-revealed");
+    var chatBtn = document.getElementById("raffle-buyer-chat");
     var chatUid = Number(ctx.user_id);
     if (chatBtn) {
       if (Number.isFinite(chatUid) && chatUid > 0) {
