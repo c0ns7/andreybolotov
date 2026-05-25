@@ -307,8 +307,8 @@ export default function HomeAppClient() {
   useEffect(() => {
     const needsTick = raffles.some((r) => {
       const publicStart = Math.floor(Number(r.public_start_at || 0));
-      const salesOpen = r.sales_open !== false && r.sales_open !== 0;
-      const scheduled = String(r.status || "") === "active" && !salesOpen && publicStart > 0;
+      const scheduled =
+        String(r.status || "") === "active" && publicStart > 0 && r.sales_open === false;
       const closedStream = String(r.status || "") === "closed" && Number(r.live_stream_at || 0) > 0;
       return scheduled || closedStream;
     });
