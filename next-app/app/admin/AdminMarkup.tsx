@@ -904,6 +904,46 @@ export default function AdminMarkup() {
                 </p>
               </div>
             </section>
+            <section
+              className="admin-raffle-schedule-card"
+              aria-labelledby="raffle-sec-schedule"
+              id="raffle-schedule-card"
+            >
+              <div className="admin-raffle-schedule-card__glow" aria-hidden="true" />
+              <h3 id="raffle-sec-schedule" className="admin-raffle-schedule-card__title">
+                <span className="admin-raffle-schedule-card__title-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                </span>
+                Старт акции на сайте
+              </h3>
+              <p className="admin-raffle-schedule-card__lead">
+                Указывайте дату и время в <strong>агинском</strong> часовом поясе (UTC+9, +6 к Москве). Открытие и продажи
+                проверяются по серверу — смена времени на телефоне не откроет акцию раньше.
+              </p>
+              <div className="form-group admin-raffle-toggle-row">
+                <label className="admin-toggle" htmlFor="raffle-public-start-enabled">
+                  <input id="raffle-public-start-enabled" className="admin-toggle__input" type="checkbox" role="switch" />
+                  <span className="admin-toggle__track" aria-hidden="true" />
+                  <span className="admin-toggle__label">Запланировать отложенный старт</span>
+                </label>
+              </div>
+              <div id="raffle-public-start-fields" className="admin-raffle-schedule-card__fields" hidden>
+                <div className="form-group">
+                  <label htmlFor="raffle-public-start-at">Дата и время старта (агинское)</label>
+                  <input id="raffle-public-start-at" className="input admin-raffle-schedule-card__datetime" type="datetime-local" step={60} />
+                </div>
+                <div className="admin-raffle-schedule-card__preview" id="raffle-public-start-preview" role="status" aria-live="polite" hidden>
+                  <p className="admin-raffle-schedule-card__preview-line" id="raffle-public-start-preview-site" />
+                  <p className="admin-raffle-schedule-card__preview-line admin-raffle-schedule-card__preview-line--muted" id="raffle-public-start-preview-moscow" />
+                </div>
+              </div>
+              <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                Без планирования акция доступна сразу после публикации (если не скрыта). Время эфира и второй цены — тоже в агинском.
+              </p>
+            </section>
             <section className="admin-raffle-section" aria-labelledby="raffle-sec-price">
               <h3 id="raffle-sec-price" className="admin-raffle-section__title">
                 <span className="admin-raffle-section__icon" aria-hidden="true">
@@ -940,11 +980,11 @@ export default function AdminMarkup() {
               </div>
               <div className="form-row-2">
                 <div className="form-group">
-                  <label htmlFor="raffle-cenopad-start-at">Старт второй цены</label>
+                  <label htmlFor="raffle-cenopad-start-at">Старт второй цены (агинское)</label>
                   <input id="raffle-cenopad-start-at" className="input" type="datetime-local" step={60} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="raffle-cenopad-end-at">Окончание второй цены</label>
+                  <label htmlFor="raffle-cenopad-end-at">Окончание второй цены (агинское)</label>
                   <input id="raffle-cenopad-end-at" className="input" type="datetime-local" step={60} />
                 </div>
               </div>
@@ -1103,7 +1143,7 @@ export default function AdminMarkup() {
               </div>
               <div className="form-row-2">
                 <div className="form-group">
-                  <label htmlFor="raffle-live-stream-at">Время старта эфира</label>
+                  <label htmlFor="raffle-live-stream-at">Время старта эфира (агинское)</label>
                   <input
                     id="raffle-live-stream-at"
                     className="input"

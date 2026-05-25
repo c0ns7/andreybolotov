@@ -42,6 +42,8 @@ type RaffleRow = {
   live_stream_url?: string | null;
   live_stream_at?: number | null;
   live_stream_status?: string | null;
+  public_start_at?: number | null;
+  sales_open?: boolean;
 };
 
 function formatRub(n: number) {
@@ -76,6 +78,7 @@ export default function HomeAppClient() {
   const [localityModalOpen, setLocalityModalOpen] = useState(false);
   const [localityInput, setLocalityInput] = useState("");
   const [localitySaving, setLocalitySaving] = useState(false);
+  const [serverTimeSkewMs, setServerTimeSkewMs] = useState(0);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [pushPromptVisible, setPushPromptVisible] = useState(false);
   const [pushRequesting, setPushRequesting] = useState(false);
@@ -143,10 +146,12 @@ export default function HomeAppClient() {
     const ctrl = new AbortController();
     const abortTimer = window.setTimeout(() => ctrl.abort(), 12_000);
     try {
-      const data = await abApiJson<{ raffles?: RaffleRow[] }>("/api/raffles", {
+      const data = await abApiJson<{ raffles?: RaffleRow[]; server_time_ms?: number }>("/api/raffles", {
         headers: abAuthHeaders(),
         signal: ctrl.signal,
       });
+      const st = Number(data.server_time_ms);
+      if (Number.isFinite(st)) setServerTimeSkewMs(st - Date.now());
       setRaffles(Array.isArray(data.raffles) ? data.raffles : []);
       setFeedErr(false);
       void refreshTableAccess();
@@ -300,11 +305,17 @@ export default function HomeAppClient() {
   }, []);
 
   useEffect(() => {
-    const hasClosedStream = raffles.some((r) => String(r.status || "") === "closed" && Number(r.live_stream_at || 0) > 0);
-    if (!hasClosedStream) return;
-    const t = window.setInterval(() => setNowTs(Date.now()), 1000);
+    const needsTick = raffles.some((r) => {
+      const publicStart = Math.floor(Number(r.public_start_at || 0));
+      const salesOpen = r.sales_open !== false && r.sales_open !== 0;
+      const scheduled = String(r.status || "") === "active" && !salesOpen && publicStart > 0;
+      const closedStream = String(r.status || "") === "closed" && Number(r.live_stream_at || 0) > 0;
+      return scheduled || closedStream;
+    });
+    if (!needsTick) return;
+    const t = window.setInterval(() => setNowTs(Date.now() + serverTimeSkewMs), 1000);
     return () => window.clearInterval(t);
-  }, [raffles]);
+  }, [raffles, serverTimeSkewMs]);
 
   useEffect(() => {
     if (!session?.token || !authVerified) return;
@@ -401,15 +412,23 @@ export default function HomeAppClient() {
                 const myOrderStatus = String(r.my_order_status || "");
                 const isPaused = st === "paused";
                 const isClosed = st === "closed";
+                const syncedNow = Date.now() + serverTimeSkewMs;
+                const publicStartAt = Math.floor(Number(r.public_start_at || 0));
+                const salesOpen =
+                  r.sales_open !== false && !(publicStartAt > 0 && syncedNow < publicStartAt);
+                const isScheduled = st === "active" && !salesOpen && publicStartAt > 0;
+                const publicStartCountdown =
+                  isScheduled && publicStartAt > syncedNow ? formatCountdown(publicStartAt, syncedNow) : "";
                 const streamAt = Math.floor(Number(r.live_stream_at || 0));
                 const streamStatusRaw = String(r.live_stream_status || "").trim().toLowerCase();
                 const streamState =
                   streamStatusRaw === "ended"
                     ? "ended"
-                    : streamStatusRaw === "live" || (streamAt > 0 && nowTs >= streamAt)
+                    : streamStatusRaw === "live" || (streamAt > 0 && syncedNow >= streamAt)
                       ? "live"
                       : "scheduled";
-                const streamCountdown = streamAt > 0 && streamState === "scheduled" ? formatCountdown(streamAt, nowTs) : "";
+                const streamCountdown =
+                  streamAt > 0 && streamState === "scheduled" ? formatCountdown(streamAt, syncedNow) : "";
                 const streamUrl = String(r.live_stream_url || "").trim();
                 const isWaitCheck = st === "active" && myOrderStatus === "reserved";
                 const total = Math.max(0, Number(r.ticket_count) || 0);
@@ -432,9 +451,11 @@ export default function HomeAppClient() {
                     0),
                 );
                 const secondPriceCountdown =
-                  hasSecondPriceActive && secondPriceEndAt > nowTs ? formatCountdown(secondPriceEndAt, nowTs) : "";
+                  hasSecondPriceActive && secondPriceEndAt > syncedNow
+                    ? formatCountdown(secondPriceEndAt, syncedNow)
+                    : "";
                 const go = () => {
-                  if (st === "active") {
+                  if (st === "active" && salesOpen) {
                     const hash = String(r.raffle_hash || "").trim();
                     if (hash) router.push("/raffle/" + encodeURIComponent(hash));
                     else router.push("/home/raffle?id=" + encodeURIComponent(String(r.id)));
@@ -450,16 +471,17 @@ export default function HomeAppClient() {
                     key={String(r.id)}
                     className={
                       "raffle-card" +
-                      (st === "active" ? " raffle-card--active" : "") +
+                      (st === "active" && salesOpen ? " raffle-card--active" : "") +
+                      (isScheduled ? " raffle-card--scheduled" : "") +
                       (hasSecondPriceActive ? " raffle-card--cenopad" : "") +
                       (hasPromoPack ? " raffle-card--promo-5plus1" : "")
                     }
                     data-status={st}
-                    role={st === "active" ? "link" : undefined}
-                    tabIndex={st === "active" ? 0 : -1}
+                    role={st === "active" && salesOpen ? "link" : undefined}
+                    tabIndex={st === "active" && salesOpen ? 0 : -1}
                     onClick={go}
                     onKeyDown={(e) => {
-                      if (st === "active" && (e.key === "Enter" || e.key === " ")) {
+                      if (st === "active" && salesOpen && (e.key === "Enter" || e.key === " ")) {
                         e.preventDefault();
                         go();
                       }
@@ -472,7 +494,7 @@ export default function HomeAppClient() {
                         gifUrl={r.cover_gif_url}
                         updatedAt={Math.floor(Number(r.updated_at) || 0)}
                         loading={idx < 2 ? "eager" : "lazy"}
-                        animEnabled={st === "active"}
+                        animEnabled={st === "active" && salesOpen}
                       />
                       <div className="raffle-card__grad" />
                       {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}
@@ -482,6 +504,15 @@ export default function HomeAppClient() {
                           <div className="raffle-card__promo-special-timer">
                             {secondPriceCountdown || "Скоро завершится"}
                           </div>
+                        </div>
+                      ) : null}
+                      {isScheduled ? (
+                        <div className="raffle-card__badge-wrap raffle-card__badge-wrap--scheduled">
+                          <div className="raffle-card__badge raffle-card__badge--scheduled">Скоро откроется</div>
+                          <div className="raffle-card__sub">До старта акции</div>
+                          {publicStartCountdown ? (
+                            <div className="raffle-card__sub raffle-card__sub--timer">{publicStartCountdown}</div>
+                          ) : null}
                         </div>
                       ) : null}
                       {isWaitCheck ? (
@@ -583,7 +614,14 @@ export default function HomeAppClient() {
                                   </svg>
                                 </Link>
                               ) : null}
-                              {st === "active" ? (
+                              {isScheduled ? (
+                                <span
+                                  className="raffle-card__cta raffle-card__cta--dark raffle-card__cta--compact"
+                                  aria-disabled="true"
+                                >
+                                  <span className="raffle-card__cta-label">Скоро</span>
+                                </span>
+                              ) : st === "active" ? (
                                 <span className="raffle-card__cta raffle-card__cta--dark raffle-card__cta--compact">
                                   <span className="raffle-card__cta-label">Участвовать</span>
                                   <span className="raffle-card__cta-arrow" aria-hidden="true">

@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import { formatRuSiteDateTime } from "./site-timezone.js";
 
 function smtpDebugEnabled(): boolean {
   const v = String(process.env.SMTP_DEBUG ?? "")
@@ -144,19 +145,9 @@ function escapeHtmlAttr(s: string): string {
   return escapeHtml(s).replace(/'/g, "&#39;");
 }
 
+/** Даты в письмах — по агинскому (сайтовому) времени. */
 export function formatRuMoscowDateTime(ms: number): string {
-  try {
-    return new Date(ms).toLocaleString("ru-RU", {
-      timeZone: "Europe/Moscow",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return new Date(ms).toISOString();
-  }
+  return formatRuSiteDateTime(ms);
 }
 
 /** Единая вёрстка писем: тёмный хедер, карточка, футер. */

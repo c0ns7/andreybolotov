@@ -8,6 +8,7 @@ import {
   getUserByPhone,
   insertSupportMessage,
   isRaffleVisibleOnSite,
+  isRaffleSalesOpen,
   getLatestVisibleActiveRaffle,
   listRafflesPublic,
   setRafflePromoGiftLockedCounts,
@@ -730,6 +731,9 @@ export async function createReservation(
   }
   if (!isRaffleVisibleOnSite(raffle)) {
     return { ok: false, error: "Акция недоступна" };
+  }
+  if (!isRaffleSalesOpen(raffle)) {
+    return { ok: false, error: "Акция ещё не открыта — дождитесь времени старта" };
   }
   const existingOrder = await pgGet<{ id: number }>(
     `SELECT id FROM raffle_orders WHERE raffle_id = ? AND user_id = ? AND status IN ('reserved', 'pending_review')`,

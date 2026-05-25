@@ -80,6 +80,7 @@ export async function ensurePgRuntimeSchema(): Promise<void> {
   await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS cenopad_start_at BIGINT`);
   await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS cenopad_end_at BIGINT`);
   await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS live_stream_at BIGINT`);
+  await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS public_start_at BIGINT`);
   await pgPool.query(`ALTER TABLE raffles ADD COLUMN IF NOT EXISTS live_stream_status TEXT NOT NULL DEFAULT 'scheduled'`);
   await pgPool.query(
     `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_5_plus_2_enabled INTEGER NOT NULL DEFAULT 0`,

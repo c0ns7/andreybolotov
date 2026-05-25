@@ -3320,6 +3320,27 @@ html.theme-dark .home-faq-item__a {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
+.raffle-card--scheduled .raffle-card__media {
+  filter: saturate(0.92);
+}
+
+.raffle-card__badge-wrap--scheduled {
+  inset: 10px 10px auto 10px;
+  width: auto;
+  max-width: calc(100% - 20px);
+  align-items: flex-start;
+}
+
+.raffle-card__badge--scheduled {
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(147, 197, 253, 0.45);
+  color: #bfdbfe;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
 .raffle-card__badge-wrap--flat .raffle-card__badge {
   margin-bottom: 0;
   color: #fff;

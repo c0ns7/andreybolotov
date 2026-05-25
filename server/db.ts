@@ -19,6 +19,7 @@ import {
 } from "./db-auth-pg.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 import { pgPool } from "./pg.js";
+import { isEpochReached } from "./site-timezone.js";
 
 export type { SessionUser, UserRow } from "./db-auth-pg.js";
 
@@ -771,6 +772,8 @@ export type RaffleRow = {
   promo_5_plus_2_enabled?: number;
   promo_5_plus_2_locked_free_count?: number;
   hidden_from_public?: number;
+  /** Старт продаж / показа на сайте (epoch ms, агинское «настенное» время при вводе в админке). */
+  public_start_at?: number | null;
   launch_notify_sent_at?: number | null;
   created_at: number;
   updated_at: number;
@@ -822,6 +825,9 @@ export type RaffleDto = {
   promo_5_plus_2_enabled: boolean;
   promo_5_plus_2_locked_free_count: number;
   hidden_from_public?: boolean;
+  public_start_at?: number | null;
+  /** Продажи открыты по серверному времени (учитывает public_start_at). */
+  sales_open?: boolean;
 };
 
 export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): RaffleDto {
@@ -913,6 +919,11 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
       Math.floor(Number((r as RaffleRow).promo_5_plus_2_locked_free_count ?? 0)),
     ),
   };
+  const publicStartRaw = Number((r as RaffleRow).public_start_at ?? 0);
+  const public_start_at =
+    Number.isFinite(publicStartRaw) && publicStartRaw > 0 ? Math.floor(publicStartRaw) : null;
+  dto.public_start_at = public_start_at;
+  dto.sales_open = isRaffleSalesOpen(r);
   if (opts?.forAdmin) {
     dto.hidden_from_public = Boolean(Number((r as RaffleRow).hidden_from_public));
   }
@@ -922,6 +933,14 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
 export function isRaffleVisibleOnSite(r: RaffleRow | undefined): boolean {
   if (!r) return false;
   return !Number((r as RaffleRow).hidden_from_public);
+}
+
+/** Продажи и бронь номерков — только после public_start_at по серверному времени. */
+export function isRaffleSalesOpen(r: RaffleRow | undefined, nowMs = Date.now()): boolean {
+  if (!r || !isRaffleVisibleOnSite(r)) return false;
+  if (r.status !== "active") return false;
+  const startAt = Math.floor(Number((r as RaffleRow).public_start_at ?? 0));
+  return isEpochReached(startAt > 0 ? startAt : null, nowMs);
 }
 
 export function isRaffleCenopadActive(r: RaffleRow | undefined): boolean {
@@ -1009,13 +1028,17 @@ export async function listRafflesPublic(): Promise<RaffleRow[]> {
   );
 }
 
-export async function getLatestVisibleActiveRaffle(): Promise<RaffleRow | undefined> {
-  return pgGet<RaffleRow>(
+export async function getLatestVisibleActiveRaffle(nowMs = Date.now()): Promise<RaffleRow | undefined> {
+  const rows = await pgAll<RaffleRow>(
     `SELECT * FROM raffles
      WHERE COALESCE(hidden_from_public, 0) = 0 AND status = 'active'
      ORDER BY id DESC
-     LIMIT 1`,
+     LIMIT 20`,
   );
+  for (const row of rows) {
+    if (isRaffleSalesOpen(row, nowMs)) return row;
+  }
+  return undefined;
 }
 
 export async function getRaffleById(id: number): Promise<RaffleRow | undefined> {
@@ -1064,6 +1087,7 @@ export async function insertRaffle(data: {
   promo_5_plus_1_enabled: number;
   promo_5_plus_2_enabled: number;
   hidden_from_public: number;
+  public_start_at: number | null;
 }): Promise<number> {
   const now = Date.now();
   const row = await pgGet<{ id: number }>(
@@ -1072,8 +1096,8 @@ export async function insertRaffle(data: {
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
       sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
-      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, public_start_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -1112,6 +1136,7 @@ export async function insertRaffle(data: {
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,
+      data.public_start_at,
       now,
       now,
     ],
@@ -1157,6 +1182,7 @@ export async function updateRaffle(
     promo_5_plus_1_enabled: number;
     promo_5_plus_2_enabled: number;
     hidden_from_public: number;
+    public_start_at: number | null;
   },
 ): Promise<void> {
   await pgExec(
@@ -1167,7 +1193,7 @@ export async function updateRaffle(
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
       live_stream_at = ?, live_stream_status = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, card_payment_min_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, card_payment_min_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, public_start_at = ?, updated_at = ?
     WHERE id = ?`,
     [
       data.title,
@@ -1205,6 +1231,7 @@ export async function updateRaffle(
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,
+      data.public_start_at,
       Date.now(),
       id,
     ],

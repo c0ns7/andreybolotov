@@ -1994,7 +1994,7 @@
       var d = new Date(Number(ms));
       if (isNaN(d.getTime())) return "";
       return d.toLocaleString("ru-RU", {
-        timeZone: "Europe/Moscow",
+        timeZone: "Asia/Chita",
         day: "numeric",
         month: "long",
         year: "numeric",
@@ -4127,6 +4127,12 @@
   function buildRaffleCardHtml(r, idx) {
     var st = String(r.status || "active");
     var myOrderStatus = String(r.my_order_status || "");
+    var nowTs = nowMsSyncedForRaffle();
+    var publicStartAt = Math.floor(Number(r.public_start_at || 0));
+    var salesOpen = true;
+    if (r.sales_open === false || r.sales_open === 0) salesOpen = false;
+    else if (r.sales_open == null && publicStartAt > 0 && nowTs < publicStartAt) salesOpen = false;
+    var isScheduled = st === "active" && !salesOpen && publicStartAt > 0;
     var streamAt = Math.floor(Number(r.live_stream_at || 0));
     var streamStatusRaw = String(r.live_stream_status || "")
       .trim()
@@ -4134,13 +4140,13 @@
     var streamState =
       streamStatusRaw === "ended"
         ? "ended"
-        : streamStatusRaw === "live" || (streamAt > 0 && Date.now() >= streamAt)
+        : streamStatusRaw === "live" || (streamAt > 0 && nowTs >= streamAt)
           ? "live"
           : "scheduled";
     var streamUrl = String(r.live_stream_url || "").trim();
     var streamCountdown = "";
     if (streamAt > 0 && streamState === "scheduled") {
-      var left = Math.max(0, streamAt - Date.now());
+      var left = Math.max(0, streamAt - nowTs);
       var totalSec = Math.floor(left / 1000);
       var days = Math.floor(totalSec / 86400);
       var hours = Math.floor((totalSec % 86400) / 3600);
@@ -4150,7 +4156,16 @@
       else streamCountdown = String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
     }
     var badgeBlock = "";
-    if (st === "active" && myOrderStatus === "reserved") {
+    if (isScheduled) {
+      badgeBlock =
+        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--scheduled">' +
+        '<div class="raffle-card__badge raffle-card__badge--scheduled">Скоро откроется</div>' +
+        '<div class="raffle-card__sub">До старта акции</div>' +
+        '<div class="raffle-card__sub raffle-card__sub--timer" data-raffle-public-start-countdown="' +
+        escapeHtml(String(publicStartAt)) +
+        '"></div>' +
+        "</div>";
+    } else if (st === "active" && myOrderStatus === "reserved") {
       badgeBlock =
         '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--wait-check">' +
         '<div class="raffle-card__badge raffle-card__badge--wait-check">Ждём чек</div>' +
@@ -4218,12 +4233,19 @@
         "?</button>"
       : "";
     var ctaClass = "raffle-card__cta raffle-card__cta--dark";
-    var ctaLabel = st === "closed" ? "Подробно" : st === "active" || st === "paused" ? "Участвовать" : "Подробнее";
+    var ctaLabel = isScheduled
+      ? "Скоро"
+      : st === "closed"
+        ? "Подробно"
+        : st === "active" || st === "paused"
+          ? "Участвовать"
+          : "Подробнее";
     var ctaInner =
       ctaLabel === "Участвовать"
         ? '<span class="raffle-card__cta-label">Участвовать</span><span class="raffle-card__cta-arrow" aria-hidden="true">→</span>'
         : '<span class="raffle-card__cta-label">' + escapeHtml(ctaLabel) + "</span>";
-    var ctaDisabledAttr = st === "paused" ? ' disabled aria-disabled="true"' : "";
+    var ctaDisabledAttr =
+      st === "paused" || isScheduled ? ' disabled aria-disabled="true"' : "";
     var viewers = Math.max(0, Number(r.viewers_count) || 0);
     var total = Math.max(0, Number(r.ticket_count) || 0);
     var occupied = Math.max(0, Math.min(total, Number(r.occupied_count) || 0));
@@ -4258,7 +4280,7 @@
         " ₽</span>"
       : escapeHtml(formatRubleAmount(pr)) + "&nbsp;₽";
     var viewersBlock =
-      st === "paused" || st === "closed" || viewers <= 0
+      st === "paused" || st === "closed" || isScheduled || viewers <= 0
         ? ""
         : '<div class="raffle-card__viewers" aria-label="Смотрят акцию сейчас">' +
           '<span class="raffle-card__viewers-dot" aria-hidden="true"></span>' +
@@ -4267,7 +4289,8 @@
           " чел.</span></div>";
     return (
       '<article class="raffle-card' +
-      (st === "active" ? " raffle-card--active" : "") +
+      (st === "active" && salesOpen ? " raffle-card--active" : "") +
+      (isScheduled ? " raffle-card--scheduled" : "") +
       '" data-raffle-open="1" data-raffle-idx="' +
       idx +
       '" data-status="' +
@@ -4591,10 +4614,25 @@
 
   function updateRaffleStreamCountdowns(rootEl) {
     var root = rootEl || document;
+    var nowTs = nowMsSyncedForRaffle();
+    root.querySelectorAll("[data-raffle-public-start-countdown]").forEach(function (el) {
+      var at = Math.floor(Number(el.getAttribute("data-raffle-public-start-countdown") || 0));
+      if (!Number.isFinite(at) || at <= 0) return;
+      var left = Math.max(0, at - nowTs);
+      var totalSec = Math.floor(left / 1000);
+      var days = Math.floor(totalSec / 86400);
+      var hours = Math.floor((totalSec % 86400) / 3600);
+      var mins = Math.floor((totalSec % 3600) / 60);
+      var secs = totalSec % 60;
+      el.textContent =
+        days > 0
+          ? String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м"
+          : String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    });
     root.querySelectorAll("[data-raffle-stream-countdown]").forEach(function (el) {
       var at = Math.floor(Number(el.getAttribute("data-raffle-stream-countdown") || 0));
       if (!Number.isFinite(at) || at <= 0) return;
-      var left = Math.max(0, at - Date.now());
+      var left = Math.max(0, at - nowTs);
       var totalSec = Math.floor(left / 1000);
       var days = Math.floor(totalSec / 86400);
       var hours = Math.floor((totalSec % 86400) / 3600);
@@ -4611,7 +4649,7 @@
         el.textContent = "Скоро завершится";
         return;
       }
-      var left = Math.max(0, at - Date.now());
+      var left = Math.max(0, at - nowTs);
       var totalSec = Math.floor(left / 1000);
       var days = Math.floor(totalSec / 86400);
       var hours = Math.floor((totalSec % 86400) / 3600);
@@ -4657,6 +4695,7 @@
         return;
       }
       if (!res.ok) throw new Error(data.error || "Ошибка");
+      applyRaffleServerTimeSkewFromPayload(data);
       var list = data.raffles || [];
       renderRaffleCards("home-cards-app", list);
     } catch (err) {

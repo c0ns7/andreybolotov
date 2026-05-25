@@ -81,8 +81,8 @@ export async function countCardUsageTodayMsk(cardId: number, nowMs: number): Pro
        FROM raffle_orders o
       WHERE o.bank_card_id = ?
         AND o.status IN ('pending_review', 'confirmed')
-        AND (to_timestamp(o.created_at / 1000.0) AT TIME ZONE 'Europe/Moscow')::date =
-            (to_timestamp(?::bigint / 1000.0) AT TIME ZONE 'Europe/Moscow')::date`,
+        AND (to_timestamp(o.created_at / 1000.0) AT TIME ZONE 'Asia/Chita')::date =
+            (to_timestamp(?::bigint / 1000.0) AT TIME ZONE 'Asia/Chita')::date`,
     [cardId, nowMs],
   );
   return Math.max(0, Math.floor(Number(row?.c ?? 0)));

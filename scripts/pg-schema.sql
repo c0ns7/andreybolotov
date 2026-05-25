@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS raffles (
   live_stream_note TEXT NOT NULL DEFAULT '',
   live_stream_url TEXT NOT NULL DEFAULT '',
   live_stream_at BIGINT,
+  public_start_at BIGINT,
   live_stream_status TEXT NOT NULL DEFAULT 'scheduled',
   status TEXT NOT NULL DEFAULT 'active',
   sort_order INTEGER NOT NULL DEFAULT 0,

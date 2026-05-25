@@ -554,6 +554,7 @@ type RaffleInput = {
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
+  public_start_at: number | null;
   card_payment_scope: "unlimited" | "wholesale_only" | "min_order_tickets";
   card_payment_min_tickets: number;
   bank_cards: RaffleBankCardInput[];
@@ -719,6 +720,15 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   }
   const hidden_from_public = Boolean(body.hidden_from_public);
 
+  const publicStartRaw = body.public_start_at;
+  const public_start_at =
+    publicStartRaw === undefined || publicStartRaw === null || publicStartRaw === ""
+      ? null
+      : Math.floor(Number(publicStartRaw));
+  if (public_start_at != null && (!Number.isFinite(public_start_at) || public_start_at <= 0)) {
+    return { ok: false, error: "Некорректное время старта акции" };
+  }
+
   let rules_url = String(body.rules_url ?? "").trim();
   if (rules_url.length > 2000) return { ok: false, error: "Ссылка на правила слишком длинная" };
   if (rules_url && !/^https?:\/\//i.test(rules_url)) {
@@ -799,6 +809,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       promo_5_plus_1_enabled,
       promo_5_plus_2_enabled,
       hidden_from_public,
+      public_start_at,
       card_payment_scope,
       card_payment_min_tickets,
       bank_cards: parsedCards.value,
@@ -1516,6 +1527,7 @@ adminSubApp.post("/raffles", async (c) => {
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
+    public_start_at: v.public_start_at,
   });
   await replaceRaffleBankCards(id, v.bank_cards);
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
@@ -1582,6 +1594,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
+    public_start_at: v.public_start_at,
   });
   await replaceRaffleBankCards(id, v.bank_cards);
   await recalculateRaffleDerivedStatsForRaffle(id);

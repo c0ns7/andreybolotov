@@ -726,7 +726,10 @@ app.get("/api/raffles", async (request, reply) => {
     });
   }
 
+  const serverTimeMs = Date.now();
   return {
+    server_time_ms: serverTimeMs,
+    site_timezone: "Asia/Chita",
     raffles: rows.map((r) => {
       const dto = raffleToDto(r);
       const occupied = Math.min(Math.max(0, occupiedByRaffle.get(r.id) ?? 0), Number(dto.ticket_count) || 0);

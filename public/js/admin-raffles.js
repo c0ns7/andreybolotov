@@ -306,7 +306,12 @@
     if (input) input.disabled = !on;
   }
 
+  var tzApi = typeof window !== "undefined" && window.AbSiteTimezone ? window.AbSiteTimezone : null;
+
   function formatDateTimeLocalFromMs(ms) {
+    if (tzApi && typeof tzApi.formatSiteDateTimeLocalFromUtcMs === "function") {
+      return tzApi.formatSiteDateTimeLocalFromUtcMs(ms);
+    }
     var n = Math.floor(Number(ms));
     if (!Number.isFinite(n) || n <= 0) return "";
     var d = new Date(n);
@@ -327,11 +332,45 @@
   }
 
   function parseDateTimeLocalToMs(raw) {
+    if (tzApi && typeof tzApi.parseSiteDateTimeLocalToUtcMs === "function") {
+      return tzApi.parseSiteDateTimeLocalToUtcMs(raw);
+    }
     var s = String(raw || "").trim();
     if (!s) return null;
     var ts = Date.parse(s);
     if (!Number.isFinite(ts) || ts <= 0) return null;
     return Math.floor(ts);
+  }
+
+  function syncPublicStartScheduleUi() {
+    var enabledEl = document.getElementById("raffle-public-start-enabled");
+    var fieldsWrap = document.getElementById("raffle-public-start-fields");
+    var atEl = document.getElementById("raffle-public-start-at");
+    var previewWrap = document.getElementById("raffle-public-start-preview");
+    var previewSite = document.getElementById("raffle-public-start-preview-site");
+    var previewMsk = document.getElementById("raffle-public-start-preview-moscow");
+    if (!enabledEl || !fieldsWrap) return;
+    var on = !!enabledEl.checked;
+    fieldsWrap.hidden = !on;
+    if (atEl) atEl.disabled = !on;
+    if (!on || !previewWrap || !previewSite || !previewMsk) {
+      if (previewWrap) previewWrap.hidden = true;
+      return;
+    }
+    var ms = parseDateTimeLocalToMs(atEl ? atEl.value : "");
+    if (ms == null) {
+      previewWrap.hidden = true;
+      return;
+    }
+    previewWrap.hidden = false;
+    if (tzApi) {
+      previewSite.textContent =
+        "Старт на сайте: " + tzApi.formatRuSiteDateTime(ms) + " (" + tzApi.SITE_TIMEZONE_LABEL + ")";
+      previewMsk.textContent = "У участников в Москве: " + tzApi.formatRuMoscowDateTime(ms);
+    } else {
+      previewSite.textContent = "Старт: " + new Date(ms).toLocaleString("ru-RU");
+      previewMsk.hidden = true;
+    }
   }
 
   const PARTICIPANT_ICO_TRASH =
@@ -683,6 +722,13 @@
       '<div class="admin-raffle-card__badges">' +
       setStatusBadge(r.status) +
       (r.hidden_from_public ? '<span class="admin-raffle-badge admin-raffle-badge--hidden">Скрыта</span>' : "") +
+      (function () {
+        var ps = Math.floor(Number(r.public_start_at || 0));
+        if (ps > 0 && r.sales_open === false) {
+          return '<span class="admin-raffle-badge admin-raffle-badge--scheduled">Старт ' + esc(formatDateTimeLocalFromMs(ps).replace("T", " ")) + "</span>";
+        }
+        return "";
+      })() +
       "</div>" +
       '<h3 class="admin-raffle-card__title">' +
       esc(String(r.title)) +
@@ -915,6 +961,16 @@
     if (formTitle) formTitle.textContent = edit ? "Редактировать акцию" : "Новая акция";
     document.getElementById("raffle-edit-id").value = edit ? String(edit.id) : "";
     document.getElementById("raffle-title").value = edit ? edit.title : "";
+    var publicStartEnabledEl = document.getElementById("raffle-public-start-enabled");
+    var publicStartAtEl = document.getElementById("raffle-public-start-at");
+    var publicStartMs = edit ? Math.floor(Number(edit.public_start_at || 0)) : 0;
+    if (publicStartEnabledEl) {
+      publicStartEnabledEl.checked = publicStartMs > 0;
+    }
+    if (publicStartAtEl) {
+      publicStartAtEl.value = publicStartMs > 0 ? formatDateTimeLocalFromMs(publicStartMs) : "";
+    }
+    syncPublicStartScheduleUi();
     document.getElementById("raffle-cover-url").value = edit ? edit.cover_image_url || "" : "";
     var gifUrlEl = document.getElementById("raffle-cover-gif-url");
     if (gifUrlEl) gifUrlEl.value = edit ? edit.cover_gif_url || "" : "";
@@ -1520,6 +1576,9 @@
   document.getElementById("btn-raffle-new")?.addEventListener("click", function () {
     openForm(null);
   });
+  document.getElementById("raffle-public-start-enabled")?.addEventListener("change", syncPublicStartScheduleUi);
+  document.getElementById("raffle-public-start-at")?.addEventListener("input", syncPublicStartScheduleUi);
+  document.getElementById("raffle-public-start-at")?.addEventListener("change", syncPublicStartScheduleUi);
   document.getElementById("raffle-wholesale-enabled")?.addEventListener("change", syncWholesaleEveryNRow);
   document.getElementById("modal-raffle-form-close")?.addEventListener("click", closeForm);
   document.getElementById("btn-raffle-cancel")?.addEventListener("click", closeForm);
@@ -1959,6 +2018,12 @@
       hidden_from_public: (function () {
         var h = document.getElementById("raffle-hidden-from-public");
         return h ? !!h.checked : false;
+      })(),
+      public_start_at: (function () {
+        var enabled = document.getElementById("raffle-public-start-enabled");
+        if (!enabled || !enabled.checked) return null;
+        var el = document.getElementById("raffle-public-start-at");
+        return parseDateTimeLocalToMs(el ? el.value : "");
       })(),
     };
     try {
