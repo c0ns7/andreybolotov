@@ -4155,52 +4155,54 @@
       if (days > 0) streamCountdown = String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м";
       else streamCountdown = String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
     }
+    function raffleShutterHtml(variant, bodyInner) {
+      var heads = {
+        paused: "ТЕХ ПАУЗА",
+        scheduled: "СКОРО ОТКРОЕТСЯ",
+        closed: "ПРОДАЖИ ЗАКРЫТЫ",
+      };
+      return (
+        '<div class="raffle-card__shutter raffle-card__shutter--' +
+        variant +
+        '" aria-hidden="true">' +
+        '<div class="raffle-card__shutter-head">' +
+        escapeHtml(heads[variant] || "") +
+        "</div>" +
+        '<div class="raffle-card__shutter-body">' +
+        bodyInner +
+        "</div></div>"
+      );
+    }
+
     var badgeBlock = "";
     if (isScheduled) {
-      badgeBlock =
-        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--scheduled">' +
-        '<div class="raffle-card__badge raffle-card__badge--scheduled">Скоро откроется</div>' +
-        '<div class="raffle-card__sub">До старта акции</div>' +
-        '<div class="raffle-card__sub raffle-card__sub--timer" data-raffle-public-start-countdown="' +
-        escapeHtml(String(publicStartAt)) +
-        '"></div>' +
-        "</div>";
+      badgeBlock = raffleShutterHtml(
+        "scheduled",
+        '<p class="raffle-card__shutter-line">До старта акции</p>' +
+          '<p class="raffle-card__shutter-timer" data-raffle-public-start-countdown="' +
+          escapeHtml(String(publicStartAt)) +
+          '"></p>',
+      );
     } else if (st === "active" && myOrderStatus === "reserved") {
       badgeBlock =
         '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--wait-check">' +
         '<div class="raffle-card__badge raffle-card__badge--wait-check">Ждём чек</div>' +
         "</div>";
     } else if (st === "paused") {
-      badgeBlock =
-        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--paused">' +
-        '<div class="raffle-card__badge raffle-card__badge--pause">' +
-        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-        '<circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>' +
-        " Техническая пауза" +
-        "</div>" +
-        '<div class="raffle-card__sub">Скоро вернёмся</div>' +
-        "</div>";
+      badgeBlock = raffleShutterHtml("paused", '<p class="raffle-card__shutter-line">Скоро вернёмся</p>');
     } else if (st === "closed") {
-      var closedSub =
+      var closedBody =
         streamState === "scheduled"
-          ? '<div class="raffle-card__sub">До эфира</div>' +
+          ? '<p class="raffle-card__shutter-line">До эфира</p>' +
             (streamCountdown
-              ? '<div class="raffle-card__sub raffle-card__sub--timer" data-raffle-stream-countdown="' +
+              ? '<p class="raffle-card__shutter-timer" data-raffle-stream-countdown="' +
                 escapeHtml(String(streamAt)) +
-                '"></div>'
+                '"></p>'
               : "")
           : streamState === "live"
-            ? '<div class="raffle-card__sub">ЭФИР УЖЕ НАЧАЛСЯ</div>'
-            : '<div class="raffle-card__sub">Эфир окончен</div>';
-      badgeBlock =
-        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--closed">' +
-        '<div class="raffle-card__badge raffle-card__badge--pause">' +
-        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-        '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' +
-        " Продажи закрыты" +
-        "</div>" +
-        closedSub +
-        "</div>";
+            ? '<p class="raffle-card__shutter-line">Эфир уже начался</p>'
+            : '<p class="raffle-card__shutter-line">Эфир окончен</p>';
+      badgeBlock = raffleShutterHtml("closed", closedBody);
     }
     var pr = Number(r.price_rub ?? 0);
     var basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? pr)));
@@ -4615,7 +4617,7 @@
   function updateRaffleStreamCountdowns(rootEl) {
     var root = rootEl || document;
     var nowTs = nowMsSyncedForRaffle();
-    root.querySelectorAll("[data-raffle-public-start-countdown]").forEach(function (el) {
+    root.querySelectorAll("[data-raffle-public-start-countdown], .raffle-card__shutter-timer[data-raffle-public-start-countdown]").forEach(function (el) {
       var at = Math.floor(Number(el.getAttribute("data-raffle-public-start-countdown") || 0));
       if (!Number.isFinite(at) || at <= 0) return;
       var left = Math.max(0, at - nowTs);
@@ -4629,7 +4631,7 @@
           ? String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м"
           : String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
     });
-    root.querySelectorAll("[data-raffle-stream-countdown]").forEach(function (el) {
+    root.querySelectorAll("[data-raffle-stream-countdown], .raffle-card__shutter-timer[data-raffle-stream-countdown]").forEach(function (el) {
       var at = Math.floor(Number(el.getAttribute("data-raffle-stream-countdown") || 0));
       if (!Number.isFinite(at) || at <= 0) return;
       var left = Math.max(0, at - nowTs);

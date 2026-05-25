@@ -61,6 +61,27 @@ function formatCountdown(targetMs: number, nowMs: number) {
   return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
+const RAFFLE_SHUTTER_HEAD: Record<"paused" | "scheduled" | "closed", string> = {
+  paused: "ТЕХ ПАУЗА",
+  scheduled: "СКОРО ОТКРОЕТСЯ",
+  closed: "ПРОДАЖИ ЗАКРЫТЫ",
+};
+
+function RaffleCardShutter({
+  variant,
+  children,
+}: {
+  variant: "paused" | "scheduled" | "closed";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`raffle-card__shutter raffle-card__shutter--${variant}`} aria-hidden="true">
+      <div className="raffle-card__shutter-head">{RAFFLE_SHUTTER_HEAD[variant]}</div>
+      <div className="raffle-card__shutter-body">{children}</div>
+    </div>
+  );
+}
+
 export default function HomeAppClient() {
   const router = useRouter();
   const { session, authVerified, authCheckInFlight, toast, verifySession } = useAbSession();
@@ -507,13 +528,12 @@ export default function HomeAppClient() {
                         </div>
                       ) : null}
                       {isScheduled ? (
-                        <div className="raffle-card__badge-wrap raffle-card__badge-wrap--scheduled">
-                          <div className="raffle-card__badge raffle-card__badge--scheduled">Скоро откроется</div>
-                          <div className="raffle-card__sub">До старта акции</div>
+                        <RaffleCardShutter variant="scheduled">
+                          <p className="raffle-card__shutter-line">До старта акции</p>
                           {publicStartCountdown ? (
-                            <div className="raffle-card__sub raffle-card__sub--timer">{publicStartCountdown}</div>
+                            <p className="raffle-card__shutter-timer">{publicStartCountdown}</p>
                           ) : null}
-                        </div>
+                        </RaffleCardShutter>
                       ) : null}
                       {isWaitCheck ? (
                         <div className="raffle-card__badge-wrap raffle-card__badge-wrap--wait-check">
@@ -521,37 +541,25 @@ export default function HomeAppClient() {
                         </div>
                       ) : null}
                       {isPaused ? (
-                        <div className="raffle-card__badge-wrap raffle-card__badge-wrap--paused">
-                          <div className="raffle-card__badge raffle-card__badge--pause">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <circle cx="12" cy="12" r="10"></circle>
-                              <path d="M12 8v4M12 16h.01"></path>
-                            </svg>
-                            Техническая пауза
-                          </div>
-                          <div className="raffle-card__sub">Скоро вернёмся</div>
-                        </div>
+                        <RaffleCardShutter variant="paused">
+                          <p className="raffle-card__shutter-line">Скоро вернёмся</p>
+                        </RaffleCardShutter>
                       ) : null}
                       {isClosed ? (
-                        <div className="raffle-card__badge-wrap raffle-card__badge-wrap--closed">
-                          <div className="raffle-card__badge raffle-card__badge--pause">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                            </svg>
-                            Продажи закрыты
-                          </div>
+                        <RaffleCardShutter variant="closed">
                           {streamState === "scheduled" ? (
                             <>
-                              <div className="raffle-card__sub">До эфира</div>
-                              {streamCountdown ? <div className="raffle-card__sub raffle-card__sub--timer">{streamCountdown}</div> : null}
+                              <p className="raffle-card__shutter-line">До эфира</p>
+                              {streamCountdown ? (
+                                <p className="raffle-card__shutter-timer">{streamCountdown}</p>
+                              ) : null}
                             </>
                           ) : streamState === "live" ? (
-                            <div className="raffle-card__sub">Эфир уже начался</div>
+                            <p className="raffle-card__shutter-line">Эфир уже начался</p>
                           ) : (
-                            <div className="raffle-card__sub">Эфир окончен</div>
+                            <p className="raffle-card__shutter-line">Эфир окончен</p>
                           )}
-                        </div>
+                        </RaffleCardShutter>
                       ) : null}
                       <h3 className="raffle-card__title">{String(r.title || "")}</h3>
                     </div>

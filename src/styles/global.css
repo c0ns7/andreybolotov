@@ -3247,40 +3247,89 @@ html.theme-dark .home-faq-item__a {
   margin: 10px;
 }
 
-.raffle-card__badge-wrap--paused {
-  inset: auto;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
-  max-width: calc(100% - 24px);
-  margin: 0;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  /* backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); */
-  justify-content: center;
-  padding: 10px 14px 8px;
+/* Шторка поверх обложки: заголовок сверху, детали по центру */
+.raffle-card__shutter {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   pointer-events: none;
+  border-radius: inherit;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.raffle-card__badge-wrap--closed {
-  inset: auto;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
-  max-width: calc(100% - 24px);
-  margin: 0;
-  border-radius: 14px;
-  /* background: rgba(15, 23, 42, 0.78); */
-  /* border: 1px solid rgba(255, 255, 255, 0.16); */
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+.raffle-card__shutter-head {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 11px 14px 10px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+.raffle-card__shutter--paused .raffle-card__shutter-head {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 48%, #b45309 100%);
+  border-bottom: 1px solid rgba(253, 230, 138, 0.4);
+}
+
+.raffle-card__shutter--scheduled .raffle-card__shutter-head {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 52%, #1d4ed8 100%);
+  border-bottom: 1px solid rgba(191, 219, 254, 0.45);
+}
+
+.raffle-card__shutter--closed .raffle-card__shutter-head {
+  background: linear-gradient(180deg, #64748b 0%, #475569 55%, #334155 100%);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.28);
+}
+
+.raffle-card__shutter-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 10px 14px 8px;
-  pointer-events: none;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  text-align: center;
+}
+
+.raffle-card__shutter-line {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  animation: raffleSubPulse 2s ease-in-out infinite;
+}
+
+.raffle-card__shutter-timer {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  color: #fde68a;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.raffle-card__media:has(.raffle-card__shutter) .raffle-card__title {
+  visibility: hidden;
+}
+
+.raffle-card__media:has(.raffle-card__shutter) .raffle-card__promo-badge,
+.raffle-card__media:has(.raffle-card__shutter) .raffle-card__promo-special {
+  opacity: 0.35;
 }
 
 .raffle-card__badge-wrap--flat {
@@ -3320,25 +3369,17 @@ html.theme-dark .home-faq-item__a {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.raffle-card--scheduled .raffle-card__media {
-  filter: saturate(0.92);
+.raffle-card--scheduled .raffle-card__media,
+.raffle-card__media:has(.raffle-card__shutter--scheduled) {
+  filter: saturate(0.88) brightness(0.94);
 }
 
-.raffle-card__badge-wrap--scheduled {
-  inset: 10px 10px auto 10px;
-  width: auto;
-  max-width: calc(100% - 20px);
-  align-items: center;
-} 
+.raffle-card__media:has(.raffle-card__shutter--paused) {
+  filter: saturate(0.9) brightness(0.93);
+}
 
-.raffle-card__badge--scheduled {
-  margin-bottom: 6px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(147, 197, 253, 0.45);
-  color: #bfdbfe;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+.raffle-card__media:has(.raffle-card__shutter--closed) {
+  filter: saturate(0.85) brightness(0.9);
 }
 
 .raffle-card__badge-wrap--flat .raffle-card__badge {
