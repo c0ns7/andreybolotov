@@ -3328,8 +3328,8 @@ html.theme-dark .home-faq-item__a {
   inset: 10px 10px auto 10px;
   width: auto;
   max-width: calc(100% - 20px);
-  align-items: flex-start;
-}
+  align-items: center;
+} 
 
 .raffle-card__badge--scheduled {
   margin-bottom: 6px;
