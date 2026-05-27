@@ -3057,6 +3057,72 @@ html.theme-dark .home-faq-item__a {
   width: 20px;
 }
 
+.raffle-card__stream-pill {
+  position: absolute;
+  bottom: 2.65rem;
+  left: 12px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: calc(100% - 24px);
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.94);
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.raffle-card__stream-pill-text {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raffle-card__stream-pill-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  opacity: 0.88;
+}
+
+.raffle-card__stream-pill-icon svg {
+  display: block;
+}
+
+.raffle-card__stream-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #f87171;
+  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.65);
+  animation: raffleStreamPillPulse 1.35s ease-in-out infinite;
+}
+
+.raffle-card__stream-pill--live {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.45);
+}
+
+@keyframes raffleStreamPillPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(248, 113, 113, 0);
+  }
+}
+
 .raffle-card__media-img--anim {
   animation: raffle-cover-gif-in 0.35s ease-out;
 }
@@ -14777,6 +14843,15 @@ html.theme-dark .raffle-card__price-suffix {
 
 html.theme-dark .raffle-card__viewers {
   background: rgba(15, 23, 42, 0.82);
+}
+
+html.theme-dark .raffle-card__stream-pill {
+  background: rgba(15, 23, 42, 0.62);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.theme-dark .raffle-card__stream-pill--live {
+  background: rgba(127, 29, 29, 0.55);
 }
 
 html.theme-dark .raffle-card__progress-track {

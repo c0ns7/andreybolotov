@@ -78,6 +78,20 @@
     return formatRuInTimezone(ms, MOSCOW_TIMEZONE);
   }
 
+  function formatStreamCardShort(ms) {
+    try {
+      return new Date(ms).toLocaleString("ru-RU", {
+        timeZone: SITE_TIMEZONE,
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (_) {
+      return "";
+    }
+  }
+
   global.AbSiteTimezone = {
     SITE_TIMEZONE: SITE_TIMEZONE,
     SITE_TIMEZONE_LABEL: SITE_TIMEZONE_LABEL,
@@ -87,5 +101,6 @@
     formatRuSiteDateTime: formatRuSiteDateTime,
     formatRuMoscowDateTime: formatRuMoscowDateTime,
     formatRuInTimezone: formatRuInTimezone,
+    formatStreamCardShort: formatStreamCardShort,
   };
 })(typeof window !== "undefined" ? window : globalThis);

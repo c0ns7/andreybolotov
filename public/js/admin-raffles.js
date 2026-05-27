@@ -343,6 +343,35 @@
     return Math.floor(ts);
   }
 
+  function syncLiveStreamScheduleUi() {
+    var showEl = document.getElementById("raffle-live-stream-show-on-card");
+    var atEl = document.getElementById("raffle-live-stream-at");
+    var previewWrap = document.getElementById("raffle-live-stream-preview");
+    var previewSite = document.getElementById("raffle-live-stream-preview-site");
+    var previewMsk = document.getElementById("raffle-live-stream-preview-moscow");
+    if (!showEl) return;
+    var on = !!showEl.checked;
+    if (!on || !previewWrap || !previewSite || !previewMsk) {
+      if (previewWrap) previewWrap.hidden = true;
+      return;
+    }
+    var ms = parseDateTimeLocalToMs(atEl ? atEl.value : "");
+    if (ms == null) {
+      previewWrap.hidden = true;
+      return;
+    }
+    previewWrap.hidden = false;
+    if (tzApi) {
+      previewSite.textContent =
+        "Эфир на карточке: " + tzApi.formatRuSiteDateTime(ms) + " (" + tzApi.SITE_TIMEZONE_LABEL + ")";
+      previewMsk.textContent = "У участников в Москве: " + tzApi.formatRuMoscowDateTime(ms);
+      previewMsk.hidden = false;
+    } else {
+      previewSite.textContent = "Эфир: " + new Date(ms).toLocaleString("ru-RU");
+      previewMsk.hidden = true;
+    }
+  }
+
   function syncPublicStartScheduleUi() {
     var enabledEl = document.getElementById("raffle-public-start-enabled");
     var fieldsWrap = document.getElementById("raffle-public-start-fields");
@@ -1018,19 +1047,25 @@
     if (tbankUrlEl) tbankUrlEl.value = edit ? edit.tbank_collection_url || "" : "";
     var rulesEl = document.getElementById("raffle-rules-url");
     if (rulesEl) rulesEl.value = edit ? edit.rules_url || "" : "";
+    var liveShowEl = document.getElementById("raffle-live-stream-show-on-card");
+    var streamAtMs = edit ? Math.floor(Number(edit.live_stream_at || 0)) : 0;
+    if (liveShowEl) {
+      liveShowEl.checked = edit ? !!edit.live_stream_show_on_card : false;
+    }
     var liveNoteEl = document.getElementById("raffle-live-stream-note");
     if (liveNoteEl) liveNoteEl.value = edit ? edit.live_stream_note || "" : "";
     var liveUrlEl = document.getElementById("raffle-live-stream-url");
     if (liveUrlEl) liveUrlEl.value = edit ? edit.live_stream_url || "" : "";
     var liveAtEl = document.getElementById("raffle-live-stream-at");
     if (liveAtEl) {
-      liveAtEl.value = edit ? formatDateTimeLocalFromMs(edit.live_stream_at) : "";
+      liveAtEl.value = streamAtMs > 0 ? formatDateTimeLocalFromMs(streamAtMs) : "";
     }
     var liveStatusEl = document.getElementById("raffle-live-stream-status");
     if (liveStatusEl) {
       var st = edit ? String(edit.live_stream_status || "scheduled").toLowerCase() : "scheduled";
       liveStatusEl.value = st === "live" || st === "ended" ? st : "scheduled";
     }
+    syncLiveStreamScheduleUi();
     var sberRecEl = document.getElementById("raffle-recipient-sber");
     if (sberRecEl)
       sberRecEl.value = edit
@@ -1679,6 +1714,9 @@
   document.getElementById("raffle-public-start-enabled")?.addEventListener("change", syncPublicStartScheduleUi);
   document.getElementById("raffle-public-start-at")?.addEventListener("input", syncPublicStartScheduleUi);
   document.getElementById("raffle-public-start-at")?.addEventListener("change", syncPublicStartScheduleUi);
+  document.getElementById("raffle-live-stream-show-on-card")?.addEventListener("change", syncLiveStreamScheduleUi);
+  document.getElementById("raffle-live-stream-at")?.addEventListener("input", syncLiveStreamScheduleUi);
+  document.getElementById("raffle-live-stream-at")?.addEventListener("change", syncLiveStreamScheduleUi);
   document.getElementById("raffle-wholesale-enabled")?.addEventListener("change", syncWholesaleEveryNRow);
   document.getElementById("modal-raffle-form-close")?.addEventListener("click", closeForm);
   document.getElementById("btn-raffle-cancel")?.addEventListener("click", closeForm);
@@ -2073,6 +2111,10 @@
       live_stream_url: (function () {
         var el = document.getElementById("raffle-live-stream-url");
         return el ? String(el.value || "").trim() : "";
+      })(),
+      live_stream_show_on_card: (function () {
+        var el = document.getElementById("raffle-live-stream-show-on-card");
+        return el ? !!el.checked : false;
       })(),
       live_stream_at: (function () {
         var el = document.getElementById("raffle-live-stream-at");

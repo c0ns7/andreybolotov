@@ -1154,45 +1154,69 @@ export default function AdminMarkup() {
                   maxLength={2000}
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="raffle-live-stream-note">Время эфира / сообщение в модалке</label>
-                <textarea
-                  id="raffle-live-stream-note"
-                  className="input"
-                  rows={2}
-                  maxLength={2000}
-                  placeholder="Например: Эфир закончился, смотрите запись эфира по ссылке."
-                ></textarea>
+            </section>
+            <section
+              className="admin-raffle-schedule-card admin-raffle-schedule-card--stream"
+              aria-labelledby="raffle-sec-stream"
+              id="raffle-stream-schedule-card"
+            >
+              <div className="admin-raffle-schedule-card__glow" aria-hidden="true" />
+              <h3 id="raffle-sec-stream" className="admin-raffle-schedule-card__title">
+                <span className="admin-raffle-schedule-card__title-icon admin-raffle-schedule-card__title-icon--stream" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+                    <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+                    <circle cx="12" cy="12" r="2" />
+                    <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+                    <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+                  </svg>
+                </span>
+                Эфир на карточке акции
+              </h3>
+              <p className="admin-raffle-schedule-card__lead">
+                Время указывайте в <strong>агинском</strong> поясе (UTC+9, +6 к Москве). На главной появится компактная
+                плашка — не перекрывает обложку и название.
+              </p>
+              <div className="form-group admin-raffle-toggle-row">
+                <label className="admin-toggle" htmlFor="raffle-live-stream-show-on-card">
+                  <input id="raffle-live-stream-show-on-card" className="admin-toggle__input" type="checkbox" role="switch" />
+                  <span className="admin-toggle__track" aria-hidden="true" />
+                  <span className="admin-toggle__label">Показывать время эфира на карточке</span>
+                </label>
               </div>
-              <div className="form-row-2">
+              <div id="raffle-live-stream-fields" className="admin-raffle-schedule-card__fields">
                 <div className="form-group">
-                  <label htmlFor="raffle-live-stream-at">Время старта эфира (агинское)</label>
-                  <input
-                    id="raffle-live-stream-at"
+                  <label htmlFor="raffle-live-stream-at">Дата и время эфира (агинское)</label>
+                  <input id="raffle-live-stream-at" className="input admin-raffle-schedule-card__datetime" type="datetime-local" step={60} />
+                </div>
+                <div className="admin-raffle-schedule-card__preview" id="raffle-live-stream-preview" role="status" aria-live="polite" hidden>
+                  <p className="admin-raffle-schedule-card__preview-line" id="raffle-live-stream-preview-site" />
+                  <p className="admin-raffle-schedule-card__preview-line admin-raffle-schedule-card__preview-line--muted" id="raffle-live-stream-preview-moscow" />
+                </div>
+                <div className="form-row-2">
+                  <div className="form-group">
+                    <label htmlFor="raffle-live-stream-status">Статус</label>
+                    <select id="raffle-live-stream-status" className="input input--select">
+                      <option value="scheduled">Запланирован</option>
+                      <option value="live">Идёт</option>
+                      <option value="ended">Окончен</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="raffle-live-stream-url">Ссылка на эфир</label>
+                    <input id="raffle-live-stream-url" className="input" type="url" inputMode="url" placeholder="https://…" maxLength={2000} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-live-stream-note">Текст после закрытия продаж (модалка)</label>
+                  <textarea
+                    id="raffle-live-stream-note"
                     className="input"
-                    type="datetime-local"
-                    step={60}
-                  />
+                    rows={2}
+                    maxLength={2000}
+                    placeholder="Например: Эфир закончился, смотрите запись по ссылке."
+                  ></textarea>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="raffle-live-stream-status">Статус эфира</label>
-                  <select id="raffle-live-stream-status" className="input input--select">
-                    <option value="scheduled">Запланирован</option>
-                    <option value="live">Идет</option>
-                    <option value="ended">Окончен</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label htmlFor="raffle-live-stream-url">Ссылка на эфир (для кнопки в модалке)</label>
-                <input
-                  id="raffle-live-stream-url"
-                  className="input"
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://…"
-                  maxLength={2000}
-                />
               </div>
             </section>
             <section className="admin-raffle-section" aria-labelledby="raffle-sec-pub">

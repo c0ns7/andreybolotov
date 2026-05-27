@@ -758,6 +758,7 @@ export type RaffleRow = {
   live_stream_url?: string;
   live_stream_at?: number | null;
   live_stream_status?: string;
+  live_stream_show_on_card?: number;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -813,6 +814,7 @@ export type RaffleDto = {
   live_stream_url: string | null;
   live_stream_at: number | null;
   live_stream_status: "scheduled" | "live" | "ended" | null;
+  live_stream_show_on_card: boolean;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -889,6 +891,7 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     live_stream_url: liveStreamUrlRaw ? liveStreamUrlRaw : null,
     live_stream_at: liveStreamAt,
     live_stream_status: liveStreamStatus,
+    live_stream_show_on_card: Boolean(Number((r as RaffleRow).live_stream_show_on_card ?? 0)),
     status: st,
     sort_order: r.sort_order,
     wholesale_enabled: Boolean((r as RaffleRow).wholesale_enabled),
@@ -1078,6 +1081,7 @@ export async function insertRaffle(data: {
   live_stream_url: string;
   live_stream_at: number | null;
   live_stream_status: string;
+  live_stream_show_on_card: number;
   status: string;
   sort_order: number;
   wholesale_enabled: number;
@@ -1095,9 +1099,9 @@ export async function insertRaffle(data: {
       raffle_hash, title, cover_image_url, cover_gif_url, price_rub, cenopad_enabled, cenopad_price_rub, old_price_rub, ticket_count,
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
-      sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status,
+      sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status, live_stream_show_on_card,
       status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, public_start_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -1127,6 +1131,7 @@ export async function insertRaffle(data: {
       data.live_stream_url,
       data.live_stream_at,
       data.live_stream_status,
+      data.live_stream_show_on_card,
       data.status,
       data.sort_order,
       data.wholesale_enabled,
@@ -1173,6 +1178,7 @@ export async function updateRaffle(
     live_stream_url: string;
     live_stream_at: number | null;
     live_stream_status: string;
+    live_stream_show_on_card: number;
     status: string;
     sort_order: number;
     wholesale_enabled: number;
@@ -1191,7 +1197,7 @@ export async function updateRaffle(
       cenopad_enabled = ?, cenopad_price_rub = ?,
       cenopad_start_at = ?, cenopad_end_at = ?,
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
-      live_stream_at = ?, live_stream_status = ?,
+      live_stream_at = ?, live_stream_status = ?, live_stream_show_on_card = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
       status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, card_payment_min_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, public_start_at = ?, updated_at = ?
     WHERE id = ?`,
@@ -1219,6 +1225,7 @@ export async function updateRaffle(
       data.live_stream_url,
       data.live_stream_at,
       data.live_stream_status,
+      data.live_stream_show_on_card,
       data.sber_enabled,
       data.tbank_enabled,
       data.qr_enabled,

@@ -3522,6 +3522,15 @@ body.admin-pay-lightbox-open {
   color: #2563eb;
 }
 
+.admin-raffle-schedule-card__title-icon--stream {
+  background: rgba(244, 63, 94, 0.12);
+  color: #e11d48;
+}
+
+.admin-raffle-schedule-card--stream .admin-raffle-schedule-card__glow {
+  background: radial-gradient(ellipse 80% 60% at 20% 0%, rgba(244, 63, 94, 0.14), transparent 70%);
+}
+
 .admin-raffle-schedule-card__lead {
   position: relative;
   margin: 0 0 0.85rem;

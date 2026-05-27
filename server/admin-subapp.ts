@@ -548,6 +548,7 @@ type RaffleInput = {
   live_stream_url: string;
   live_stream_at: number | null;
   live_stream_status: "scheduled" | "live" | "ended";
+  live_stream_show_on_card: boolean;
   status: "active" | "closed" | "paused";
   sort_order: number;
   wholesale_enabled: boolean;
@@ -750,6 +751,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     .toLowerCase();
   const live_stream_status =
     streamStatusRaw === "live" || streamStatusRaw === "ended" ? streamStatusRaw : "scheduled";
+  const live_stream_show_on_card = Boolean(body.live_stream_show_on_card);
   if (live_stream_url.length > 2000) {
     return { ok: false, error: "Ссылка на эфир слишком длинная" };
   }
@@ -803,6 +805,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       live_stream_url,
       live_stream_at,
       live_stream_status,
+      live_stream_show_on_card,
       status,
       sort_order,
       wholesale_enabled,
@@ -1530,6 +1533,7 @@ adminSubApp.post("/raffles", async (c) => {
     live_stream_url: v.live_stream_url,
     live_stream_at: v.live_stream_at,
     live_stream_status: v.live_stream_status,
+    live_stream_show_on_card: v.live_stream_show_on_card ? 1 : 0,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,
@@ -1597,6 +1601,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     live_stream_url: v.live_stream_url,
     live_stream_at: v.live_stream_at,
     live_stream_status: v.live_stream_status,
+    live_stream_show_on_card: v.live_stream_show_on_card ? 1 : 0,
     status: v.status,
     sort_order: v.sort_order,
     wholesale_enabled: v.wholesale_enabled ? 1 : 0,

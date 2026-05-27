@@ -76,6 +76,21 @@ export function formatRuMoscowDateTime(ms: number): string {
   return formatRuInTimezone(ms, MOSCOW_TIMEZONE);
 }
 
+/** Короткая подпись для бейджа на карточке акции. */
+export function formatStreamCardShort(ms: number): string {
+  try {
+    return new Date(ms).toLocaleString("ru-RU", {
+      timeZone: SITE_TIMEZONE,
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 /** Продажи и публичное открытие — только по серверным часам (Date.now), не по часам устройства. */
 export function isEpochReached(atMs: number | null | undefined, nowMs = Date.now()): boolean {
   const at = Math.floor(Number(atMs ?? 0));

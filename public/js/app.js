@@ -4195,6 +4195,49 @@
       if (days > 0) streamCountdown = String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м";
       else streamCountdown = String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
     }
+    var showStreamOnCard =
+      st === "active" &&
+      salesOpen &&
+      !isScheduled &&
+      st !== "paused" &&
+      (Number(r.live_stream_show_on_card) === 1 || r.live_stream_show_on_card === true) &&
+      streamAt > 0 &&
+      streamState !== "ended";
+    var streamPillHtml = "";
+    if (showStreamOnCard) {
+      var pillLabel = "";
+      var pillLive = streamState === "live";
+      var pillCountdown = false;
+      if (pillLive) {
+        pillLabel = "В эфире";
+      } else if (streamState === "scheduled") {
+        var pillLeft = streamAt - nowTs;
+        if (pillLeft > 0 && pillLeft < 48 * 3600 * 1000) {
+          pillLabel = streamCountdown;
+          pillCountdown = !!pillLabel;
+        } else {
+          var tzShort = global.AbSiteTimezone && global.AbSiteTimezone.formatStreamCardShort;
+          pillLabel = tzShort ? tzShort(streamAt) : "";
+        }
+      }
+      if (pillLabel) {
+        var pillIcon = pillLive
+          ? '<span class="raffle-card__stream-pill-dot" aria-hidden="true"></span>'
+          : '<span class="raffle-card__stream-pill-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path><circle cx="12" cy="12" r="2"></circle><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path></svg></span>';
+        streamPillHtml =
+          '<div class="raffle-card__stream-pill' +
+          (pillLive ? " raffle-card__stream-pill--live" : "") +
+          '" aria-label="' +
+          escapeHtml(pillLive ? "Эфир идёт" : "Время эфира") +
+          '">' +
+          pillIcon +
+          '<span class="raffle-card__stream-pill-text"' +
+          (pillCountdown ? ' data-raffle-card-stream-countdown="' + escapeHtml(String(streamAt)) + '"' : "") +
+          ">" +
+          escapeHtml(pillLabel) +
+          "</span></div>";
+      }
+    }
     function raffleShutterHtml(variant, bodyInner) {
       var heads = {
         paused: "Тех пауза",
@@ -4366,6 +4409,7 @@
       viewersBlock +
       specialPromoBadge +
       promoBadge +
+      streamPillHtml +
       badgeBlock +
       '<h3 class="raffle-card__title">' +
       escapeHtml(String(r.title || "")) +
@@ -4694,6 +4738,16 @@
         days > 0
           ? String(days) + "д " + String(hours).padStart(2, "0") + "ч " + String(mins).padStart(2, "0") + "м"
           : String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    });
+    root.querySelectorAll("[data-raffle-card-stream-countdown]").forEach(function (el) {
+      var at = Math.floor(Number(el.getAttribute("data-raffle-card-stream-countdown") || 0));
+      if (!Number.isFinite(at) || at <= 0) return;
+      var left = Math.max(0, at - nowTs);
+      var totalSec = Math.floor(left / 1000);
+      var hours = Math.floor((totalSec % 86400) / 3600);
+      var mins = Math.floor((totalSec % 3600) / 60);
+      var secs = totalSec % 60;
+      el.textContent = String(hours).padStart(2, "0") + ":" + String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
     });
     root.querySelectorAll("[data-second-price-countdown]").forEach(function (el) {
       var at = Math.floor(Number(el.getAttribute("data-second-price-countdown") || 0));

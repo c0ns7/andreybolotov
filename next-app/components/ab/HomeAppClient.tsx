@@ -18,6 +18,7 @@ import HomeHeaderOnline from "./HomeHeaderOnline";
 import AnimatedStatNumber from "./AnimatedStatNumber";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
+import { formatStreamCardShort } from "../../lib/site-timezone";
 
 type RaffleRow = {
   id: number;
@@ -42,6 +43,7 @@ type RaffleRow = {
   live_stream_url?: string | null;
   live_stream_at?: number | null;
   live_stream_status?: string | null;
+  live_stream_show_on_card?: number | boolean;
   public_start_at?: number | null;
   sales_open?: boolean;
 };
@@ -59,6 +61,16 @@ function formatCountdown(targetMs: number, nowMs: number) {
   const secs = totalSec % 60;
   if (days > 0) return `${days}д ${hours.toString().padStart(2, "0")}ч ${mins.toString().padStart(2, "0")}м`;
   return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+function streamCardPillLabel(streamAt: number, streamState: string, nowMs: number): string {
+  if (streamState === "live") return "В эфире";
+  if (streamState === "ended" || streamAt <= 0) return "";
+  const left = streamAt - nowMs;
+  if (streamState === "scheduled" && left > 0 && left < 48 * 3600 * 1000) {
+    return formatCountdown(streamAt, nowMs);
+  }
+  return formatStreamCardShort(streamAt);
 }
 
 const RAFFLE_SHUTTER_HEAD: Record<"paused" | "scheduled" | "closed", string> = {
@@ -373,7 +385,11 @@ export default function HomeAppClient() {
       const scheduled =
         String(r.status || "") === "active" && publicStart > 0 && r.sales_open === false;
       const closedStream = String(r.status || "") === "closed" && Number(r.live_stream_at || 0) > 0;
-      return scheduled || closedStream;
+      const activeStreamPill =
+        String(r.status || "") === "active" &&
+        Boolean(Number(r.live_stream_show_on_card) || r.live_stream_show_on_card === true) &&
+        Number(r.live_stream_at || 0) > 0;
+      return scheduled || closedStream || activeStreamPill;
     });
     if (!needsTick) return;
     const t = window.setInterval(() => setNowTs(Date.now() + serverTimeSkewMs), 1000);
@@ -492,6 +508,15 @@ export default function HomeAppClient() {
                       : "scheduled";
                 const streamCountdown =
                   streamAt > 0 && streamState === "scheduled" ? formatCountdown(streamAt, syncedNow) : "";
+                const showStreamOnCard =
+                  st === "active" &&
+                  salesOpen &&
+                  !isScheduled &&
+                  !isPaused &&
+                  Boolean(Number(r.live_stream_show_on_card) || r.live_stream_show_on_card === true) &&
+                  streamAt > 0 &&
+                  streamState !== "ended";
+                const streamPillLabel = showStreamOnCard ? streamCardPillLabel(streamAt, streamState, syncedNow) : "";
                 const streamUrl = String(r.live_stream_url || "").trim();
                 const isWaitCheck = st === "active" && myOrderStatus === "reserved";
                 const total = Math.max(0, Number(r.ticket_count) || 0);
@@ -586,6 +611,30 @@ export default function HomeAppClient() {
                         <RaffleCardShutter variant="paused">
                           <p className="raffle-card__shutter-line">Скоро вернёмся</p>
                         </RaffleCardShutter>
+                      ) : null}
+                      {streamPillLabel ? (
+                        <div
+                          className={
+                            "raffle-card__stream-pill" +
+                            (streamState === "live" ? " raffle-card__stream-pill--live" : "")
+                          }
+                          aria-label={streamState === "live" ? "Эфир идёт" : "Время эфира"}
+                        >
+                          {streamState === "live" ? (
+                            <span className="raffle-card__stream-pill-dot" aria-hidden="true" />
+                          ) : (
+                            <span className="raffle-card__stream-pill-icon" aria-hidden="true">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+                                <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+                                <circle cx="12" cy="12" r="2" />
+                                <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+                                <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+                              </svg>
+                            </span>
+                          )}
+                          <span className="raffle-card__stream-pill-text">{streamPillLabel}</span>
+                        </div>
                       ) : null}
                       {isClosed ? (
                         <RaffleCardShutter variant="closed">
