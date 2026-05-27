@@ -92,6 +92,20 @@
     }
   }
 
+  function formatStreamTimeLeft(targetMs, nowMs) {
+    var now = nowMs != null ? Math.floor(Number(nowMs)) : Date.now();
+    var left = Math.max(0, Math.floor(Number(targetMs)) - now);
+    if (left <= 0) return "";
+    var totalSec = Math.floor(left / 1000);
+    var days = Math.floor(totalSec / 86400);
+    var hours = Math.floor((totalSec % 86400) / 3600);
+    var mins = Math.floor((totalSec % 3600) / 60);
+    var secs = totalSec % 60;
+    if (days > 0) return String(days) + "д " + String(hours).padStart(2, "0") + "ч";
+    if (hours > 0) return String(hours) + "ч " + String(mins).padStart(2, "0") + "м";
+    return String(mins) + ":" + String(secs).padStart(2, "0");
+  }
+
   global.AbSiteTimezone = {
     SITE_TIMEZONE: SITE_TIMEZONE,
     SITE_TIMEZONE_LABEL: SITE_TIMEZONE_LABEL,
@@ -102,5 +116,6 @@
     formatRuMoscowDateTime: formatRuMoscowDateTime,
     formatRuInTimezone: formatRuInTimezone,
     formatStreamCardShort: formatStreamCardShort,
+    formatStreamTimeLeft: formatStreamTimeLeft,
   };
 })(typeof window !== "undefined" ? window : globalThis);

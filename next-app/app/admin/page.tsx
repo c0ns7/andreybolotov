@@ -15,7 +15,7 @@ export default function AdminPage() {
   return (
     <>
       <AdminMarkup />
-      <Script src="/static-proxy/js/site-timezone.js?v=20260530" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/site-timezone.js?v=20260603" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin.js?v=20260526" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-raffles.js?v=20260602" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-payments.js?v=20260518" strategy="afterInteractive" />

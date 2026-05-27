@@ -76,6 +76,20 @@ export function formatRuMoscowDateTime(ms: number): string {
   return formatRuInTimezone(ms, MOSCOW_TIMEZONE);
 }
 
+/** Компактно: сколько осталось до эфира. */
+export function formatStreamTimeLeft(targetMs: number, nowMs = Date.now()): string {
+  const left = Math.max(0, Math.floor(Number(targetMs)) - Math.floor(Number(nowMs)));
+  if (left <= 0) return "";
+  const totalSec = Math.floor(left / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  if (days > 0) return `${days}д ${hours.toString().padStart(2, "0")}ч`;
+  if (hours > 0) return `${hours}ч ${mins.toString().padStart(2, "0")}м`;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 /** Короткая подпись для бейджа на карточке акции. */
 export function formatStreamCardShort(ms: number): string {
   try {
