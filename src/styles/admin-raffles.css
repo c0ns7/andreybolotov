@@ -1282,20 +1282,286 @@
 .admin-raffle-wholesalers__list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  border: 1px solid #fdba74;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(194, 65, 12, 0.08);
 }
-.admin-raffle-wholesaler-row {
+
+.admin-raffle-wholesalers__empty {
+  margin: 0;
+}
+
+.admin-raffle-wholesalers__empty--dashed {
+  border-style: dashed;
+}
+
+.admin-raffle-wholesaler-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid #ffedd5;
+  background: #fff;
+  transition: background 0.15s ease;
+}
+
+.admin-raffle-wholesaler-card:last-child {
+  border-bottom: none;
+}
+
+.admin-raffle-wholesaler-card:hover {
+  background: linear-gradient(90deg, #fff7ed 0%, #fff 100%);
+}
+
+.admin-raffle-wholesaler-card__open {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 0.9rem;
+  gap: 12px;
+  padding: 14px 12px 14px 14px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
-.admin-raffle-wholesaler-row__num {
-  font-weight: 800;
+
+.admin-raffle-wholesaler-card__open:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.admin-raffle-wholesaler-card__badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
+  color: #9a3412;
+  background: linear-gradient(180deg, #ffedd5 0%, #fed7aa 100%);
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.2);
+}
+
+.admin-raffle-wholesaler-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.admin-raffle-wholesaler-card__phone {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-raffle-wholesaler-card__phone.is-masked {
+  filter: blur(4px);
+  user-select: none;
+}
+
+.admin-raffle-wholesaler-card__meta {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.admin-raffle-wholesaler-card__name {
+  font-weight: 700;
+  color: #334155;
+}
+
+.admin-raffle-wholesaler-card__hint {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #ea580c;
+  letter-spacing: 0.01em;
+}
+
+.admin-raffle-wholesaler-card__chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+}
+
+.admin-raffle-wholesaler-card:hover .admin-raffle-wholesaler-card__chev {
+  color: #ea580c;
+}
+
+.admin-raffle-wholesaler-card__copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  margin: 8px 8px 8px 0;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.admin-raffle-wholesaler-card__copy:hover {
+  border-color: #fdba74;
+  background: #fff7ed;
   color: #c2410c;
-  min-width: 2.5rem;
+}
+
+.admin-raffle-wholesaler-card__copy:active {
+  transform: scale(0.96);
+}
+
+.admin-raffle-wholesaler-card__copy:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: 2px;
+}
+
+.modal-overlay--raffle-wholesaler {
+  z-index: 116;
+}
+
+.admin-raffle-modal__title-icon--wholesaler {
+  background: linear-gradient(145deg, #ffedd5 0%, #fed7aa 100%);
+  color: #c2410c;
+}
+
+.admin-raffle-wholesaler-modal__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-raffle-wholesaler-modal__stat {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #ffedd5;
+  background: linear-gradient(180deg, #fff7ed 0%, #fff 100%);
+  text-align: center;
+}
+
+.admin-raffle-wholesaler-modal__stat-k {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9a3412;
+}
+
+.admin-raffle-wholesaler-modal__stat-v {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-raffle-wholesaler-modal__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.admin-raffle-wholesaler-modal__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-raffle-wholesaler-modal__row--phone .admin-raffle-wholesaler-modal__phone-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-raffle-wholesaler-modal__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.admin-raffle-wholesaler-modal__value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.admin-raffle-wholesaler-modal__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #c2410c;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.admin-raffle-wholesaler-modal__copy:hover {
+  background: #fff7ed;
+  border-color: #ea580c;
+}
+
+.admin-raffle-wholesaler-modal__actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .admin-raffle-wholesaler-modal__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-raffle-wholesaler-card__open {
+    padding: 12px 10px;
+  }
+
+  .admin-raffle-wholesaler-card__hint {
+    display: none;
+  }
 }
 .admin-raffle-participant-card--wholesale {
   border-color: #fdba74;

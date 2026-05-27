@@ -9,8 +9,9 @@
   let rafflesListTab = "active";
   /** @type {Array<{ticket_number:number,user_phone:string,order_status:string,is_wholesale?:boolean,user_id?:number,user_name?:string,,user_locality?:string}>} */
   let participantsCache = [];
-  /** @type {Array<{wholesale_number:number,user_phone:string}>} */
+  /** @type {Array<{wholesale_number:number,user_phone:string,user_id?:number,user_name?:string,user_locality?:string,confirmed_ticket_count?:number,total_ticket_count?:number}>} */
   let wholesalersCache = [];
+  let wholesalerModalPhone = "";
   let participantsRaffleId = null;
   let participantsActiveTab = "participants";
   let participantsWholesaleEnabled = false;
@@ -372,6 +373,12 @@
       previewMsk.hidden = true;
     }
   }
+
+  const ICO_COPY =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+    '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>' +
+    '<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>' +
+    "</svg>";
 
   const PARTICIPANT_ICO_TRASH =
     '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -1204,34 +1211,127 @@
     });
   }
 
+  function ticketsCountLabel(n) {
+    var x = Math.max(0, Math.floor(Number(n) || 0));
+    var mod10 = x % 10;
+    var mod100 = x % 100;
+    if (mod10 === 1 && mod100 !== 11) return String(x) + " номерок";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return String(x) + " номерка";
+    return String(x) + " номерков";
+  }
+
+  async function copyTextToClipboard(text, okMsg) {
+    var t = String(text || "").trim();
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      if (okMsg && typeof window.abAdminToast === "function") window.abAdminToast(okMsg, "success");
+    } catch (_) {
+      alert("Не удалось скопировать");
+    }
+  }
+
+  function openWholesalerModal(w) {
+    if (!w) return;
+    var modal = document.getElementById("modal-raffle-wholesaler");
+    var title = document.getElementById("modal-raffle-wholesaler-title");
+    var nameEl = document.getElementById("raffle-wholesaler-name");
+    var phoneEl = document.getElementById("raffle-wholesaler-phone");
+    var localityEl = document.getElementById("raffle-wholesaler-locality");
+    var confirmedEl = document.getElementById("raffle-wholesaler-confirmed");
+    var totalEl = document.getElementById("raffle-wholesaler-total");
+    var chatBtn = document.getElementById("raffle-wholesaler-chat");
+    wholesalerModalPhone = String(w.user_phone || "").trim();
+    if (title) title.textContent = "Оптовик № " + String(w.wholesale_number);
+    if (nameEl) nameEl.textContent = String(w.user_name || "").trim() || "Не указано";
+    if (phoneEl) phoneEl.textContent = wholesalerModalPhone || "Не указано";
+    if (localityEl) localityEl.textContent = String(w.user_locality || "").trim() || "Не указано";
+    if (confirmedEl) confirmedEl.textContent = ticketsCountLabel(w.confirmed_ticket_count);
+    if (totalEl) totalEl.textContent = ticketsCountLabel(w.total_ticket_count);
+    var uid = Number(w.user_id);
+    if (chatBtn) {
+      if (Number.isFinite(uid) && uid > 0) {
+        chatBtn.hidden = false;
+        chatBtn.dataset.userId = String(uid);
+      } else {
+        chatBtn.hidden = true;
+        delete chatBtn.dataset.userId;
+      }
+    }
+    if (modal) {
+      modal.classList.add("is-open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeWholesalerModal() {
+    var modal = document.getElementById("modal-raffle-wholesaler");
+    wholesalerModalPhone = "";
+    if (modal) {
+      modal.classList.remove("is-open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+    var chatBtn = document.getElementById("raffle-wholesaler-chat");
+    if (chatBtn) {
+      chatBtn.hidden = true;
+      delete chatBtn.dataset.userId;
+    }
+  }
+
   function renderWholesalersList() {
     const el = document.getElementById("raffle-wholesalers-list");
     if (!el) return;
     if (!participantsWholesaleEnabled) {
       el.innerHTML =
-        '<p class="admin-raffle-participants__empty" style="margin:0">' +
+        '<p class="admin-raffle-participants__empty admin-raffle-wholesalers__empty">' +
         "Оптовики для этой акции отключены. Включите опцию при редактировании акции.</p>";
       return;
     }
     if (!wholesalersCache.length) {
       el.innerHTML =
-        '<p class="admin-raffle-participants__empty" style="margin:0;border-style:dashed">' +
+        '<p class="admin-raffle-participants__empty admin-raffle-wholesalers__empty admin-raffle-wholesalers__empty--dashed">' +
         "Пока нет. Номер оптовика присваивается за каждые " +
         esc(wholesaleEveryNLabel()) +
         " закреплённых номерков по очереди.</p>";
       return;
     }
     el.innerHTML = wholesalersCache
-      .map(function (w) {
+      .map(function (w, idx) {
+        var phone = String(w.user_phone || "").trim();
+        var total = Math.max(0, Math.floor(Number(w.total_ticket_count) || 0));
+        var confirmed = Math.max(0, Math.floor(Number(w.confirmed_ticket_count) || 0));
+        var name = String(w.user_name || "").trim();
         return (
-          '<div class="admin-raffle-wholesaler-row">' +
-          '<span class="admin-raffle-wholesaler-row__num">№ ' +
+          '<article class="admin-raffle-wholesaler-card">' +
+          '<button type="button" class="admin-raffle-wholesaler-card__open" data-wholesaler-idx="' +
+          String(idx) +
+          '" aria-label="Оптовик № ' +
+          esc(String(w.wholesale_number)) +
+          ', подробнее">' +
+          '<span class="admin-raffle-wholesaler-card__badge">№ ' +
           esc(String(w.wholesale_number)) +
           "</span>" +
-          "<span>" +
-          esc(String(w.user_phone || "—")) +
+          '<span class="admin-raffle-wholesaler-card__body">' +
+          '<span class="admin-raffle-wholesaler-card__phone is-masked">' +
+          esc(phone || "—") +
           "</span>" +
-          "</div>"
+          '<span class="admin-raffle-wholesaler-card__meta">' +
+          (name ? '<span class="admin-raffle-wholesaler-card__name">' + esc(name) + "</span> · " : "") +
+          esc(ticketsCountLabel(total)) +
+          (confirmed !== total ? " · закреплено " + String(confirmed) : "") +
+          "</span>" +
+          '<span class="admin-raffle-wholesaler-card__hint">Нажмите для подробностей</span>' +
+          "</span>" +
+          '<span class="admin-raffle-wholesaler-card__chev" aria-hidden="true">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"></path></svg>' +
+          "</span>" +
+          "</button>" +
+          '<button type="button" class="admin-raffle-wholesaler-card__copy" data-wholesaler-copy-phone="' +
+          esc(phone) +
+          '" aria-label="Копировать телефон" title="Копировать телефон">' +
+          ICO_COPY +
+          "</button>" +
+          "</article>"
         );
       })
       .join("");
@@ -1586,6 +1686,41 @@
     .getElementById("modal-raffle-participants-close")
     ?.addEventListener("click", closeParticipants);
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
+
+  document.getElementById("raffle-wholesalers-list")?.addEventListener("click", function (e) {
+    var copyBtn = e.target && e.target.closest && e.target.closest("[data-wholesaler-copy-phone]");
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      void copyTextToClipboard(copyBtn.getAttribute("data-wholesaler-copy-phone"), "Телефон скопирован");
+      return;
+    }
+    var openBtn = e.target && e.target.closest && e.target.closest("[data-wholesaler-idx]");
+    if (!openBtn) return;
+    e.preventDefault();
+    var idx = Number(openBtn.getAttribute("data-wholesaler-idx"));
+    if (!Number.isFinite(idx) || idx < 0 || idx >= wholesalersCache.length) return;
+    openWholesalerModal(wholesalersCache[idx]);
+  });
+
+  document.getElementById("modal-raffle-wholesaler-close")?.addEventListener("click", closeWholesalerModal);
+  document.getElementById("modal-raffle-wholesaler")?.addEventListener("click", function (e) {
+    if (e.target === document.getElementById("modal-raffle-wholesaler")) closeWholesalerModal();
+  });
+  document.getElementById("raffle-wholesaler-copy-phone")?.addEventListener("click", function () {
+    void copyTextToClipboard(wholesalerModalPhone, "Телефон скопирован");
+  });
+  document.getElementById("raffle-wholesaler-chat")?.addEventListener("click", function () {
+    var id = Number(this.getAttribute("data-user-id"));
+    if (!Number.isFinite(id) || id < 1) return;
+    if (typeof window.abAdminOpenSupportChat !== "function") {
+      alert("Чат недоступен. Обновите страницу админки.");
+      return;
+    }
+    closeWholesalerModal();
+    if (modalParticipants) closeParticipants();
+    window.abAdminOpenSupportChat(id);
+  });
   participantsSearch?.addEventListener("input", function () {
     if (!participantsRaffleId) return;
     if (participantsSearchTimer) clearTimeout(participantsSearchTimer);

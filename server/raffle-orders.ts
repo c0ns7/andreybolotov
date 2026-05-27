@@ -2266,6 +2266,11 @@ export async function recalculateRaffleDerivedStatsForRaffle(raffleId: number): 
 export type AdminWholesalerRow = {
   wholesale_number: number;
   user_phone: string;
+  user_id: number;
+  user_name: string;
+  user_locality: string;
+  confirmed_ticket_count: number;
+  total_ticket_count: number;
 };
 
 export type AdminRaffleParticipantView = {
@@ -2892,12 +2897,32 @@ export async function listAdminRaffleWholesalers(raffleId: number): Promise<Admi
   const wholesale_enabled = Boolean(raffle && Number(raffle.wholesale_enabled));
   if (!wholesale_enabled) return [];
   return pgAll<AdminWholesalerRow>(
-    `SELECT w.wholesale_number AS wholesale_number, u.phone AS user_phone
+    `SELECT w.wholesale_number AS wholesale_number,
+            u.phone AS user_phone,
+            u.id AS user_id,
+            COALESCE(u.name, '') AS user_name,
+            COALESCE(u.locality, '') AS user_locality,
+            COALESCE(cc.c, 0) AS confirmed_ticket_count,
+            COALESCE(tc.c, 0) AS total_ticket_count
        FROM raffle_wholesale_assignments w
        INNER JOIN users u ON u.id = w.user_id
+       LEFT JOIN (
+         SELECT h.user_id AS user_id, COUNT(*)::int AS c
+           FROM raffle_ticket_holds h
+           INNER JOIN raffle_orders o ON o.id = h.order_id
+          WHERE h.raffle_id = ? AND o.status = 'confirmed' AND COALESCE(h.is_bonus, 0) = 0
+          GROUP BY h.user_id
+       ) cc ON cc.user_id = w.user_id
+       LEFT JOIN (
+         SELECT h.user_id AS user_id, COUNT(*)::int AS c
+           FROM raffle_ticket_holds h
+           INNER JOIN raffle_orders o ON o.id = h.order_id
+          WHERE h.raffle_id = ? AND o.status NOT IN ('expired', 'rejected')
+          GROUP BY h.user_id
+       ) tc ON tc.user_id = w.user_id
        WHERE w.raffle_id = ?
        ORDER BY w.wholesale_number ASC`,
-    [raffleId],
+    [raffleId, raffleId, raffleId],
   );
 }
 

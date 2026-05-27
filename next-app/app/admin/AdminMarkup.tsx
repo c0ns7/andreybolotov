@@ -1502,6 +1502,86 @@ export default function AdminMarkup() {
       </div>
 
     <div
+      id="modal-raffle-wholesaler"
+      className="modal-overlay modal-overlay--raffle-form modal-overlay--raffle-wholesaler"
+      aria-hidden="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-raffle-wholesaler-title"
+    >
+      <div className="modal admin-raffle-modal admin-raffle-modal--wholesaler">
+        <div className="modal__top admin-raffle-modal__top">
+          <span className="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div className="admin-raffle-modal__title-wrap">
+            <span className="admin-raffle-modal__title-icon admin-raffle-modal__title-icon--wholesaler" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
+            <h2 id="modal-raffle-wholesaler-title" className="modal__top-title admin-raffle-modal__title">
+              Оптовик
+            </h2>
+          </div>
+          <button type="button" className="modal__close admin-raffle-modal__close" id="modal-raffle-wholesaler-close" aria-label="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div className="modal__body admin-raffle-modal__body">
+          <div className="admin-raffle-wholesaler-modal__stats">
+            <div className="admin-raffle-wholesaler-modal__stat">
+              <span className="admin-raffle-wholesaler-modal__stat-k">Закреплено</span>
+              <span id="raffle-wholesaler-confirmed" className="admin-raffle-wholesaler-modal__stat-v">
+                0
+              </span>
+            </div>
+            <div className="admin-raffle-wholesaler-modal__stat">
+              <span className="admin-raffle-wholesaler-modal__stat-k">Всего в акции</span>
+              <span id="raffle-wholesaler-total" className="admin-raffle-wholesaler-modal__stat-v">
+                0
+              </span>
+            </div>
+          </div>
+          <div className="admin-raffle-wholesaler-modal__fields">
+            <div className="admin-raffle-wholesaler-modal__row">
+              <span className="admin-raffle-wholesaler-modal__label">Имя</span>
+              <span id="raffle-wholesaler-name" className="admin-raffle-wholesaler-modal__value"></span>
+            </div>
+            <div className="admin-raffle-wholesaler-modal__row admin-raffle-wholesaler-modal__row--phone">
+              <span className="admin-raffle-wholesaler-modal__label">Телефон</span>
+              <div className="admin-raffle-wholesaler-modal__phone-wrap">
+                <span id="raffle-wholesaler-phone" className="admin-raffle-wholesaler-modal__value"></span>
+                <button type="button" className="admin-raffle-wholesaler-modal__copy" id="raffle-wholesaler-copy-phone" aria-label="Копировать телефон">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                  </svg>
+                  <span>Копировать</span>
+                </button>
+              </div>
+            </div>
+            <div className="admin-raffle-wholesaler-modal__row">
+              <span className="admin-raffle-wholesaler-modal__label">Населённый пункт</span>
+              <span id="raffle-wholesaler-locality" className="admin-raffle-wholesaler-modal__value"></span>
+            </div>
+          </div>
+          <div className="admin-raffle-wholesaler-modal__actions">
+            <button type="button" className="admin-raffle-btn admin-raffle-btn--chat" id="raffle-wholesaler-chat" hidden>
+              <svg className="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>
+              </svg>
+              Написать в чат
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
       id="modal-raffle-buyer"
       className="modal-overlay modal-overlay--raffle-form modal-overlay--raffle-buyer"
       aria-hidden="true"
