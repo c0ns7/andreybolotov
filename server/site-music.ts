@@ -21,9 +21,12 @@ export type SiteMusicTrackDto = {
   created_at: number;
 };
 
+export type MusicPlaybackMode = "sequential" | "shuffle";
+
 export type PublicSiteMusicPayload = {
   music_enabled: boolean;
   music_default_volume: number;
+  music_playback_mode: MusicPlaybackMode;
   tracks: Array<{ id: number; title: string; file_url: string; mime: string }>;
 };
 
@@ -139,6 +142,7 @@ export async function getPublicSiteMusicPayload(): Promise<PublicSiteMusicPayloa
   return {
     music_enabled: settings.music_enabled,
     music_default_volume: settings.music_default_volume,
+    music_playback_mode: settings.music_playback_mode,
     tracks: tracks
       .filter((t) => t.file_url)
       .map((t) => ({ id: t.id, title: t.title, file_url: t.file_url, mime: t.mime })),

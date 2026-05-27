@@ -22,11 +22,23 @@ export type SiteMusicTrack = {
   mime: string;
 };
 
+type MusicPlaybackMode = "sequential" | "shuffle";
+
 type SiteMusicPayload = {
   music_enabled: boolean;
   music_default_volume: number;
+  music_playback_mode: MusicPlaybackMode;
   tracks: SiteMusicTrack[];
 };
+
+function shuffleIndices(len: number): number[] {
+  const arr = Array.from({ length: len }, (_, i) => i);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 type SiteMusicContextValue = {
   available: boolean;
@@ -70,9 +82,12 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "/";
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const trackIdxRef = useRef(0);
+  const shuffleOrderRef = useRef<number[]>([]);
+  const shufflePosRef = useRef(0);
   const [payload, setPayload] = useState<SiteMusicPayload>({
     music_enabled: false,
     music_default_volume: 35,
+    music_playback_mode: "sequential",
     tracks: [],
   });
   const [loaded, setLoaded] = useState(false);
@@ -88,11 +103,18 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch("/api/site/music", { cache: "no-store" });
       const data = (await res.json()) as SiteMusicPayload;
+      const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+      const mode: MusicPlaybackMode =
+        String(data.music_playback_mode || "").trim().toLowerCase() === "shuffle" ? "shuffle" : "sequential";
       setPayload({
         music_enabled: !!data.music_enabled,
         music_default_volume: Math.max(0, Math.min(100, Math.floor(Number(data.music_default_volume) || 35))),
-        tracks: Array.isArray(data.tracks) ? data.tracks : [],
+        music_playback_mode: mode,
+        tracks,
       });
+      trackIdxRef.current = 0;
+      shuffleOrderRef.current = tracks.length > 1 ? shuffleIndices(tracks.length) : tracks.length === 1 ? [0] : [];
+      shufflePosRef.current = 0;
     } catch {
       /* ignore */
     } finally {
@@ -109,16 +131,42 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
     const onWs = (ev: Event) => {
       const d = (ev as CustomEvent<SiteMusicPayload & { type?: string }>).detail;
       if (!d || d.type !== "site_music_updated") return;
+      const tracks = Array.isArray(d.tracks) ? d.tracks : [];
+      const mode: MusicPlaybackMode =
+        String(d.music_playback_mode || "").trim().toLowerCase() === "shuffle" ? "shuffle" : "sequential";
       setPayload({
         music_enabled: !!d.music_enabled,
         music_default_volume: Math.max(0, Math.min(100, Math.floor(Number(d.music_default_volume) || 35))),
-        tracks: Array.isArray(d.tracks) ? d.tracks : [],
+        music_playback_mode: mode,
+        tracks,
       });
       trackIdxRef.current = 0;
+      shuffleOrderRef.current = tracks.length > 1 ? shuffleIndices(tracks.length) : tracks.length === 1 ? [0] : [];
+      shufflePosRef.current = 0;
     };
     window.addEventListener(AB_USER_WS_EVENT, onWs as EventListener);
     return () => window.removeEventListener(AB_USER_WS_EVENT, onWs as EventListener);
   }, []);
+
+  const advanceToNextTrack = useCallback(
+    (len: number) => {
+      if (len <= 1) {
+        trackIdxRef.current = 0;
+        return;
+      }
+      if (payload.music_playback_mode === "shuffle") {
+        if (shuffleOrderRef.current.length !== len) {
+          shuffleOrderRef.current = shuffleIndices(len);
+          shufflePosRef.current = 0;
+        }
+        shufflePosRef.current = (shufflePosRef.current + 1) % len;
+        trackIdxRef.current = shuffleOrderRef.current[shufflePosRef.current] ?? 0;
+        return;
+      }
+      trackIdxRef.current = (trackIdxRef.current + 1) % len;
+    },
+    [payload.music_playback_mode],
+  );
 
   const playCurrent = useCallback(async () => {
     const audio = audioRef.current;
@@ -183,19 +231,35 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
       return;
     }
     void playCurrent();
-  }, [shouldPlay, playCurrent, payload.tracks, payload.music_default_volume]);
+  }, [shouldPlay, playCurrent, payload.tracks, payload.music_default_volume, payload.music_playback_mode]);
+
+  useEffect(() => {
+    const len = payload.tracks.length;
+    if (len > 1) {
+      shuffleOrderRef.current = shuffleIndices(len);
+      shufflePosRef.current = 0;
+      if (payload.music_playback_mode === "shuffle") {
+        trackIdxRef.current = shuffleOrderRef.current[0] ?? 0;
+      }
+    } else {
+      trackIdxRef.current = 0;
+      shuffleOrderRef.current = len === 1 ? [0] : [];
+      shufflePosRef.current = 0;
+    }
+  }, [payload.tracks, payload.music_playback_mode]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const onEnded = () => {
-      if (!payload.tracks.length) return;
-      trackIdxRef.current = (trackIdxRef.current + 1) % payload.tracks.length;
+      const len = payload.tracks.length;
+      if (!len) return;
+      advanceToNextTrack(len);
       void playCurrent();
     };
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
-  }, [payload.tracks, playCurrent]);
+  }, [payload.tracks, playCurrent, advanceToNextTrack]);
 
   const toggleUserMusic = useCallback(() => {
     if (!userOff && !isPlaying && shouldPlay) {

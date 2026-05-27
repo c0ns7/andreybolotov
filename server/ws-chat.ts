@@ -315,6 +315,7 @@ export function broadcastBlogEnabledUpdated(enabled: boolean) {
 export function broadcastSiteMusicUpdated(payload: {
   music_enabled: boolean;
   music_default_volume: number;
+  music_playback_mode: "sequential" | "shuffle";
   tracks: Array<{ id: number; title: string; file_url: string; mime: string }>;
 }) {
   const body = JSON.stringify({ type: "site_music_updated", ...payload });

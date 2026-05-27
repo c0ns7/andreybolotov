@@ -345,6 +345,9 @@
 }
 
 .admin-settings-app {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   animation: adminRafflesIn 0.35s ease-out;
 }
 
@@ -352,13 +355,15 @@
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 20px;
+  width: 100%;
+  margin-bottom: 24px;
   padding: 18px 20px;
   border-radius: 18px;
   border: 1px solid #e2e8f0;
   background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
   text-align: left;
+  box-sizing: border-box;
 }
 
 .admin-settings-hero__icon {
@@ -404,14 +409,48 @@
 }
 
 .admin-settings-panel {
-  max-width: 520px;
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
+
 .admin-settings-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
   padding: 22px 20px 24px;
   border-radius: 18px;
   border: 1px solid #e2e8f0;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+  .admin-settings-panel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+@media (min-width: 720px) and (max-width: 1023px) {
+  .admin-settings-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .admin-settings-card:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 719px) {
+  .admin-settings-panel {
+    grid-template-columns: 1fr;
+  }
 }
 .admin-settings-card__title {
   margin: 0 0 10px;
@@ -423,8 +462,9 @@
 .admin-settings-card__text {
   margin: 0 0 18px;
   font-size: 0.88rem;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #64748b;
+  flex: 1;
 }
 .admin-settings-toggle {
   display: flex;
@@ -497,6 +537,16 @@
   min-height: 1.2em;
   font-size: 0.82rem;
   color: #64748b;
+}
+
+.admin-settings-card .admin-settings-action-btn {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.admin-settings-card__status:not(:empty) {
+  margin-top: auto;
+  padding-top: 10px;
 }
 
 .modal-overlay--raffle-form {

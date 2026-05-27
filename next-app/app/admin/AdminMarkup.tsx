@@ -693,6 +693,25 @@ export default function AdminMarkup() {
               </label>
               <input type="range" id="admin-music-volume" className="admin-music-volume__range" min={0} max={100} step={1} defaultValue={35} />
             </div>
+            <div className="admin-music-playback" role="radiogroup" aria-label="Режим воспроизведения для пользователей">
+              <span className="admin-music-playback__legend">Воспроизведение у пользователей</span>
+              <div className="admin-music-playback__options">
+                <label className="admin-music-playback__option">
+                  <input type="radio" name="admin-music-playback" id="admin-music-playback-sequential" value="sequential" defaultChecked />
+                  <span className="admin-music-playback__option-inner">
+                    <span className="admin-music-playback__option-title">По порядку</span>
+                    <span className="admin-music-playback__option-hint">Как в плейлисте ниже</span>
+                  </span>
+                </label>
+                <label className="admin-music-playback__option">
+                  <input type="radio" name="admin-music-playback" id="admin-music-playback-shuffle" value="shuffle" />
+                  <span className="admin-music-playback__option-inner">
+                    <span className="admin-music-playback__option-title">В перемешку</span>
+                    <span className="admin-music-playback__option-hint">Случайный следующий трек</span>
+                  </span>
+                </label>
+              </div>
+            </div>
             <p className="admin-settings-card__status admin-music-status" id="admin-music-status" role="status"></p>
           </div>
 
@@ -711,8 +730,12 @@ export default function AdminMarkup() {
           </div>
 
           <div className="admin-settings-card admin-music-card admin-music-card--playlist">
-            <h2 className="admin-settings-card__title">Плейлист</h2>
-            <p className="admin-settings-card__text">Стрелками меняйте порядок воспроизведения. Выключенные треки остаются в списке, но не попадают пользователям.</p>
+            <div className="admin-music-playlist-head">
+              <h2 className="admin-settings-card__title">Плейлист</h2>
+              <p className="admin-settings-card__text admin-music-playlist-head__hint">
+                Тумблер «В плейлисте» включает трек для пользователей. Стрелками — порядок при режиме «По порядку».
+              </p>
+            </div>
             <p id="admin-music-empty" className="admin-music-empty" hidden>
               Пока нет треков — загрузите первый файл выше.
             </p>

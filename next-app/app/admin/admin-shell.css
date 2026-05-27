@@ -1601,6 +1601,13 @@
     }
   }
 
+  .admin-settings-app {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    animation: adminSectionIn 0.4s ease-out;
+  }
+
   .admin-music-app {
     width: 100%;
     max-width: 100%;
@@ -1649,7 +1656,9 @@
   }
 
   .admin-music-volume {
-    margin-top: 14px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
   }
 
   .admin-music-volume__label {
@@ -1662,6 +1671,98 @@
   .admin-music-volume__range {
     width: 100%;
     accent-color: #2563eb;
+  }
+
+  .admin-music-playback {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .admin-music-playback__legend {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .admin-music-playback__options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 560px) {
+    .admin-music-playback__options {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .admin-music-playback__option {
+    position: relative;
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .admin-music-playback__option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .admin-music-playback__option-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .admin-music-playback__option input:checked + .admin-music-playback__option-inner {
+    border-color: #93c5fd;
+    background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12), 0 8px 20px rgba(37, 99, 235, 0.1);
+  }
+
+  .admin-music-playback__option input:focus-visible + .admin-music-playback__option-inner {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
+  .admin-music-playback__option-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .admin-music-playback__option-hint {
+    font-size: 0.76rem;
+    color: #64748b;
+    line-height: 1.35;
+  }
+
+  .admin-music-playlist-head {
+    margin-bottom: 14px;
+  }
+
+  .admin-music-playlist-head__hint {
+    margin-top: 6px;
+    margin-bottom: 0;
+  }
+
+  .admin-music-app .admin-toggle__input:checked + .admin-toggle__track {
+    background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+  }
+
+  .admin-music-app .admin-toggle__input:focus-visible + .admin-toggle__track {
+    outline-color: #2563eb;
   }
 
   .admin-music-drop {
@@ -1716,7 +1817,7 @@
   .admin-music-tracks {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
 
   .admin-music-track {
@@ -1724,10 +1825,26 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 14px;
-    padding: 12px 14px;
-    border-radius: 14px;
+    padding: 14px 16px;
+    border-radius: 16px;
     border: 1px solid #e2e8f0;
-    background: #fff;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition:
+      border-color 0.18s ease,
+      opacity 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .admin-music-track--off {
+    opacity: 0.72;
+    background: #f1f5f9;
+    border-style: dashed;
+    border-color: #cbd5e1;
+  }
+
+  .admin-music-track--off .admin-music-track__title {
+    color: #64748b;
   }
 
   @media (max-width: 720px) {
@@ -1761,11 +1878,17 @@
   }
 
   .admin-music-track__num {
-    min-width: 1.5rem;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.65rem;
+    height: 1.65rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #475569;
     text-align: center;
+    border-radius: 8px;
+    background: #e2e8f0;
   }
 
   .admin-music-track__move {
@@ -1810,15 +1933,35 @@
     width: 100%;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
-    padding: 8px 10px;
+    padding: 9px 11px;
     font: inherit;
     font-weight: 600;
+    color: #0f172a;
+    background: #fff;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .admin-music-track__title:focus {
+    outline: none;
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 
   .admin-music-track__link {
-    font-size: 0.82rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: fit-content;
+    font-size: 0.8rem;
+    font-weight: 600;
     color: #2563eb;
     text-decoration: none;
+  }
+
+  .admin-music-track__link:hover {
+    text-decoration: underline;
   }
 
   .admin-music-track__actions {
@@ -1826,26 +1969,56 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 12px;
   }
 
   .admin-music-track__toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.84rem;
+    flex-shrink: 0;
+  }
+
+  .admin-music-track__toggle .admin-toggle__label {
+    font-size: 0.82rem;
+    font-weight: 600;
     color: #334155;
+    white-space: nowrap;
   }
 
   .admin-music-track__delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     border: 1px solid #fecaca;
-    border-radius: 999px;
-    padding: 7px 12px;
-    font: inherit;
-    font-size: 0.82rem;
-    color: #b91c1c;
+    border-radius: 12px;
+    color: #dc2626;
     background: #fff;
     cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.12s ease;
+  }
+
+  .admin-music-track__delete:hover:not(:disabled) {
+    border-color: #f87171;
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+
+  .admin-music-track__delete:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .admin-music-track__delete:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .admin-music-track__delete svg {
+    display: block;
   }
 
   .admin-music-status--err {

@@ -2045,8 +2045,26 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (hasQr) modes.push("qr");
       if (hasBankCards) modes.push("bank_card");
       if (hasTbank) modes.push("tbank_collection");
-      if (hasCol) modes.push("collection");
       return modes;
+    };
+
+    const hidePaymentPurposeNotice = () => {
+      const el = document.getElementById("reserve-payment-purpose-notice");
+      if (!el) return;
+      el.hidden = true;
+      el.setAttribute("aria-hidden", "true");
+    };
+
+    const showPaymentPurposeNotice = (purpose: string) => {
+      const el = document.getElementById("reserve-payment-purpose-notice");
+      const val = document.getElementById("reserve-payment-purpose-notice-value");
+      const display = String(purpose || "Оплата услуг").trim() || "Оплата услуг";
+      if (val) val.textContent = display.toUpperCase();
+      if (!el) return;
+      el.hidden = false;
+      el.setAttribute("aria-hidden", "false");
+      const btn = document.getElementById("reserve-payment-purpose-notice-ok");
+      btn?.focus();
     };
 
     const paintReservePayment = (
@@ -2088,26 +2106,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         bankCard ??
         (m === "bank_card" ? reserveDraftRef.current?.activeBankCard ?? null : null);
       if (reserveDraftRef.current) reserveDraftRef.current.paymentMethod = m;
-      const bCol = document.getElementById("reserve-payment-method-collection");
-      const bTb = document.getElementById("reserve-payment-method-tbank");
-      const bQr = document.getElementById("reserve-payment-method-qr");
-      if (bCol) {
-        bCol.hidden = !hasCol;
-        bCol.classList.toggle("is-active", m === "collection");
-        bCol.setAttribute("aria-selected", m === "collection" ? "true" : "false");
-      }
-      if (bTb) {
-        bTb.hidden = !hasTbank;
-        bTb.classList.toggle("is-active", m === "tbank_collection");
-        bTb.setAttribute("aria-selected", m === "tbank_collection" ? "true" : "false");
-      }
-      if (bQr) {
-        bQr.hidden = !hasQr;
-        bQr.classList.toggle("is-active", m === "qr");
-        bQr.setAttribute("aria-selected", m === "qr" ? "true" : "false");
-      }
-      const methEl = document.getElementById("reserve-payment-methods");
-      if (methEl) methEl.hidden = true;
       const rec = String(r.sber_collection_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
       const recT = String(r.tbank_collection_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
       const recQr = String(r.qr_recipient || r.collection_recipient || "").trim() || "Реквизиты уточняются";
@@ -2247,6 +2245,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       const fullOrd = document.getElementById("reserve-payment-order-id");
       if (fullOrd) fullOrd.textContent = "Заказ A" + String(d.orderId);
+      hidePaymentPurposeNotice();
       paintReservePayment(r, "collection");
       const modeAfter = reserveDraftRef.current?.paymentMethod ?? "collection";
       try {
@@ -2304,6 +2303,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     elGoPay?.addEventListener("click", onGoPay);
 
     const onPayClose = () => {
+      hidePaymentPurposeNotice();
       if (reserveDraftRef.current?.orderId) {
         openOverlay(document.getElementById("modal-reserve-payment-cancel-confirm"));
         return;
@@ -2381,20 +2381,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const elPayBackLink = document.getElementById("reserve-payment-back-link");
     elPayBackLink?.addEventListener("click", onPayBack);
 
-    const methodHandlers: Array<{ el: HTMLElement; fn: () => void }> = [];
-    for (const spec of [
-      { id: "reserve-payment-method-collection", m: "collection" as const },
-      { id: "reserve-payment-method-tbank", m: "tbank_collection" as const },
-      { id: "reserve-payment-method-qr", m: "qr" as const },
-    ]) {
-      const el = document.getElementById(spec.id);
-      const fn = () => {
-        const rf = raffleRef.current;
-        if (rf) paintReservePayment(rf, spec.m);
-      };
-      el?.addEventListener("click", fn);
-      if (el) methodHandlers.push({ el, fn });
-    }
+    const elPurposeOk = document.getElementById("reserve-payment-purpose-notice-ok");
+    const onPurposeOk = () => hidePaymentPurposeNotice();
+    elPurposeOk?.addEventListener("click", onPurposeOk);
 
     const elAltReq = document.getElementById("reserve-payment-alt-requisites");
     const onAltReq = async () => {
@@ -2478,6 +2467,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         /* ignore */
       }
       paintReservePayment(rf, mode as "collection" | "tbank_collection" | "qr");
+      if (mode === "qr") {
+        const purpose = String(rf.qr_payment_purpose || "Оплата услуг").trim() || "Оплата услуг";
+        showPaymentPurposeNotice(purpose);
+      } else {
+        hidePaymentPurposeNotice();
+      }
     };
     const onAltReqClick = () => void onAltReq();
     elAltReq?.addEventListener("click", onAltReqClick);
@@ -2627,7 +2622,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elPayDone?.removeEventListener("click", onPayDone);
       elPayBack?.removeEventListener("click", onPayBack);
       elPayBackLink?.removeEventListener("click", onPayBack);
-      for (const { el, fn } of methodHandlers) el.removeEventListener("click", fn);
+      elPurposeOk?.removeEventListener("click", onPurposeOk);
       elFile?.removeEventListener("change", onFileChange);
       receiptUploadSeqRef.current += 1;
       receiptUploadDataRef.current = null;

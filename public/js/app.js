@@ -2134,6 +2134,51 @@
     if (a) a.textContent = text;
   }
 
+  var altPayCycle = { modes: [], idx: -1 };
+
+  function hidePaymentPurposeNotice() {
+    var el = document.getElementById("reserve-payment-purpose-notice");
+    if (!el) return;
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+  }
+
+  function showPaymentPurposeNotice(purpose) {
+    var el = document.getElementById("reserve-payment-purpose-notice");
+    var val = document.getElementById("reserve-payment-purpose-notice-value");
+    var display = String(purpose || "Оплата услуг").trim() || "Оплата услуг";
+    if (val) val.textContent = display.toUpperCase();
+    if (!el) return;
+    el.hidden = false;
+    el.setAttribute("aria-hidden", "false");
+    var btn = document.getElementById("reserve-payment-purpose-notice-ok");
+    if (btn && typeof btn.focus === "function") btn.focus();
+  }
+
+  function buildAltPayModesFromRaffle(rf, ticketCount) {
+    if (!rf) return [];
+    var hasCol =
+      (rf.sber_enabled != null ? !!rf.sber_enabled : Boolean(String(rf.collection_url || "").trim())) &&
+      Boolean(String(rf.collection_url || "").trim());
+    var hasTbank =
+      (rf.tbank_enabled != null ? !!rf.tbank_enabled : Boolean(String(rf.tbank_collection_url || "").trim())) &&
+      Boolean(String(rf.tbank_collection_url || "").trim());
+    var hasQr =
+      (rf.qr_enabled != null ? !!rf.qr_enabled : Boolean(String(rf.qr_image_url || "").trim())) &&
+      Boolean(String(rf.qr_image_url || "").trim());
+    var scope = String(rf.card_payment_scope || "unlimited").toLowerCase();
+    var everyN = Math.max(1, Math.floor(Number(rf.wholesale_every_n_tickets) || 10));
+    var minCardM = Math.max(1, Math.floor(Number(rf.card_payment_min_tickets) || 2));
+    var wholesaleOk = scope !== "wholesale_only" || ticketCount >= everyN;
+    var minOrderOk = scope !== "min_order_tickets" || ticketCount >= minCardM;
+    var hasBankCards = Boolean(rf.has_bank_cards) && wholesaleOk && minOrderOk;
+    var modes = [];
+    if (hasQr) modes.push("qr");
+    if (hasBankCards) modes.push("bank_card");
+    if (hasTbank) modes.push("tbank_collection");
+    return modes;
+  }
+
   function renderReserveFlowModals() {
     var nums = Array.isArray(reserveFlowState.numbers) ? reserveFlowState.numbers : [];
     var amountText = formatRubleAmount(Number(reserveFlowState.amountRub || 0)) + " ₽";
@@ -2236,25 +2281,16 @@
       if (qrSrc) payQrImg.setAttribute("src", qrSrc);
       else payQrImg.removeAttribute("src");
     }
-    if (methodTabs) methodTabs.hidden = methodsAvailable < 2;
-    if (methodCollectionBtn) {
-      methodCollectionBtn.hidden = !hasCollection;
-      methodCollectionBtn.classList.toggle("is-active", chosenMethod === "collection");
-      methodCollectionBtn.setAttribute("aria-selected", chosenMethod === "collection" ? "true" : "false");
-    }
-    if (methodTbankBtn) {
-      methodTbankBtn.hidden = !hasTbankCollection;
-      methodTbankBtn.classList.toggle("is-active", chosenMethod === "tbank_collection");
-      methodTbankBtn.setAttribute("aria-selected", chosenMethod === "tbank_collection" ? "true" : "false");
-    }
-    if (methodQrBtn) {
-      methodQrBtn.hidden = !hasQr;
-      methodQrBtn.classList.toggle("is-active", chosenMethod === "qr");
-      methodQrBtn.setAttribute("aria-selected", chosenMethod === "qr" ? "true" : "false");
-    }
+    if (methodTabs) methodTabs.hidden = true;
+    var bankCardBlock = document.getElementById("reserve-payment-bank-card");
     if (collectBlock) collectBlock.hidden = chosenMethod !== "collection";
     if (collectTbankBlock) collectTbankBlock.hidden = chosenMethod !== "tbank_collection";
     if (qrBlock) qrBlock.hidden = chosenMethod !== "qr";
+    if (bankCardBlock) bankCardBlock.hidden = chosenMethod !== "bank_card";
+    var altBtn = document.getElementById("reserve-payment-alt-requisites");
+    var rfAlt = getCachedRaffleById(reserveFlowState.raffleId);
+    var altModes = rfAlt ? buildAltPayModesFromRaffle(rfAlt, nums.length) : [];
+    if (altBtn) altBtn.hidden = altModes.length === 0;
     switchReservePaymentStep("requisites");
     paintReserveDeadlineLine(Number(reserveFlowState.reservedUntil || 0));
     var rf = getCachedRaffleById(reserveFlowState.raffleId);
@@ -2292,6 +2328,7 @@
   }
 
   function closeReservePaymentModal() {
+    hidePaymentPurposeNotice();
     if (modalReservePaymentCancelConfirm) closeModal(modalReservePaymentCancelConfirm);
     stopReservePaymentTimer();
     switchReservePaymentStep("requisites");
@@ -2546,6 +2583,9 @@
 
   async function armReservePaymentUiFromFlowState() {
     if (!reserveFlowState.orderId) return;
+    altPayCycle = { modes: [], idx: -1 };
+    reserveFlowState.paymentMethod = "collection";
+    hidePaymentPurposeNotice();
     await refreshReserveFlowPaymentParticipation();
     renderReserveFlowModals();
     fetch("/api/raffles/orders/" + String(reserveFlowState.orderId) + "/bank", {
@@ -6348,17 +6388,26 @@
       showToast("Реквизиты пока не настроены", "warning");
     }
   });
-  document.getElementById("reserve-payment-method-collection")?.addEventListener("click", function () {
-    reserveFlowState.paymentMethod = "collection";
+  document.getElementById("reserve-payment-purpose-notice-ok")?.addEventListener("click", hidePaymentPurposeNotice);
+  document.getElementById("reserve-payment-alt-requisites")?.addEventListener("click", async function () {
+    var rf = getCachedRaffleById(reserveFlowState.raffleId);
+    if (!rf || !reserveFlowState.orderId) return;
+    if (!altPayCycle.modes.length) {
+      altPayCycle.modes = buildAltPayModesFromRaffle(rf, (reserveFlowState.numbers || []).length);
+      altPayCycle.idx = -1;
+    }
+    if (!altPayCycle.modes.length) {
+      showToast("Нет других способов оплаты", "warning");
+      return;
+    }
+    altPayCycle.idx = (altPayCycle.idx + 1) % altPayCycle.modes.length;
+    var mode = altPayCycle.modes[altPayCycle.idx];
+    reserveFlowState.paymentMethod = mode;
+    hidePaymentPurposeNotice();
     renderReserveFlowModals();
-  });
-  document.getElementById("reserve-payment-method-tbank")?.addEventListener("click", function () {
-    reserveFlowState.paymentMethod = "tbank_collection";
-    renderReserveFlowModals();
-  });
-  document.getElementById("reserve-payment-method-qr")?.addEventListener("click", function () {
-    reserveFlowState.paymentMethod = "qr";
-    renderReserveFlowModals();
+    if (mode === "qr") {
+      showPaymentPurposeNotice(reserveFlowState.qrPaymentPurpose || "Оплата услуг");
+    }
   });
   document.getElementById("reserve-payment-back")?.addEventListener("click", function () {
     switchReservePaymentStep("requisites");

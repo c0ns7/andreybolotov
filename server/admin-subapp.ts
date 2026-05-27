@@ -17,6 +17,7 @@ import {
   setBlogEnabled,
   setMusicEnabled,
   setMusicDefaultVolume,
+  setMusicPlaybackMode,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -846,6 +847,7 @@ adminSubApp.get("/music", async (c) => {
   return c.json({
     music_enabled: settings.music_enabled,
     music_default_volume: settings.music_default_volume,
+    music_playback_mode: settings.music_playback_mode,
     tracks,
   });
 });
@@ -853,7 +855,7 @@ adminSubApp.get("/music", async (c) => {
 adminSubApp.patch("/music/settings", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
-  let body: { music_enabled?: unknown; music_default_volume?: unknown };
+  let body: { music_enabled?: unknown; music_default_volume?: unknown; music_playback_mode?: unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -865,12 +867,22 @@ adminSubApp.patch("/music/settings", async (c) => {
   if (body.music_default_volume !== undefined) {
     await setMusicDefaultVolume(Number(body.music_default_volume));
   }
+  if (body.music_playback_mode !== undefined) {
+    const modeRaw = String(body.music_playback_mode ?? "")
+      .trim()
+      .toLowerCase();
+    if (modeRaw !== "sequential" && modeRaw !== "shuffle") {
+      return c.json({ error: "Режим воспроизведения: sequential или shuffle" }, 400);
+    }
+    await setMusicPlaybackMode(modeRaw);
+  }
   await notifySiteMusicChanged();
   c.header("Cache-Control", "no-store");
   const settings = await getSiteSettings();
   return c.json({
     music_enabled: settings.music_enabled,
     music_default_volume: settings.music_default_volume,
+    music_playback_mode: settings.music_playback_mode,
   });
 });
 

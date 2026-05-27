@@ -392,21 +392,6 @@ export default function AbRafflePurchaseShellMarkup() {
             </ol>
           </div>
 
-          <div id="reserve-payment-methods" className="reserve-payment-modal__methods" role="tablist" aria-label="Способ оплаты" hidden>
-            <button type="button" id="reserve-payment-method-collection" className="reserve-payment-modal__method-btn is-active" role="tab" aria-selected="true">
-              <span className="reserve-payment-modal__method-title">Сбер</span>
-              <span className="reserve-payment-modal__method-sub">Быстрый сбор</span>
-            </button>
-            <button type="button" id="reserve-payment-method-tbank" className="reserve-payment-modal__method-btn" role="tab" aria-selected="false">
-              <span className="reserve-payment-modal__method-title">Тинькофф</span>
-              <span className="reserve-payment-modal__method-sub">Сбор по ссылке</span>
-            </button>
-            <button type="button" id="reserve-payment-method-qr" className="reserve-payment-modal__method-btn" role="tab" aria-selected="false">
-              <span className="reserve-payment-modal__method-title">QR-код</span>
-              <span className="reserve-payment-modal__method-sub">Любой банк</span>
-            </button>
-          </div>
-
           <section id="reserve-payment-collect" className="pay-sheet-dark-card">
             <div className="pay-sheet-dark-card__head">
               <span className="pay-sheet-dark-card__tag">Сбор средств</span>
@@ -650,6 +635,40 @@ export default function AbRafflePurchaseShellMarkup() {
             Ой, я ещё не оплатил (вернуться к реквизитам)
           </button>
         </div>
+      </div>
+    </div>
+
+    <div
+      id="reserve-payment-purpose-notice"
+      className="pay-sheet-purpose-notice"
+      hidden
+      aria-hidden="true"
+      role="presentation"
+    >
+      <div className="pay-sheet-purpose-notice__panel" role="alertdialog" aria-modal="true" aria-labelledby="reserve-payment-purpose-notice-title">
+        <div className="pay-sheet-purpose-notice__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <p className="pay-sheet-purpose-notice__eyebrow">Важно перед оплатой</p>
+        <h3 id="reserve-payment-purpose-notice-title" className="pay-sheet-purpose-notice__title">
+          Укажите назначение платежа
+        </h3>
+        <p className="pay-sheet-purpose-notice__text">
+          При оплате по QR-коду в приложении банка в поле <strong>«Назначение»</strong> или <strong>«Сообщение получателю»</strong> обязательно напишите:
+        </p>
+        <p id="reserve-payment-purpose-notice-value" className="pay-sheet-purpose-notice__value">
+          ОПЛАТА УСЛУГ
+        </p>
+        <p className="pay-sheet-purpose-notice__foot">
+          Без правильного назначения перевод может не засчитаться при проверке чека.
+        </p>
+        <button type="button" className="pay-sheet-purpose-notice__btn" id="reserve-payment-purpose-notice-ok">
+          ПОНЯТНО
+        </button>
       </div>
     </div>
   </div>

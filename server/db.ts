@@ -1251,24 +1251,39 @@ export async function setRafflePromoGiftLockedCounts(
   );
 }
 
+export type MusicPlaybackMode = "sequential" | "shuffle";
+
+function normalizeMusicPlaybackMode(raw: unknown): MusicPlaybackMode {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase() === "shuffle"
+    ? "shuffle"
+    : "sequential";
+}
+
 export async function getSiteSettings(): Promise<{
   maintenance_enabled: boolean;
   blog_enabled: boolean;
   music_enabled: boolean;
   music_default_volume: number;
+  music_playback_mode: MusicPlaybackMode;
 }> {
   const row = await pgGet<{
     maintenance_enabled: number;
     blog_enabled?: number;
     music_enabled?: number;
     music_default_volume?: number;
-  }>(`SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume FROM site_settings WHERE id = 1`);
+    music_playback_mode?: string;
+  }>(
+    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode FROM site_settings WHERE id = 1`,
+  );
   const vol = Math.floor(Number(row?.music_default_volume ?? 35));
   return {
     maintenance_enabled: Boolean(Number(row?.maintenance_enabled)),
     blog_enabled: Boolean(Number(row?.blog_enabled)),
     music_enabled: Boolean(Number(row?.music_enabled)),
     music_default_volume: Math.max(0, Math.min(100, Number.isFinite(vol) ? vol : 35)),
+    music_playback_mode: normalizeMusicPlaybackMode(row?.music_playback_mode),
   };
 }
 
@@ -1287,6 +1302,11 @@ export async function setMusicEnabled(on: boolean): Promise<void> {
 export async function setMusicDefaultVolume(volume: number): Promise<void> {
   const v = Math.max(0, Math.min(100, Math.floor(Number(volume) || 0)));
   await pgExec(`UPDATE site_settings SET music_default_volume = ? WHERE id = 1`, [v]);
+}
+
+export async function setMusicPlaybackMode(mode: MusicPlaybackMode): Promise<void> {
+  const m = normalizeMusicPlaybackMode(mode);
+  await pgExec(`UPDATE site_settings SET music_playback_mode = ? WHERE id = 1`, [m]);
 }
 
 export async function deleteRaffle(id: number): Promise<void> {

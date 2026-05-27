@@ -3,6 +3,12 @@
 
   const STORAGE_KEY = "ab_auth_v2";
 
+  const ICO_TRASH =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<polyline points="3 6 5 6 21 6"></polyline>' +
+    '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+    "</svg>";
+
   function loadSession() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -33,9 +39,18 @@
     return Math.max(0, Math.min(100, Math.floor(Number(n) || 0)));
   }
 
+  function normPlaybackMode(raw) {
+    return String(raw || "")
+      .trim()
+      .toLowerCase() === "shuffle"
+      ? "shuffle"
+      : "sequential";
+  }
+
   let state = {
     music_enabled: false,
     music_default_volume: 35,
+    music_playback_mode: "sequential",
     tracks: [],
   };
 
@@ -74,6 +89,7 @@
         }
         state.music_enabled = !!x.d.music_enabled;
         state.music_default_volume = fmtVol(x.d.music_default_volume);
+        state.music_playback_mode = normPlaybackMode(x.d.music_playback_mode);
         state.tracks = Array.isArray(x.d.tracks) ? x.d.tracks : [];
         paintMusic();
         setStatus("", false);
@@ -138,11 +154,15 @@
     const toggle = document.getElementById("admin-music-enabled");
     const vol = document.getElementById("admin-music-volume");
     const volVal = document.getElementById("admin-music-volume-val");
+    const seq = document.getElementById("admin-music-playback-sequential");
+    const shuf = document.getElementById("admin-music-playback-shuffle");
     const list = document.getElementById("admin-music-tracks");
     const empty = document.getElementById("admin-music-empty");
     if (toggle) toggle.checked = !!state.music_enabled;
     if (vol) vol.value = String(state.music_default_volume);
     if (volVal) volVal.textContent = String(state.music_default_volume) + "%";
+    if (seq) seq.checked = state.music_playback_mode === "sequential";
+    if (shuf) shuf.checked = state.music_playback_mode === "shuffle";
     if (!list) return;
     if (!state.tracks.length) {
       list.innerHTML = "";
@@ -159,7 +179,9 @@
         const upDisabled = idx === 0 ? " disabled" : "";
         const downDisabled = idx === state.tracks.length - 1 ? " disabled" : "";
         return (
-          '<article class="admin-music-track" data-track-id="' +
+          '<article class="admin-music-track' +
+          (on ? "" : " admin-music-track--off") +
+          '" data-track-id="' +
           String(id) +
           '">' +
           '<div class="admin-music-track__order">' +
@@ -170,7 +192,7 @@
           ' aria-label="Поднять выше">' +
           '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>' +
           "</button>" +
-          '<span class="admin-music-track__num">' +
+          '<span class="admin-music-track__num" aria-hidden="true">' +
           String(idx + 1) +
           "</span>" +
           '<button type="button" class="admin-music-track__move" data-dir="down" data-track-id="' +
@@ -190,17 +212,20 @@
           '" target="_blank" rel="noopener noreferrer">Прослушать</a>' +
           "</div>" +
           '<div class="admin-music-track__actions">' +
-          '<label class="admin-music-track__toggle">' +
-          '<input type="checkbox" class="admin-music-track__enabled" data-track-id="' +
+          '<label class="admin-toggle admin-music-track__toggle">' +
+          '<input type="checkbox" class="admin-toggle__input admin-music-track__enabled" data-track-id="' +
           String(id) +
-          '" ' +
+          '" role="switch" ' +
           (on ? "checked" : "") +
           " />" +
-          '<span>В плейлисте</span>' +
+          '<span class="admin-toggle__track" aria-hidden="true"></span>' +
+          '<span class="admin-toggle__label">В плейлисте</span>' +
           "</label>" +
           '<button type="button" class="admin-music-track__delete" data-track-id="' +
           String(id) +
-          '">Удалить</button>' +
+          '" aria-label="Удалить трек" title="Удалить">' +
+          ICO_TRASH +
+          "</button>" +
           "</div>" +
           "</article>"
         );
@@ -238,11 +263,10 @@
       if (btn) btn.disabled = true;
       if (progress) progress.textContent = "Загрузка…";
       xhr.send(fd);
-    })
-      .finally(function () {
-        if (btn) btn.disabled = false;
-        if (progress) progress.textContent = "";
-      });
+    }).finally(function () {
+      if (btn) btn.disabled = false;
+      if (progress) progress.textContent = "";
+    });
   }
 
   function bindMusicPanel() {
@@ -255,6 +279,7 @@
     const fileInput = document.getElementById("admin-music-file");
     const uploadBtn = document.getElementById("admin-music-upload-btn");
     const drop = document.getElementById("admin-music-drop");
+    const playbackRadios = root.querySelectorAll('input[name="admin-music-playback"]');
 
     if (toggle) {
       toggle.addEventListener("change", function () {
@@ -265,6 +290,8 @@
             if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
             state.music_enabled = !!x.d.music_enabled;
             state.music_default_volume = fmtVol(x.d.music_default_volume);
+            state.music_playback_mode = normPlaybackMode(x.d.music_playback_mode);
+            paintMusic();
             setStatus(on ? "Музыка включена для всех" : "Музыка выключена — иконки на сайте не будет", false);
           })
           .catch(function (e) {
@@ -276,6 +303,33 @@
           });
       });
     }
+
+    playbackRadios.forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        if (!radio.checked) return;
+        const mode = normPlaybackMode(radio.value);
+        radio.disabled = true;
+        patchSettings({ music_playback_mode: mode })
+          .then(function (x) {
+            if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+            state.music_playback_mode = normPlaybackMode(x.d.music_playback_mode);
+            paintMusic();
+            setStatus(
+              mode === "shuffle"
+                ? "У пользователей треки идут в перемешку"
+                : "У пользователей треки идут по порядку плейлиста",
+              false,
+            );
+          })
+          .catch(function (e) {
+            paintMusic();
+            setStatus(String((e && e.message) || "Ошибка"), true);
+          })
+          .finally(function () {
+            radio.disabled = false;
+          });
+      });
+    });
 
     if (vol) {
       let volTimer = null;
@@ -393,35 +447,43 @@
           });
         return;
       }
+    });
 
+    root.addEventListener("change", function (e) {
       const en = e.target.closest(".admin-music-track__enabled");
-      if (en) {
-        const id = Number(en.getAttribute("data-track-id"));
-        if (!Number.isFinite(id)) return;
-        fetch("/api/admin/music/tracks/" + String(id), {
-          method: "PATCH",
-          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
-          body: JSON.stringify({ enabled: !!en.checked }),
-          cache: "no-store",
-        })
-          .then(function (r) {
-            return r.json().then(function (d) {
-              return { ok: r.ok, d: d };
-            });
-          })
-          .then(function (x) {
-            if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
-            const tr = x.d.track;
-            state.tracks = state.tracks.map(function (t) {
-              return Number(t.id) === id ? tr : t;
-            });
-            setStatus(tr && tr.enabled ? "Трек в плейлисте" : "Трек скрыт из плейлиста", false);
-          })
-          .catch(function (err) {
-            en.checked = !en.checked;
-            setStatus(String((err && err.message) || "Ошибка"), true);
+      if (!en) return;
+      const id = Number(en.getAttribute("data-track-id"));
+      if (!Number.isFinite(id)) return;
+      const card = en.closest(".admin-music-track");
+      const wantOn = !!en.checked;
+      en.disabled = true;
+      fetch("/api/admin/music/tracks/" + String(id), {
+        method: "PATCH",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ enabled: wantOn }),
+        cache: "no-store",
+      })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            return { ok: r.ok, d: d };
           });
-      }
+        })
+        .then(function (x) {
+          if (!x.ok) throw new Error((x.d && x.d.error) || "Ошибка");
+          const tr = x.d.track;
+          state.tracks = state.tracks.map(function (t) {
+            return Number(t.id) === id ? tr : t;
+          });
+          if (card) card.classList.toggle("admin-music-track--off", !tr.enabled);
+          setStatus(tr && tr.enabled ? "Трек в плейлисте" : "Трек скрыт из плейлиста", false);
+        })
+        .catch(function (err) {
+          en.checked = !wantOn;
+          setStatus(String((err && err.message) || "Ошибка"), true);
+        })
+        .finally(function () {
+          en.disabled = false;
+        });
     });
 
     root.addEventListener(
