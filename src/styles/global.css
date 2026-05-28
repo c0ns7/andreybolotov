@@ -9222,6 +9222,35 @@ html.theme-dark .reserve-payment-modal__upload-hint {
   margin-bottom: 0;
 }
 
+.legal-modal__section + .legal-modal__section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.legal-modal__section h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #4c1d95;
+}
+
+.legal-modal__section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.legal-modal__section li {
+  margin: 0 0 5px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.legal-modal__section li:last-child {
+  margin-bottom: 0;
+}
+
 .legal-modal__actions {
   padding: 14px 18px 18px;
   border-top: 1px solid var(--border);
