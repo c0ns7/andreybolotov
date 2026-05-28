@@ -101,6 +101,25 @@ export default function AuthModalsLegacy() {
                     .
                   </span>
                 </label>
+                <label className="consent-check consent-check--legacy consent-switch">
+                  <input type="checkbox" id="reg-legal-docs-accept" defaultChecked />
+                  <span className="consent-switch__slider" aria-hidden="true" />
+                  <span>
+                    Я ознакомлен(а) с{" "}
+                    <a className="consent-check__link" href="/home/legal/cookies" target="_blank" rel="noopener noreferrer">
+                      политикой cookie
+                    </a>
+                    ,{" "}
+                    <a className="consent-check__link" href="/home/legal/notifications" target="_blank" rel="noopener noreferrer">
+                      политикой уведомлений
+                    </a>{" "}
+                    и{" "}
+                    <a className="consent-check__link" href="/home/legal/offer" target="_blank" rel="noopener noreferrer">
+                      публичной офертой проекта
+                    </a>
+                    .
+                  </span>
+                </label>
                 <div className="form-actions form-actions--split">
                   <button type="button" className="btn btn--ghost" id="reg-step-back-3">Назад</button>
                   <button type="submit" className="btn btn--primary" id="reg-submit-btn">Зарегистрироваться</button>

@@ -52,7 +52,8 @@ export default function LandingClient() {
   const [regPass2, setRegPass2] = useState("");
   const [showRegPass, setShowRegPass] = useState(false);
   const [showRegPass2, setShowRegPass2] = useState(false);
-  const [regLegalAccepted, setRegLegalAccepted] = useState(true);
+  const [regLegalAcceptedMain, setRegLegalAcceptedMain] = useState(true);
+  const [regLegalAcceptedDocs, setRegLegalAcceptedDocs] = useState(true);
   const [legalModal, setLegalModal] = useState<"none" | "pd" | "privacy">("none");
 
   const [loginPhone, setLoginPhone] = useState("");
@@ -74,7 +75,8 @@ export default function LandingClient() {
     setRegLocality("");
     setRegPass("");
     setRegPass2("");
-    setRegLegalAccepted(true);
+    setRegLegalAcceptedMain(true);
+    setRegLegalAcceptedDocs(true);
     setLegalModal("none");
   }, []);
 
@@ -152,7 +154,7 @@ export default function LandingClient() {
       toast("Пароли не совпадают", "warning");
       return;
     }
-    if (!regLegalAccepted) {
+    if (!regLegalAcceptedMain || !regLegalAcceptedDocs) {
       toast("Подтвердите согласие с документами", "warning");
       return;
     }
@@ -454,7 +456,7 @@ export default function LandingClient() {
                   </div>
                 </div>
                 <label className="consent-check consent-switch">
-                  <input type="checkbox" checked={regLegalAccepted} onChange={(e) => setRegLegalAccepted(e.target.checked)} />
+                  <input type="checkbox" checked={regLegalAcceptedMain} onChange={(e) => setRegLegalAcceptedMain(e.target.checked)} />
                   <span className="consent-switch__slider" aria-hidden="true" />
                   <span>
                     Я принимаю{" "}
@@ -468,8 +470,27 @@ export default function LandingClient() {
                     .
                   </span>
                 </label>
+                <label className="consent-check consent-switch">
+                  <input type="checkbox" checked={regLegalAcceptedDocs} onChange={(e) => setRegLegalAcceptedDocs(e.target.checked)} />
+                  <span className="consent-switch__slider" aria-hidden="true" />
+                  <span>
+                    Я ознакомлен(а) с{" "}
+                    <a className="consent-check__link" href="/home/legal/cookies" target="_blank" rel="noopener noreferrer">
+                      политикой cookie
+                    </a>
+                    ,{" "}
+                    <a className="consent-check__link" href="/home/legal/notifications" target="_blank" rel="noopener noreferrer">
+                      политикой уведомлений
+                    </a>{" "}
+                    и{" "}
+                    <a className="consent-check__link" href="/home/legal/offer" target="_blank" rel="noopener noreferrer">
+                      публичной офертой проекта
+                    </a>
+                    .
+                  </span>
+                </label>
                 <div className="form-actions">
-                  <button type="submit" className="btn btn--primary" disabled={!regLegalAccepted}>
+                  <button type="submit" className="btn btn--primary" disabled={!regLegalAcceptedMain || !regLegalAcceptedDocs}>
                     Зарегистрироваться
                   </button>
                 </div>

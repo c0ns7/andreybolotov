@@ -8200,15 +8200,17 @@
     });
   });
   var regLegalAccept = document.getElementById("reg-legal-accept");
+  var regLegalDocsAccept = document.getElementById("reg-legal-docs-accept");
   var regSubmitBtn = document.getElementById("reg-submit-btn");
   function syncRegSubmitByLegal() {
-    if (!regSubmitBtn || !regLegalAccept) return;
-    regSubmitBtn.disabled = !regLegalAccept.checked;
+    if (!regSubmitBtn || !regLegalAccept || !regLegalDocsAccept) return;
+    regSubmitBtn.disabled = !regLegalAccept.checked || !regLegalDocsAccept.checked;
   }
   if (regLegalAccept) {
     regLegalAccept.addEventListener("change", syncRegSubmitByLegal);
-    syncRegSubmitByLegal();
   }
+  if (regLegalDocsAccept) regLegalDocsAccept.addEventListener("change", syncRegSubmitByLegal);
+  syncRegSubmitByLegal();
 
   var profileModalClose = document.getElementById("profile-modal-close");
   if (profileModalClose) profileModalClose.addEventListener("click", function () {
@@ -8281,7 +8283,8 @@
       return;
     }
     var legalAccepted = !!((document.getElementById("reg-legal-accept") || {}).checked);
-    if (!legalAccepted) {
+    var legalDocsAccepted = !!((document.getElementById("reg-legal-docs-accept") || {}).checked);
+    if (!legalAccepted || !legalDocsAccepted) {
       showToast("Подтвердите согласие с документами", "warning");
       return;
     }
