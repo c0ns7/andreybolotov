@@ -124,6 +124,11 @@ export async function updateUserLocalityPg(userId: number, locality: string): Pr
   await pgPool.query("UPDATE users SET locality = $1 WHERE id = $2", [loc || null, userId]);
 }
 
+export async function updateUserNamePg(userId: number, name: string): Promise<void> {
+  const n = String(name).trim().slice(0, 200);
+  await pgPool.query("UPDATE users SET name = $1 WHERE id = $2", [n, userId]);
+}
+
 export async function updateUserEmailNotifyPrefsPg(
   userId: number,
   prefs: {

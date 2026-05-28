@@ -121,6 +121,7 @@ import { getStaffTypingForUser, getUserTypingForThread } from "./typing-state.js
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import { applyStaffSupportGreetingForUser } from "./support-staff-greeting.js";
+import { validatePersonName } from "./person-name.js";
 import {
   deleteSiteMusicTrack,
   getPublicSiteMusicPayload,
@@ -1906,7 +1907,7 @@ adminSubApp.patch("/users/:userId", async (c) => {
     body.name !== undefined || body.phone !== undefined || body.locality !== undefined;
 
   if (wantsProfile) {
-    const name = String(body.name ?? target.name).trim();
+    const nameCheck = validatePersonName(String(body.name ?? target.name ?? ""));
     const phoneRaw = body.phone !== undefined ? String(body.phone) : target.phone;
 
     const phone = normalizePhone(phoneRaw);
@@ -1914,7 +1915,8 @@ adminSubApp.patch("/users/:userId", async (c) => {
     if (!isValidRuMobile(phone)) {
       return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
     }
-    if (!name) return c.json({ error: "Укажите имя" }, 400);
+    if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
+    const name = nameCheck.name;
     const locality = body.locality !== undefined
       ? String(body.locality).trim()
       : target.locality != null

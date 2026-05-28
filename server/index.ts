@@ -42,6 +42,7 @@ import {
   touchUserLastActivePg,
   updateUserEmailNotifyPrefsPg,
   updateUserLocalityPg,
+  updateUserNamePg,
   updateUserPasswordHashPg,
 } from "./db-auth-pg.js";
 import { attachWebSocket, broadcastRaffleGridUpdated, broadcastTypingUserToAdmins } from "./ws-chat.js";
@@ -49,6 +50,7 @@ import { getStaffTypingForUser } from "./typing-state.js";
 import type { Context } from "hono";
 import type { RaffleRow, SessionUser } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
+import { validatePersonName } from "./person-name.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import {
   attachReceiptToOrder,
@@ -553,7 +555,7 @@ app.post("/api/auth/register", async (c) => {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
   const phone = normalizePhone(String(body.phone ?? ""));
-  const name = String(body.name ?? "").trim();
+  const nameRaw = String(body.name ?? "");
   const locality = String(body.locality ?? "").trim().slice(0, 120);
   const password = String(body.password ?? "");
 
@@ -561,7 +563,9 @@ app.post("/api/auth/register", async (c) => {
   if (!isValidRuMobile(phone)) {
     return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
   }
-  if (!name) return c.json({ error: "Укажите ФИО" }, 400);
+  const nameCheck = validatePersonName(nameRaw);
+  if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
+  const name = nameCheck.name;
   if (!locality) return c.json({ error: "Укажите населенный пункт" }, 400);
   if (password.length < 6) return c.json({ error: "Пароль не короче 6 символов" }, 400);
 
@@ -796,6 +800,21 @@ app.patch("/api/auth/locality", async (c) => {
   if (!locality) return c.json({ error: "Укажите населенный пункт" }, 400);
   await updateUserLocalityPg(u.id, locality);
   return c.json({ ok: true, locality });
+});
+
+app.patch("/api/auth/name", async (c) => {
+  const u = await requireUser(c);
+  if (u instanceof Response) return u;
+  let body: { name?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const nameCheck = validatePersonName(String(body.name ?? ""));
+  if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
+  await updateUserNamePg(u.id, nameCheck.name);
+  return c.json({ ok: true, name: nameCheck.name });
 });
 
 app.get("/api/chat/unread", async (c) => {

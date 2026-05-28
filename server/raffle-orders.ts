@@ -1698,7 +1698,7 @@ export type ParticipationHistoryTimelineEntry = {
 };
 
 export type ParticipationHistoryRaffle = {
-  raffle: { id: number; title: string; status: string };
+  raffle: { id: number; title: string; status: string; price_rub: number };
   last_activity_at: number;
   /** Хронология: дата/время и номерки по этапу (бронь, проверка, закрепление). */
   timeline: ParticipationHistoryTimelineEntry[];
@@ -1746,6 +1746,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     raffle_id: number;
     raffle_title: string;
     raffle_status: string;
+    raffle_price_rub: number;
     order_status: string;
     ord_updated_at: number;
     ticket_number: number;
@@ -1760,6 +1761,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
          r.id AS raffle_id,
          r.title AS raffle_title,
          r.status AS raffle_status,
+         COALESCE(r.price_rub, 0) AS raffle_price_rub,
          o.status AS order_status,
          o.updated_at AS ord_updated_at,
          h.ticket_number AS ticket_number,
@@ -1790,6 +1792,7 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
           id: rid,
           title: String(row.raffle_title || ""),
           status: String(row.raffle_status || "active"),
+          price_rub: Math.max(0, Math.floor(Number(row.raffle_price_rub) || 0)),
         },
         last_activity_at: Number(row.ord_updated_at) || 0,
         timeline: [],

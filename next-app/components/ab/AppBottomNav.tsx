@@ -3,7 +3,17 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, BadgeCheck, Clock3, Gift, HandHeart, Hash, Hourglass, MapPin, Ticket } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleCheck,
+  Clock3,
+  HandHeart,
+  Hash,
+  Hourglass,
+  MapPin,
+  Ticket,
+  Trophy,
+} from "lucide-react";
 import { abAuthHeaders } from "../../lib/ab-api";
 import { getAbBlogUnreadCached, invalidateAbBlogUnreadCache } from "../../lib/ab-blog-unread-cache";
 import { getAbChatUnreadCached, invalidateAbChatUnreadCache } from "../../lib/ab-chat-unread-cache";
@@ -57,7 +67,7 @@ type HistoryTimelineEntry = {
 
 type HistoryPayload = {
   raffles?: Array<{
-    raffle?: { title?: string; status?: string };
+    raffle?: { title?: string; status?: string; price_rub?: number };
     timeline?: HistoryTimelineEntry[];
     numbers?: {
       reserved?: number[];
@@ -121,84 +131,67 @@ function blurIfFocusInsideModalRoot(rootId: string) {
   }
 }
 
-function formatHistoryWhen(ms?: number) {
+function formatHistoryDateOnly(ms?: number) {
   const t = Math.floor(Number(ms) || 0);
   if (!Number.isFinite(t) || t < 1) return "—";
   try {
-    return new Date(t).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+    return new Date(t).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
   } catch {
     return "—";
   }
 }
 
-function historyTimelineStatusLabel(status?: HistoryTimelineStatus) {
-  if (status === "reserved") return "В брони";
-  if (status === "pending_review") return "На проверке";
-  if (status === "confirmed") return "Закреплено";
-  if (status === "bonus_5plus1") return "Бонус 5+1";
-  if (status === "bonus_5plus2") return "Бонус 5+2";
-  return "Участие";
-}
-
-function historyTimelineRowClass(status?: HistoryTimelineStatus) {
-  if (status === "pending_review") return "history-row--pending";
-  if (status === "confirmed") return "history-row--confirmed";
-  if (status === "bonus_5plus1" || status === "bonus_5plus2") return "history-row--bonus";
-  return "";
-}
-
-function historyNumbersRow(label: ReactNode, nums?: number[], rowClass = "") {
-  const arr = Array.isArray(nums)
-    ? nums.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0)
-    : [];
-  if (!arr.length) return null;
-  const text = arr.map((n) => `№${String(n)}`).join(", ");
+function formatHistoryRubAmount(amount: number) {
   return (
-    <p className={"history-row" + (rowClass ? ` ${rowClass}` : "")}>
-      <strong className="history-row__label">{label}</strong>{" "}
-      <span className="history-row__nums">{text}</span>
-    </p>
+    new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Math.max(0, Math.floor(amount))) + "\u00a0₽"
   );
 }
 
-function historyTimelineEntryRow(entry: HistoryTimelineEntry, key: string) {
-  const nums = Array.isArray(entry.numbers)
-    ? entry.numbers.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0)
-    : [];
-  if (!nums.length) return null;
-  const status = entry.status;
-  const label = historyTimelineStatusLabel(status);
-  const rowClass = historyTimelineRowClass(status);
-  const icon =
-    status === "reserved" ? (
-      <Clock3 size={14} strokeWidth={2.2} aria-hidden="true" />
-    ) : status === "pending_review" ? (
-      <Hourglass size={14} strokeWidth={2.2} aria-hidden="true" />
-    ) : status === "confirmed" ? (
-      <BadgeCheck size={14} strokeWidth={2.2} aria-hidden="true" />
-    ) : status === "bonus_5plus1" || status === "bonus_5plus2" ? (
-      <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
-    ) : null;
-  return (
-    <div className="history-entry" key={key}>
-      <p className="history-entry__when">{formatHistoryWhen(entry.at)}</p>
-      {historyNumbersRow(
-        <>
-          {icon}
-          <span>{label}:</span>
-        </>,
-        nums,
-        rowClass,
-      )}
-    </div>
-  );
+function raffleHistoryStatusBadge(status?: string) {
+  const s = String(status || "active").toLowerCase();
+  if (s === "active") return { text: "Активен", mod: "active" as const };
+  if (s === "closed" || s === "completed" || s === "finished") return { text: "Завершён", mod: "closed" as const };
+  if (s === "paused") return { text: "Пауза", mod: "paused" as const };
+  return { text: "Акция", mod: "default" as const };
 }
 
-function historyCardBody(it: NonNullable<HistoryPayload["raffles"]>[number], idx: number) {
-  const timeline = Array.isArray(it.timeline) ? it.timeline : [];
-  if (timeline.length) {
-    return timeline.map((entry, eidx) => historyTimelineEntryRow(entry, `h_${String(idx)}_t_${String(eidx)}`));
+function historyEventChipVariant(status?: HistoryTimelineStatus): "reserved" | "pending" | "confirmed" | "bonus" {
+  if (status === "pending_review") return "pending";
+  if (status === "confirmed") return "confirmed";
+  if (status === "bonus_5plus1" || status === "bonus_5plus2") return "bonus";
+  return "reserved";
+}
+
+function historyEventMeta(
+  status: HistoryTimelineStatus | undefined,
+  count: number,
+  priceRub: number,
+): { text: string; mod: "paid" | "pending" | "reserved" | "bonus" } | null {
+  if (!count) return null;
+  if (status === "confirmed") {
+    if (priceRub > 0) return { text: formatHistoryRubAmount(priceRub * count), mod: "paid" };
+    return { text: "Оплачено", mod: "paid" };
   }
+  if (status === "pending_review") return { text: "На проверке", mod: "pending" };
+  if (status === "reserved") return { text: "В брони", mod: "reserved" };
+  if (status === "bonus_5plus1" || status === "bonus_5plus2") return { text: "Бонус", mod: "bonus" };
+  return null;
+}
+
+function buildFallbackHistoryTimeline(
+  it: NonNullable<HistoryPayload["raffles"]>[number],
+): HistoryTimelineEntry[] {
+  const at = Math.floor(Number(it.last_activity_at) || 0) || Date.now();
+  const out: HistoryTimelineEntry[] = [];
+  const push = (status: HistoryTimelineStatus, nums?: number[]) => {
+    const arr = (Array.isArray(nums) ? nums : [])
+      .map((n) => Math.floor(Number(n)))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (arr.length) out.push({ status, numbers: arr, at });
+  };
+  push("reserved", it.numbers?.reserved);
+  push("pending_review", it.numbers?.pending_review);
+  push("confirmed", it.numbers?.confirmed);
   const bonusNums = Array.from(
     new Set(
       [
@@ -210,40 +203,80 @@ function historyCardBody(it: NonNullable<HistoryPayload["raffles"]>[number], idx
         .filter((n) => Number.isFinite(n) && n > 0),
     ),
   ).sort((a, b) => a - b);
+  if (bonusNums.length) push("bonus_5plus1", bonusNums);
+  return out;
+}
+
+function HistoryTimelineEvent({
+  entry,
+  priceRub,
+  entryKey,
+}: {
+  entry: HistoryTimelineEntry;
+  priceRub: number;
+  entryKey: string;
+}) {
+  const nums = Array.isArray(entry.numbers)
+    ? entry.numbers.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0)
+    : [];
+  if (!nums.length) return null;
+  const meta = historyEventMeta(entry.status, nums.length, priceRub);
+  const chipVariant = historyEventChipVariant(entry.status);
   return (
-    <>
-      {historyNumbersRow(
-        <>
-          <Clock3 size={14} strokeWidth={2.2} aria-hidden="true" />
-          <span>В брони:</span>
-        </>,
-        it.numbers?.reserved,
-      )}
-      {historyNumbersRow(
-        <>
-          <Hourglass size={14} strokeWidth={2.2} aria-hidden="true" />
-          <span>На проверке:</span>
-        </>,
-        it.numbers?.pending_review,
-        "history-row--pending",
-      )}
-      {historyNumbersRow(
-        <>
-          <BadgeCheck size={14} strokeWidth={2.2} aria-hidden="true" />
-          <span>Закреплено:</span>
-        </>,
-        it.numbers?.confirmed,
-        "history-row--confirmed",
-      )}
-      {historyNumbersRow(
-        <>
-          <Gift size={14} strokeWidth={2.2} aria-hidden="true" />
-          <span>Бонус:</span>
-        </>,
-        bonusNums,
-        "history-row--bonus",
-      )}
-    </>
+    <div className="history-event" key={entryKey}>
+      <div className="history-event__meta">
+        <span className="history-event__date">{formatHistoryDateOnly(entry.at)}</span>
+        {meta ? <span className={`history-event__tag history-event__tag--${meta.mod}`}>{meta.text}</span> : null}
+      </div>
+      <div className="history-event__chips">
+        {nums.map((n) => (
+          <span key={`${entryKey}_${String(n)}`} className={`history-event__chip history-event__chip--${chipVariant}`}>
+            {String(n)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HistoryRaffleCard({
+  it,
+  idx,
+}: {
+  it: NonNullable<HistoryPayload["raffles"]>[number];
+  idx: number;
+}) {
+  const title = String(it.raffle?.title || "Акция");
+  const badge = raffleHistoryStatusBadge(it.raffle?.status);
+  const priceRub = Math.max(0, Math.floor(Number(it.raffle?.price_rub) || 0));
+  const timeline = Array.isArray(it.timeline) && it.timeline.length ? it.timeline : buildFallbackHistoryTimeline(it);
+
+  return (
+    <article className="history-card">
+      <div className="history-card__banner">
+        <Trophy className="history-card__trophy" size={12} strokeWidth={2} aria-hidden="true" />
+        <span className="history-card__raffle-title">{title}</span>
+        <span className={`history-card__badge history-card__badge--${badge.mod}`}>{badge.text}</span>
+      </div>
+      <div className="history-card__events">
+        {timeline.map((entry, eidx) => (
+          <HistoryTimelineEvent
+            key={`h_${String(idx)}_t_${String(eidx)}`}
+            entryKey={`h_${String(idx)}_t_${String(eidx)}`}
+            entry={entry}
+            priceRub={priceRub}
+          />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function HistoryModalLoader() {
+  return (
+    <div className="history-modal__loader-wrap" role="status" aria-live="polite" aria-label="Загрузка истории">
+      <div className="history-modal__loader" />
+    </div>
   );
 }
 
@@ -333,6 +366,152 @@ function filterTicketGroupsForProfile(
   const hasAnyTickets = allGroups.some((g) => Array.isArray(g?.numbers) && g.numbers!.length > 0);
   if (!filtered.length && hasAnyTickets) return groups;
   return filtered;
+}
+
+type ProfileRaffleTicketsBlock = {
+  raffleId: number;
+  title: string;
+  reserved: number[];
+  pending: number[];
+  confirmed: number[];
+  wholesale: number[];
+};
+
+function mergeUniqueTicketNums(base: number[], incoming?: number[]): number[] {
+  const next = [
+    ...base,
+    ...(Array.isArray(incoming) ? incoming : []).map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0),
+  ];
+  return Array.from(new Set(next)).sort((a, b) => a - b);
+}
+
+function buildProfileRaffleTicketsBlocks(
+  reserved: TicketGroup[],
+  pending: TicketGroup[],
+  confirmed: TicketGroup[],
+  wholesaleSlots: WholesaleSlotRow[],
+  raffleTitleById: Map<number, string>,
+): ProfileRaffleTicketsBlock[] {
+  const map = new Map<number, ProfileRaffleTicketsBlock>();
+
+  const ensure = (rid: number, title?: string) => {
+    const id = Math.max(0, Math.floor(Number(rid) || 0));
+    let block = map.get(id);
+    const fallbackTitle =
+      String(title || "").trim() ||
+      (id > 0 ? raffleTitleById.get(id) : "") ||
+      (id > 0 ? `Акция №${id}` : "Акция");
+    if (!block) {
+      block = { raffleId: id, title: fallbackTitle, reserved: [], pending: [], confirmed: [], wholesale: [] };
+      map.set(id, block);
+    } else if (title && block.title === "Акция" && title.trim()) {
+      block.title = title.trim();
+    }
+    return block;
+  };
+
+  const ingestGroups = (groups: TicketGroup[], field: "reserved" | "pending" | "confirmed") => {
+    for (const g of groups) {
+      const rid = Math.floor(Number(g?.raffle?.id) || 0);
+      const block = ensure(rid, g?.raffle?.title);
+      block[field] = mergeUniqueTicketNums(block[field], g.numbers);
+    }
+  };
+
+  ingestGroups(reserved, "reserved");
+  ingestGroups(pending, "pending");
+  ingestGroups(confirmed, "confirmed");
+
+  for (const slot of wholesaleSlots) {
+    const rid = Math.floor(Number(slot?.raffle_id) || 0);
+    const block = ensure(rid);
+    block.wholesale = mergeUniqueTicketNums(block.wholesale, slot.wholesale_numbers);
+  }
+
+  return Array.from(map.values())
+    .filter((b) => b.reserved.length > 0 || b.pending.length > 0 || b.confirmed.length > 0 || b.wholesale.length > 0)
+    .sort((a, b) => a.title.localeCompare(b.title, "ru"));
+}
+
+function profileRaffleNumChips(nums: number[], variant: "reserved" | "pending" | "confirmed" | "wholesale") {
+  if (!nums.length) return null;
+  return (
+    <div className="profile-raffle-chips">
+      {nums.map((n) => (
+        <span key={`${variant}_${String(n)}`} className={`profile-raffle-chip profile-raffle-chip--${variant}`}>
+          {String(n)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ProfileRaffleTicketsCard({ block }: { block: ProfileRaffleTicketsBlock }) {
+  const statuses: Array<{
+    key: string;
+    nums: number[];
+    variant: "reserved" | "pending" | "confirmed" | "wholesale";
+    label: string;
+    icon: ReactNode;
+    statusClass: string;
+  }> = [
+    {
+      key: "reserved",
+      nums: block.reserved,
+      variant: "reserved",
+      label: "В брони",
+      icon: <Clock3 size={10} strokeWidth={2} aria-hidden="true" />,
+      statusClass: "profile-raffle-status--reserved",
+    },
+    {
+      key: "pending",
+      nums: block.pending,
+      variant: "pending",
+      label: "На проверке",
+      icon: <Hourglass size={10} strokeWidth={2} aria-hidden="true" />,
+      statusClass: "profile-raffle-status--pending",
+    },
+    {
+      key: "confirmed",
+      nums: block.confirmed,
+      variant: "confirmed",
+      label: "Оплачено",
+      icon: <CircleCheck size={10} strokeWidth={2} aria-hidden="true" />,
+      statusClass: "profile-raffle-status--confirmed",
+    },
+    {
+      key: "wholesale",
+      nums: block.wholesale,
+      variant: "wholesale",
+      label: "Оптовик",
+      icon: <Hash size={10} strokeWidth={2} aria-hidden="true" />,
+      statusClass: "profile-raffle-status--wholesale",
+    },
+  ];
+
+  return (
+    <article className="profile-raffle-block">
+      <div className="profile-raffle-block__head">
+        <Trophy className="profile-raffle-block__trophy" size={11} strokeWidth={2} aria-hidden="true" />
+        <span className="profile-raffle-block__title">{block.title}</span>
+      </div>
+      <div className="profile-raffle-block__statuses">
+        {statuses.map((st) =>
+          st.nums.length > 0 ? (
+            <div className="profile-raffle-block__status" key={st.key}>
+              <p className={`profile-raffle-status ${st.statusClass}`}>
+                {st.icon}
+                <span>
+                  {st.label} ({st.nums.length})
+                </span>
+              </p>
+              {profileRaffleNumChips(st.nums, st.variant)}
+            </div>
+          ) : null,
+        )}
+      </div>
+    </article>
+  );
 }
 
 export default function AppBottomNav({
@@ -663,9 +842,6 @@ export default function AppBottomNav({
   const profileReserved = useMemo(() => mergeTicketGroupsByRaffle(profileReservedRaw), [profileReservedRaw]);
   const profilePending = useMemo(() => mergeTicketGroupsByRaffle(profilePendingRaw), [profilePendingRaw]);
   const profileConfirmed = useMemo(() => mergeTicketGroupsByRaffle(profileConfirmedRaw), [profileConfirmedRaw]);
-  const hasWholesaleNumbers = wholesaleSlots.some(
-    (s) => Array.isArray(s?.wholesale_numbers) && s.wholesale_numbers.length > 0,
-  );
   const profileTicketsCount = useMemo(() => {
     let total = 0;
     const addGroups = (groups: TicketGroup[]) => {
@@ -695,6 +871,17 @@ export default function AppBottomNav({
     ingest(confirmed);
     return m;
   }, [reserved, pending, confirmed]);
+  const profileRaffleBlocks = useMemo(
+    () =>
+      buildProfileRaffleTicketsBlocks(
+        profileReserved,
+        profilePending,
+        profileConfirmed,
+        wholesaleSlots,
+        raffleTitleById,
+      ),
+    [profileReserved, profilePending, profileConfirmed, wholesaleSlots, raffleTitleById],
+  );
   const profilePhone = mounted ? formatPhoneRu(session?.phone) : "";
   const profileLocality = mounted ? (session?.locality?.trim() || "Не указано") : "Не указано";
   const profileUserId =
@@ -936,80 +1123,20 @@ export default function AppBottomNav({
                   <p className="history-empty">Загрузка...</p>
                 ) : ticketsError ? (
                   <p className="profile-modal__tickets-err">{ticketsError}</p>
-                ) : !profileReserved.length && !profilePending.length && !profileConfirmed.length && !hasWholesaleNumbers ? (
+                ) : !profileRaffleBlocks.length ? (
                   <div className="profile-tickets-empty" role="status">
                     <p className="profile-tickets-empty__title">Билетов пока нет</p>
                     <p className="profile-tickets-empty__sub">Участвуйте в акциях!</p>
                   </div>
                 ) : (
-                  <>
-                    {hasWholesaleNumbers ? (
-                      <section className="tickets-section tickets-section--wholesale">
-                        <h3 className="tickets-section__title">
-                          <Hash className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
-                          <span>Оптовик</span>
-                        </h3>
-                        {wholesaleSlots.map((slot, i) => {
-                          const nums = Array.isArray(slot?.wholesale_numbers) ? slot.wholesale_numbers : [];
-                          if (!nums.length) return null;
-                          const rid = Math.floor(Number(slot?.raffle_id) || 0);
-                          const title =
-                            rid > 0 ? raffleTitleById.get(rid) || `Акция №${rid}` : String(slot?.raffle_id || "Акция");
-                          return (
-                            <section className="tickets-group tickets-group--wholesale" key={"w_" + String(i) + "_" + String(rid)}>
-                              <h3 className="tickets-group__title">{title}</h3>
-                              <div className="tickets-group__wholesale">
-                                <strong>Номер оптовика</strong>
-                                {numChips(nums)}
-                              </div>
-                            </section>
-                          );
-                        })}
-                      </section>
-                    ) : null}
-                    {profileReserved.length ? (
-                      <section className="tickets-section">
-                        <h3 className="tickets-section__title">
-                          <Clock3 className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
-                          <span>Забронированные</span>
-                        </h3>
-                        {profileReserved.map((it, i) => (
-                          <section className="tickets-group tickets-group--reserved-pending" key={"r_" + String(i)}>
-                            <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
-                            {numChips(it.numbers)}
-                          </section>
-                        ))}
-                      </section>
-                    ) : null}
-                    {profilePending.length ? (
-                      <section className="tickets-section tickets-section--pending">
-                        <h3 className="tickets-section__title">
-                          <Hourglass className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
-                          <span>На проверке</span>
-                        </h3>
-                        {profilePending.map((it, i) => (
-                          <section className="tickets-group tickets-group--reserved-pending" key={"p_" + String(i)}>
-                            <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
-                            {numChips(it.numbers)}
-                          </section>
-                        ))}
-                      </section>
-                    ) : null}
-                    {profileConfirmed.length ? (
-                      <section className="tickets-section tickets-section--confirmed">
-                        <h3 className="tickets-section__title">
-                          <BadgeCheck className="tickets-section__title-icon" size={14} strokeWidth={2.2} aria-hidden="true" />
-                          <span>Закрепленные</span>
-                        </h3>
-                        {profileConfirmed.map((it, i) => (
-                          <section className="tickets-group tickets-group--confirmed" key={"c_" + String(i)}>
-                            <h3 className="tickets-group__title">{String(it.raffle?.title || "Акция")}</h3>
-                            {numChips(it.numbers, false)}
-                          </section>
-                        ))}
-                      </section>
-                    ) : null}
-                  </>
+                  <div className="profile-tickets-feed">
+                    {profileRaffleBlocks.map((block) => (
+                      <ProfileRaffleTicketsCard
+                        key={`raffle_${String(block.raffleId)}_${block.title}`}
+                        block={block}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
@@ -1081,12 +1208,12 @@ export default function AppBottomNav({
                 <ArrowLeft size={20} strokeWidth={2} aria-hidden="true" />
               </button>
               <h2 id="modal-participation-history-title" className="history-modal__title">
-                История участий
+                История билетов
               </h2>
             </div>
             <div className="history-modal__body custom-scrollbar" id="modal-participation-history-body">
               {historyLoading ? (
-                <p className="history-modal__status">Загрузка…</p>
+                <HistoryModalLoader />
               ) : historyError ? (
                 <p className="history-modal__status history-modal__status--error">{historyError}</p>
               ) : !history.raffles?.length ? (
@@ -1094,18 +1221,15 @@ export default function AppBottomNav({
                   <div className="history-modal__empty-icon" aria-hidden="true">
                     <Ticket size={24} strokeWidth={2} />
                   </div>
-                  <p className="history-modal__empty-title">История участия пока пуста</p>
-                  <p className="history-modal__empty-text">Здесь появятся ваши номерки по акциям — с датой брони, проверки и закрепления</p>
+                  <p className="history-modal__empty-title">История билетов пока пуста</p>
+                  <p className="history-modal__empty-text">Здесь появятся ваши номерки по акциям — с датой и суммой участия</p>
                 </div>
               ) : (
-                history.raffles.map((it, idx) => (
-                  <article className="history-card" key={"h_" + String(idx)}>
-                    <div className="history-card__head">
-                      <h3 className="history-card__title">{String(it.raffle?.title || "Акция")}</h3>
-                    </div>
-                    <div className="history-card__timeline">{historyCardBody(it, idx)}</div>
-                  </article>
-                ))
+                <div className="history-modal__feed history-modal__feed--in">
+                  {history.raffles.map((it, idx) => (
+                    <HistoryRaffleCard key={"h_" + String(idx)} it={it} idx={idx} />
+                  ))}
+                </div>
               )}
             </div>
             <button type="button" className="history-modal__btn-back" onClick={closeHistoryModal}>

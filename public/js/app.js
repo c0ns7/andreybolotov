@@ -3580,36 +3580,57 @@
     }
   }
 
-  function historyNumbersLine(title, nums, cls) {
-    var arr = Array.isArray(nums) ? nums : [];
-    if (!arr.length) return "";
-    var s = arr
-      .map(function (n) {
-        return "№" + String(Math.floor(Number(n)));
-      })
-      .join(", ");
-    return '<p class="history-row' + (cls ? " " + cls : "") + '"><strong>' + escapeHtml(title) + ":</strong> " + escapeHtml(s) + "</p>";
+  function formatHistoryDateOnly(ms) {
+    var t = Math.floor(Number(ms) || 0);
+    if (!Number.isFinite(t) || t < 1) return "—";
+    try {
+      return new Date(t).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+    } catch (_) {
+      return "—";
+    }
   }
 
-  function historyTimelineStatusLabel(st) {
-    var x = String(st || "");
-    if (x === "reserved") return "В брони";
-    if (x === "pending_review") return "На проверке";
-    if (x === "confirmed") return "Закреплено";
-    if (x === "bonus_5plus1") return "Бонус 5+1";
-    if (x === "bonus_5plus2") return "Бонус 5+2";
-    return "Участие";
+  function formatHistoryRubAmount(amount) {
+    return (
+      new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Math.max(0, Math.floor(Number(amount) || 0))) +
+      "\u00a0₽"
+    );
   }
 
-  function historyTimelineRowClass(st) {
-    var x = String(st || "");
-    if (x === "pending_review") return "history-row--pending";
-    if (x === "confirmed") return "history-row--confirmed";
-    if (x === "bonus_5plus1" || x === "bonus_5plus2") return "history-row--bonus";
+  function historyRaffleBadgeHtml(status) {
+    var s = String(status || "active").toLowerCase();
+    if (s === "active") return { text: "Активен", mod: "active" };
+    if (s === "closed" || s === "completed" || s === "finished") return { text: "Завершён", mod: "closed" };
+    if (s === "paused") return { text: "Пауза", mod: "paused" };
+    return { text: "Акция", mod: "default" };
+  }
+
+  function historyEventChipVariant(st) {
+    if (st === "pending_review") return "pending";
+    if (st === "confirmed") return "confirmed";
+    if (st === "bonus_5plus1" || st === "bonus_5plus2") return "bonus";
+    return "reserved";
+  }
+
+  function historyEventMetaHtml(st, count, priceRub) {
+    if (!count) return "";
+    if (st === "confirmed") {
+      var paid = priceRub > 0 ? formatHistoryRubAmount(priceRub * count) : "Оплачено";
+      return '<span class="history-event__tag history-event__tag--paid">' + escapeHtml(paid) + "</span>";
+    }
+    if (st === "pending_review") {
+      return '<span class="history-event__tag history-event__tag--pending">На проверке</span>';
+    }
+    if (st === "reserved") {
+      return '<span class="history-event__tag history-event__tag--reserved">В брони</span>';
+    }
+    if (st === "bonus_5plus1" || st === "bonus_5plus2") {
+      return '<span class="history-event__tag history-event__tag--bonus">Бонус</span>';
+    }
     return "";
   }
 
-  function historyTimelineEntryHtml(entry, idx) {
+  function historyTimelineEntryHtml(entry, idx, priceRub) {
     var nums = Array.isArray(entry && entry.numbers) ? entry.numbers : [];
     var clean = nums
       .map(function (n) {
@@ -3619,23 +3640,40 @@
         return Number.isFinite(n) && n > 0;
       });
     if (!clean.length) return "";
-    var when = formatReceiptArchiveTs(Number(entry && entry.at));
     var st = String((entry && entry.status) || "");
+    var chipVar = historyEventChipVariant(st);
+    var chips = clean
+      .map(function (n) {
+        return (
+          '<span class="history-event__chip history-event__chip--' +
+          chipVar +
+          '">' +
+          escapeHtml(String(n)) +
+          "</span>"
+        );
+      })
+      .join("");
     return (
-      '<div class="history-entry">' +
-      '<p class="history-entry__when">' +
-      escapeHtml(when) +
-      "</p>" +
-      historyNumbersLine(historyTimelineStatusLabel(st), clean, historyTimelineRowClass(st)) +
+      '<div class="history-event">' +
+      '<div class="history-event__meta">' +
+      '<span class="history-event__date">' +
+      escapeHtml(formatHistoryDateOnly(entry && entry.at)) +
+      "</span>" +
+      historyEventMetaHtml(st, clean.length, Math.max(0, Math.floor(Number(priceRub) || 0))) +
+      "</div>" +
+      '<div class="history-event__chips">' +
+      chips +
+      "</div>" +
       "</div>"
     );
   }
 
-  function historyStatusLabel(st) {
-    var x = String(st || "active");
-    if (x === "closed") return "Закрыта";
-    if (x === "paused") return "Пауза";
-    return "Активна";
+  function historyModalLoaderHtml() {
+    return (
+      '<div class="history-modal__loader-wrap" role="status" aria-live="polite" aria-label="Загрузка истории">' +
+      '<div class="history-modal__loader"></div>' +
+      "</div>"
+    );
   }
 
   function renderParticipationHistoryModalBody(payload) {
@@ -3650,57 +3688,57 @@
         '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path>' +
         '<path d="M13 5v2"></path><path d="M13 17v2"></path><path d="M13 11v2"></path>' +
         "</svg></div>" +
-        '<p class="history-modal__empty-title">История участия пока пуста</p>' +
-        '<p class="history-modal__empty-text">Здесь появятся ваши номерки по акциям — с датой брони, проверки и закрепления</p>' +
+        '<p class="history-modal__empty-title">История билетов пока пуста</p>' +
+        '<p class="history-modal__empty-text">Здесь появятся ваши номерки по акциям — с датой и суммой участия</p>' +
         "</div>";
       return;
     }
-    body.innerHTML = list
-      .map(function (it, idx) {
-        var raffle = (it && it.raffle) || {};
-        var nums = (it && it.numbers) || {};
-        var timeline = Array.isArray(it && it.timeline) ? it.timeline : [];
-        var bodyHtml = "";
-        if (timeline.length) {
-          bodyHtml =
-            '<div class="history-card__timeline">' +
-            timeline
+    body.innerHTML =
+      '<div class="history-modal__feed history-modal__feed--in">' +
+      list
+        .map(function (it, idx) {
+          var raffle = (it && it.raffle) || {};
+          var nums = (it && it.numbers) || {};
+          var timeline = Array.isArray(it && it.timeline) ? it.timeline : [];
+          var priceRub = Math.max(0, Math.floor(Number(raffle.price_rub) || 0));
+          var badge = historyRaffleBadgeHtml(raffle.status);
+          var eventsHtml = "";
+          if (timeline.length) {
+            eventsHtml = timeline
               .map(function (entry, eidx) {
-                return historyTimelineEntryHtml(entry, idx + "_" + String(eidx));
+                return historyTimelineEntryHtml(entry, idx + "_" + String(eidx), priceRub);
               })
-              .join("") +
-            "</div>";
-        } else {
-          bodyHtml =
-            historyNumbersLine("В брони", nums.reserved, "") +
-            historyNumbersLine("На проверке", nums.pending_review, "history-row--pending") +
-            historyNumbersLine("Закреплено", nums.confirmed, "history-row--confirmed") +
-            (function () {
-              var b1 = nums.bonus_5plus1_confirmed;
-              var b2 = nums.bonus_5plus2_confirmed;
-              var hasSplit =
-                (Array.isArray(b1) && b1.length) || (Array.isArray(b2) && b2.length);
-              if (hasSplit) {
-                return (
-                  historyNumbersLine("Бонус 5+1", Array.isArray(b1) ? b1 : [], "history-row--bonus") +
-                  historyNumbersLine("Бонус 5+2", Array.isArray(b2) ? b2 : [], "history-row--bonus")
-                );
-              }
-              return historyNumbersLine("Бонус по акции", nums.bonus_confirmed || [], "history-row--bonus");
-            })();
-        }
-        return (
-          '<article class="history-card">' +
-          '<div class="history-card__head">' +
-          '<h3 class="history-card__title">' +
-          escapeHtml(String(raffle.title || "Акция")) +
-          "</h3>" +
-          "</div>" +
-          bodyHtml +
-          "</article>"
-        );
-      })
-      .join("");
+              .join("");
+          } else {
+            var at = Math.floor(Number(it && it.last_activity_at) || 0) || Date.now();
+            eventsHtml =
+              historyTimelineEntryHtml({ status: "reserved", numbers: nums.reserved, at: at }, idx + "_r", priceRub) +
+              historyTimelineEntryHtml({ status: "pending_review", numbers: nums.pending_review, at: at }, idx + "_p", priceRub) +
+              historyTimelineEntryHtml({ status: "confirmed", numbers: nums.confirmed, at: at }, idx + "_c", priceRub);
+          }
+          return (
+            '<article class="history-card">' +
+            '<div class="history-card__banner">' +
+            '<svg class="history-card__trophy" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path><path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path><path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path><path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path>' +
+            "</svg>" +
+            '<span class="history-card__raffle-title">' +
+            escapeHtml(String(raffle.title || "Акция")) +
+            "</span>" +
+            '<span class="history-card__badge history-card__badge--' +
+            badge.mod +
+            '">' +
+            escapeHtml(badge.text) +
+            "</span>" +
+            "</div>" +
+            '<div class="history-card__events">' +
+            eventsHtml +
+            "</div>" +
+            "</article>"
+          );
+        })
+        .join("") +
+      "</div>";
   }
 
   async function fetchParticipationHistoryFromApi() {
@@ -3744,7 +3782,7 @@
     closeProfileModal();
     if (!modalParticipationHistory) return;
     var body = document.getElementById("modal-participation-history-body");
-    if (body) body.innerHTML = renderTicketsLoadingSkeleton();
+    if (body) body.innerHTML = historyModalLoaderHtml();
     openModal(modalParticipationHistory);
     setBottomNavActive();
     refreshParticipationHistoryModalContent();
@@ -7505,15 +7543,20 @@
     setRegisterStep(1);
     document.getElementById("reg-step-next-1")?.addEventListener("click", function () {
       const phone = phoneToNormalized((document.getElementById("phone-reg") || {}).value || "");
-      const name = String((document.getElementById("fio-reg") || {}).value || "").trim();
+      const nameRaw = String((document.getElementById("fio-reg") || {}).value || "");
       if (phone.length !== 11 || !isValidRuMobilePhone(phone)) {
         showToast("Введите корректный номер телефона", "warning");
         return;
       }
-      if (!name) {
-        showToast("Укажите ФИО", "warning");
+      var nameCheck = window.AbPersonName && window.AbPersonName.validatePersonName
+        ? window.AbPersonName.validatePersonName(nameRaw)
+        : { ok: !!nameRaw.trim(), name: nameRaw.trim(), error: "Укажите ФИО" };
+      if (!nameCheck.ok) {
+        showToast(nameCheck.error || "Укажите ФИО", "warning");
         return;
       }
+      var fioEl = document.getElementById("fio-reg");
+      if (fioEl) fioEl.value = nameCheck.name;
       setRegisterStep(2);
     });
     document.getElementById("reg-step-next-2")?.addEventListener("click", function () {
@@ -8182,14 +8225,18 @@
       showToast("Нужен мобильный номер России (+7 9XX …)", "warning");
       return;
     }
-    const name = document.getElementById("fio-reg").value.trim();
+    const nameRaw = document.getElementById("fio-reg").value;
     const locality = String((document.getElementById("locality-reg") || {}).value || "").trim();
     const p1 = document.getElementById("pass-reg").value;
     const p2 = document.getElementById("pass-reg2").value;
-    if (!name) {
-      showToast("Укажите ФИО", "warning");
+    var nameCheckSubmit = window.AbPersonName && window.AbPersonName.validatePersonName
+      ? window.AbPersonName.validatePersonName(nameRaw)
+      : { ok: !!String(nameRaw || "").trim(), name: String(nameRaw || "").trim(), error: "Укажите ФИО" };
+    if (!nameCheckSubmit.ok) {
+      showToast(nameCheckSubmit.error || "Укажите ФИО", "warning");
       return;
     }
+    const name = nameCheckSubmit.name;
     if (!locality) {
       showToast("Укажите населенный пункт", "warning");
       return;

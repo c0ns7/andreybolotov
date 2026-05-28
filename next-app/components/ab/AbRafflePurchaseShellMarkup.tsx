@@ -738,29 +738,41 @@ export default function AbRafflePurchaseShellMarkup() {
 >
   <div id="receipt-sent-confetti" className="receipt-sent-confetti" aria-hidden="true" />
   <div className="modal receipt-sent-modal">
-    <div className="receipt-sent-modal__hero" aria-hidden="true">
-      <div className="receipt-sent-modal__ring" />
-      <div className="receipt-sent-modal__check">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
+    <div className="receipt-sent-modal__glow" aria-hidden="true" />
+    <div className="receipt-sent-modal__card">
+      <span className="receipt-sent-modal__badge">Чек принят</span>
+      <div className="receipt-sent-modal__hero" aria-hidden="true">
+        <div className="receipt-sent-modal__ring receipt-sent-modal__ring--outer" />
+        <div className="receipt-sent-modal__ring receipt-sent-modal__ring--inner" />
+        <div className="receipt-sent-modal__check">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
       </div>
-    </div>
-    <h3 id="receipt-sent-title" className="receipt-sent-modal__title">
-      Чек успешно отправлен!
-    </h3>
-    <p className="receipt-sent-modal__text">
-      Администратор проверит его в течение нескольких минут.
-      <br />
-      Можете закрыть это окно, статус билетов обновится автоматически.
-    </p>
-    <div className="receipt-sent-modal__actions">
-      <button type="button" className="receipt-sent-modal__btn receipt-sent-modal__btn--share" id="receipt-sent-share">
-        Поделиться с другом
-      </button>
-      <button type="button" className="receipt-sent-modal__btn receipt-sent-modal__btn--ok" id="receipt-sent-ok">
-        Понятно, спасибо
-      </button>
+      <h3 id="receipt-sent-title" className="receipt-sent-modal__title">
+        <span className="receipt-sent-modal__title-emoji" aria-hidden="true">
+          🎉
+        </span>
+        Чек успешно отправлен!
+      </h3>
+      <p className="receipt-sent-modal__text">
+        Администратор проверит его в течение <strong>нескольких минут</strong>.
+      </p>
+      <p className="receipt-sent-modal__hint">
+        Можете закрыть это окно — статус билетов обновится автоматически
+      </p>
+      <div className="receipt-sent-modal__actions">
+        <button type="button" className="receipt-sent-modal__btn receipt-sent-modal__btn--share" id="receipt-sent-share">
+          <span className="receipt-sent-modal__btn-emoji" aria-hidden="true">
+            📣
+          </span>
+          <span className="receipt-sent-modal__btn-text">Поделиться с другом</span>
+        </button>
+        <button type="button" className="receipt-sent-modal__btn receipt-sent-modal__btn--ok" id="receipt-sent-ok">
+          Понятно, спасибо
+        </button>
+      </div>
     </div>
   </div>
 </div>

@@ -10,6 +10,7 @@ import {
   AB_PASSWORD_RESET_ADMIN_TEXT,
 } from "../../lib/ab-support-links";
 import { useAbSession } from "./AbSessionContext";
+import { normalizePersonName, validatePersonName } from "../../lib/person-name";
 
 type AuthResp = {
   token: string;
@@ -130,8 +131,9 @@ export default function LandingClient() {
       toast("Нужен мобильный номер России (+7 9XX …)", "warning");
       return;
     }
-    if (!regName.trim()) {
-      toast("Укажите ФИО", "warning");
+    const nameCheck = validatePersonName(regName);
+    if (nameCheck.ok === false) {
+      toast(nameCheck.error, "warning");
       return;
     }
     if (!regLocality.trim()) {
@@ -151,7 +153,7 @@ export default function LandingClient() {
         method: "POST",
         body: JSON.stringify({
           phone,
-          name: regName.trim(),
+          name: nameCheck.name,
           locality: regLocality.trim(),
           password: regPass,
         }),
@@ -358,8 +360,21 @@ export default function LandingClient() {
                         <circle cx="12" cy="7" r="4" />
                       </svg>
                     </span>
-                    <input className="input" id="fio-reg-native" type="text" autoComplete="name" value={regName} onChange={(e) => setRegName(e.target.value)} />
+                    <input
+                      className="input"
+                      id="fio-reg-native"
+                      type="text"
+                      autoComplete="name"
+                      placeholder="Иванов Иван Иванович"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      onBlur={() => {
+                        const n = normalizePersonName(regName);
+                        if (n) setRegName(n);
+                      }}
+                    />
                   </div>
+                  <p className="form-hint">Полностью на русском: фамилия и имя обязательны, без инициалов (не «И. И.»)</p>
                 </div>
                 <div className="form-group">
                   <label htmlFor="locality-reg-native">Населенный пункт</label>

@@ -3,7 +3,19 @@
 
   var MODAL_ID = "modal-receipt-sent-success";
   var CONFETTI_ID = "receipt-sent-confetti";
-  var SHARE_TEXT = "Я участвую в акциях у Андрея Болотова";
+  var DEFAULT_SITE_URL = "https://andreybolotov.ru";
+
+  function buildReceiptSentShareMessage(siteUrl) {
+    var url = (siteUrl || DEFAULT_SITE_URL).replace(/\/$/, "");
+    return [
+      "🎉 Я участвую в акциях «Быть добру!»",
+      "",
+      "✨ Присоединяйся к акциям у Андрея Болотова",
+      "🎯 Выбирай номерки, оплачивай и участвуй — это просто",
+      "",
+      "🔗 " + url,
+    ].join("\n");
+  }
   var confettiTimer = null;
   var onDismissCb = null;
   var wired = false;
@@ -91,11 +103,11 @@
   }
 
   function shareReceiptSentInvite() {
-    var url = global.location ? global.location.origin : "";
-    var payload = url ? SHARE_TEXT + "\n" + url : SHARE_TEXT;
+    var origin = global.location ? global.location.origin : "";
+    var message = buildReceiptSentShareMessage(origin || DEFAULT_SITE_URL);
     if (global.navigator && typeof global.navigator.share === "function") {
       return global.navigator
-        .share({ title: "Акции Андрея Болотова", text: SHARE_TEXT, url: url || undefined })
+        .share({ title: "Быть добру! — акции Андрея Болотова", text: message })
         .then(function () {
           return "shared";
         })
@@ -105,7 +117,7 @@
         });
     }
     if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText) {
-      return global.navigator.clipboard.writeText(payload).then(function () {
+      return global.navigator.clipboard.writeText(message).then(function () {
         return "copied";
       });
     }
@@ -122,7 +134,7 @@
   }
 
   global.AbReceiptSent = {
-    SHARE_TEXT: SHARE_TEXT,
+    buildShareMessage: buildReceiptSentShareMessage,
     open: openReceiptSentSuccessModal,
     share: shareReceiptSentInvite,
     stopConfetti: stopConfetti,

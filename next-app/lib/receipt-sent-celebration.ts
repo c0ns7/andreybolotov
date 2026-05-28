@@ -1,6 +1,21 @@
 const MODAL_ID = "modal-receipt-sent-success";
 const CONFETTI_ID = "receipt-sent-confetti";
-export const RECEIPT_SENT_SHARE_TEXT = "Я участвую в акциях у Андрея Болотова";
+const DEFAULT_SITE_URL = "https://andreybolotov.ru";
+
+/** Структурированный текст для «Поделиться» / буфера обмена */
+export function buildReceiptSentShareMessage(siteUrl?: string): string {
+  const url = (siteUrl || DEFAULT_SITE_URL).replace(/\/$/, "");
+  return [
+    "🎉 Я участвую в акциях «Быть добру!»",
+    "",
+    "✨ Присоединяйся к розыгрышам у Андрея Болотова",
+    "🎯 Выбирай номерки, оплачивай и участвуй — это просто",
+    "",
+    `🔗 ${url}`,
+  ].join("\n");
+}
+
+export const RECEIPT_SENT_SHARE_TEXT = buildReceiptSentShareMessage(DEFAULT_SITE_URL);
 
 let confettiTimer: ReturnType<typeof setInterval> | null = null;
 let onDismissCb: (() => void) | null = null;
@@ -82,14 +97,13 @@ function wireReceiptSentModalOnce() {
 }
 
 export async function shareReceiptSentInvite(): Promise<"shared" | "copied" | "cancelled"> {
-  const url = typeof window !== "undefined" ? window.location.origin : "";
-  const payload = url ? `${RECEIPT_SENT_SHARE_TEXT}\n${url}` : RECEIPT_SENT_SHARE_TEXT;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const message = buildReceiptSentShareMessage(origin || DEFAULT_SITE_URL);
   if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
     try {
       await navigator.share({
-        title: "Акции Андрея Болотова",
-        text: RECEIPT_SENT_SHARE_TEXT,
-        url: url || undefined,
+        title: "Быть добру! — акции Андрея Болотова",
+        text: message,
       });
       return "shared";
     } catch (e) {
@@ -97,7 +111,7 @@ export async function shareReceiptSentInvite(): Promise<"shared" | "copied" | "c
     }
   }
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(payload);
+    await navigator.clipboard.writeText(message);
     return "copied";
   }
   return "cancelled";

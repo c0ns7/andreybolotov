@@ -45,6 +45,7 @@ import {
   touchUserLastActivePg,
   updateUserEmailNotifyPrefsPg,
   updateUserLocalityPg,
+  updateUserNamePg,
   updateUserPasswordHashPg,
 } from "../../server/db-auth-pg.js";
 import { ensurePgRuntimeSchema, isPgConnectivityError } from "../../server/pg.js";
@@ -80,6 +81,7 @@ import {
   userCancelReservedRaffleOrder,
 } from "../../server/raffle-orders.js";
 import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
+import { validatePersonName } from "../../server/person-name.js";
 import {
   addBlogComment,
   getBlogPostBySlug,
@@ -1044,14 +1046,16 @@ app.post("/api/auth/register", async (request, reply) => {
     password?: string;
   };
   const phone = normalizePhone(String(body.phone ?? ""));
-  const name = String(body.name ?? "").trim();
+  const nameRaw = String(body.name ?? "");
   const emailRaw = String(body.email ?? "").trim().toLowerCase();
   const locality = String(body.locality ?? "").trim().slice(0, 120);
   const password = String(body.password ?? "");
 
   if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
   if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
-  if (!name) return reply.code(400).send({ error: "Укажите ФИО" });
+  const nameCheck = validatePersonName(nameRaw);
+  if (!nameCheck.ok) return reply.code(400).send({ error: nameCheck.error });
+  const name = nameCheck.name;
   if (!locality) return reply.code(400).send({ error: "Укажите населенный пункт" });
   if (password.length < 6) return reply.code(400).send({ error: "Пароль не короче 6 символов" });
   if (await getUserByPhonePg(phone)) {
@@ -1167,6 +1171,16 @@ app.patch("/api/auth/locality", async (request, reply) => {
   if (!locality) return reply.code(400).send({ error: "Укажите населенный пункт" });
   await updateUserLocalityPg(user.id, locality);
   return { ok: true, locality };
+});
+
+app.patch("/api/auth/name", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const body = (request.body ?? {}) as { name?: unknown };
+  const nameCheck = validatePersonName(String(body.name ?? ""));
+  if (!nameCheck.ok) return reply.code(400).send({ error: nameCheck.error });
+  await updateUserNamePg(user.id, nameCheck.name);
+  return { ok: true, name: nameCheck.name };
 });
 
 app.post("/api/auth/logout", async (request) => {

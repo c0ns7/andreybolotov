@@ -19,6 +19,7 @@ import AnimatedStatNumber from "./AnimatedStatNumber";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 import { formatStreamTimeLeft } from "../../lib/site-timezone";
+import { isPersonNameComplete, normalizePersonName, validatePersonName } from "../../lib/person-name";
 
 type RaffleRow = {
   id: number;
@@ -152,6 +153,9 @@ export default function HomeAppClient() {
   const [rejectedReason, setRejectedReason] = useState("");
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [closedRaffleModal, setClosedRaffleModal] = useState<RaffleRow | null>(null);
+  const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
   const [localityModalOpen, setLocalityModalOpen] = useState(false);
   const [localityInput, setLocalityInput] = useState("");
   const [localitySaving, setLocalitySaving] = useState(false);
@@ -400,6 +404,14 @@ export default function HomeAppClient() {
 
   useEffect(() => {
     if (!session?.token || !authVerified) return;
+    const currentName = String(session.name ?? "").trim();
+    if (!isPersonNameComplete(currentName)) {
+      setNameInput(currentName);
+      setNameModalOpen(true);
+      setLocalityModalOpen(false);
+      return;
+    }
+    setNameModalOpen(false);
     const current = String(session.locality ?? "").trim();
     if (current) {
       setLocalityModalOpen(false);
@@ -407,7 +419,31 @@ export default function HomeAppClient() {
     }
     setLocalityInput("");
     setLocalityModalOpen(true);
-  }, [session?.token, session?.locality, authVerified]);
+  }, [session?.token, session?.name, session?.locality, authVerified]);
+
+  const onSaveName = useCallback(async () => {
+    const check = validatePersonName(nameInput);
+    if (check.ok === false) {
+      toast(check.error, "warning");
+      return;
+    }
+    setNameSaving(true);
+    try {
+      await abApiJson("/api/auth/name", {
+        method: "PATCH",
+        headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ name: check.name }),
+      });
+      await verifySession();
+      setNameModalOpen(false);
+      toast("ФИО сохранено", "success");
+    } catch (e) {
+      const msg = e instanceof AbApiError ? e.message : "Не удалось сохранить";
+      toast(msg, "error");
+    } finally {
+      setNameSaving(false);
+    }
+  }, [nameInput, toast, verifySession]);
 
   const onSaveLocality = useCallback(async () => {
     const locality = localityInput.trim();
@@ -453,7 +489,7 @@ export default function HomeAppClient() {
       <div id="screen-app" className={"screen home-screen" + (showApp ? "" : " screen--hidden")}>
         <PullToRefresh
           onRefresh={handlePullRefresh}
-          disabled={!showApp || showHomeBootLoader || localityModalOpen || !!closedRaffleModal}
+          disabled={!showApp || showHomeBootLoader || nameModalOpen || localityModalOpen || !!closedRaffleModal}
           className="home-screen__ptr"
         >
         <div id="view-app-feed" className="app-view home-inner">
@@ -877,6 +913,53 @@ export default function HomeAppClient() {
                   </svg>
                 </a>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {nameModalOpen ? (
+        <div className="modal-overlay modal-overlay--locality is-open" role="dialog" aria-modal="true" aria-hidden="false">
+          <div className="modal locality-modal">
+            <div className="locality-modal__head">
+              <div className="locality-modal__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21a8 8 0 0 0-16 0"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </div>
+              <h2 className="locality-modal__title">Укажите ФИО полностью</h2>
+              <p className="locality-modal__subtitle">
+                Нужны фамилия и имя на русском языке (отчество по желанию). Инициалы, сокращения и латиница не подходят.
+              </p>
+            </div>
+            <div className="modal__body locality-modal__body">
+              <div className="form-group locality-modal__group">
+                <label htmlFor="profile-name-required">Фамилия, имя, отчество</label>
+                <input
+                  id="profile-name-required"
+                  className="input locality-modal__input"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Иванов Иван Иванович"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onBlur={() => {
+                    const n = normalizePersonName(nameInput);
+                    if (n) setNameInput(n);
+                  }}
+                />
+              </div>
+              <div className="form-actions locality-modal__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary locality-modal__save-btn"
+                  disabled={nameSaving}
+                  onClick={() => void onSaveName()}
+                >
+                  {nameSaving ? "Сохраняем..." : "Сохранить"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

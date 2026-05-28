@@ -209,7 +209,7 @@ export default function AppDockModalsLegacy() {
                 </svg>
               </button>
               <h2 id="modal-participation-history-title" className="history-modal__title">
-                История участий
+                История билетов
               </h2>
             </div>
             <div className="history-modal__body custom-scrollbar" id="modal-participation-history-body" />

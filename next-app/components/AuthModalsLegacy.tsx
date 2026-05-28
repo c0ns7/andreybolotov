@@ -27,7 +27,7 @@ export default function AuthModalsLegacy() {
                 </div>
                 <div className="form-group">
                   <label htmlFor="fio-reg">ФИО</label>
-                  <input className="input" type="text" id="fio-reg" name="fio" autoComplete="name" placeholder="Как к вам обращаться" />
+                  <input className="input" type="text" id="fio-reg" name="fio" autoComplete="name" placeholder="Иванов Иван Иванович" />
                 </div>
                 <div className="form-actions form-actions--split">
                   <button type="button" className="btn btn--primary" id="reg-step-next-1">Далее</button>
