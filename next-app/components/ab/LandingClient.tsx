@@ -52,6 +52,8 @@ export default function LandingClient() {
   const [regPass2, setRegPass2] = useState("");
   const [showRegPass, setShowRegPass] = useState(false);
   const [showRegPass2, setShowRegPass2] = useState(false);
+  const [regLegalAccepted, setRegLegalAccepted] = useState(false);
+  const [legalModal, setLegalModal] = useState<"none" | "pd" | "privacy">("none");
 
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPass, setLoginPass] = useState("");
@@ -72,6 +74,8 @@ export default function LandingClient() {
     setRegLocality("");
     setRegPass("");
     setRegPass2("");
+    setRegLegalAccepted(false);
+    setLegalModal("none");
   }, []);
 
   useEffect(() => {
@@ -148,6 +152,10 @@ export default function LandingClient() {
       toast("Пароли не совпадают", "warning");
       return;
     }
+    if (!regLegalAccepted) {
+      toast("Подтвердите согласие с документами", "warning");
+      return;
+    }
     try {
       const data = await abApiJson<AuthResp>("/api/auth/register", {
         method: "POST",
@@ -156,6 +164,8 @@ export default function LandingClient() {
           name: nameCheck.name,
           locality: regLocality.trim(),
           password: regPass,
+          consent_personal_data: true,
+          consent_privacy_policy: true,
         }),
       });
       setSessionFromLogin(sessionFromAuth(data));
@@ -448,8 +458,71 @@ export default function LandingClient() {
                     Зарегистрироваться
                   </button>
                 </div>
+                <label className="consent-check">
+                  <input type="checkbox" checked={regLegalAccepted} onChange={(e) => setRegLegalAccepted(e.target.checked)} />
+                  <span>
+                    Я принимаю{" "}
+                    <button type="button" className="consent-check__link" onClick={() => setLegalModal("pd")}>
+                      согласие на обработку персональных данных
+                    </button>{" "}
+                    и{" "}
+                    <button type="button" className="consent-check__link" onClick={() => setLegalModal("privacy")}>
+                      политику конфиденциальности
+                    </button>
+                    .
+                  </span>
+                </label>
               </form>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={"modal-overlay legal-modal-overlay" + (legalModal !== "none" ? " is-open" : "")}
+        aria-hidden={legalModal === "none"}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setLegalModal("none");
+        }}
+      >
+        <div className="modal legal-modal">
+          <div className="legal-modal__head">
+            <h3 className="legal-modal__title">
+              {legalModal === "pd" ? "Согласие на обработку персональных данных" : "Политика конфиденциальности"}
+            </h3>
+            <button type="button" className="legal-modal__close" aria-label="Закрыть" onClick={() => setLegalModal("none")}>
+              ✕
+            </button>
+          </div>
+          <div className="legal-modal__body custom-scrollbar">
+            {legalModal === "pd" ? (
+              <>
+                <p>Настоящим я, субъект персональных данных, действуя свободно и в своём интересе, даю согласие оператору сайта andreybolotov.ru на обработку моих персональных данных.</p>
+                <p>
+                  Перечень данных: номер телефона, фамилия, имя, отчество (при наличии), населённый пункт, адрес электронной почты (если указан), технические данные сессии.
+                </p>
+                <p>
+                  Цели обработки: регистрация и авторизация в личном кабинете, исполнение пользовательского соглашения, обратная связь, обеспечение безопасности сервиса и выполнение требований законодательства РФ.
+                </p>
+                <p>Действия с данными: сбор, запись, систематизация, хранение, уточнение, использование, передача уполномоченным обработчикам, блокирование, удаление и уничтожение.</p>
+                <p>Согласие действует до отзыва. Отзыв возможен через обращение в поддержку. Оператор прекращает обработку в сроки, установленные законодательством Российской Федерации.</p>
+              </>
+            ) : (
+              <>
+                <p>Оператор обрабатывает персональные данные в соответствии с Федеральным законом РФ № 152-ФЗ «О персональных данных» и иными применимыми нормами права РФ (редакция, действующая в 2026 году).</p>
+                <p>Мы обрабатываем только данные, необходимые для работы личного кабинета: регистрации, авторизации, поддержки пользователя и обеспечения безопасности.</p>
+                <p>Доступ к данным получают только уполномоченные лица и технические обработчики в объёме, необходимом для оказания услуг.</p>
+                <p>Оператор принимает правовые, организационные и технические меры для защиты данных от неправомерного или случайного доступа, изменения, распространения и уничтожения.</p>
+                <p>Пользователь вправе запросить сведения об обработке своих данных, их уточнение, ограничение обработки или удаление в случаях, предусмотренных законодательством РФ.</p>
+              </>
+            )}
+          </div>
+          <div className="legal-modal__actions">
+            <button type="button" className="btn btn--primary" onClick={() => setLegalModal("none")}>
+              Понятно
+            </button>
           </div>
         </div>
       </div>

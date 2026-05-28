@@ -1044,12 +1044,16 @@ app.post("/api/auth/register", async (request, reply) => {
     email?: string;
     locality?: string;
     password?: string;
+    consent_personal_data?: boolean;
+    consent_privacy_policy?: boolean;
   };
   const phone = normalizePhone(String(body.phone ?? ""));
   const nameRaw = String(body.name ?? "");
   const emailRaw = String(body.email ?? "").trim().toLowerCase();
   const locality = String(body.locality ?? "").trim().slice(0, 120);
   const password = String(body.password ?? "");
+  const consentPersonalData = body.consent_personal_data === true;
+  const consentPrivacyPolicy = body.consent_privacy_policy === true;
 
   if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
   if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
@@ -1058,6 +1062,9 @@ app.post("/api/auth/register", async (request, reply) => {
   const name = nameCheck.name;
   if (!locality) return reply.code(400).send({ error: "Укажите населенный пункт" });
   if (password.length < 6) return reply.code(400).send({ error: "Пароль не короче 6 символов" });
+  if (!consentPersonalData || !consentPrivacyPolicy) {
+    return reply.code(400).send({ error: "Нужно согласие на обработку персональных данных и политику конфиденциальности" });
+  }
   if (await getUserByPhonePg(phone)) {
     return reply.code(409).send({ error: "Этот номер телефона уже зарегистрирован" });
   }

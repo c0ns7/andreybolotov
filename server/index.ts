@@ -548,7 +548,14 @@ app.get("/api/internal/cron/raffle-free-tickets-push-tick", async (c) => {
 });
 
 app.post("/api/auth/register", async (c) => {
-  let body: { phone?: string; name?: string; locality?: string; password?: string };
+  let body: {
+    phone?: string;
+    name?: string;
+    locality?: string;
+    password?: string;
+    consent_personal_data?: boolean;
+    consent_privacy_policy?: boolean;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -558,6 +565,8 @@ app.post("/api/auth/register", async (c) => {
   const nameRaw = String(body.name ?? "");
   const locality = String(body.locality ?? "").trim().slice(0, 120);
   const password = String(body.password ?? "");
+  const consentPersonalData = body.consent_personal_data === true;
+  const consentPrivacyPolicy = body.consent_privacy_policy === true;
 
   if (!phone) return c.json({ error: "Введите полный номер телефона" }, 400);
   if (!isValidRuMobile(phone)) {
@@ -568,6 +577,9 @@ app.post("/api/auth/register", async (c) => {
   const name = nameCheck.name;
   if (!locality) return c.json({ error: "Укажите населенный пункт" }, 400);
   if (password.length < 6) return c.json({ error: "Пароль не короче 6 символов" }, 400);
+  if (!consentPersonalData || !consentPrivacyPolicy) {
+    return c.json({ error: "Нужно согласие на обработку персональных данных и политику конфиденциальности" }, 400);
+  }
 
   if (await getUserByPhonePg(phone)) {
     return c.json({ error: "Этот номер телефона уже зарегистрирован" }, 409);

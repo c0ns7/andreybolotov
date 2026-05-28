@@ -86,6 +86,20 @@ export default function AuthModalsLegacy() {
                     </button>
                   </div>
                 </div>
+                <label className="consent-check consent-check--legacy">
+                  <input type="checkbox" id="reg-legal-accept" />
+                  <span>
+                    Я принимаю{" "}
+                    <button type="button" className="consent-check__link" id="reg-open-pd-consent">
+                      согласие на обработку персональных данных
+                    </button>{" "}
+                    и{" "}
+                    <button type="button" className="consent-check__link" id="reg-open-privacy-policy">
+                      политику конфиденциальности
+                    </button>
+                    .
+                  </span>
+                </label>
                 <div className="form-actions form-actions--split">
                   <button type="button" className="btn btn--ghost" id="reg-step-back-3">Назад</button>
                   <button type="submit" className="btn btn--primary">Зарегистрироваться</button>
@@ -174,6 +188,40 @@ export default function AuthModalsLegacy() {
             <div className="form-actions">
               <a className="btn btn--primary" href="https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w" target="_blank" rel="noopener noreferrer">Написать в MAX</a>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-legal-pd" className="modal-overlay legal-modal-overlay" aria-hidden="true" role="dialog" aria-labelledby="legal-pd-title">
+        <div className="modal legal-modal">
+          <div className="legal-modal__head">
+            <h3 id="legal-pd-title" className="legal-modal__title">Согласие на обработку персональных данных</h3>
+            <button type="button" className="legal-modal__close" id="modal-legal-pd-close" aria-label="Закрыть">
+              ✕
+            </button>
+          </div>
+          <div className="legal-modal__body custom-scrollbar">
+            <p>Я даю согласие оператору сайта andreybolotov.ru на обработку моих персональных данных для работы личного кабинета.</p>
+            <p>Обрабатываются: номер телефона, ФИО, населённый пункт, адрес электронной почты (если указан), технические данные сессии.</p>
+            <p>Цели обработки: регистрация, авторизация, поддержка, обеспечение безопасности и соблюдение законодательства РФ.</p>
+            <p>Согласие действует до отзыва. Отзыв возможен через обращение в поддержку.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-legal-privacy" className="modal-overlay legal-modal-overlay" aria-hidden="true" role="dialog" aria-labelledby="legal-privacy-title">
+        <div className="modal legal-modal">
+          <div className="legal-modal__head">
+            <h3 id="legal-privacy-title" className="legal-modal__title">Политика конфиденциальности</h3>
+            <button type="button" className="legal-modal__close" id="modal-legal-privacy-close" aria-label="Закрыть">
+              ✕
+            </button>
+          </div>
+          <div className="legal-modal__body custom-scrollbar">
+            <p>Оператор обрабатывает персональные данные в соответствии с ФЗ-152 «О персональных данных» и действующим законодательством РФ.</p>
+            <p>Обрабатываются только данные, необходимые для регистрации, авторизации, поддержки пользователя и безопасности сервиса.</p>
+            <p>Оператор принимает организационные и технические меры для защиты данных от неправомерного доступа и утраты.</p>
+            <p>Пользователь вправе запросить сведения об обработке, уточнение, ограничение обработки или удаление данных в случаях, предусмотренных законом.</p>
           </div>
         </div>
       </div>

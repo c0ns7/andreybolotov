@@ -239,6 +239,21 @@ export default function HomeSettingsPage() {
                 </label>
               </div>
             </div>
+
+            <section className="settings-card settings-legal-card" aria-labelledby="settings-legal-title">
+              <h2 id="settings-legal-title" className="settings-card__title">
+                Правовые документы
+              </h2>
+              <p className="settings-card__lead">Документы доступны в любое время в этом разделе.</p>
+              <div className="settings-legal-card__links">
+                <Link href="/home/legal/personal-data" className="settings-legal-card__link">
+                  Согласие на обработку персональных данных
+                </Link>
+                <Link href="/home/legal/privacy" className="settings-legal-card__link">
+                  Политика конфиденциальности
+                </Link>
+              </div>
+            </section>
           </div>
         </div>
         <SettingsDockClient />

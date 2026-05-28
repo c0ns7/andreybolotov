@@ -8179,6 +8179,27 @@
     });
   });
 
+  var modalLegalPd = document.getElementById("modal-legal-pd");
+  var modalLegalPrivacy = document.getElementById("modal-legal-privacy");
+  document.getElementById("reg-open-pd-consent")?.addEventListener("click", function () {
+    if (modalLegalPd) openModal(modalLegalPd);
+  });
+  document.getElementById("reg-open-privacy-policy")?.addEventListener("click", function () {
+    if (modalLegalPrivacy) openModal(modalLegalPrivacy);
+  });
+  document.getElementById("modal-legal-pd-close")?.addEventListener("click", function () {
+    if (modalLegalPd) closeModal(modalLegalPd);
+  });
+  document.getElementById("modal-legal-privacy-close")?.addEventListener("click", function () {
+    if (modalLegalPrivacy) closeModal(modalLegalPrivacy);
+  });
+  [modalLegalPd, modalLegalPrivacy].forEach(function (ov) {
+    if (!ov) return;
+    ov.addEventListener("click", function (e) {
+      if (e.target === ov) closeModal(ov);
+    });
+  });
+
   var profileModalClose = document.getElementById("profile-modal-close");
   if (profileModalClose) profileModalClose.addEventListener("click", function () {
     closeProfileModal();
@@ -8249,10 +8270,22 @@
       showToast("Пароли не совпадают", "warning");
       return;
     }
+    var legalAccepted = !!((document.getElementById("reg-legal-accept") || {}).checked);
+    if (!legalAccepted) {
+      showToast("Подтвердите согласие с документами", "warning");
+      return;
+    }
 
     apiJson("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ phone, name, locality: locality, password: p1 }),
+      body: JSON.stringify({
+        phone,
+        name,
+        locality: locality,
+        password: p1,
+        consent_personal_data: true,
+        consent_privacy_policy: true,
+      }),
     })
       .then(function (data) {
         authVerified = true;
