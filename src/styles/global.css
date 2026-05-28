@@ -14691,9 +14691,22 @@ html.theme-dark .settings-tabs [role="tab"][aria-selected="true"] {
 }
 
 .legal-page__back {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   color: #5b21b6;
   text-decoration: none;
   font-weight: 700;
+}
+
+.legal-page__back:hover {
+  background: #faf5ff;
+  border-color: #c4b5fd;
 }
 
 .legal-page__title {
@@ -14718,6 +14731,35 @@ html.theme-dark .settings-tabs [role="tab"][aria-selected="true"] {
 }
 
 .legal-page__card p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-page__section + .legal-page__section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.legal-page__section h2 {
+  margin: 0 0 8px;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #4c1d95;
+}
+
+.legal-page__section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.legal-page__section li {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.legal-page__section li:last-child {
   margin-bottom: 0;
 }
 
