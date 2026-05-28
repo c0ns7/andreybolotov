@@ -2493,18 +2493,74 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (fill) fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
       if (txt) txt.textContent = text;
     };
+    let receiptPreviewObjectUrl: string | null = null;
+    const revokeReceiptPreviewUrl = () => {
+      if (receiptPreviewObjectUrl) {
+        URL.revokeObjectURL(receiptPreviewObjectUrl);
+        receiptPreviewObjectUrl = null;
+      }
+    };
+    const setReceiptPreviewUi = (file: File | null) => {
+      const drop = document.getElementById("reserve-payment-file-drop");
+      const preview = document.getElementById("reserve-payment-file-preview");
+      const img = document.getElementById("reserve-payment-file-preview-img") as HTMLImageElement | null;
+      const pdf = document.getElementById("reserve-payment-file-preview-pdf");
+      const pdfName = document.getElementById("reserve-payment-file-preview-pdf-name");
+      const caption = document.getElementById("reserve-payment-file-name");
+      revokeReceiptPreviewUrl();
+      if (!file) {
+        if (drop) drop.hidden = false;
+        if (preview) preview.hidden = true;
+        if (img) {
+          img.hidden = true;
+          img.removeAttribute("src");
+        }
+        if (pdf) pdf.hidden = true;
+        if (caption) caption.textContent = "";
+        return;
+      }
+      if (drop) drop.hidden = true;
+      if (preview) preview.hidden = false;
+      if (caption) caption.textContent = file.name;
+      const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+      if (isPdf) {
+        if (img) {
+          img.hidden = true;
+          img.removeAttribute("src");
+        }
+        if (pdf) pdf.hidden = false;
+        if (pdfName) pdfName.textContent = file.name;
+      } else {
+        if (pdf) pdf.hidden = true;
+        if (img) {
+          receiptPreviewObjectUrl = URL.createObjectURL(file);
+          img.src = receiptPreviewObjectUrl;
+          img.hidden = false;
+        }
+      }
+    };
+    const clearReceiptFile = () => {
+      const input = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
+      if (input) input.value = "";
+      receiptUploadSeqRef.current += 1;
+      receiptUploadDataRef.current = null;
+      receiptUploadInFlightRef.current = false;
+      setReceiptSendReady(false);
+      setReceiptProgress(0, "Загрузка: 0%", false);
+      setReceiptPreviewUi(null);
+    };
     const onFileChange = (e: Event) => {
       const f = (e.target as HTMLInputElement).files?.[0];
       const currentSeq = ++receiptUploadSeqRef.current;
-      const el = document.getElementById("reserve-payment-file-name");
-      if (el) el.textContent = f ? f.name : "Фото или PDF (до 10 МБ)";
       receiptUploadDataRef.current = null;
       receiptUploadInFlightRef.current = false;
       setReceiptSendReady(false);
       if (!f) {
+        setReceiptPreviewUi(null);
         setReceiptProgress(0, "Загрузка: 0%", false);
         return;
       }
+      setReceiptPreviewUi(f);
       receiptUploadInFlightRef.current = true;
       setReceiptProgress(0, "Загрузка: 0%");
       void uploadReceiptFile(f, (p) => {
@@ -2523,12 +2579,20 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           receiptUploadDataRef.current = null;
           receiptUploadInFlightRef.current = false;
           setReceiptProgress(0, "Загрузка: 0%", false);
+          clearReceiptFile();
           const msg = String((err as Error).message || "Не удалось загрузить файл");
           toastRef.current(msg, "error");
         });
     };
     const elFile = document.getElementById("reserve-payment-file");
+    const elFileRemove = document.getElementById("reserve-payment-file-remove");
+    const onFileRemove = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      clearReceiptFile();
+    };
     elFile?.addEventListener("change", onFileChange);
+    elFileRemove?.addEventListener("click", onFileRemove);
     setReceiptSendReady(false);
     setReceiptProgress(0, "Загрузка: 0%", false);
 
@@ -2563,6 +2627,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         reserveDraftRef.current = null;
         receiptUploadDataRef.current = null;
         receiptUploadInFlightRef.current = false;
+        revokeReceiptPreviewUrl();
         openReceiptSentSuccessModal({
           onDismiss: () => {
             void syncOrderRef.current();
@@ -2628,6 +2693,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elPayBackLink?.removeEventListener("click", onPayBack);
       elPurposeOk?.removeEventListener("click", onPurposeOk);
       elFile?.removeEventListener("change", onFileChange);
+      elFileRemove?.removeEventListener("click", onFileRemove);
+      revokeReceiptPreviewUrl();
       receiptUploadSeqRef.current += 1;
       receiptUploadDataRef.current = null;
       receiptUploadInFlightRef.current = false;

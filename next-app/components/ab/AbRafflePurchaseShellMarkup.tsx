@@ -604,7 +604,7 @@ export default function AbRafflePurchaseShellMarkup() {
           </div>
           <div className="pay-sheet-receipt-upload-wrap">
             <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/*,application/pdf" className="pay-sheet-receipt-input" hidden />
-            <label htmlFor="reserve-payment-file" className="pay-sheet-receipt-drop">
+            <label id="reserve-payment-file-drop" htmlFor="reserve-payment-file" className="pay-sheet-receipt-drop">
               <div className="pay-sheet-receipt-drop__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3v12"></path>
@@ -614,11 +614,33 @@ export default function AbRafflePurchaseShellMarkup() {
               </div>
               <div className="pay-sheet-receipt-drop__text">
                 <p className="pay-sheet-receipt-drop__title">Загрузить чек</p>
-                <p id="reserve-payment-file-name" className="pay-sheet-receipt-drop__sub">
-                  Фото или PDF перевода
-                </p>
+                <p className="pay-sheet-receipt-drop__sub">Фото или PDF перевода</p>
               </div>
             </label>
+            <div id="reserve-payment-file-preview" className="pay-sheet-receipt-preview" hidden>
+              <div className="pay-sheet-receipt-preview__frame">
+                <img id="reserve-payment-file-preview-img" className="pay-sheet-receipt-preview__img" alt="Превью чека" hidden />
+                <div id="reserve-payment-file-preview-pdf" className="pay-sheet-receipt-preview__pdf" hidden>
+                  <span className="pay-sheet-receipt-preview__pdf-badge">PDF</span>
+                  <span id="reserve-payment-file-preview-pdf-name" className="pay-sheet-receipt-preview__pdf-name" />
+                </div>
+                <button
+                  type="button"
+                  id="reserve-payment-file-remove"
+                  className="pay-sheet-receipt-preview__remove"
+                  aria-label="Удалить файл и выбрать другой"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
+              </div>
+              <p id="reserve-payment-file-name" className="pay-sheet-receipt-preview__caption" />
+            </div>
             <div id="reserve-payment-upload-progress" className="pay-sheet-receipt-progress" hidden>
               <div className="pay-sheet-receipt-progress__track">
                 <div id="reserve-payment-upload-progress-fill" className="pay-sheet-receipt-progress__fill" />

@@ -5830,6 +5830,112 @@ html.theme-dark .pay-sheet-copy-btn--copied:hover {
   color: #9ca3af;
 }
 
+.pay-sheet-receipt-preview {
+  display: block;
+}
+
+.pay-sheet-receipt-preview[hidden] {
+  display: none !important;
+}
+
+.pay-sheet-receipt-preview__frame {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  min-height: 120px;
+  max-height: min(42vh, 220px);
+}
+
+.pay-sheet-receipt-preview__img {
+  display: block;
+  width: 100%;
+  max-height: min(42vh, 220px);
+  object-fit: contain;
+  background: #0f172a;
+}
+
+.pay-sheet-receipt-preview__img[hidden],
+.pay-sheet-receipt-preview__pdf[hidden] {
+  display: none !important;
+}
+
+.pay-sheet-receipt-preview__pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.pay-sheet-receipt-preview__pdf-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.pay-sheet-receipt-preview__pdf-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  word-break: break-word;
+}
+
+.pay-sheet-receipt-preview__remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.pay-sheet-receipt-preview__remove:hover {
+  background: rgba(127, 29, 29, 0.88);
+}
+
+.pay-sheet-receipt-preview__remove:active {
+  transform: scale(0.94);
+}
+
+.pay-sheet-receipt-preview__caption {
+  margin: 8px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  word-break: break-word;
+}
+
+.pay-sheet-receipt-drop[hidden] {
+  display: none !important;
+}
+
 .pay-sheet-receipt-progress {
   margin-top: 10px;
 }
@@ -6057,6 +6163,15 @@ html.theme-dark .pay-sheet-receipt-drop__title {
 
 html.theme-dark .pay-sheet-receipt-progress__track {
   background: rgba(148, 163, 184, 0.28);
+}
+
+html.theme-dark .pay-sheet-receipt-preview__frame {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+html.theme-dark .pay-sheet-receipt-preview__caption {
+  color: #94a3b8;
 }
 
 html.theme-dark .pay-sheet-receipt-progress__text {

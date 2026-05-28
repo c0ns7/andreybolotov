@@ -6449,10 +6449,65 @@
   document.getElementById("reserve-payment-back-link")?.addEventListener("click", function () {
     switchReservePaymentStep("requisites");
   });
+  var reserveReceiptPreviewUrl = null;
+  function revokeReserveReceiptPreviewUrl() {
+    if (reserveReceiptPreviewUrl) {
+      URL.revokeObjectURL(reserveReceiptPreviewUrl);
+      reserveReceiptPreviewUrl = null;
+    }
+  }
+  function setReserveReceiptPreviewUi(file) {
+    var drop = document.getElementById("reserve-payment-file-drop");
+    var preview = document.getElementById("reserve-payment-file-preview");
+    var img = document.getElementById("reserve-payment-file-preview-img");
+    var pdf = document.getElementById("reserve-payment-file-preview-pdf");
+    var pdfName = document.getElementById("reserve-payment-file-preview-pdf-name");
+    var caption = document.getElementById("reserve-payment-file-name");
+    revokeReserveReceiptPreviewUrl();
+    if (!file) {
+      if (drop) drop.hidden = false;
+      if (preview) preview.hidden = true;
+      if (img) {
+        img.hidden = true;
+        img.removeAttribute("src");
+      }
+      if (pdf) pdf.hidden = true;
+      if (caption) caption.textContent = "";
+      return;
+    }
+    if (drop) drop.hidden = true;
+    if (preview) preview.hidden = false;
+    if (caption) caption.textContent = file.name;
+    var isPdf = file.type === "application/pdf" || /\.pdf$/i.test(String(file.name || ""));
+    if (isPdf) {
+      if (img) {
+        img.hidden = true;
+        img.removeAttribute("src");
+      }
+      if (pdf) pdf.hidden = false;
+      if (pdfName) pdfName.textContent = file.name;
+    } else {
+      if (pdf) pdf.hidden = true;
+      if (img) {
+        reserveReceiptPreviewUrl = URL.createObjectURL(file);
+        img.src = reserveReceiptPreviewUrl;
+        img.hidden = false;
+      }
+    }
+  }
+  function clearReserveReceiptFile() {
+    var input = document.getElementById("reserve-payment-file");
+    if (input) input.value = "";
+    setReserveReceiptPreviewUi(null);
+  }
   document.getElementById("reserve-payment-file")?.addEventListener("change", function () {
     var f = this.files && this.files[0];
-    var nameEl = document.getElementById("reserve-payment-file-name");
-    if (nameEl) nameEl.textContent = f ? f.name : "Фото или PDF перевода";
+    setReserveReceiptPreviewUi(f || null);
+  });
+  document.getElementById("reserve-payment-file-remove")?.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    clearReserveReceiptFile();
   });
   document.getElementById("reserve-payment-send")?.addEventListener("click", async function () {
     var input = document.getElementById("reserve-payment-file");
