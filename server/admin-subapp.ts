@@ -120,6 +120,7 @@ import {
 import { getStaffTypingForUser, getUserTypingForThread } from "./typing-state.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
+import { applyStaffSupportGreetingForUser } from "./support-staff-greeting.js";
 import {
   deleteSiteMusicTrack,
   getPublicSiteMusicPayload,
@@ -1998,13 +1999,14 @@ adminSubApp.post("/users/:userId/messages", async (c) => {
   if (!parsed.ok) {
     return c.json({ error: "error" in parsed ? parsed.error : "Некорректные данные" }, 400);
   }
-  const id = await insertSupportMessage(userId, parsed.text, true, parsed.attachment);
+  const messageText = await applyStaffSupportGreetingForUser(userId, parsed.text);
+  const id = await insertSupportMessage(userId, messageText, true, parsed.attachment);
   await markThreadReadByStaff(userId);
   broadcastThreadReadByStaff(userId);
   const row = await getSupportMessageById(id);
   if (row) broadcastChatMessage(userId, messageToDto(row));
   notifyUserEmailStaffReply(userId, {
-    body: parsed.text,
+    body: messageText,
     attachmentName: parsed.attachment?.name ?? null,
     attachmentMime: parsed.attachment?.mime ?? null,
   });

@@ -13,6 +13,8 @@ type Props = {
   height?: number;
   /** false — только обложка (без GIF/видео), например при паузе или закрытых продажах */
   animEnabled?: boolean;
+  /** false — видео только по кнопке play (на главной без автозапуска) */
+  autoPlayVideo?: boolean;
 };
 
 function PlayIcon() {
@@ -35,6 +37,7 @@ export default function RaffleCardMedia({
   width = 480,
   height = 160,
   animEnabled = true,
+  autoPlayVideo = true,
 }: Props) {
   const staticSrc = String(coverUrl || "").trim();
   const animSrc = animEnabled ? String(gifUrl || "").trim() : "";
@@ -75,10 +78,10 @@ export default function RaffleCardMedia({
   }, [animDisplaySrc, animIsVideo]);
 
   useEffect(() => {
-    if (!animIsVideo || !animDisplaySrc || autoPlayedRef.current) return;
+    if (!autoPlayVideo || !animIsVideo || !animDisplaySrc || autoPlayedRef.current) return;
     autoPlayedRef.current = true;
     setShowVideo(true);
-  }, [animIsVideo, animDisplaySrc]);
+  }, [autoPlayVideo, animIsVideo, animDisplaySrc]);
 
   useEffect(() => {
     if (!showVideo) return;

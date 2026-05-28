@@ -51,11 +51,13 @@ type SiteMusicContextValue = {
 const SiteMusicContext = createContext<SiteMusicContextValue | null>(null);
 
 function readUserOff(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return localStorage.getItem(LS_OFF_KEY) === "1";
+    const v = localStorage.getItem(LS_OFF_KEY);
+    if (v === null) return true;
+    return v === "1";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -91,7 +93,7 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
     tracks: [],
   });
   const [loaded, setLoaded] = useState(false);
-  const [userOff, setUserOff] = useState(false);
+  const [userOff, setUserOff] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [needsGesture, setNeedsGesture] = useState(false);
 
@@ -195,32 +197,6 @@ export function SiteMusicProvider({ children }: { children: ReactNode }) {
       setNeedsGesture(true);
     }
   }, [payload.tracks, payload.music_default_volume, shouldPlay]);
-
-  useEffect(() => {
-    if (!loaded || !shouldPlay || userOff) return;
-
-    const tryAutoplay = () => {
-      void playCurrent();
-    };
-
-    tryAutoplay();
-    const t1 = window.setTimeout(tryAutoplay, 400);
-    const t2 = window.setTimeout(tryAutoplay, 1200);
-
-    const unlock = () => {
-      tryAutoplay();
-    };
-    const opts: AddEventListenerOptions = { once: true, passive: true };
-    document.addEventListener("pointerdown", unlock, opts);
-    document.addEventListener("touchstart", unlock, opts);
-    document.addEventListener("keydown", unlock, { once: true });
-    window.addEventListener("scroll", unlock, opts);
-
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [loaded, shouldPlay, userOff, playCurrent]);
 
   useEffect(() => {
     const audio = audioRef.current;

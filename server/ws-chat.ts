@@ -11,6 +11,7 @@ import {
 import { getUserBySessionTokenPg } from "./db-auth-pg.js";
 import { parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import { notifyUserEmailStaffReply } from "./notify-email.js";
+import { applyStaffSupportGreetingForUser } from "./support-staff-greeting.js";
 import { setStaffTypingForUser, setUserTyping } from "./typing-state.js";
 
 const OPEN = WebSocket.OPEN;
@@ -446,12 +447,13 @@ async function routeAdminSocketMessage(ws: WebSocket, raw: string) {
   if (msg.type !== "send" && msg.type !== "admin_send") return;
   const userId = Number(msg.userId);
   if (!Number.isFinite(userId)) return;
-  const text = String(msg.body ?? "").trim();
+  const rawText = String(msg.body ?? "").trim();
   const att = parseChatAttachmentFromMessage(msg.attachment);
   if (msg.attachment !== undefined && !att) return;
-  if (!text && !att) return;
-  if (text.length > 4000) return;
+  if (!rawText && !att) return;
+  if (rawText.length > 4000) return;
   if (!(await getUserById(userId))) return;
+  const text = rawText ? await applyStaffSupportGreetingForUser(userId, rawText) : rawText;
   const id = await insertSupportMessage(userId, text, true, att);
   await markThreadReadByStaff(userId);
   broadcastThreadReadByStaff(userId);

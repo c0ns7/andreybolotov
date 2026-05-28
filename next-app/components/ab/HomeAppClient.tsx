@@ -586,6 +586,7 @@ export default function HomeAppClient() {
                         updatedAt={Math.floor(Number(r.updated_at) || 0)}
                         loading={idx < 2 ? "eager" : "lazy"}
                         animEnabled={st === "active" && salesOpen}
+                        autoPlayVideo={false}
                       />
                       <div className="raffle-card__grad" />
                       {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}

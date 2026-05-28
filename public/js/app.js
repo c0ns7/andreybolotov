@@ -4387,7 +4387,7 @@
       (coverGifSrc
         ? ' data-gif-url="' +
           escapeHtml(coverGifSrc) +
-          '" data-raffle-id="' +
+          '" data-video-manual="1" data-raffle-id="' +
           escapeHtml(String(r.id)) +
           '" data-updated-at="' +
           escapeHtml(String(coverUpdatedAt)) +
@@ -4494,6 +4494,7 @@
 
   function applyAbRaffleCoverAnim(media, url) {
     if (!media || !url) return;
+    var manualVideo = media.getAttribute("data-video-manual") === "1";
     var isVideo = isAbRaffleCoverAnimVideo(url);
     var img = media.querySelector("[data-raffle-media-img]");
     var video = media.querySelector("[data-raffle-media-video]");
@@ -4508,14 +4509,16 @@
         video.muted = true;
         video.loop = true;
         video.playsInline = true;
-        video.autoplay = true;
+        video.autoplay = !manualVideo;
         video.setAttribute("aria-hidden", "true");
         video.preload = "metadata";
         media.insertBefore(video, media.firstChild || null);
       }
       video.src = url;
       video.classList.add("raffle-card__media-img--anim");
-      void video.play().catch(function () {});
+      if (!manualVideo) {
+        void video.play().catch(function () {});
+      }
       return;
     }
     if (video) {
