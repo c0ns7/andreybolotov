@@ -52,7 +52,7 @@ export default function LandingClient() {
   const [regPass2, setRegPass2] = useState("");
   const [showRegPass, setShowRegPass] = useState(false);
   const [showRegPass2, setShowRegPass2] = useState(false);
-  const [regLegalAccepted, setRegLegalAccepted] = useState(false);
+  const [regLegalAccepted, setRegLegalAccepted] = useState(true);
   const [legalModal, setLegalModal] = useState<"none" | "pd" | "privacy">("none");
 
   const [loginPhone, setLoginPhone] = useState("");
@@ -74,7 +74,7 @@ export default function LandingClient() {
     setRegLocality("");
     setRegPass("");
     setRegPass2("");
-    setRegLegalAccepted(false);
+    setRegLegalAccepted(true);
     setLegalModal("none");
   }, []);
 
@@ -453,13 +453,9 @@ export default function LandingClient() {
                     </button>
                   </div>
                 </div>
-                <div className="form-actions">
-                  <button type="submit" className="btn btn--primary">
-                    Зарегистрироваться
-                  </button>
-                </div>
-                <label className="consent-check">
+                <label className="consent-check consent-switch">
                   <input type="checkbox" checked={regLegalAccepted} onChange={(e) => setRegLegalAccepted(e.target.checked)} />
+                  <span className="consent-switch__slider" aria-hidden="true" />
                   <span>
                     Я принимаю{" "}
                     <button type="button" className="consent-check__link" onClick={() => setLegalModal("pd")}>
@@ -472,6 +468,11 @@ export default function LandingClient() {
                     .
                   </span>
                 </label>
+                <div className="form-actions">
+                  <button type="submit" className="btn btn--primary" disabled={!regLegalAccepted}>
+                    Зарегистрироваться
+                  </button>
+                </div>
               </form>
             )}
           </div>

@@ -8199,6 +8199,16 @@
       if (e.target === ov) closeModal(ov);
     });
   });
+  var regLegalAccept = document.getElementById("reg-legal-accept");
+  var regSubmitBtn = document.getElementById("reg-submit-btn");
+  function syncRegSubmitByLegal() {
+    if (!regSubmitBtn || !regLegalAccept) return;
+    regSubmitBtn.disabled = !regLegalAccept.checked;
+  }
+  if (regLegalAccept) {
+    regLegalAccept.addEventListener("change", syncRegSubmitByLegal);
+    syncRegSubmitByLegal();
+  }
 
   var profileModalClose = document.getElementById("profile-modal-close");
   if (profileModalClose) profileModalClose.addEventListener("click", function () {

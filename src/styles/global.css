@@ -9110,6 +9110,47 @@ html.theme-dark .reserve-payment-modal__upload-hint {
   accent-color: #7c3aed;
 }
 
+.consent-switch {
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+}
+
+.consent-switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.consent-switch__slider {
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d1d5db;
+  position: relative;
+  transition: background-color 0.18s ease;
+}
+
+.consent-switch__slider::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  transition: transform 0.18s ease;
+}
+
+.consent-switch input[type="checkbox"]:checked + .consent-switch__slider {
+  background: #7c3aed;
+}
+
+.consent-switch input[type="checkbox"]:checked + .consent-switch__slider::after {
+  transform: translateX(18px);
+}
+
 .consent-check__link {
   border: none;
   padding: 0;

@@ -86,8 +86,9 @@ export default function AuthModalsLegacy() {
                     </button>
                   </div>
                 </div>
-                <label className="consent-check consent-check--legacy">
-                  <input type="checkbox" id="reg-legal-accept" />
+                <label className="consent-check consent-check--legacy consent-switch">
+                  <input type="checkbox" id="reg-legal-accept" defaultChecked />
+                  <span className="consent-switch__slider" aria-hidden="true" />
                   <span>
                     Я принимаю{" "}
                     <button type="button" className="consent-check__link" id="reg-open-pd-consent">
@@ -102,7 +103,7 @@ export default function AuthModalsLegacy() {
                 </label>
                 <div className="form-actions form-actions--split">
                   <button type="button" className="btn btn--ghost" id="reg-step-back-3">Назад</button>
-                  <button type="submit" className="btn btn--primary">Зарегистрироваться</button>
+                  <button type="submit" className="btn btn--primary" id="reg-submit-btn">Зарегистрироваться</button>
                 </div>
               </div>
               <p className="form-links">
