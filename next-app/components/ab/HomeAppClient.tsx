@@ -16,6 +16,7 @@ import HomeBeginnerOnboarding from "./HomeBeginnerOnboarding";
 import HomeMusicToggle from "./HomeMusicToggle";
 import HomeHeaderOnline from "./HomeHeaderOnline";
 import AnimatedStatNumber from "./AnimatedStatNumber";
+import FlipDigitsText from "./FlipDigitsText";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 import { formatStreamTimeLeft } from "../../lib/site-timezone";
@@ -630,7 +631,7 @@ export default function HomeAppClient() {
                         <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
                           <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>
                           <div className="raffle-card__promo-special-timer">
-                            {secondPriceCountdown || "Скоро завершится"}
+                            {secondPriceCountdown ? <FlipDigitsText text={secondPriceCountdown} /> : "Скоро завершится"}
                           </div>
                         </div>
                       ) : null}
@@ -638,7 +639,9 @@ export default function HomeAppClient() {
                         <RaffleCardShutter variant="scheduled">
                           <p className="raffle-card__shutter-line">До старта акции</p>
                           {publicStartCountdown ? (
-                            <p className="raffle-card__shutter-timer">{publicStartCountdown}</p>
+                            <p className="raffle-card__shutter-timer">
+                              <FlipDigitsText text={publicStartCountdown} />
+                            </p>
                           ) : null}
                         </RaffleCardShutter>
                       ) : null}
@@ -667,7 +670,9 @@ export default function HomeAppClient() {
                           {streamPill.live ? (
                             <>
                               <span className="raffle-card__stream-pill-dot" aria-hidden="true" />
-                              <span className="raffle-card__stream-pill-time">{streamPill.time}</span>
+                              <span className="raffle-card__stream-pill-time">
+                                <FlipDigitsText text={streamPill.time} />
+                              </span>
                             </>
                           ) : (
                             <>
@@ -683,7 +688,9 @@ export default function HomeAppClient() {
                             <>
                               <p className="raffle-card__shutter-line">До эфира</p>
                               {streamCountdown ? (
-                                <p className="raffle-card__shutter-timer">{streamCountdown}</p>
+                              <p className="raffle-card__shutter-timer">
+                                <FlipDigitsText text={streamCountdown} />
+                              </p>
                               ) : null}
                             </>
                           ) : streamState === "live" ? (

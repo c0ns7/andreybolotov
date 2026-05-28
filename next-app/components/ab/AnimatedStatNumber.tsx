@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import FlipDigitsText from "./FlipDigitsText";
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3;
@@ -71,8 +72,6 @@ export default function AnimatedStatNumber({ value, maxStepThrough = 48 }: Props
   }, [target, maxStepThrough]);
 
   return (
-    <span aria-label={String(target)}>
-      {formatGrouped(display)}
-    </span>
+    <FlipDigitsText text={formatGrouped(display)} />
   );
 }

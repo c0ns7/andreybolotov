@@ -9151,6 +9151,40 @@ html.theme-dark .reserve-payment-modal__upload-hint {
   transform: translateX(18px);
 }
 
+.flip-digit {
+  position: relative;
+  display: inline-block;
+  width: 0.68em;
+  height: 1.02em;
+  overflow: hidden;
+  vertical-align: -0.08em;
+}
+
+.flip-digit--static {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  vertical-align: baseline;
+}
+
+.flip-digit__track {
+  display: block;
+  transform: translateY(0);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.flip-digit.is-animating .flip-digit__track {
+  transform: translateY(-1.02em);
+}
+
+.flip-digit__item {
+  display: block;
+  height: 1.02em;
+  line-height: 1.02em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .consent-check__link {
   border: none;
   padding: 0;
