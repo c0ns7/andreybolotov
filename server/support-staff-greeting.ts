@@ -1,4 +1,4 @@
-import { pgGet } from "./pg.js";
+import { pgGet } from "./pg-sql.js";
 import { parseSiteDateTimeLocalToUtcMs, SITE_TIMEZONE } from "./site-timezone.js";
 
 const STAFF_GREETING_RE = /^\s*здравствуйте\b/i;
