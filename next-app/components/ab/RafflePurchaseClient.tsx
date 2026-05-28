@@ -13,6 +13,7 @@ import {
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
+import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
@@ -2562,11 +2563,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         reserveDraftRef.current = null;
         receiptUploadDataRef.current = null;
         receiptUploadInFlightRef.current = false;
-        const hint = data.order?.receipt_review_eta_hint ? String(data.order.receipt_review_eta_hint) : "";
-        toastRef.current(hint ? "Чек отправлен. " + hint : "Чек отправлен на проверку", "success");
-        void syncOrderRef.current();
-        void loadAllSlicesRef.current({ force: true, showLoader: false });
-        router.replace("/home");
+        openReceiptSentSuccessModal({
+          onDismiss: () => {
+            void syncOrderRef.current();
+            void loadAllSlicesRef.current({ force: true, showLoader: false });
+            router.replace("/home");
+          },
+          onShareCopied: () => toastRef.current("Текст скопирован — отправьте другу", "success"),
+        });
       } catch (e) {
         if (isNetworkFetchError(e)) {
           const titleEl = document.getElementById("action-error-title");

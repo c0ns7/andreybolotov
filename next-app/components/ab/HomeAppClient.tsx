@@ -521,6 +521,7 @@ export default function HomeAppClient() {
                 const streamPill = showStreamOnCard ? streamCardPill(streamAt, streamState, syncedNow) : null;
                 const streamUrl = String(r.live_stream_url || "").trim();
                 const isWaitCheck = st === "active" && myOrderStatus === "reserved";
+                const isPendingReview = st === "active" && myOrderStatus === "pending_review";
                 const total = Math.max(0, Number(r.ticket_count) || 0);
                 const occupied = Math.max(0, Math.min(total, Number(r.occupied_count) || 0));
                 const free = Math.max(0, total - occupied);
@@ -603,6 +604,11 @@ export default function HomeAppClient() {
                             <p className="raffle-card__shutter-timer">{publicStartCountdown}</p>
                           ) : null}
                         </RaffleCardShutter>
+                      ) : null}
+                      {isPendingReview ? (
+                        <div className="raffle-card__badge-wrap raffle-card__badge-wrap--pending-review">
+                          <div className="raffle-card__badge raffle-card__badge--pending-review">На проверке</div>
+                        </div>
                       ) : null}
                       {isWaitCheck ? (
                         <div className="raffle-card__badge-wrap raffle-card__badge-wrap--wait-check">

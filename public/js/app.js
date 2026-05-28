@@ -4263,6 +4263,11 @@
           escapeHtml(String(publicStartAt)) +
           '"></p>',
       );
+    } else if (st === "active" && myOrderStatus === "pending_review") {
+      badgeBlock =
+        '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--pending-review">' +
+        '<div class="raffle-card__badge raffle-card__badge--pending-review">На проверке</div>' +
+        "</div>";
     } else if (st === "active" && myOrderStatus === "reserved") {
       badgeBlock =
         '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--wait-check">' +
@@ -6515,12 +6520,22 @@
       fetchCartFromApi().catch(function () {});
       fetchTicketsFromApi().catch(function () {});
       loadRaffleTicketSlice().catch(function () {});
-      var etaHint =
-        data.order && data.order.receipt_review_eta_hint
-          ? String(data.order.receipt_review_eta_hint)
-          : "";
-      showToast(etaHint ? "Чек отправлен. " + etaHint : "Чек отправлен на проверку", "success");
       emitUxEvent("raffle_receipt_sent", { order_id: reserveFlowState.orderId });
+      if (global.AbReceiptSent && typeof global.AbReceiptSent.open === "function") {
+        global.AbReceiptSent.open({
+          onDismiss: function () {
+            loadRafflesFeed().catch(function () {});
+            if (IS_HOME_APP) location.href = "/home";
+          },
+        });
+      } else {
+        var etaHint =
+          data.order && data.order.receipt_review_eta_hint
+            ? String(data.order.receipt_review_eta_hint)
+            : "";
+        showToast(etaHint ? "Чек отправлен. " + etaHint : "Чек отправлен на проверку", "success");
+        if (IS_HOME_APP) location.href = "/home";
+      }
     } catch (err) {
       var msg = String((err && err.message) || "Ошибка");
       if (msg === "SESSION_EXPIRED") {
