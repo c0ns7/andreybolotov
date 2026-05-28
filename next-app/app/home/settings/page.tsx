@@ -252,6 +252,15 @@ export default function HomeSettingsPage() {
                 <Link href="/home/legal/privacy" className="settings-legal-card__link">
                   Политика конфиденциальности
                 </Link>
+                <Link href="/home/legal/cookies" className="settings-legal-card__link">
+                  Политика использования файлов cookie
+                </Link>
+                <Link href="/home/legal/notifications" className="settings-legal-card__link">
+                  Политика уведомлений
+                </Link>
+                <Link href="/home/legal/offer" className="settings-legal-card__link">
+                  Публичная оферта проекта
+                </Link>
               </div>
             </section>
           </div>
