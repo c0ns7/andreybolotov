@@ -66,6 +66,36 @@ export function stripBlogBodyDuplicateMedia(html: string, media: { url: string }
   return doc.body.innerHTML.trim();
 }
 
+function normalizePlainText(s: string): string {
+  return stripBlogHtmlText(s).replace(/\s+/g, " ").trim();
+}
+
+/** Убирает из начала body абзацы, совпадающие с кратким описанием (excerpt уже показывается отдельно). */
+export function stripBlogBodyDuplicateExcerpt(html: string, excerpt: string): string {
+  const raw = String(html || "").trim();
+  const ex = String(excerpt || "").trim();
+  if (!raw || !ex) return raw;
+  const exNorm = normalizePlainText(ex);
+  if (!exNorm) return raw;
+
+  if (typeof DOMParser === "undefined") {
+    const bodyNorm = normalizePlainText(raw);
+    return bodyNorm === exNorm ? "" : raw;
+  }
+
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const isMatch = (el: Element) => {
+    const text = normalizePlainText(el.textContent || "");
+    if (!text) return !el.querySelector("img, video, iframe, audio, picture");
+    return text === exNorm;
+  };
+
+  while (doc.body.firstElementChild && isMatch(doc.body.firstElementChild)) {
+    doc.body.firstElementChild.remove();
+  }
+  return doc.body.innerHTML.trim();
+}
+
 export function resolveBlogBodyHtml(
   html: string,
   excerpt: string,
@@ -74,7 +104,7 @@ export function resolveBlogBodyHtml(
   const raw = String(html || "").trim();
   if (blogHtmlHasContent(raw)) return raw;
   const ex = String(excerpt || "").trim();
-  if (ex) return `<p>${escapeHtmlAttr(ex)}</p>`;
+  if (ex) return "";
   const first = media.find((m) => String(m.url || "").trim());
   if (!first) return "";
   const url = escapeHtmlAttr(String(first.url).trim());

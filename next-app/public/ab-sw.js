@@ -83,9 +83,13 @@ self.addEventListener("message", function (event) {
     caches.open(CACHE).then(function (cache) {
       return cache.match(url).then(function (hit) {
         if (hit) return hit;
-        return fetch(url, { credentials: "same-origin" }).then(function (res) {
-          return safeCachePut(cache, url, res);
-        });
+        return fetch(url, { credentials: "same-origin" })
+          .then(function (res) {
+            return safeCachePut(cache, url, res);
+          })
+          .catch(function () {
+            return undefined;
+          });
       });
     }),
   );
@@ -106,7 +110,7 @@ self.addEventListener("fetch", function (event) {
           })
           .catch(function () {
             if (cached) return cached;
-            throw new Error("offline");
+            return Response.error();
           });
 
         if (cached) {

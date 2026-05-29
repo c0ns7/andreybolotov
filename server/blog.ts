@@ -119,7 +119,7 @@ function normalizeBlogBodyForSave(
   const raw = String(html || "").trim();
   if (blogBodyHasContent(raw)) return raw;
   const ex = String(excerpt || "").trim();
-  if (ex) return `<p>${escapeBlogHtmlText(ex)}</p>`;
+  if (ex) return "";
   const first = media.find((m) => String(m.url || "").trim());
   if (!first) return "";
   const url = escapeBlogHtmlText(String(first.url).trim());

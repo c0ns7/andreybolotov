@@ -18,7 +18,12 @@ import { abUploadHttpOrigin, blogUploadApiUrl, uploadTimeoutMs } from "../../../
 import { prefetchMediaList } from "../../../lib/ab-media-cache";
 import { invalidateAbBlogUnreadCache } from "../../../lib/ab-blog-unread-cache";
 import { AB_USER_WS_EVENT } from "../../../lib/ab-user-ws-events";
-import { blogHtmlHasContent, resolveBlogBodyHtml, stripBlogBodyDuplicateMedia } from "../../../lib/ab-blog-html";
+import {
+  blogHtmlHasContent,
+  resolveBlogBodyHtml,
+  stripBlogBodyDuplicateExcerpt,
+  stripBlogBodyDuplicateMedia,
+} from "../../../lib/ab-blog-html";
 import type { BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import BlogComments from "./BlogComments";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
@@ -430,7 +435,7 @@ function BlogPageClientInner() {
     }
     const mediaPayload = formMedia.map((m) => ({ url: m.url, mime: m.mime }));
     const bodyHtml = resolveBlogBodyHtml(editorRef.current?.getHtml() ?? formBody, formExcerpt, mediaPayload);
-    if (!blogHtmlHasContent(bodyHtml)) {
+    if (!blogHtmlHasContent(bodyHtml) && !formExcerpt.trim() && !mediaPayload.length) {
       toast("Добавьте текст поста в редакторе, краткое описание или медиа", "warning");
       return;
     }
@@ -537,8 +542,11 @@ function BlogPageClientInner() {
       : readPost.cover_url
         ? [{ id: 0, url: readPost.cover_url, mime: readPost.cover_mime }]
         : [];
-    const articleBodyHtml = stripBlogBodyDuplicateMedia(readPost.body_html, articleMedia);
-    const readMin = estimateReadMinutes(articleBodyHtml || readPost.body_html);
+    const articleBodyHtml = stripBlogBodyDuplicateExcerpt(
+      stripBlogBodyDuplicateMedia(readPost.body_html, articleMedia),
+      readPost.excerpt,
+    );
+    const readMin = estimateReadMinutes(articleBodyHtml || readPost.excerpt || readPost.body_html);
     return wrapPtr(
       <article className="blog-article">
         <BlogPageHeader title={readPost.title} backOnClick={() => setReadPost(null)} backLabel="К ленте блога" />
