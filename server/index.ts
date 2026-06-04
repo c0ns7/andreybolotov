@@ -693,8 +693,8 @@ app.get("/api/auth/me", async (c) => {
     console.error("[me] materialize preassign:", e instanceof Error ? e.message : e);
   }
   const row = await getUserByIdPg(user.id);
-  const { isStaffRole, staffAdminAreas, staffRoleLabel } = await import("./admin-roles.js");
-  const role = user.role ?? "user";
+  const { isStaffRole, staffAdminAreas, staffRoleLabel, normalizeStaffRole } = await import("./admin-roles.js");
+  const role = normalizeStaffRole(row?.role ?? user.role ?? "user");
   return c.json({
     user: {
       id: user.id,

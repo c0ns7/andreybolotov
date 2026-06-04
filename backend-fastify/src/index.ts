@@ -50,7 +50,13 @@ import {
 } from "../../server/db-auth-pg.js";
 import { ensurePgRuntimeSchema, isPgConnectivityError, pgPool } from "../../server/pg.js";
 import { attachProcessStabilityGuards } from "../../server/process-stability.js";
-import { isFullAccessStaff, isStaffRole, staffAdminAreas, staffRoleLabel } from "../../server/admin-roles.js";
+import {
+  isFullAccessStaff,
+  isStaffRole,
+  normalizeStaffRole,
+  staffAdminAreas,
+  staffRoleLabel,
+} from "../../server/admin-roles.js";
 import { publicRaffleExtraFields } from "../../server/raffle-bank-cards.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "../../server/chat-attachments.js";
 import {
@@ -1174,7 +1180,7 @@ app.get("/api/auth/me", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
   const row = await getUserByIdPg(user.id);
-  const role = user.role ?? "user";
+  const role = normalizeStaffRole(row?.role ?? user.role ?? "user");
   return {
     user: {
       id: user.id,

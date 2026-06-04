@@ -581,6 +581,28 @@
     return tab;
   }
 
+  /** Дублирует server/admin-roles.ts — fallback, если API не отдал staff_areas. */
+  function staffAreasFromRole(role) {
+    var r = String(role == null ? "" : role)
+      .trim()
+      .toLowerCase();
+    if (r === "admin") r = "owner";
+    if (!isStaffSession(r, true)) return [];
+    if (r === "owner" || r === "developer" || r === "moderator") {
+      return ["home", "support", "users", "raffles", "payments", "prizes", "settings", "music", "stats", "blog"];
+    }
+    if (r === "support") return ["home", "support", "payments", "raffles", "music"];
+    if (r === "financier") return ["home", "support", "payments", "music"];
+    return ["home"];
+  }
+
+  function resolveAdminStaffAreas(role, isStaff, fromApi) {
+    var areas = Array.isArray(fromApi) ? fromApi.filter(Boolean) : [];
+    if (!areas.length) areas = staffAreasFromRole(role);
+    if (isStaffSession(role, isStaff) && areas.indexOf("home") < 0) areas.unshift("home");
+    return areas;
+  }
+
   function canAdminArea(area) {
     return adminStaffAreas.indexOf(area) >= 0;
   }
@@ -1443,10 +1465,7 @@
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       adminSessionRole = merged.role;
-      adminStaffAreas = Array.isArray(me.user.staff_areas) ? me.user.staff_areas.slice() : [];
-      if (adminStaffAreas.indexOf("home") < 0 && isStaffSession(merged.role, me.user.is_staff)) {
-        adminStaffAreas.unshift("home");
-      }
+      adminStaffAreas = resolveAdminStaffAreas(merged.role, me.user.is_staff, me.user.staff_areas);
       window.abAdminStaffAreas = adminStaffAreas.slice();
       if (!isStaffSession(merged.role, me.user.is_staff)) {
         if (adminLoading) adminLoading.hidden = true;
