@@ -35,6 +35,10 @@ type RaffleRow = {
   base_price_rub?: number;
   cenopad_enabled?: number | boolean;
   cenopad_price_rub?: number | null;
+  second_price_enabled?: number | boolean;
+  second_price_rub?: number | null;
+  second_price_start_at?: number | null;
+  cenopad_start_at?: number | null;
   old_price_rub?: number | null;
   ticket_count?: number;
   occupied_count?: number;
@@ -76,6 +80,21 @@ function streamCardPill(
   const time = formatStreamTimeLeft(streamAt, nowMs);
   if (!time) return null;
   return { live: false, time };
+}
+
+function secondPriceStartCardPill(
+  r: RaffleRow,
+  nowMs: number,
+): { at: number; time: string } | null {
+  const enabled =
+    Boolean(Number(r.cenopad_enabled) || r.cenopad_enabled === true) ||
+    Boolean(Number(r.second_price_enabled) || r.second_price_enabled === true);
+  const priceRub = Math.floor(Number(r.second_price_rub ?? r.cenopad_price_rub ?? 0));
+  const startAt = Math.floor(Number(r.second_price_start_at ?? r.cenopad_start_at ?? 0));
+  if (!enabled || priceRub <= 0 || startAt <= 0 || nowMs >= startAt) return null;
+  const time = formatStreamTimeLeft(startAt, nowMs);
+  if (!time) return null;
+  return { at: startAt, time };
 }
 
 const RAFFLE_SHUTTER_HEAD: Record<"paused" | "scheduled" | "closed", string> = {
@@ -234,7 +253,11 @@ export default function HomeAppClient() {
         signal: ctrl.signal,
       });
       const st = Number(data.server_time_ms);
-      if (Number.isFinite(st)) setServerTimeSkewMs(st - Date.now());
+      if (Number.isFinite(st)) {
+        const skew = st - Date.now();
+        setServerTimeSkewMs(skew);
+        setNowTs(st);
+      }
       setRaffles(Array.isArray(data.raffles) ? data.raffles : []);
       setFeedErr(false);
       void refreshTableAccess();
@@ -397,7 +420,8 @@ export default function HomeAppClient() {
         String(r.status || "") === "active" &&
         Boolean(Number(r.live_stream_show_on_card) || r.live_stream_show_on_card === true) &&
         Number(r.live_stream_at || 0) > 0;
-      return scheduled || closedStream || activeStreamPill;
+      const priceStartPill = secondPriceStartCardPill(r, Date.now() + serverTimeSkewMs);
+      return scheduled || closedStream || activeStreamPill || Boolean(priceStartPill);
     });
     if (!needsTick) return;
     const t = window.setInterval(() => setNowTs(Date.now() + serverTimeSkewMs), 1000);
@@ -531,7 +555,7 @@ export default function HomeAppClient() {
                 const myOrderStatus = String(r.my_order_status || "");
                 const isPaused = st === "paused";
                 const isClosed = st === "closed";
-                const syncedNow = Date.now() + serverTimeSkewMs;
+                const syncedNow = nowTs;
                 const publicStartAt = Math.floor(Number(r.public_start_at || 0));
                 const salesOpen =
                   r.sales_open !== false && !(publicStartAt > 0 && syncedNow < publicStartAt);
@@ -557,6 +581,10 @@ export default function HomeAppClient() {
                   streamAt > 0 &&
                   streamState !== "ended";
                 const streamPill = showStreamOnCard ? streamCardPill(streamAt, streamState, syncedNow) : null;
+                const priceStartPill =
+                  st === "active" && salesOpen && !isScheduled && !isPaused
+                    ? secondPriceStartCardPill(r, syncedNow)
+                    : null;
                 const streamUrl = String(r.live_stream_url || "").trim();
                 const isWaitCheck = st === "active" && myOrderStatus === "reserved";
                 const isPendingReview = st === "active" && myOrderStatus === "pending_review";
@@ -661,26 +689,43 @@ export default function HomeAppClient() {
                           <p className="raffle-card__shutter-line">Скоро вернёмся</p>
                         </RaffleCardShutter>
                       ) : null}
-                      {streamPill ? (
-                        <div
-                          className={
-                            "raffle-card__stream-pill" + (streamPill.live ? " raffle-card__stream-pill--live" : "")
-                          }
-                          aria-label={streamPill.live ? "Эфир идёт" : "До эфира " + streamPill.time}
-                        >
-                          {streamPill.live ? (
-                            <>
-                              <span className="raffle-card__stream-pill-dot" aria-hidden="true" />
+                      {priceStartPill || streamPill ? (
+                        <div className="raffle-card__info-pills">
+                          {priceStartPill ? (
+                            <div
+                              className="raffle-card__stream-pill raffle-card__stream-pill--price"
+                              aria-label={"До смены цены " + priceStartPill.time}
+                            >
+                              <span className="raffle-card__stream-pill-kicker">до смены цены</span>
                               <span className="raffle-card__stream-pill-time">
-                                <FlipDigitsText text={streamPill.time} />
+                                <FlipDigitsText text={priceStartPill.time} />
                               </span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="raffle-card__stream-pill-kicker">до эфира</span>
-                              <span className="raffle-card__stream-pill-time">{streamPill.time}</span>
-                            </>
-                          )}
+                            </div>
+                          ) : null}
+                          {streamPill ? (
+                            <div
+                              className={
+                                "raffle-card__stream-pill" + (streamPill.live ? " raffle-card__stream-pill--live" : "")
+                              }
+                              aria-label={streamPill.live ? "Эфир идёт" : "До эфира " + streamPill.time}
+                            >
+                              {streamPill.live ? (
+                                <>
+                                  <span className="raffle-card__stream-pill-dot" aria-hidden="true" />
+                                  <span className="raffle-card__stream-pill-time">
+                                    <FlipDigitsText text={streamPill.time} />
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="raffle-card__stream-pill-kicker">до эфира</span>
+                                  <span className="raffle-card__stream-pill-time">
+                                    <FlipDigitsText text={streamPill.time} />
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                       {isClosed ? (

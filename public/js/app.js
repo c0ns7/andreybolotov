@@ -4265,15 +4265,15 @@
       (Number(r.live_stream_show_on_card) === 1 || r.live_stream_show_on_card === true) &&
       streamAt > 0 &&
       streamState !== "ended";
+    var formatTimeLeft = global.AbSiteTimezone && global.AbSiteTimezone.formatStreamTimeLeft;
     var streamPillHtml = "";
     if (showStreamOnCard) {
-      var formatLeft = global.AbSiteTimezone && global.AbSiteTimezone.formatStreamTimeLeft;
       var pillLive = streamState === "live";
       var pillTime = "";
       if (pillLive) {
         pillTime = "В эфире";
-      } else if (streamState === "scheduled" && formatLeft) {
-        pillTime = formatLeft(streamAt, nowTs);
+      } else if (streamState === "scheduled" && formatTimeLeft) {
+        pillTime = formatTimeLeft(streamAt, nowTs);
       }
       if (pillTime) {
         var pillInner = pillLive
@@ -4295,6 +4295,40 @@
           "</div>";
       }
     }
+    var cenopadEnabled =
+      Number(r.cenopad_enabled) === 1 ||
+      r.cenopad_enabled === true ||
+      Number(r.second_price_enabled) === 1 ||
+      r.second_price_enabled === true;
+    var secondPriceRub = Math.floor(Number(r.second_price_rub ?? r.cenopad_price_rub ?? 0));
+    var secondPriceStartAt = Math.floor(Number(r.second_price_start_at ?? r.cenopad_start_at ?? 0));
+    var showPriceChangeOnCard =
+      st === "active" &&
+      salesOpen &&
+      !isScheduled &&
+      cenopadEnabled &&
+      secondPriceRub > 0 &&
+      secondPriceStartAt > 0 &&
+      nowTs < secondPriceStartAt;
+    var pricePillHtml = "";
+    if (showPriceChangeOnCard && formatTimeLeft) {
+      var pricePillTime = formatTimeLeft(secondPriceStartAt, nowTs);
+      if (pricePillTime) {
+        pricePillHtml =
+          '<div class="raffle-card__stream-pill raffle-card__stream-pill--price" aria-label="До смены цены ' +
+          escapeHtml(pricePillTime) +
+          '">' +
+          '<span class="raffle-card__stream-pill-kicker">до смены цены</span><span class="raffle-card__stream-pill-time" data-raffle-card-price-countdown="' +
+          escapeHtml(String(secondPriceStartAt)) +
+          '">' +
+          escapeHtml(pricePillTime) +
+          "</span></div>";
+      }
+    }
+    var infoPillsHtml =
+      pricePillHtml || streamPillHtml
+        ? '<div class="raffle-card__info-pills">' + pricePillHtml + streamPillHtml + "</div>"
+        : "";
     function raffleShutterHtml(variant, bodyInner) {
       var heads = {
         paused: "Тех пауза",
@@ -4471,7 +4505,7 @@
       viewersBlock +
       specialPromoBadge +
       promoBadge +
-      streamPillHtml +
+      infoPillsHtml +
       badgeBlock +
       '<h3 class="raffle-card__title">' +
       escapeHtml(String(r.title || "")) +
@@ -4798,6 +4832,12 @@
     });
     root.querySelectorAll("[data-raffle-card-stream-countdown]").forEach(function (el) {
       var at = Math.floor(Number(el.getAttribute("data-raffle-card-stream-countdown") || 0));
+      if (!Number.isFinite(at) || at <= 0) return;
+      var formatLeft = global.AbSiteTimezone && global.AbSiteTimezone.formatStreamTimeLeft;
+      el.textContent = formatLeft ? formatLeft(at, nowTs) : "";
+    });
+    root.querySelectorAll("[data-raffle-card-price-countdown]").forEach(function (el) {
+      var at = Math.floor(Number(el.getAttribute("data-raffle-card-price-countdown") || 0));
       if (!Number.isFinite(at) || at <= 0) return;
       var formatLeft = global.AbSiteTimezone && global.AbSiteTimezone.formatStreamTimeLeft;
       el.textContent = formatLeft ? formatLeft(at, nowTs) : "";

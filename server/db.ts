@@ -918,7 +918,10 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
   const secondPriceEndRaw = Number((r as RaffleRow).cenopad_end_at ?? 0);
   const secondPriceStart = Number.isFinite(secondPriceStartRaw) && secondPriceStartRaw > 0 ? Math.floor(secondPriceStartRaw) : null;
   const secondPriceEnd = Number.isFinite(secondPriceEndRaw) && secondPriceEndRaw > 0 ? Math.floor(secondPriceEndRaw) : null;
-  const effectivePrice = !opts?.forAdmin && cenopadEnabled && cenopadPrice > 0 ? cenopadPrice : r.price_rub;
+  const effectivePrice =
+    !opts?.forAdmin && isRaffleCenopadActive(r) && cenopadPrice > 0
+      ? cenopadPrice
+      : Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
   const dto: RaffleDto = {
     id: r.id,
     raffle_hash: String((r as RaffleRow).raffle_hash ?? ""),
@@ -1010,14 +1013,14 @@ export function isRaffleSalesOpen(r: RaffleRow | undefined, nowMs = Date.now()):
   return isEpochReached(startAt > 0 ? startAt : null, nowMs);
 }
 
-export function isRaffleCenopadActive(r: RaffleRow | undefined): boolean {
+export function isRaffleCenopadActive(r: RaffleRow | undefined, nowMs = Date.now()): boolean {
   if (!r) return false;
   const enabled = Boolean(Number((r as RaffleRow).cenopad_enabled ?? 0));
   const p = Math.floor(Number((r as RaffleRow).cenopad_price_rub ?? 0));
   if (!(enabled && p > 0)) return false;
   const startAt = Math.floor(Number((r as RaffleRow).cenopad_start_at ?? 0));
   const endAt = Math.floor(Number((r as RaffleRow).cenopad_end_at ?? 0));
-  const now = Date.now();
+  const now = Math.floor(Number(nowMs));
   if (Number.isFinite(startAt) && startAt > 0 && now < startAt) return false;
   if (Number.isFinite(endAt) && endAt > 0 && now > endAt) return false;
   return true;
