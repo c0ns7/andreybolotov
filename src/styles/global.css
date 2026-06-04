@@ -3237,9 +3237,11 @@ html.theme-dark .home-faq-item__a {
   right: 0;
   z-index: 3;
   border-radius: 12px 0 0;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(236, 72, 153, 0.95));
-  box-shadow: 0 12px 24px rgba(91, 33, 182, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   padding: 8px 10px;
   pointer-events: none;
 }
@@ -3260,7 +3262,7 @@ html.theme-dark .home-faq-item__a {
   align-items: center;
   justify-content: center;
   min-height: 1.02em;
-  color: #fde68a;
+  color: rgba(253, 230, 138, 0.95);
   text-align: center;
   font-size: 0.8rem;
   font-weight: 800;
