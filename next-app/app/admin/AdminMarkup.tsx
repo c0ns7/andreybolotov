@@ -73,7 +73,16 @@ export default function AdminMarkup() {
           </div>
 
           <nav className="admin-rail__nav admin-nav" aria-label="Разделы">
-            <a href="/admin" className="admin-nav__link" id="nav-link-support" data-tooltip="Поддержка">
+            <a href="/admin" className="admin-nav__link" id="nav-link-home" data-tooltip="Главная">
+              <span className="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              </span>
+              <span className="admin-nav__text">Главная</span>
+            </a>
+            <a href="/admin?tab=support" className="admin-nav__link" id="nav-link-support" data-tooltip="Поддержка">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -182,15 +191,37 @@ export default function AdminMarkup() {
             </button>
             <div className="admin-topbar__titles">
               <h1 id="admin-page-heading" className="admin-title">
-                Поддержка
+                Главная
               </h1>
               <p id="admin-page-sub" className="admin-sub">
-                Пользователи и переписка
+                Сводка по сайту без персональных данных
               </p>
             </div>
           </header>
 
           <div className="admin-workspace__body">
+      <div id="admin-home-app" className="admin-home-app" hidden>
+        <section className="admin-home-hero" aria-labelledby="admin-home-hero-title">
+          <div className="admin-home-hero__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18"></path>
+              <path d="M7 16l4-4 4 4 5-8"></path>
+            </svg>
+          </div>
+          <div className="admin-home-hero__text">
+            <h2 id="admin-home-hero-title" className="admin-home-hero__title">Панель управления</h2>
+            <p className="admin-home-hero__lead">
+              Краткая сводка без имён, телефонов и переписок — удобно, если админка открыта на эфире.
+              Подробные разделы открывайте вручную из меню слева.
+            </p>
+          </div>
+        </section>
+        <div id="admin-home-metrics" className="admin-home-metrics" aria-live="polite"></div>
+        <div id="admin-home-site" className="admin-home-site" hidden aria-live="polite"></div>
+        <nav id="admin-home-quick" className="admin-home-quick" aria-label="Быстрые разделы"></nav>
+        <p id="admin-home-status" className="admin-home-status" role="status" hidden></p>
+      </div>
+
       <div id="admin-app" className="admin-app" hidden>
         <div className="admin-layout">
           <aside className="admin-sidebar">

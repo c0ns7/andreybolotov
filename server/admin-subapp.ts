@@ -35,6 +35,7 @@ import {
   countConfirmedTicketsSoldByCenopad,
   deleteSupportStaffMessageForUser,
   getRaffleSalesAccounting,
+  getAdminDashboardSummary,
   getAdminUsersStats,
   deletePasswordResetTokensForUser,
   deleteUserAccountByAdmin,
@@ -1130,6 +1131,13 @@ adminSubApp.get("/users/all", async (c) => {
     offset: safeOff,
     limit: safeLim,
   });
+});
+
+adminSubApp.get("/dashboard", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  c.header("Cache-Control", "no-store");
+  return c.json(await getAdminDashboardSummary());
 });
 
 adminSubApp.get("/stats/users", async (c) => {

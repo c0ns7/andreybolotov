@@ -1,6 +1,7 @@
 /** Роли персонала в админ-панели и доступ к разделам. */
 
 export type AdminArea =
+  | "home"
   | "support"
   | "users"
   | "raffles"
@@ -66,6 +67,7 @@ export function staffRoleLabel(role: string | null | undefined): string {
 export function staffHasArea(role: string | null | undefined, area: AdminArea): boolean {
   const r = normalizeStaffRole(role);
   if (!isStaffRole(r)) return false;
+  if (area === "home") return true;
   if (isFullAccessStaff(r)) return true;
   if (r === "support") {
     return area === "support" || area === "payments" || area === "raffles" || area === "music";
@@ -78,6 +80,7 @@ export function staffHasArea(role: string | null | undefined, area: AdminArea): 
 
 export function staffAdminAreas(role: string | null | undefined): AdminArea[] {
   const all: AdminArea[] = [
+    "home",
     "support",
     "users",
     "raffles",
@@ -119,6 +122,8 @@ export function parseStaffRoleInput(raw: unknown): string | null {
 export function resolveAdminArea(path: string, method: string): AdminArea {
   const p = (path.split("?")[0] || "/").replace(/\/+$/, "") || "/";
   const m = method.toUpperCase();
+
+  if (p === "/dashboard") return "home";
 
   if (p === "/chat/upload" || p === "/typing" || p === "/broadcast-max-chat-invite") {
     return "support";

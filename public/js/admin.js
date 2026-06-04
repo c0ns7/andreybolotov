@@ -355,6 +355,7 @@
   let settingsApp = null;
   let musicApp = null;
   let statsApp = null;
+  let homeApp = null;
   let listEl = null;
   let empty = null;
   let thread = null;
@@ -413,6 +414,7 @@
     settingsApp = document.getElementById("admin-settings-app");
     musicApp = document.getElementById("admin-music-app");
     statsApp = document.getElementById("admin-stats-app");
+    homeApp = document.getElementById("admin-home-app");
     listEl = document.getElementById("admin-user-list");
     empty = document.getElementById("admin-empty");
     thread = document.getElementById("admin-thread");
@@ -570,9 +572,11 @@
     if (settingsApp) settingsApp.hidden = true;
     if (musicApp) musicApp.hidden = true;
     if (statsApp) statsApp.hidden = true;
+    if (homeApp) homeApp.hidden = true;
   }
 
   function tabToStaffArea(tab) {
+    if (tab === "home") return "home";
     if (tab === "support") return "support";
     return tab;
   }
@@ -583,6 +587,7 @@
 
   function applyStaffNavVisibility() {
     var links = {
+      home: "nav-link-home",
       support: "nav-link-support",
       users: "nav-link-users",
       raffles: "nav-link-raffles",
@@ -602,23 +607,32 @@
   }
 
   function getAdminTab() {
-    var tab = "support";
+    var tab = "home";
     try {
       var u = new URL(location.href);
-      var t = u.searchParams.get("tab");
-      if (t === "raffles") tab = "raffles";
-      else if (t === "payments") tab = "payments";
-      else if (t === "prizes") tab = "prizes";
-      else if (t === "users") tab = "users";
-      else if (t === "settings") tab = "settings";
-      else if (t === "music") tab = "music";
-      else if (t === "stats") tab = "stats";
-      else tab = "support";
+      if (!u.searchParams.has("tab")) {
+        tab = "home";
+      } else {
+        var t = String(u.searchParams.get("tab") || "")
+          .trim()
+          .toLowerCase();
+        if (t === "home") tab = "home";
+        else if (t === "support") tab = "support";
+        else if (t === "raffles") tab = "raffles";
+        else if (t === "payments") tab = "payments";
+        else if (t === "prizes") tab = "prizes";
+        else if (t === "users") tab = "users";
+        else if (t === "settings") tab = "settings";
+        else if (t === "music") tab = "music";
+        else if (t === "stats") tab = "stats";
+        else tab = "home";
+      }
     } catch (_) {
-      tab = "support";
+      tab = "home";
     }
     if (!canAdminArea(tabToStaffArea(tab))) {
-      return adminStaffAreas.indexOf("support") >= 0 ? "support" : adminStaffAreas[0] || "support";
+      if (canAdminArea("home")) return "home";
+      return adminStaffAreas[0] || "home";
     }
     return tab;
   }
@@ -682,6 +696,7 @@
     var tab = getAdminTab();
     var heading = document.getElementById("admin-page-heading");
     var sub = document.getElementById("admin-page-sub");
+    var navHome = document.getElementById("nav-link-home");
     var navSupport = document.getElementById("nav-link-support");
     var navUsers = document.getElementById("nav-link-users");
     var navRaffles = document.getElementById("nav-link-raffles");
@@ -691,6 +706,7 @@
     var navSettings = document.getElementById("nav-link-settings");
     var navStats = document.getElementById("nav-link-stats");
 
+    if (homeApp) homeApp.hidden = tab !== "home";
     if (app) app.hidden = tab !== "support";
     if (rafflesApp) rafflesApp.hidden = tab !== "raffles";
     if (paymentsApp) paymentsApp.hidden = tab !== "payments";
@@ -704,7 +720,9 @@
 
     if (heading) {
       heading.textContent =
-        tab === "raffles"
+        tab === "home"
+          ? "Главная"
+          : tab === "raffles"
           ? "Акции"
           : tab === "payments"
             ? "Оплаты акций"
@@ -722,7 +740,9 @@
     }
     if (sub) {
       sub.textContent =
-        tab === "raffles"
+        tab === "home"
+          ? "Сводка по сайту без персональных данных"
+          : tab === "raffles"
           ? "Каталог акций на главной"
           : tab === "payments"
             ? "Проверка чеков и закрепление номерков"
@@ -739,6 +759,7 @@
                 : "Пользователи и переписка";
     }
 
+    if (navHome) navHome.setAttribute("aria-current", tab === "home" ? "page" : "false");
     if (navSupport) navSupport.setAttribute("aria-current", tab === "support" ? "page" : "false");
     if (navUsers) navUsers.setAttribute("aria-current", tab === "users" ? "page" : "false");
     if (navRaffles) navRaffles.setAttribute("aria-current", tab === "raffles" ? "page" : "false");
@@ -769,6 +790,13 @@
     if (tab === "stats" && typeof window.abInitStats === "function") {
       window.abInitStats();
     }
+    if (tab === "home") {
+      if (homeApp && homeApp.dataset.inited === "1" && typeof window.abReloadAdminHome === "function") {
+        window.abReloadAdminHome();
+      } else if (typeof window.abInitHome === "function") {
+        window.abInitHome();
+      }
+    }
     syncAdminMobileChatShell();
   }
 
@@ -785,7 +813,7 @@
     var id = Number(userId);
     if (!Number.isFinite(id)) return;
     if (getAdminTab() !== "support") {
-      location.href = "/admin?openUser=" + encodeURIComponent(String(id));
+      location.href = "/admin?tab=support&openUser=" + encodeURIComponent(String(id));
       return;
     }
     adminTab = "all";
@@ -1416,6 +1444,10 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       adminSessionRole = merged.role;
       adminStaffAreas = Array.isArray(me.user.staff_areas) ? me.user.staff_areas.slice() : [];
+      if (adminStaffAreas.indexOf("home") < 0 && isStaffSession(merged.role, me.user.is_staff)) {
+        adminStaffAreas.unshift("home");
+      }
+      window.abAdminStaffAreas = adminStaffAreas.slice();
       if (!isStaffSession(merged.role, me.user.is_staff)) {
         if (adminLoading) adminLoading.hidden = true;
         location.replace("/home");

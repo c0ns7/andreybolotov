@@ -7,8 +7,8 @@ import "../../../src/styles/chat-action-cards.css";
 import "./admin-shell.css";
 
 export const metadata: Metadata = {
-  title: "Админка — поддержка",
-  description: "Панель администратора: обращения пользователей.",
+  title: "Админ-панель",
+  description: "Панель администратора сайта.",
 };
 
 export default function AdminPage() {
@@ -16,7 +16,8 @@ export default function AdminPage() {
     <>
       <AdminMarkup />
       <Script src="/static-proxy/js/site-timezone.js?v=20260603" strategy="afterInteractive" />
-      <Script src="/static-proxy/js/admin.js?v=20260531" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin.js?v=20260601" strategy="afterInteractive" />
+      <Script src="/static-proxy/js/admin-dashboard.js?v=20260601" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-users.js?v=20260529" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-raffles.js?v=20260602" strategy="afterInteractive" />
       <Script src="/static-proxy/js/admin-payments.js?v=20260518" strategy="afterInteractive" />

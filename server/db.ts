@@ -567,6 +567,63 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+export type AdminDashboardPayload = {
+  generated_at: number;
+  metrics: {
+    total_users: number;
+    active_raffles: number;
+    total_raffles: number;
+    pending_payments: number;
+    prizes_need_attention: number;
+    unread_support_messages: number;
+    unread_support_threads: number;
+  };
+  site: {
+    maintenance_enabled: boolean;
+    blog_enabled: boolean;
+    music_enabled: boolean;
+  };
+};
+
+export async function getAdminDashboardSummary(): Promise<AdminDashboardPayload> {
+  const usersRow = await pgGet<{ total: number }>(`SELECT COUNT(*)::int AS total FROM users`);
+  const rafflesRow = await pgGet<{ active: number; total: number }>(
+    `SELECT COUNT(*) FILTER (WHERE status = 'active')::int AS active,
+            COUNT(*)::int AS total
+       FROM raffles`,
+  );
+  const pendingPayRow = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM raffle_orders WHERE status = 'pending_review'`,
+  );
+  const prizesRow = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM prize_awards WHERE status IN ('pending', 'claimed', 'processing')`,
+  );
+  const unreadRow = await pgGet<{ messages: number; threads: number }>(
+    `SELECT COUNT(*)::int AS messages,
+            COUNT(DISTINCT user_id)::int AS threads
+       FROM support_messages
+      WHERE is_staff = 0 AND read_by_staff_at IS NULL`,
+  );
+  const site = await getSiteSettings();
+  return {
+    generated_at: Date.now(),
+    metrics: {
+      total_users: Math.max(0, Number(usersRow?.total ?? 0)),
+      active_raffles: Math.max(0, Number(rafflesRow?.active ?? 0)),
+      total_raffles: Math.max(0, Number(rafflesRow?.total ?? 0)),
+      pending_payments: Math.max(0, Number(pendingPayRow?.c ?? 0)),
+      prizes_need_attention: Math.max(0, Number(prizesRow?.c ?? 0)),
+      unread_support_messages: Math.max(0, Number(unreadRow?.messages ?? 0)),
+      unread_support_threads: Math.max(0, Number(unreadRow?.threads ?? 0)),
+    },
+    site: {
+      maintenance_enabled: site.maintenance_enabled,
+      blog_enabled: site.blog_enabled,
+      music_enabled: site.music_enabled,
+    },
+  };
+}
+
 export async function getAdminUsersStats(): Promise<AdminUsersStatsPayload> {
   const usersTotals = await pgGet<{ total: number; with_loc: number; without_loc: number }>(
     `SELECT COUNT(*)::int AS total,
