@@ -413,7 +413,8 @@ app.use(async (c, next) => {
   const site = await getSiteSettings();
   if (!site.maintenance_enabled) return next();
   const u = await authUser(c);
-  if (u && u.role === "admin") return next();
+  const { isStaffRole } = await import("./admin-roles.js");
+  if (u && isStaffRole(u.role)) return next();
   return c.json(
     { error: "Технические работы. Попробуйте позже.", code: "maintenance" },
     503,
@@ -692,13 +693,18 @@ app.get("/api/auth/me", async (c) => {
     console.error("[me] materialize preassign:", e instanceof Error ? e.message : e);
   }
   const row = await getUserByIdPg(user.id);
+  const { isStaffRole, staffAdminAreas, staffRoleLabel } = await import("./admin-roles.js");
+  const role = user.role ?? "user";
   return c.json({
     user: {
       id: user.id,
       phone: user.phone,
       name: user.name,
       locality: row?.locality != null ? String(row.locality).trim() : "",
-      role: user.role ?? "user",
+      role,
+      role_label: staffRoleLabel(role),
+      is_staff: isStaffRole(role),
+      staff_areas: staffAdminAreas(role),
       blocked: Number(user.blocked) === 1,
     },
   });
@@ -909,13 +915,20 @@ server.listen(PORT, () => {
   console.log(`HTTP + WebSocket ws://127.0.0.1:${PORT}/ws`);
   console.log(`Database: PostgreSQL (DATABASE_URL)`);
   if (String(process.env.DISABLE_RAFFLE_MAIL_INTERVAL ?? "").trim() !== "1") {
-    void tickReserveExpiryEmailReminders();
-    setInterval(() => void tickReserveExpiryEmailReminders(), 60_000);
+    const runMailTick = () => {
+      tickReserveExpiryEmailReminders().catch((err) => {
+        console.error("[mail] tick failed:", err instanceof Error ? err.message : err);
+      });
+    };
+    runMailTick();
+    setInterval(runMailTick, 60_000).unref?.();
   } else {
     console.log("[mail] INTERVAL отключён — используйте CRON → GET /api/internal/cron/raffle-mail-tick?secret=…");
   }
   if (String(process.env.DISABLE_RAFFLE_FREE_TICKETS_PUSH_INTERVAL ?? "").trim() !== "1") {
-    startRaffleFreeTicketsPushInterval();
+    startRaffleFreeTicketsPushInterval((err) => {
+      console.error("[push] tick failed:", err instanceof Error ? err.message : err);
+    });
     console.log("[push] Напоминания об остатке номерков: каждые 30 мин (остановка при < 25)");
   } else {
     console.log(

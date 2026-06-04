@@ -9,6 +9,9 @@
   let supportThreadSearch = "";
   /** @type {'all' | 'new' | 'unanswered'} */
   let adminTab = "all";
+  /** @type {string[]} */
+  let adminStaffAreas = [];
+  let adminSessionRole = "user";
 
   let userTypingInThreadActive = false;
   /** @type {number | null} */
@@ -569,21 +572,55 @@
     if (statsApp) statsApp.hidden = true;
   }
 
+  function tabToStaffArea(tab) {
+    if (tab === "support") return "support";
+    return tab;
+  }
+
+  function canAdminArea(area) {
+    return adminStaffAreas.indexOf(area) >= 0;
+  }
+
+  function applyStaffNavVisibility() {
+    var links = {
+      support: "nav-link-support",
+      users: "nav-link-users",
+      raffles: "nav-link-raffles",
+      payments: "nav-link-payments",
+      prizes: "nav-link-prizes",
+      settings: "nav-link-settings",
+      music: "nav-link-music",
+      stats: "nav-link-stats",
+    };
+    Object.keys(links).forEach(function (area) {
+      var el = document.getElementById(links[area]);
+      if (!el) return;
+      var allowed = canAdminArea(area);
+      el.hidden = !allowed;
+      el.style.display = allowed ? "" : "none";
+    });
+  }
+
   function getAdminTab() {
+    var tab = "support";
     try {
       var u = new URL(location.href);
       var t = u.searchParams.get("tab");
-      if (t === "raffles") return "raffles";
-      if (t === "payments") return "payments";
-      if (t === "prizes") return "prizes";
-      if (t === "users") return "users";
-      if (t === "settings") return "settings";
-      if (t === "music") return "music";
-      if (t === "stats") return "stats";
-      return "support";
+      if (t === "raffles") tab = "raffles";
+      else if (t === "payments") tab = "payments";
+      else if (t === "prizes") tab = "prizes";
+      else if (t === "users") tab = "users";
+      else if (t === "settings") tab = "settings";
+      else if (t === "music") tab = "music";
+      else if (t === "stats") tab = "stats";
+      else tab = "support";
     } catch (_) {
-      return "support";
+      tab = "support";
     }
+    if (!canAdminArea(tabToStaffArea(tab))) {
+      return adminStaffAreas.indexOf("support") >= 0 ? "support" : adminStaffAreas[0] || "support";
+    }
+    return tab;
   }
 
   function isAdminMobileChatLayout() {
@@ -662,6 +699,8 @@
     if (settingsApp) settingsApp.hidden = tab !== "settings";
     if (musicApp) musicApp.hidden = tab !== "music";
     if (statsApp) statsApp.hidden = tab !== "stats";
+
+    applyStaffNavVisibility();
 
     if (heading) {
       heading.textContent =
@@ -745,9 +784,10 @@
   window.abAdminOpenSupportChat = function (userId) {
     var id = Number(userId);
     if (!Number.isFinite(id)) return;
-    try {
-      history.replaceState({}, "", "/admin");
-    } catch (_) {}
+    if (getAdminTab() !== "support") {
+      location.href = "/admin?openUser=" + encodeURIComponent(String(id));
+      return;
+    }
     adminTab = "all";
     document.querySelectorAll(".admin-tab").forEach(function (b) {
       var on = b.getAttribute("data-tab") === "all";
@@ -1222,35 +1262,138 @@
     });
   }
 
+  /** Разделы админки — обычные ссылки, полная перезагрузка (не SPA). */
   function bindAdminSectionNav() {
-    document.querySelectorAll(".admin-nav .admin-nav__link[href^='/admin']").forEach(function (a) {
+    /* no-op: навигация через href без intercept */
+  }
+
+  function bindAdminRail() {
+    var root = document.getElementById("admin-root");
+    var rail = document.getElementById("admin-rail");
+    var backdrop = document.getElementById("admin-rail-backdrop");
+    var toggleRail = document.getElementById("admin-rail-toggle");
+    var toggleTop = document.getElementById("admin-topbar-menu");
+    if (!root || !rail) return;
+
+    var mobileMq = window.matchMedia("(max-width: 899px)");
+    var desktopExpanded = false;
+    var mobileOpen = false;
+
+    function isMobile() {
+      return mobileMq.matches;
+    }
+
+    function syncAria() {
+      var open = isMobile() ? mobileOpen : desktopExpanded;
+      [toggleRail, toggleTop].forEach(function (btn) {
+        if (!btn) return;
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      if (backdrop) {
+        var showBackdrop = isMobile() && mobileOpen;
+        backdrop.hidden = !showBackdrop;
+        backdrop.setAttribute("aria-hidden", showBackdrop ? "false" : "true");
+      }
+    }
+
+    function applyRailState() {
+      rail.classList.toggle("is-expanded", !isMobile() && desktopExpanded);
+      root.classList.toggle("is-rail-expanded", !isMobile() && desktopExpanded);
+      root.classList.toggle("is-mobile-nav-open", isMobile() && mobileOpen);
+      document.documentElement.classList.toggle("admin-nav-scroll-lock", isMobile() && mobileOpen);
+      syncAria();
+    }
+
+    function closeMobileNav() {
+      if (!mobileOpen) return;
+      mobileOpen = false;
+      applyRailState();
+    }
+
+    function toggleDesktopRail() {
+      if (isMobile()) return;
+      desktopExpanded = !desktopExpanded;
+      applyRailState();
+    }
+
+    function toggleMobileNav() {
+      if (!isMobile()) return;
+      mobileOpen = !mobileOpen;
+      applyRailState();
+    }
+
+    function onLayoutChange() {
+      if (!isMobile()) {
+        mobileOpen = false;
+      } else {
+        desktopExpanded = false;
+      }
+      applyRailState();
+    }
+
+    if (toggleRail) {
+      toggleRail.addEventListener("click", function () {
+        if (isMobile()) toggleMobileNav();
+        else toggleDesktopRail();
+      });
+    }
+    if (toggleTop) {
+      toggleTop.addEventListener("click", toggleMobileNav);
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", closeMobileNav);
+    }
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && isMobile() && mobileOpen) closeMobileNav();
+    });
+    rail.querySelectorAll(".admin-nav__link, .admin-rail__exit").forEach(function (link) {
+      link.addEventListener("click", function () {
+        if (isMobile()) closeMobileNav();
+      });
+    });
+    try {
+      if (mobileMq.addEventListener) mobileMq.addEventListener("change", onLayoutChange);
+      else if (mobileMq.addListener) mobileMq.addListener(onLayoutChange);
+    } catch (_) {
+      window.addEventListener("resize", onLayoutChange);
+    }
+    applyRailState();
+  }
+
+  function bindAdminExitNav() {
+    document.querySelectorAll("a.admin-exit[href]").forEach(function (a) {
       a.addEventListener("click", function (e) {
         if (e.defaultPrevented) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         if (typeof e.button === "number" && e.button !== 0) return;
-        var href = String(a.getAttribute("href") || "/admin");
+        var href = String(a.getAttribute("href") || "/home");
         e.preventDefault();
-        try {
-          history.pushState({}, "", href);
-        } catch (_) {}
-        try {
-          window.dispatchEvent(new CustomEvent("ab-route"));
-        } catch (_) {}
-        applyAdminTab();
-        processAdminOpenUserQuery();
+        location.href = href;
       });
-    });
-    window.addEventListener("popstate", function () {
-      applyAdminTab();
-      processAdminOpenUserQuery();
     });
   }
 
-  function isAdminRole(role) {
-    return String(role == null ? "" : role)
+  function isStaffSession(role, isStaff) {
+    if (isStaff === true) return true;
+    var r = String(role == null ? "" : role)
       .trim()
-      .toLowerCase() === "admin";
+      .toLowerCase();
+    return (
+      r === "admin" ||
+      r === "owner" ||
+      r === "developer" ||
+      r === "moderator" ||
+      r === "support" ||
+      r === "financier"
+    );
   }
+
+  window.abAdminCanAssignRoles = function () {
+    var r = String(adminSessionRole || "")
+      .trim()
+      .toLowerCase();
+    return r === "admin" || r === "owner" || r === "developer" || r === "moderator";
+  };
 
   async function bootstrap() {
     await waitForAdminDom(4000);
@@ -1271,7 +1414,14 @@
         role: me.user.role != null ? me.user.role : s.role || "user",
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      if (!isAdminRole(merged.role)) {
+      adminSessionRole = merged.role;
+      adminStaffAreas = Array.isArray(me.user.staff_areas) ? me.user.staff_areas.slice() : [];
+      if (!isStaffSession(merged.role, me.user.is_staff)) {
+        if (adminLoading) adminLoading.hidden = true;
+        location.replace("/home");
+        return;
+      }
+      if (!adminStaffAreas.length) {
         if (adminLoading) adminLoading.hidden = true;
         location.replace("/home");
         return;
@@ -1298,6 +1448,8 @@
     refreshDomRefs();
     bindTabs();
     bindAdminSectionNav();
+    bindAdminRail();
+    bindAdminExitNav();
     bindSupportThreadSearch();
     try {
       var mq = window.matchMedia("(max-width: 699px)");

@@ -22,9 +22,17 @@ function getPgConnectionString(): string {
 function buildPoolConfig(): PoolConfig {
   const connectionString = getPgConnectionString();
   const timeoutMs = Number(process.env.PG_CONNECTION_TIMEOUT_MS ?? 10_000);
+  const poolMax = Number(process.env.PG_POOL_MAX ?? 20);
+  const idleMs = Number(process.env.PG_POOL_IDLE_MS ?? 20_000);
+  const maxLifeSec = Number(process.env.PG_POOL_MAX_LIFETIME_SEC ?? 300);
   const cfg: PoolConfig = {
     connectionString,
     connectionTimeoutMillis: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10_000,
+    max: Number.isFinite(poolMax) && poolMax > 0 ? Math.floor(poolMax) : 20,
+    idleTimeoutMillis: Number.isFinite(idleMs) && idleMs > 0 ? Math.floor(idleMs) : 20_000,
+    maxLifetimeSeconds:
+      Number.isFinite(maxLifeSec) && maxLifeSec > 0 ? Math.floor(maxLifeSec) : 300,
+    keepAlive: true,
   };
   const sslFlag = String(process.env.PGSSLMODE ?? process.env.DATABASE_SSL ?? "")
     .trim()
@@ -39,8 +47,9 @@ export const pgPool = new Pool(buildPoolConfig());
 
 /** Сетевая/инфраструктурная недоступность Postgres (не «логическая» SQL-ошибка). */
 export function isPgConnectivityError(err: unknown): boolean {
-  const e = err as NodeJS.ErrnoException & { code?: string };
+  const e = err as NodeJS.ErrnoException & { code?: string; message?: string };
   const code = String(e?.code ?? "");
+  const msg = String(e?.message ?? "").toLowerCase();
   if (
     code === "ECONNREFUSED" ||
     code === "ETIMEDOUT" ||
@@ -51,15 +60,39 @@ export function isPgConnectivityError(err: unknown): boolean {
   ) {
     return true;
   }
+  if (code === "57P01" || code === "57P02" || code === "53300") return true;
   if (code.startsWith("08")) return true;
+  if (
+    msg.includes("connection terminated") ||
+    msg.includes("connection closed") ||
+    msg.includes("client was closed") ||
+    msg.includes("cannot use a pool after calling end") ||
+    msg.includes("socket hang up") ||
+    msg.includes("server closed the connection")
+  ) {
+    return true;
+  }
   return false;
+}
+
+const PG_RETRY_DELAY_MS = 120;
+
+/** Повтор запроса при обрыве idle-соединения (типичная причина падения API). */
+export async function withPgRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isPgConnectivityError(err)) throw err;
+    await new Promise((r) => setTimeout(r, PG_RETRY_DELAY_MS));
+    return await fn();
+  }
 }
 
 export async function pgQuery<T extends QueryResultRow = QueryResultRow>(
   text: string,
   values: unknown[] = [],
 ): Promise<T[]> {
-  const result = await pgPool.query<T>(text, values);
+  const result = await withPgRetry(() => pgPool.query<T>(text, values));
   return result.rows;
 }
 
@@ -67,7 +100,7 @@ export async function pgQueryOne<T extends QueryResultRow = QueryResultRow>(
   text: string,
   values: unknown[] = [],
 ): Promise<T | undefined> {
-  const result = await pgPool.query<T>(text, values);
+  const result = await withPgRetry(() => pgPool.query<T>(text, values));
   return result.rows[0];
 }
 

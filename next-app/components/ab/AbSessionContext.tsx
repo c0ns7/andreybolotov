@@ -9,6 +9,7 @@ import {
   formatRaffleFreeTicketsReminderPush,
   showAbBrowserNotification,
 } from "../../lib/ab-browser-push";
+import { isStaffRole } from "../../lib/ab-admin-roles";
 import { buildAbPublicWebSocketUrl, buildAbWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 /** Должен совпадать с server/raffle-free-tickets-push.ts (30 мин). */
@@ -130,7 +131,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
         })
           .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
           .then((x) => {
-            if (x.ok && x.d?.user?.role === "admin") return;
+            if (x.ok && (x.d?.user?.is_staff || isStaffRole(x.d?.user?.role))) return;
             router.replace("/maintenance");
           })
           .catch(() => router.replace("/maintenance"));
@@ -174,7 +175,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
       }
       if (msg.type !== "site_maintenance_updated" || !msg.maintenance) return;
       const s = loadAbSession();
-      if (s?.role === "admin") return;
+      if (isStaffRole(s?.role)) return;
       try {
         routerRef.current.replace("/maintenance");
       } catch {

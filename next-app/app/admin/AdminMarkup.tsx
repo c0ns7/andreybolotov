@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 export default function AdminMarkup() {
   return (
     <div className="app-shell app-shell--with-tabbar app-shell--admin">
@@ -30,12 +28,18 @@ export default function AdminMarkup() {
         </div>
       </div>
 
-      <div id="admin-root" hidden>
-      <header className="admin-head">
-        <div className="admin-head__bar">
-          <div className="admin-head__bar-top">
-            <div className="admin-brand">
-              <span className="admin-brand__badge" aria-hidden="true">
+      <div id="admin-root" className="admin-root" hidden>
+        <div
+          id="admin-rail-backdrop"
+          className="admin-rail-backdrop"
+          hidden
+          aria-hidden="true"
+        ></div>
+
+        <aside id="admin-rail" className="admin-rail" aria-label="Навигация админ-панели">
+          <div className="admin-rail__head">
+            <a href="/admin" className="admin-rail__brand" title="Админ-панель">
+              <span className="admin-rail__brand-icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="7" height="9" rx="1"></rect>
                   <rect x="14" y="3" width="7" height="5" rx="1"></rect>
@@ -43,23 +47,33 @@ export default function AdminMarkup() {
                   <rect x="3" y="16" width="7" height="5" rx="1"></rect>
                 </svg>
               </span>
-              <div className="admin-brand__text">
-                <span className="admin-brand__label">Админ-панель</span>
-                <span className="admin-brand__hint">andreybolotov.ru</span>
-              </div>
-            </div>
-            <Link href="/home" className="admin-exit">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
+              <span className="admin-rail__brand-text">
+                <span className="admin-rail__brand-title">Админ</span>
+                <span className="admin-rail__brand-hint">andreybolotov.ru</span>
+              </span>
+            </a>
+            <button
+              type="button"
+              id="admin-rail-toggle"
+              className="admin-rail__burger"
+              aria-label="Меню разделов"
+              aria-expanded="false"
+              aria-controls="admin-rail"
+            >
+              <svg className="admin-rail__burger-icon admin-rail__burger-icon--open" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="18" x2="20" y2="18"></line>
               </svg>
-              <span>На сайт</span>
-            </Link>
+              <svg className="admin-rail__burger-icon admin-rail__burger-icon--close" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+              </svg>
+            </button>
           </div>
 
-          <nav className="admin-nav" aria-label="Разделы">
-            <a href="/admin" className="admin-nav__link" id="nav-link-support">
+          <nav className="admin-rail__nav admin-nav" aria-label="Разделы">
+            <a href="/admin" className="admin-nav__link" id="nav-link-support" data-tooltip="Поддержка">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -67,7 +81,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Поддержка</span>
             </a>
-            <a href="/admin?tab=users" className="admin-nav__link" id="nav-link-users">
+            <a href="/admin?tab=users" className="admin-nav__link" id="nav-link-users" data-tooltip="Пользователи">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -78,7 +92,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Пользователи</span>
             </a>
-            <a href="/admin?tab=raffles" className="admin-nav__link" id="nav-link-raffles">
+            <a href="/admin?tab=raffles" className="admin-nav__link" id="nav-link-raffles" data-tooltip="Акции">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
@@ -86,7 +100,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Акции</span>
             </a>
-            <a href="/admin?tab=payments" className="admin-nav__link" id="nav-link-payments">
+            <a href="/admin?tab=payments" className="admin-nav__link" id="nav-link-payments" data-tooltip="Оплаты">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
@@ -95,7 +109,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Оплаты</span>
             </a>
-            <a href="/admin?tab=prizes" className="admin-nav__link" id="nav-link-prizes">
+            <a href="/admin?tab=prizes" className="admin-nav__link" id="nav-link-prizes" data-tooltip="Призы">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path>
@@ -105,7 +119,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Призы</span>
             </a>
-            <a href="/admin?tab=settings" className="admin-nav__link" id="nav-link-settings">
+            <a href="/admin?tab=settings" className="admin-nav__link" id="nav-link-settings" data-tooltip="Настройки">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3"></circle>
@@ -114,7 +128,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Настройки</span>
             </a>
-            <a href="/admin?tab=music" className="admin-nav__link" id="nav-link-music">
+            <a href="/admin?tab=music" className="admin-nav__link" id="nav-link-music" data-tooltip="Музыка">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 18V5l12-2v13"></path>
@@ -124,7 +138,7 @@ export default function AdminMarkup() {
               </span>
               <span className="admin-nav__text">Музыка</span>
             </a>
-            <a href="/admin?tab=stats" className="admin-nav__link" id="nav-link-stats">
+            <a href="/admin?tab=stats" className="admin-nav__link" id="nav-link-stats" data-tooltip="Статистика">
               <span className="admin-nav__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="20" x2="12" y2="10"></line>
@@ -135,14 +149,48 @@ export default function AdminMarkup() {
               <span className="admin-nav__text">Статистика</span>
             </a>
           </nav>
-        </div>
 
-        <div className="admin-head__hero">
-          <h1 id="admin-page-heading" className="admin-title">Поддержка</h1>
-          <p id="admin-page-sub" className="admin-sub">Пользователи и переписка</p>
-        </div>
-      </header>
+          <div className="admin-rail__foot">
+            <a href="/home" className="admin-exit admin-rail__exit" data-tooltip="На сайт">
+              <span className="admin-nav__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+              </span>
+              <span className="admin-nav__text">На сайт</span>
+            </a>
+          </div>
+        </aside>
 
+        <div className="admin-workspace">
+          <header className="admin-topbar">
+            <button
+              type="button"
+              id="admin-topbar-menu"
+              className="admin-topbar__burger"
+              aria-label="Открыть меню"
+              aria-expanded="false"
+              aria-controls="admin-rail"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="18" x2="20" y2="18"></line>
+              </svg>
+            </button>
+            <div className="admin-topbar__titles">
+              <h1 id="admin-page-heading" className="admin-title">
+                Поддержка
+              </h1>
+              <p id="admin-page-sub" className="admin-sub">
+                Пользователи и переписка
+              </p>
+            </div>
+          </header>
+
+          <div className="admin-workspace__body">
       <div id="admin-app" className="admin-app" hidden>
         <div className="admin-layout">
           <aside className="admin-sidebar">
@@ -847,9 +895,8 @@ export default function AdminMarkup() {
           </div>
         </div>
       </div>
-    </div>
-    </div>
-    </div>
+          </div>
+        </div>
 
     <div id="modal-raffle-form" className="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-raffle-form-title">
       <div className="modal admin-raffle-modal admin-raffle-modal--form">
@@ -1743,6 +1790,9 @@ export default function AdminMarkup() {
           <div id="admin-user-tickets-content" className="admin-user-tickets__content custom-scrollbar"></div>
         </div>
       </div>
+    </div>
+    </div>
+    </div>
     </div>
   </div>
   );

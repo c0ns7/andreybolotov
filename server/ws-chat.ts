@@ -527,11 +527,14 @@ export function attachWebSocket(wss: WebSocketServer) {
       return;
     }
 
-    if (user.role === "admin") {
+    const { isStaffRole } = await import("./admin-roles.js");
+    if (isStaffRole(user.role)) {
       adminSockets.add(ws);
       sendJson(ws, { type: "ready", role: "admin" });
       ws.on("message", (data) => {
-        void routeAdminSocketMessage(ws, data.toString());
+        routeAdminSocketMessage(ws, data.toString()).catch((err) => {
+          console.error("[ws] admin message:", err instanceof Error ? err.message : err);
+        });
       });
       ws.on("close", () => {
         adminSockets.delete(ws);
@@ -543,7 +546,9 @@ export function attachWebSocket(wss: WebSocketServer) {
     const messages = (await listSupportMessagesForUser(user.id)).map(messageToDto);
     sendJson(ws, { type: "ready", role: "user", messages });
     ws.on("message", (data) => {
-      void routeUserSocketMessage(user.id, data.toString());
+      routeUserSocketMessage(user.id, data.toString()).catch((err) => {
+        console.error("[ws] user message:", err instanceof Error ? err.message : err);
+      });
     });
     ws.on("close", () => {
       removeUserSocket(Number(user.id), ws);

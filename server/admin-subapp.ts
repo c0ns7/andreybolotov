@@ -10,7 +10,7 @@ import bcrypt from "bcryptjs";
 import type { SessionUser } from "./db.js";
 import { getUserBySessionTokenPg } from "./db-auth-pg.js";
 import {
-  countActiveAdmins,
+  countActivePrivilegedStaff,
   deleteRaffle,
   getRaffleById,
   getSiteSettings,
@@ -122,6 +122,14 @@ import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "./chat-attachments.js";
 import { applyStaffSupportGreetingForUser } from "./support-staff-greeting.js";
 import { validatePersonName } from "./person-name.js";
+import {
+  canAssignStaffRoles,
+  isFullAccessStaff,
+  isStaffRole,
+  parseStaffRoleInput,
+  resolveAdminArea,
+  staffHasArea,
+} from "./admin-roles.js";
 import {
   deleteSiteMusicTrack,
   getPublicSiteMusicPayload,
@@ -266,9 +274,11 @@ export async function getAdminUserFromAuthHeader(
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!token) return null;
   const u = (await getUserBySessionTokenPg(token)) ?? null;
-  if (!u || u.role !== "admin" || isBlockedUser(u)) return null;
+  if (!u || !isStaffRole(u.role) || isBlockedUser(u)) return null;
   return u;
 }
+
+export { isStaffRole, isFullAccessStaff, staffHasArea, staffAdminAreas } from "./admin-roles.js";
 
 function extForRaffleUpload(mime: string, fileName: string): string | null {
   const m = mime.toLowerCase().split(";")[0].trim();
@@ -496,11 +506,21 @@ async function requireAdmin(c: Context): Promise<SessionUser | Response> {
   if (isBlockedUser(u)) {
     return c.json({ error: "Аккаунт заблокирован", code: "account_blocked" }, 403);
   }
-  if (u.role !== "admin") return c.json({ error: "Недостаточно прав" }, 403);
+  const area = resolveAdminArea(c.req.path, c.req.method);
+  if (!staffHasArea(u.role, area)) {
+    return c.json({ error: "Недостаточно прав" }, 403);
+  }
   return u;
 }
 
 const rateLimitBuckets = new Map<string, { win: number; n: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now - bucket.win > 120_000) rateLimitBuckets.delete(key);
+  }
+}, 60_000).unref?.();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
   if (process.env.AB_ENABLE_RATE_LIMIT !== "1") return true;
@@ -1944,10 +1964,14 @@ adminSubApp.patch("/users/:userId", async (c) => {
   }
 
   if (body.role !== undefined) {
-    const role = String(body.role).toLowerCase() === "admin" ? "admin" : "user";
-    const wasAdmin = (target.role ?? "user") === "admin";
-    if (role === "user" && wasAdmin && await countActiveAdmins() === 1) {
-      return c.json({ error: "Нельзя снять последнего администратора" }, 400);
+    if (!canAssignStaffRoles(auth.role)) {
+      return c.json({ error: "Недостаточно прав для смены роли" }, 403);
+    }
+    const role = parseStaffRoleInput(body.role);
+    if (!role) return c.json({ error: "Некорректная роль" }, 400);
+    const wasPrivileged = isFullAccessStaff(target.role);
+    if (role === "user" && wasPrivileged && (await countActivePrivilegedStaff()) === 1) {
+      return c.json({ error: "Нельзя снять последнего администратора с полным доступом" }, 400);
     }
     await updateUserRole(userId, role);
   }
@@ -1959,7 +1983,7 @@ adminSubApp.patch("/users/:userId", async (c) => {
         return c.json({ error: "Нельзя заблокировать собственный аккаунт" }, 400);
       }
       const t2 = await getUserById(userId);
-      if (t2 && (t2.role ?? "user") === "admin" && await countActiveAdmins() === 1) {
+      if (t2 && isFullAccessStaff(t2.role) && (await countActivePrivilegedStaff()) === 1) {
         return c.json({ error: "Нельзя заблокировать последнего администратора" }, 400);
       }
     }
@@ -2044,7 +2068,7 @@ adminSubApp.delete("/users/:userId", async (c) => {
   if (userId === auth.id) {
     return c.json({ error: "Нельзя удалить собственный аккаунт" }, 400);
   }
-  if ((target.role ?? "user") === "admin" && await countActiveAdmins() === 1) {
+  if (isFullAccessStaff(target.role) && (await countActivePrivilegedStaff()) === 1) {
     return c.json({ error: "Нельзя удалить последнего администратора" }, 400);
   }
   await deleteUserAccountByAdmin(userId);

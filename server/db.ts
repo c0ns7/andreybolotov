@@ -57,12 +57,19 @@ export async function getUserBySessionToken(token: string) {
   return getUserBySessionTokenPg(token);
 }
 
-export async function countActiveAdmins(): Promise<number> {
+/** Активные роли с полным доступом (владелец, разработчик, модератор; legacy admin). */
+export async function countActivePrivilegedStaff(): Promise<number> {
   const r = await pgGet<{ c: number }>(
     `SELECT COUNT(*)::int AS c FROM users
-     WHERE COALESCE(role,'user') = 'admin' AND COALESCE(blocked,0) = 0`,
+     WHERE COALESCE(blocked,0) = 0
+       AND LOWER(COALESCE(role,'user')) IN ('admin','owner','developer','moderator')`,
   );
   return Number(r?.c ?? 0);
+}
+
+/** @deprecated Используйте countActivePrivilegedStaff */
+export async function countActiveAdmins(): Promise<number> {
+  return countActivePrivilegedStaff();
 }
 
 export type AdminUserListRow = {
@@ -177,7 +184,7 @@ export async function listUsersForAdminPage(
   );
 }
 
-export async function updateUserRole(userId: number, role: "admin" | "user"): Promise<void> {
+export async function updateUserRole(userId: number, role: string): Promise<void> {
   await pgExec(`UPDATE users SET role = ? WHERE id = ?`, [role, userId]);
 }
 

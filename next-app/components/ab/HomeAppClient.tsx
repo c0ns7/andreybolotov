@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactElement } from "react";
+import { isFullAccessStaff } from "../../lib/ab-admin-roles";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
@@ -207,7 +208,7 @@ export default function HomeAppClient() {
       const hasRaffle = latestRes.ok && id > 0 && cnt > 0;
       const confirmed = Array.isArray(ticketPayload?.confirmed) ? ticketPayload.confirmed : [];
       const hasConfirmed = confirmed.some((g) => Array.isArray(g?.numbers) && g.numbers.length > 0);
-      const isAdmin = String(session?.role || "") === "admin";
+      const isAdmin = isFullAccessStaff(session?.role);
       setTableRaffleId(hasRaffle ? id : 0);
       setCanOpenTable(hasRaffle && (hasConfirmed || isAdmin));
     } catch {

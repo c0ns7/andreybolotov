@@ -27,6 +27,7 @@ import {
 import type { BlogMediaItem, BlogPost, BlogTag } from "../../../lib/ab-blog-types";
 import BlogComments from "./BlogComments";
 import { BLOG_MEDIA_MAX } from "../../../lib/ab-blog-types";
+import { isFullAccessStaff } from "../../../lib/ab-admin-roles";
 import { useSiteFlags } from "../../../lib/use-site-flags";
 import { useAbSession } from "../AbSessionContext";
 import BlogPageHeader from "./BlogPageHeader";
@@ -97,7 +98,7 @@ function BlogPageClientInner() {
   const { session, authVerified, toast } = useAbSession();
   const { blog_enabled: blogEnabled, loaded: siteFlagsLoaded } = useSiteFlags();
   const searchParams = useSearchParams();
-  const isAdmin = authVerified && String(session?.role || "") === "admin";
+  const isAdmin = authVerified && isFullAccessStaff(session?.role);
   const sessionUserId = Number(session?.id) || 0;
   const canUseBlog = blogEnabled || isAdmin;
   const token = session?.token || "";

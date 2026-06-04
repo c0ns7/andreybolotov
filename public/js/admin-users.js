@@ -60,6 +60,63 @@
     return data;
   }
 
+  var ROLE_LABELS = {
+    owner: "Владелец",
+    developer: "Разработчик",
+    moderator: "Модератор",
+    support: "Саппорт",
+    financier: "Финансист",
+    admin: "Владелец",
+    user: "Пользователь",
+  };
+
+  function staffRoleLabel(role) {
+    var r = String(role == null ? "" : role)
+      .trim()
+      .toLowerCase();
+    return ROLE_LABELS[r] || ROLE_LABELS.user;
+  }
+
+  function isStaffRoleValue(role) {
+    var r = String(role == null ? "" : role)
+      .trim()
+      .toLowerCase();
+    return (
+      r === "admin" ||
+      r === "owner" ||
+      r === "developer" ||
+      r === "moderator" ||
+      r === "support" ||
+      r === "financier"
+    );
+  }
+
+  function pickStaffRole(currentRole) {
+    var options = [
+      { v: "owner", l: "Владелец" },
+      { v: "developer", l: "Разработчик" },
+      { v: "moderator", l: "Модератор" },
+      { v: "support", l: "Саппорт" },
+      { v: "financier", l: "Финансист" },
+      { v: "user", l: "Пользователь" },
+    ];
+    var lines = options.map(function (o, i) {
+      return i + 1 + " — " + o.l + " (" + o.v + ")";
+    });
+    var hint =
+      "Текущая роль: " +
+      staffRoleLabel(currentRole) +
+      "\n\nВыберите номер:\n" +
+      lines.join("\n");
+    var raw = window.prompt(hint, isStaffRoleValue(currentRole) ? String(currentRole) : "support");
+    if (raw == null) return null;
+    var n = parseInt(String(raw).trim(), 10);
+    if (n >= 1 && n <= options.length) return options[n - 1].v;
+    var t = String(raw).trim().toLowerCase();
+    if (ROLE_LABELS[t] || t === "user") return t === "admin" ? "owner" : t;
+    return null;
+  }
+
   function esc(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -217,23 +274,20 @@
       '<div class="admin-users-grid" role="list">' +
       usersCache
         .map(function (u) {
-          var roleLabel = u.role === "admin" ? "Админ" : "Пользователь";
+          var roleLabel = staffRoleLabel(u.role);
           var stLabel = u.blocked ? "Заблокирован" : "Активен";
           var stClass = u.blocked ? "admin-user-card__status--blocked" : "admin-user-card__status--ok";
           var lastActiveLabel = formatLastActive(u.last_active_at);
           var letter = String(u.name || "?").trim().charAt(0).toUpperCase() || "?";
-          var roleBtn =
-            u.role === "admin"
-              ? '<button type="button" class="admin-user-card__icon-btn admin-user-card__icon-btn--muted" data-demote="' +
-                u.id +
-                '" title="Снять админа" aria-label="Снять админа">' +
-                ICO.userDown +
-                "</button>"
-              : '<button type="button" class="admin-user-card__icon-btn admin-user-card__icon-btn--accent" data-promote="' +
-                u.id +
-                '" title="Админ" aria-label="Сделать админом">' +
-                ICO.crown +
-                "</button>";
+          var roleBtn = "";
+          if (typeof window.abAdminCanAssignRoles === "function" && window.abAdminCanAssignRoles()) {
+            roleBtn =
+              '<button type="button" class="admin-user-card__icon-btn admin-user-card__icon-btn--accent" data-role="' +
+              u.id +
+              '" title="Сменить роль" aria-label="Сменить роль">' +
+              ICO.crown +
+              "</button>";
+          }
           var blockBtn = u.blocked
             ? '<button type="button" class="admin-user-card__icon-btn admin-user-card__icon-btn--ok" data-unblock="' +
               u.id +
@@ -324,17 +378,18 @@
         }
       });
     });
-    el.querySelectorAll("[data-promote]").forEach(function (btn) {
+    el.querySelectorAll("[data-role]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var id = Number(btn.getAttribute("data-promote"));
-        patchUser(id, { role: "admin" });
-      });
-    });
-    el.querySelectorAll("[data-demote]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        if (!confirm("Снять права администратора?")) return;
-        var id = Number(btn.getAttribute("data-demote"));
-        patchUser(id, { role: "user" });
+        var id = Number(btn.getAttribute("data-role"));
+        var u = usersCache.find(function (x) {
+          return Number(x.id) === id;
+        });
+        var next = pickStaffRole(u ? u.role : "user");
+        if (!next) return;
+        if (next === "user" && u && isStaffRoleValue(u.role)) {
+          if (!confirm("Снять права персонала?")) return;
+        }
+        patchUser(id, { role: next });
       });
     });
     el.querySelectorAll("[data-block]").forEach(function (btn) {

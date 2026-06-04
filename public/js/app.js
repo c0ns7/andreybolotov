@@ -2,6 +2,20 @@
   "use strict";
 
   const STORAGE_KEY = "ab_auth_v2";
+  function isStaffRole(role, isStaff) {
+    if (isStaff === true) return true;
+    var r = String(role == null ? "" : role)
+      .trim()
+      .toLowerCase();
+    return (
+      r === "admin" ||
+      r === "owner" ||
+      r === "developer" ||
+      r === "moderator" ||
+      r === "support" ||
+      r === "financier"
+    );
+  }
   /** Пара localStorage+cookie: если удалили только cookie — считаем выходом */
   const PAIR_KEY = "ab_sess_pair";
   const SESS_COOKIE = "ab_sess";
@@ -126,6 +140,24 @@
   }
 
   syncRouteFromLocation();
+
+  /** Вход в /admin — полная перезагрузка, не клиентский роутер Next. */
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (normalizeAppPath(location.pathname) === "/admin") return;
+      var a = e.target && e.target.closest && e.target.closest("a[href^='/admin']");
+      if (!a) return;
+      if (e.defaultPrevented) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (typeof e.button === "number" && e.button !== 0) return;
+      var href = String(a.getAttribute("href") || "/admin");
+      e.preventDefault();
+      location.href = href;
+    },
+    true,
+  );
+
   var RESUME_PAYMENT_ORDER_KEY = "ab_resume_payment_order";
 
   function applyStoredAppearance() {
@@ -221,7 +253,7 @@
             });
           })
           .then(function (x) {
-            if (x.ok && x.d && x.d.user && x.d.user.role === "admin") return;
+            if (x.ok && x.d && x.d.user && isStaffRole(x.d.user.role, x.d.user.is_staff)) return;
             location.replace("/maintenance");
           })
           .catch(function () {
@@ -1321,7 +1353,7 @@
       }
     }
     if (adminWrap) {
-      const show = authed && s.role === "admin" && !accountBlocked;
+      const show = authed && isStaffRole(s.role) && !accountBlocked;
       adminWrap.hidden = !show;
     }
     if (authed) syncProfileTicketCount();

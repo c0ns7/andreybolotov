@@ -22,6 +22,7 @@ import {
   getAbParticipationHistoryCached,
   invalidateAbParticipationHistoryCache,
 } from "../../lib/ab-participation-history-cache";
+import { isFullAccessStaff, isStaffRole } from "../../lib/ab-admin-roles";
 import { loadAbSession } from "../../lib/ab-session";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { useAbSession } from "./AbSessionContext";
@@ -669,7 +670,7 @@ export default function AppBottomNav({
       setBlogUnread(0);
       return;
     }
-    if (!blogEnabled && String(cur.role || session?.role || "") !== "admin") {
+    if (!blogEnabled && !isFullAccessStaff(cur.role || session?.role)) {
       setBlogUnread(0);
       return;
     }
@@ -812,9 +813,10 @@ export default function AppBottomNav({
     return () => window.clearInterval(t);
   }, [pathname, showBlog, authVerified, refreshBlogUnread]);
 
-  const isAdmin = mounted && String(session?.role || "") === "admin";
+  const isStaff = mounted && isStaffRole(session?.role);
+  const isBlogAdmin = mounted && isFullAccessStaff(session?.role);
   const isBlogRoute = pathname === "/home/blog" || pathname.startsWith("/home/blog/");
-  const showBlogUnreadBadge = showBlog && (blogEnabled || isAdmin) && blogUnread > 0;
+  const showBlogUnreadBadge = showBlog && (blogEnabled || isBlogAdmin) && blogUnread > 0;
   const reserved = Array.isArray(tickets.reserved) ? tickets.reserved : [];
   const pending = Array.isArray(tickets.pending_review) ? tickets.pending_review : [];
   const confirmed = Array.isArray(tickets.confirmed) ? tickets.confirmed : [];
@@ -933,7 +935,7 @@ export default function AppBottomNav({
             </button>
           ) : null}
           {showBlog ? (
-            blogEnabled || isAdmin ? (
+            blogEnabled || isBlogAdmin ? (
               <Link
                 href="/home/blog"
                 className={
@@ -1142,20 +1144,20 @@ export default function AppBottomNav({
             </div>
 
             <div className="profile-modal__actions-row">
-              {isAdmin ? (
-                <Link
+              {isStaff ? (
+                <a
                   href="/admin"
                   className="profile-modal__icon-settings profile-modal__icon-settings--admin"
                   id="link-admin"
                   aria-label="Панель администратора"
                   title="Панель администратора"
-                  onClick={closeProfileModal}
+                  onClick={() => closeProfileModal()}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4z"></path>
                     <path d="M9.5 12.5 11 14l3.5-3.5"></path>
                   </svg>
-                </Link>
+                </a>
               ) : null}
               <button
                 type="button"

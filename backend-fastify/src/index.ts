@@ -48,7 +48,9 @@ import {
   updateUserNamePg,
   updateUserPasswordHashPg,
 } from "../../server/db-auth-pg.js";
-import { ensurePgRuntimeSchema, isPgConnectivityError } from "../../server/pg.js";
+import { ensurePgRuntimeSchema, isPgConnectivityError, pgPool } from "../../server/pg.js";
+import { attachProcessStabilityGuards } from "../../server/process-stability.js";
+import { isFullAccessStaff, isStaffRole, staffAdminAreas, staffRoleLabel } from "../../server/admin-roles.js";
 import { publicRaffleExtraFields } from "../../server/raffle-bank-cards.js";
 import { extForChatMime, parseChatAttachmentFromMessage } from "../../server/chat-attachments.js";
 import {
@@ -148,6 +150,19 @@ function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
   b.n += 1;
   return b.n <= max;
 }
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now - bucket.win > 120_000) rateLimitBuckets.delete(key);
+  }
+  for (const [key, entry] of paymentParticipationCache) {
+    if (now - entry.ts > 120_000) paymentParticipationCache.delete(key);
+  }
+  for (const [key, entry] of latestTableCache) {
+    if (now - entry.ts > 60_000) latestTableCache.delete(key);
+  }
+}, 60_000).unref?.();
 
 function getClientIp(request: FastifyRequest): string {
   const xfwd = String(request.headers["x-forwarded-for"] ?? "");
@@ -282,6 +297,8 @@ const app = Fastify({
   requestTimeout: 600_000,
   bodyLimit: MULTIPART_MAX_FILE_BYTES + 1024 * 1024,
 });
+
+attachProcessStabilityGuards(app.log);
 
 await app.register(cors, {
   origin: true,
@@ -653,11 +670,14 @@ app.get("/api/internal/cron/raffle-free-tickets-push-tick", async (request, repl
   return { ok: true, at: Date.now(), ...result };
 });
 
-app.get("/api/health", async () => {
-  return {
-    ok: true,
-    api: "fastify",
-  };
+app.get("/api/health", async (_request, reply) => {
+  try {
+    await pgPool.query("SELECT 1");
+    return { ok: true, api: "fastify", db: "ok", ts: Date.now() };
+  } catch (err) {
+    reply.code(503);
+    return { ok: false, api: "fastify", db: "error", ts: Date.now() };
+  }
 });
 
 app.get("/api/site/status", async (_request, reply) => {
@@ -1154,6 +1174,7 @@ app.get("/api/auth/me", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;
   const row = await getUserByIdPg(user.id);
+  const role = user.role ?? "user";
   return {
     user: {
       id: user.id,
@@ -1161,7 +1182,10 @@ app.get("/api/auth/me", async (request, reply) => {
       name: user.name,
       email: user.email != null && String(user.email).trim() ? String(user.email).trim().toLowerCase() : "",
       locality: row?.locality != null ? String(row.locality).trim() : "",
-      role: user.role ?? "user",
+      role,
+      role_label: staffRoleLabel(role),
+      is_staff: isStaffRole(role),
+      staff_areas: staffAdminAreas(role),
       blocked: Number(user.blocked) === 1,
       email_notify_chat: row ? Number(row.email_notify_chat ?? 1) !== 0 : true,
       email_notify_raffles: false,
@@ -1752,7 +1776,7 @@ app.post("/api/raffles/orders/:orderId/receipt", async (request, reply) => {
 
 async function requireBlogPublic(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply, user: { role?: string }) {
   const site = await getSiteSettings();
-  if (site.blog_enabled || String(user.role) === "admin") return true;
+  if (site.blog_enabled || isFullAccessStaff(user.role)) return true;
   void reply.code(403).send({ error: "Блог временно недоступен", code: "blog_disabled" });
   return false;
 }
@@ -1863,7 +1887,7 @@ app.delete("/api/blog/comments/:commentId", async (request, reply) => {
   const res = await deleteBlogCommentForUser(
     commentId,
     user.id,
-    String(user.role) === "admin",
+    isFullAccessStaff(user.role),
   );
   if (!res.ok) {
     const code = res.error === "Недостаточно прав" ? 403 : 404;
@@ -1917,36 +1941,55 @@ app.setNotFoundHandler(async (request, reply) => {
   });
 });
 
-try {
-  await ensurePgRuntimeSchema();
-  await app.listen({ host, port });
-  const wss = new WebSocketServer({ noServer: true });
-  attachWebSocket(wss);
-  app.server.on("upgrade", (request, socket, head) => {
-    const hostHdr = request.headers.host ?? "127.0.0.1";
+const BOOT_RETRIES = 5;
+
+async function bootApi(): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= BOOT_RETRIES; attempt++) {
     try {
-      const u = new URL(request.url ?? "/", `http://${hostHdr}`);
-      if (u.pathname === "/ws") {
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          wss.emit("connection", ws, request);
-        });
+      await ensurePgRuntimeSchema();
+      await app.listen({ host, port });
+      const wss = new WebSocketServer({ noServer: true });
+      attachWebSocket(wss);
+      app.server.on("upgrade", (request, socket, head) => {
+        const hostHdr = request.headers.host ?? "127.0.0.1";
+        try {
+          const u = new URL(request.url ?? "/", `http://${hostHdr}`);
+          if (u.pathname === "/ws") {
+            wss.handleUpgrade(request, socket, head, (ws) => {
+              wss.emit("connection", ws, request);
+            });
+          } else {
+            socket.destroy();
+          }
+        } catch {
+          socket.destroy();
+        }
+      });
+      const logHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+      app.log.info(`Fastify API on http://${logHost}:${port} (bind ${host}:${port})`);
+      app.log.info(`WebSocket ws://127.0.0.1:${port}/ws`);
+      if (String(process.env.DISABLE_RAFFLE_FREE_TICKETS_PUSH_INTERVAL ?? "").trim() !== "1") {
+        startRaffleFreeTicketsPushInterval((err) => app.log.error({ err }, "[push] tick failed"));
+        app.log.info("[push] Напоминания об остатке номерков: каждые 30 мин (остановка при < 25)");
       } else {
-        socket.destroy();
+        app.log.info("[push] Интервал остатка номерков отключён — CRON /api/internal/cron/raffle-free-tickets-push-tick");
       }
-    } catch {
-      socket.destroy();
+      return;
+    } catch (error) {
+      lastErr = error;
+      const retryable = isPgConnectivityError(error);
+      app.log.error({ err: error, attempt, retryable }, "API boot failed");
+      if (!retryable || attempt >= BOOT_RETRIES) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
-  });
-  const logHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-  app.log.info(`Fastify API on http://${logHost}:${port} (bind ${host}:${port})`);
-  app.log.info(`WebSocket ws://127.0.0.1:${port}/ws`);
-  if (String(process.env.DISABLE_RAFFLE_FREE_TICKETS_PUSH_INTERVAL ?? "").trim() !== "1") {
-    startRaffleFreeTicketsPushInterval();
-    app.log.info("[push] Напоминания об остатке номерков: каждые 30 мин (остановка при < 25)");
-  } else {
-    app.log.info("[push] Интервал остатка номерков отключён — CRON /api/internal/cron/raffle-free-tickets-push-tick");
   }
+  throw lastErr;
+}
+
+try {
+  await bootApi();
 } catch (error) {
-  app.log.error(error);
+  app.log.error({ err: error }, "API fatal boot error");
   process.exit(1);
 }

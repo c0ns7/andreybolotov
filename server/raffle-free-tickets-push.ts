@@ -48,7 +48,16 @@ export async function tickRaffleFreeTicketsPushReminders(): Promise<{
   return { sent: true, raffle_id: rid, free_count: freeCount, stopped: false };
 }
 
-export function startRaffleFreeTicketsPushInterval(): void {
-  void tickRaffleFreeTicketsPushReminders();
-  setInterval(() => void tickRaffleFreeTicketsPushReminders(), RAFFLE_FREE_TICKETS_PUSH_INTERVAL_MS);
+export function startRaffleFreeTicketsPushInterval(
+  onError?: (err: unknown) => void,
+): void {
+  const run = () => {
+    tickRaffleFreeTicketsPushReminders().catch((err) => {
+      if (onError) onError(err);
+      else console.error("[push] tick failed:", err instanceof Error ? err.message : err);
+    });
+  };
+  run();
+  const id = setInterval(run, RAFFLE_FREE_TICKETS_PUSH_INTERVAL_MS);
+  if (typeof id.unref === "function") id.unref();
 }
