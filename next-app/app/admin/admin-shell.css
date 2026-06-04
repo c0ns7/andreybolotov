@@ -34,11 +34,6 @@
     position: relative;
     --admin-rail-w-collapsed: 76px;
     --admin-rail-w-expanded: 272px;
-    --admin-rail-w: var(--admin-rail-w-collapsed);
-  }
-
-  #admin-root.is-rail-expanded {
-    --admin-rail-w: var(--admin-rail-w-expanded);
   }
 
   .admin-rail-backdrop {
@@ -67,7 +62,7 @@
     position: fixed;
     left: 0;
     top: 0;
-    width: var(--admin-rail-w);
+    width: var(--admin-rail-w-collapsed);
     height: 100vh;
     height: 100dvh;
     min-height: 100vh;
@@ -84,6 +79,13 @@
       transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 190;
     overflow: hidden;
+  }
+
+  .admin-rail.is-expanded {
+    width: var(--admin-rail-w-expanded);
+    box-shadow:
+      8px 0 36px rgba(15, 23, 42, 0.12),
+      4px 0 24px rgba(15, 23, 42, 0.06);
   }
 
   .admin-rail__head {
@@ -420,15 +422,12 @@
   .admin-workspace {
     flex: 1;
     min-width: 0;
-    margin-left: var(--admin-rail-w);
-    width: calc(100% - var(--admin-rail-w));
+    margin-left: var(--admin-rail-w-collapsed);
+    width: calc(100% - var(--admin-rail-w-collapsed));
     display: flex;
     flex-direction: column;
     min-height: 100dvh;
     background: transparent;
-    transition:
-      margin-left 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-      width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     box-sizing: border-box;
   }
 
@@ -503,20 +502,21 @@
   }
 
   @media (max-width: 899px) {
-    #admin-root:not([hidden]) {
-      --admin-rail-w: min(288px, 86vw);
-    }
-
     .admin-workspace {
       margin-left: 0;
       width: 100%;
     }
 
     .admin-rail {
+      width: min(288px, 86vw);
       height: 100vh;
       height: 100dvh;
       transform: translateX(-105%);
       box-shadow: 8px 0 32px rgba(15, 23, 42, 0.14);
+    }
+
+    .admin-rail.is-expanded {
+      width: min(288px, 86vw);
     }
 
     #admin-root.is-mobile-nav-open .admin-rail {
@@ -564,6 +564,10 @@
   }
 
   @media (min-width: 900px) {
+    .admin-rail.is-expanded {
+      z-index: 200;
+    }
+
     .admin-rail.is-expanded .admin-nav__text,
     .admin-rail.is-expanded .admin-rail__brand-text {
       opacity: 1;
