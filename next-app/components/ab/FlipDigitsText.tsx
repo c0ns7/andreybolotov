@@ -33,7 +33,13 @@ function FlipChar({ ch }: { ch: string }) {
   }, [ch, current]);
 
   if (!isDigit(ch)) {
-    return <span className="flip-digit flip-digit--static">{ch}</span>;
+    const staticClass =
+      "flip-digit flip-digit--static" + (ch === " " ? " flip-digit--space" : "");
+    return (
+      <span className={staticClass} aria-hidden="true">
+        {ch === " " ? "\u00a0" : ch}
+      </span>
+    );
   }
 
   return (
@@ -48,8 +54,9 @@ function FlipChar({ ch }: { ch: string }) {
 
 export default function FlipDigitsText({ text, className }: Props) {
   const value = String(text || "");
+  const rootClass = ["flip-digits-text", className].filter(Boolean).join(" ");
   return (
-    <span className={className} aria-label={value}>
+    <span className={rootClass} aria-label={value}>
       {value.split("").map((ch, idx) => (
         <FlipChar key={`f_${String(idx)}`} ch={ch} />
       ))}
