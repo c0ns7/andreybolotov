@@ -4454,12 +4454,32 @@
     var secondPriceEndAt = Math.floor(Number(r.second_price_end_at ?? r.cenopad_end_at ?? 0));
     var specialPromoBadge = "";
     if (hasSecondPrice) {
+      var secondPriceTimerText = "Скоро завершится";
+      if (secondPriceEndAt > nowTs) {
+        var spLeft = Math.max(0, secondPriceEndAt - nowTs);
+        var spSec = Math.floor(spLeft / 1000);
+        var spDays = Math.floor(spSec / 86400);
+        var spHours = Math.floor((spSec % 86400) / 3600);
+        var spMins = Math.floor((spSec % 3600) / 60);
+        var spSecs = spSec % 60;
+        secondPriceTimerText =
+          String(spDays) +
+          "д " +
+          String(spHours).padStart(2, "0") +
+          "ч " +
+          String(spMins).padStart(2, "0") +
+          "м " +
+          String(spSecs).padStart(2, "0") +
+          "с";
+      }
       specialPromoBadge =
         '<div class="raffle-card__promo-special">' +
         '<div class="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>' +
         '<div class="raffle-card__promo-special-timer" data-second-price-countdown="' +
         escapeHtml(String(secondPriceEndAt)) +
-        '"></div>' +
+        '">' +
+        escapeHtml(secondPriceTimerText) +
+        "</div>" +
         "</div>";
     }
     var priceInner = hasSecondPrice

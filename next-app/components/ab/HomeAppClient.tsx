@@ -17,7 +17,6 @@ import HomeBeginnerOnboarding from "./HomeBeginnerOnboarding";
 import HomeMusicToggle from "./HomeMusicToggle";
 import HomeHeaderOnline from "./HomeHeaderOnline";
 import AnimatedStatNumber from "./AnimatedStatNumber";
-import FlipDigitsText from "./FlipDigitsText";
 import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 import { formatStreamTimeLeft } from "../../lib/site-timezone";
@@ -68,6 +67,17 @@ function formatCountdown(targetMs: number, nowMs: number) {
   const secs = totalSec % 60;
   if (days > 0) return `${days}д ${hours.toString().padStart(2, "0")}ч ${mins.toString().padStart(2, "0")}м`;
   return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+/** Таймер на плашке «Акция специально для вас» — всегда с секундами, в одну строку. */
+function formatPromoSpecialCountdown(targetMs: number, nowMs: number) {
+  const left = Math.max(0, targetMs - nowMs);
+  const totalSec = Math.floor(left / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  return `${days}д ${hours.toString().padStart(2, "0")}ч ${mins.toString().padStart(2, "0")}м ${secs.toString().padStart(2, "0")}с`;
 }
 
 function streamCardPill(
@@ -421,7 +431,17 @@ export default function HomeAppClient() {
         Boolean(Number(r.live_stream_show_on_card) || r.live_stream_show_on_card === true) &&
         Number(r.live_stream_at || 0) > 0;
       const priceStartPill = secondPriceStartCardPill(r, Date.now() + serverTimeSkewMs);
-      return scheduled || closedStream || activeStreamPill || Boolean(priceStartPill);
+      const now = Date.now() + serverTimeSkewMs;
+      const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? r.price_rub ?? 0)));
+      const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
+      const secondEnd = Math.floor(
+        Number((r as { second_price_end_at?: number; cenopad_end_at?: number }).second_price_end_at ??
+          (r as { cenopad_end_at?: number }).cenopad_end_at ??
+          0),
+      );
+      const promoSpecialTimer =
+        basePrice > currentPrice && currentPrice > 0 && secondEnd > now;
+      return scheduled || closedStream || activeStreamPill || Boolean(priceStartPill) || promoSpecialTimer;
     });
     if (!needsTick) return;
     const t = window.setInterval(() => setNowTs(Date.now() + serverTimeSkewMs), 1000);
@@ -609,7 +629,7 @@ export default function HomeAppClient() {
                 );
                 const secondPriceCountdown =
                   hasSecondPriceActive && secondPriceEndAt > syncedNow
-                    ? formatCountdown(secondPriceEndAt, syncedNow)
+                    ? formatPromoSpecialCountdown(secondPriceEndAt, syncedNow)
                     : "";
                 const go = () => {
                   if (st === "active" && salesOpen) {
@@ -660,7 +680,7 @@ export default function HomeAppClient() {
                         <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
                           <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>
                           <div className="raffle-card__promo-special-timer">
-                            {secondPriceCountdown ? <FlipDigitsText text={secondPriceCountdown} /> : "Скоро завершится"}
+                            {secondPriceCountdown || "Скоро завершится"}
                           </div>
                         </div>
                       ) : null}
@@ -668,9 +688,7 @@ export default function HomeAppClient() {
                         <RaffleCardShutter variant="scheduled">
                           <p className="raffle-card__shutter-line">До старта акции</p>
                           {publicStartCountdown ? (
-                            <p className="raffle-card__shutter-timer">
-                              <FlipDigitsText text={publicStartCountdown} />
-                            </p>
+                            <p className="raffle-card__shutter-timer">{publicStartCountdown}</p>
                           ) : null}
                         </RaffleCardShutter>
                       ) : null}
@@ -697,9 +715,7 @@ export default function HomeAppClient() {
                               aria-label={"До смены цены " + priceStartPill.time}
                             >
                               <span className="raffle-card__stream-pill-kicker">до смены цены</span>
-                              <span className="raffle-card__stream-pill-time">
-                                <FlipDigitsText text={priceStartPill.time} />
-                              </span>
+                              <span className="raffle-card__stream-pill-time">{priceStartPill.time}</span>
                             </div>
                           ) : null}
                           {streamPill ? (
@@ -712,16 +728,12 @@ export default function HomeAppClient() {
                               {streamPill.live ? (
                                 <>
                                   <span className="raffle-card__stream-pill-dot" aria-hidden="true" />
-                                  <span className="raffle-card__stream-pill-time">
-                                    <FlipDigitsText text={streamPill.time} />
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="raffle-card__stream-pill-kicker">до эфира</span>
-                                  <span className="raffle-card__stream-pill-time">
-                                    <FlipDigitsText text={streamPill.time} />
-                                  </span>
+                              <span className="raffle-card__stream-pill-time">{streamPill.time}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="raffle-card__stream-pill-kicker">до эфира</span>
+                              <span className="raffle-card__stream-pill-time">{streamPill.time}</span>
                                 </>
                               )}
                             </div>
@@ -734,9 +746,7 @@ export default function HomeAppClient() {
                             <>
                               <p className="raffle-card__shutter-line">До эфира</p>
                               {streamCountdown ? (
-                              <p className="raffle-card__shutter-timer">
-                                <FlipDigitsText text={streamCountdown} />
-                              </p>
+                              <p className="raffle-card__shutter-timer">{streamCountdown}</p>
                               ) : null}
                             </>
                           ) : streamState === "live" ? (

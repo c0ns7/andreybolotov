@@ -28,7 +28,10 @@ function FlipChar({ ch }: { ch: string }) {
     setPrev(current);
     setCurrent(ch);
     setAnimating(true);
-    const t = window.setTimeout(() => setAnimating(false), 220);
+    const t = window.setTimeout(() => {
+      setAnimating(false);
+      setPrev(ch);
+    }, 220);
     return () => window.clearTimeout(t);
   }, [ch, current]);
 
@@ -38,6 +41,14 @@ function FlipChar({ ch }: { ch: string }) {
     return (
       <span className={staticClass} aria-hidden="true">
         {ch === " " ? "\u00a0" : ch}
+      </span>
+    );
+  }
+
+  if (!animating && prev === current) {
+    return (
+      <span className="flip-digit" aria-hidden="true">
+        <span className="flip-digit__item">{current}</span>
       </span>
     );
   }
