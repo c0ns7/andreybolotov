@@ -194,32 +194,17 @@ export default function AdminMarkup() {
                 Главная
               </h1>
               <p id="admin-page-sub" className="admin-sub">
-                Сводка по сайту без персональных данных
+                Выберите раздел в меню
               </p>
             </div>
           </header>
 
           <div className="admin-workspace__body">
       <div id="admin-home-app" className="admin-home-app" hidden>
-        <section className="admin-home-hero" aria-labelledby="admin-home-hero-title">
-          <div className="admin-home-hero__icon" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18"></path>
-              <path d="M7 16l4-4 4 4 5-8"></path>
-            </svg>
-          </div>
-          <div className="admin-home-hero__text">
-            <h2 id="admin-home-hero-title" className="admin-home-hero__title">Панель управления</h2>
-            <p className="admin-home-hero__lead">
-              Краткая сводка без имён, телефонов и переписок — удобно, если админка открыта на эфире.
-              Подробные разделы открывайте вручную из меню слева.
-            </p>
-          </div>
+        <section className="admin-home-stub" aria-labelledby="admin-home-stub-title">
+          <h2 id="admin-home-stub-title" className="admin-home-stub__title">Админ-панель</h2>
+          <p className="admin-home-stub__text">Выберите нужный раздел в меню слева.</p>
         </section>
-        <div id="admin-home-metrics" className="admin-home-metrics" aria-live="polite"></div>
-        <div id="admin-home-site" className="admin-home-site" hidden aria-live="polite"></div>
-        <nav id="admin-home-quick" className="admin-home-quick" aria-label="Быстрые разделы"></nav>
-        <p id="admin-home-status" className="admin-home-status" role="status" hidden></p>
       </div>
 
       <div id="admin-app" className="admin-app" hidden>
