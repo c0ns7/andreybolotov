@@ -3574,3 +3574,119 @@ body.admin-pay-lightbox-open {
   color: #b45309;
   border: 1px solid #fcd34d;
 }
+
+.admin-raffle-btn--stats {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+.admin-raffle-btn--stats:hover:not(:disabled) {
+  background: #e0f2fe;
+}
+
+.admin-raffle-modal--stats {
+  max-width: 420px;
+}
+
+.admin-raffle-stats__loading,
+.admin-raffle-stats__error {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+.admin-raffle-stats__error {
+  color: #b91c1c;
+}
+
+.admin-raffle-stats__bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+  margin-bottom: 1rem;
+}
+.admin-raffle-stats__bar-occupied {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #4f46e5);
+  min-width: 0;
+  transition: width 0.2s ease;
+}
+
+.admin-raffle-stats__grid {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-raffle-stats__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 0.86rem;
+}
+.admin-raffle-stats__row--total {
+  background: #fff;
+  border-color: #cbd5e1;
+  font-weight: 700;
+}
+.admin-raffle-stats__row--free .admin-raffle-stats__value {
+  color: #047857;
+}
+.admin-raffle-stats__row--occupied .admin-raffle-stats__value {
+  color: #4338ca;
+}
+.admin-raffle-stats__row--pending .admin-raffle-stats__value {
+  color: #b45309;
+}
+.admin-raffle-stats__row--reserved .admin-raffle-stats__value {
+  color: #0369a1;
+}
+.admin-raffle-stats__row--rejected .admin-raffle-stats__value {
+  color: #b91c1c;
+}
+.admin-raffle-stats__row--sub {
+  margin-left: 0.75rem;
+  background: #fff;
+  border-style: dashed;
+  font-size: 0.82rem;
+}
+
+.admin-raffle-stats__label {
+  color: #334155;
+}
+.admin-raffle-stats__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+}
+.admin-raffle-stats__pct {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: right;
+  min-width: 3.2rem;
+}
+
+.admin-raffle-stats__note {
+  margin: 0.85rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.admin-raffle-stats__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}

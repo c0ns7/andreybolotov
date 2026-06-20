@@ -70,6 +70,7 @@ import {
   confirmOrderByAdmin,
   getOrderById,
   getTicketNumbersForOrder,
+  getAdminRaffleTicketStats,
   isRaffleTicketBlocked,
   listGloballyFreeTicketNumbers,
   listReceiptHistoryPriorForPendingOrder,
@@ -1738,6 +1739,19 @@ adminSubApp.delete("/raffles/:id", async (c) => {
   await deleteRaffle(id);
   broadcastRafflesFeedUpdated();
   return c.json({ ok: true });
+});
+
+adminSubApp.get("/raffles/:id/ticket-stats", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = await getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  const stats = await getAdminRaffleTicketStats(id);
+  if (!stats) return c.json({ error: "Акция не найдена" }, 404);
+  c.header("Cache-Control", "no-store");
+  return c.json({ stats, raffle_title: String(raffle.title || "") });
 });
 
 adminSubApp.get("/raffles/:id/participants", async (c) => {

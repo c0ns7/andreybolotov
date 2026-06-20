@@ -45,12 +45,50 @@ function formatSearchPhone(raw: string): string {
   return out;
 }
 
-function buildRangeTabs(ticketCount: number): Array<{ key: string; label: string; from: number; to: number }> {
-  const tabs = [{ key: "all", label: "Общий", from: 1, to: Math.max(1, ticketCount) }];
-  const size = 500;
-  for (let from = 1; from <= ticketCount; from += size) {
-    const to = Math.min(ticketCount, from + size - 1);
-    tabs.push({ key: `${from}-${to}`, label: `${from}-${to}`, from, to });
+function buildTableRangeTabs(meta: {
+  ticketCount: number;
+  ticketStart?: number;
+  ticketEnd?: number;
+  sequentialWindowFrom?: number | null;
+  sequentialWindowTo?: number | null;
+}): Array<{ key: string; label: string; from: number; to: number }> {
+  const start = Math.max(1, Math.floor(Number(meta.ticketStart) || 1));
+  const endRaw = Math.floor(Number(meta.ticketEnd) || 0);
+  const count = Math.max(0, Math.floor(Number(meta.ticketCount) || 0));
+  const end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
+
+  const hasSequentialWindow =
+    meta.sequentialWindowFrom != null &&
+    meta.sequentialWindowTo != null &&
+    Number.isFinite(Number(meta.sequentialWindowFrom)) &&
+    Number.isFinite(Number(meta.sequentialWindowTo));
+
+  let rangeStart = start;
+  let rangeEnd = end;
+  if (hasSequentialWindow) {
+    rangeStart = Math.max(start, Math.floor(Number(meta.sequentialWindowFrom)));
+    rangeEnd = Math.min(end, Math.max(rangeStart, Math.floor(Number(meta.sequentialWindowTo))));
+  }
+
+  if (rangeEnd < rangeStart) {
+    return [{ key: String(rangeStart), label: String(rangeStart), from: rangeStart, to: rangeStart }];
+  }
+
+  const tabs: Array<{ key: string; label: string; from: number; to: number }> = [];
+  const chunk = 500;
+
+  if (hasSequentialWindow) {
+    for (let from = rangeStart; from <= rangeEnd; from += chunk) {
+      const to = Math.min(from + chunk - 1, rangeEnd);
+      tabs.push({ key: `${from}-${to}`, label: `${from}–${to}`, from, to });
+    }
+    return tabs;
+  }
+
+  tabs.push({ key: "all", label: "Общий", from: rangeStart, to: rangeEnd });
+  for (let from = rangeStart; from <= rangeEnd; from += chunk) {
+    const to = Math.min(from + chunk - 1, rangeEnd);
+    tabs.push({ key: `${from}-${to}`, label: `${from}–${to}`, from, to });
   }
   return tabs;
 }
@@ -65,6 +103,10 @@ export default function PublicTableClient() {
   const [cards, setCards] = useState<PublicTicketCard[]>([]);
   const [raffleTitle, setRaffleTitle] = useState("");
   const [ticketCount, setTicketCount] = useState(0);
+  const [ticketStart, setTicketStart] = useState(1);
+  const [ticketEnd, setTicketEnd] = useState(0);
+  const [sequentialWindowFrom, setSequentialWindowFrom] = useState<number | null>(null);
+  const [sequentialWindowTo, setSequentialWindowTo] = useState<number | null>(null);
   const [hideTicketStats, setHideTicketStats] = useState(false);
   const [raffleId, setRaffleId] = useState(0);
   const [viewersCount, setViewersCount] = useState(0);
@@ -94,7 +136,27 @@ export default function PublicTableClient() {
       }
       const rid = Math.max(0, Math.floor(Number(raffle.id) || 0));
       const count = Math.max(0, Math.floor(Number(raffle.ticket_count) || 0));
+      const start = Math.max(1, Math.floor(Number(raffle.ticket_start_number) || 1));
+      const endRaw = Math.floor(Number(raffle.ticket_end_number) || 0);
+      const end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
+      const seqFromRaw = raffle.sequential_window_from;
+      const seqToRaw = raffle.sequential_window_to;
+      const seqFrom =
+        seqFromRaw != null && Number.isFinite(Number(seqFromRaw)) ? Math.floor(Number(seqFromRaw)) : null;
+      const seqTo = seqToRaw != null && Number.isFinite(Number(seqToRaw)) ? Math.floor(Number(seqToRaw)) : null;
       setTicketCount(count);
+      setTicketStart(start);
+      setTicketEnd(end);
+      setSequentialWindowFrom(seqFrom);
+      setSequentialWindowTo(seqTo);
+      const tabs = buildTableRangeTabs({
+        ticketCount: count,
+        ticketStart: start,
+        ticketEnd: end,
+        sequentialWindowFrom: seqFrom,
+        sequentialWindowTo: seqTo,
+      });
+      setActiveRangeKey(tabs[0]?.key || "all");
       setHideTicketStats(Boolean(Number(raffle.hide_ticket_stats) || raffle.hide_ticket_stats === true));
       setRaffleId(rid);
       setRaffleTitle(String(raffle.title || "Акция"));
@@ -163,7 +225,17 @@ export default function PublicTableClient() {
     };
   }, []);
 
-  const rangeTabs = useMemo(() => buildRangeTabs(ticketCount), [ticketCount]);
+  const rangeTabs = useMemo(
+    () =>
+      buildTableRangeTabs({
+        ticketCount,
+        ticketStart,
+        ticketEnd,
+        sequentialWindowFrom,
+        sequentialWindowTo,
+      }),
+    [ticketCount, ticketStart, ticketEnd, sequentialWindowFrom, sequentialWindowTo],
+  );
   const activeRange = useMemo(
     () => rangeTabs.find((x) => x.key === activeRangeKey) || rangeTabs[0] || { key: "all", label: "Общий", from: 1, to: 999999 },
     [rangeTabs, activeRangeKey],
@@ -296,6 +368,7 @@ export default function PublicTableClient() {
               </label>
             </div>
           ) : null}
+          {rangeTabs.length > 1 ? (
           <div className="table-page__ranges" role="tablist" aria-label="Диапазоны номерков">
             {rangeTabs.map((tab) => (
               <button
@@ -308,6 +381,7 @@ export default function PublicTableClient() {
               </button>
             ))}
           </div>
+          ) : null}
         </header>
 
         <div className="table-page__cards">

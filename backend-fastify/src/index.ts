@@ -879,8 +879,8 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   }
 
   const sequentialWindow = await getSequentialTicketWindow(latest);
-  const tableFrom = sequentialWindow?.from ?? 1;
-  const tableTo = sequentialWindow?.to ?? ticketCount;
+  const tableFrom = sequentialWindow?.from ?? ticketStart;
+  const tableTo = sequentialWindow?.to ?? ticketEnd;
 
   const tableRows: Array<{ n: number; status: "free" | "taken" | "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null }> = [];
   for (let n = tableFrom; n <= tableTo; n++) {
@@ -991,8 +991,8 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
   }
 
   const sequentialWindow = await getSequentialTicketWindow(latest);
-  const tableFrom = sequentialWindow?.from ?? 1;
-  const tableTo = sequentialWindow?.to ?? ticketCount;
+  const tableFrom = sequentialWindow?.from ?? ticketStart;
+  const tableTo = sequentialWindow?.to ?? ticketEnd;
 
   const tableRows: Array<{ n: number; status: "free" | "taken"; phone: string | null }> = [];
   for (let n = tableFrom; n <= tableTo; n++) {

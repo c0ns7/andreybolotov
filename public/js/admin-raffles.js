@@ -430,6 +430,8 @@
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
     bell:
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>',
+    stats:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
   };
 
   function bankCardRowHtml(row) {
@@ -564,6 +566,10 @@
   const formTitle = document.getElementById("modal-raffle-form-title");
   const form = document.getElementById("form-raffle");
   const modalParticipants = document.getElementById("modal-raffle-participants");
+  const modalStats = document.getElementById("modal-raffle-stats");
+  const statsContent = document.getElementById("raffle-stats-content");
+  const statsSubtitle = document.getElementById("modal-raffle-stats-subtitle");
+  let statsRaffleId = null;
   const participantsSearch = document.getElementById("raffle-participants-search");
   const participantsList = document.getElementById("raffle-participants-list");
 
@@ -795,6 +801,11 @@
       '">' +
       BTN_ICO.users +
       "<span>Участники</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-btn--stats admin-raffle-stats-btn" data-id="' +
+      r.id +
+      '">' +
+      BTN_ICO.stats +
+      "<span>Статистика</span></button>" +
       '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-raffle-edit" data-id="' +
       r.id +
       '">' +
@@ -839,6 +850,109 @@
     );
   }
 
+  function formatStatNum(n) {
+    return String(Math.max(0, Math.floor(Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+
+  function statPct(part, total) {
+    if (!total) return "0%";
+    var p = (Math.max(0, Number(part) || 0) / total) * 100;
+    return (Math.round(p * 10) / 10).toFixed(1).replace(/\.0$/, "") + "%";
+  }
+
+  function renderRaffleStatsHtml(stats) {
+    var total = Math.max(0, Number(stats.ticket_count) || 0);
+    var free = Math.max(0, Number(stats.free_count) || 0);
+    var occupied = Math.max(0, Number(stats.occupied_count) || 0);
+    var confirmed = Math.max(0, Number(stats.confirmed_count) || 0);
+    var pending = Math.max(0, Number(stats.pending_review_count) || 0);
+    var reserved = Math.max(0, Number(stats.reserved_count) || 0);
+    var preassigned = Math.max(0, Number(stats.preassigned_count) || 0);
+    var rejectedTickets = Math.max(0, Number(stats.rejected_tickets) || 0);
+    var rejectedOrders = Math.max(0, Number(stats.rejected_orders) || 0);
+    var occupiedPct = total ? Math.min(100, Math.max(0, (occupied / total) * 100)) : 0;
+
+    function row(label, value, pct, cls) {
+      return (
+        '<li class="admin-raffle-stats__row' +
+        (cls ? " " + cls : "") +
+        '"><span class="admin-raffle-stats__label">' +
+        esc(label) +
+        '</span><span class="admin-raffle-stats__value">' +
+        formatStatNum(value) +
+        '</span><span class="admin-raffle-stats__pct">' +
+        esc(pct) +
+        "</span></li>"
+      );
+    }
+
+    return (
+      '<div class="admin-raffle-stats__bar" aria-hidden="true"><span class="admin-raffle-stats__bar-occupied" style="width:' +
+      String(occupiedPct) +
+      '%"></span></div>' +
+      '<ul class="admin-raffle-stats__grid">' +
+      row("Всего номерков", total, "100%", "admin-raffle-stats__row--total") +
+      row("Свободно", free, statPct(free, total), "admin-raffle-stats__row--free") +
+      row("Занято", occupied, statPct(occupied, total), "admin-raffle-stats__row--occupied") +
+      row("· Подтверждено", confirmed, statPct(confirmed, total), "admin-raffle-stats__row--sub") +
+      row("· На проверке", pending, statPct(pending, total), "admin-raffle-stats__row--sub admin-raffle-stats__row--pending") +
+      row("· В брони", reserved, statPct(reserved, total), "admin-raffle-stats__row--sub admin-raffle-stats__row--reserved") +
+      row("· До регистрации", preassigned, statPct(preassigned, total), "admin-raffle-stats__row--sub") +
+      row("Отклонено", rejectedTickets, statPct(rejectedTickets, total), "admin-raffle-stats__row--rejected") +
+      "</ul>" +
+      '<p class="admin-raffle-stats__note">Отклонено — номерки из полностью отклонённых заявок (' +
+      formatStatNum(rejectedOrders) +
+      " заявок); эти номерки снова свободны.</p>"
+    );
+  }
+
+  async function loadRaffleStats(raffleId) {
+    if (!statsContent) return;
+    statsContent.innerHTML = '<p class="admin-raffle-stats__loading">Загрузка…</p>';
+    var data = await apiJson("/api/admin/raffles/" + String(raffleId) + "/ticket-stats", {
+      cache: "no-store",
+      headers: authHeaders(),
+    });
+    if (statsSubtitle && data.raffle_title) {
+      statsSubtitle.textContent = String(data.raffle_title);
+    }
+    if (!data.stats) throw new Error("Нет данных");
+    statsContent.innerHTML = renderRaffleStatsHtml(data.stats);
+  }
+
+  async function openRaffleStats(raffleId) {
+    if (!modalStats || !statsContent) return;
+    statsRaffleId = raffleId;
+    if (statsSubtitle) {
+      var r = rafflesCache.find(function (x) {
+        return Number(x.id) === Number(raffleId);
+      });
+      statsSubtitle.textContent = r ? String(r.title || "") : "";
+    }
+    modalStats.classList.add("is-open");
+    modalStats.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    try {
+      await loadRaffleStats(raffleId);
+    } catch (e) {
+      statsContent.innerHTML =
+        '<p class="admin-raffle-stats__error">' + esc((e && e.message) || "Не удалось загрузить статистику") + "</p>";
+    }
+  }
+
+  function closeRaffleStats() {
+    if (!modalStats) return;
+    modalStats.classList.remove("is-open");
+    modalStats.setAttribute("aria-hidden", "true");
+    if (
+      (!modalParticipants || !modalParticipants.classList.contains("is-open")) &&
+      (!modalForm || !modalForm.classList.contains("is-open"))
+    ) {
+      document.body.style.overflow = "";
+    }
+    statsRaffleId = null;
+  }
+
   function bindRaffleListButtons() {
     if (!listEl) return;
     listEl.querySelectorAll(".admin-raffle-edit").forEach(function (btn) {
@@ -851,6 +965,12 @@
       btn.addEventListener("click", function () {
         const id = Number(btn.getAttribute("data-id"));
         openParticipants(id);
+      });
+    });
+    listEl.querySelectorAll(".admin-raffle-stats-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const id = Number(btn.getAttribute("data-id"));
+        openRaffleStats(id);
       });
     });
     listEl.querySelectorAll(".admin-raffle-pause").forEach(function (btn) {
@@ -1634,7 +1754,9 @@
     if (!modalParticipants) return;
     modalParticipants.classList.remove("is-open");
     modalParticipants.setAttribute("aria-hidden", "true");
-    document.body.style.overflow = "";
+    if (!modalStats || !modalStats.classList.contains("is-open")) {
+      document.body.style.overflow = "";
+    }
     resetSingleAssignForm();
     if (participantsSearchTimer) {
       clearTimeout(participantsSearchTimer);
@@ -1747,6 +1869,19 @@
   document
     .getElementById("modal-raffle-participants-close")
     ?.addEventListener("click", closeParticipants);
+  document.getElementById("modal-raffle-stats-close")?.addEventListener("click", closeRaffleStats);
+  document.getElementById("modal-raffle-stats-refresh")?.addEventListener("click", function () {
+    if (!statsRaffleId) return;
+    void loadRaffleStats(statsRaffleId).catch(function (e) {
+      if (statsContent) {
+        statsContent.innerHTML =
+          '<p class="admin-raffle-stats__error">' + esc((e && e.message) || "Не удалось загрузить статистику") + "</p>";
+      }
+    });
+  });
+  modalStats?.addEventListener("click", function (e) {
+    if (e.target === modalStats) closeRaffleStats();
+  });
   document.getElementById("modal-raffle-buyer-close")?.addEventListener("click", closeBuyerModal);
 
   document.getElementById("raffle-wholesalers-list")?.addEventListener("click", function (e) {

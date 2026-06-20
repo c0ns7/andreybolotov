@@ -3417,6 +3417,72 @@ export async function getRaffleOccupiedCount(raffleId: number): Promise<number> 
   return Math.max(0, Number((holds && holds.c) || 0) + Number((pre && pre.c) || 0));
 }
 
+export type AdminRaffleTicketStats = {
+  ticket_count: number;
+  free_count: number;
+  occupied_count: number;
+  confirmed_count: number;
+  pending_review_count: number;
+  reserved_count: number;
+  preassigned_count: number;
+  rejected_tickets: number;
+  rejected_orders: number;
+};
+
+/** Сводка по номеркам акции для админки. */
+export async function getAdminRaffleTicketStats(raffleId: number): Promise<AdminRaffleTicketStats | null> {
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return null;
+  await cleanupExpiredRaffleOrders();
+  const now = Date.now();
+  const ticketCount = Math.max(0, Math.floor(Number(raffle.ticket_count) || 0));
+
+  const holdRow = await pgGet<{
+    confirmed_count?: number;
+    pending_review_count?: number;
+    reserved_count?: number;
+  }>(
+    `SELECT
+       SUM(CASE WHEN o.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed_count,
+       SUM(CASE WHEN o.status = 'pending_review' THEN 1 ELSE 0 END) AS pending_review_count,
+       SUM(CASE WHEN o.status = 'reserved' AND o.reserved_until > ? THEN 1 ELSE 0 END) AS reserved_count
+     FROM raffle_ticket_holds h
+     INNER JOIN raffle_orders o ON o.id = h.order_id
+     WHERE h.raffle_id = ?`,
+    [now, raffleId],
+  );
+
+  const preRow = await pgGet<{ c?: number }>(
+    `SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`,
+    [raffleId],
+  );
+  const rejectedRow = await pgGet<{ rejected_tickets?: number; rejected_orders?: number }>(
+    `SELECT COALESCE(SUM(ticket_count), 0) AS rejected_tickets, COUNT(*) AS rejected_orders
+       FROM raffle_orders
+       WHERE raffle_id = ? AND status = 'rejected'`,
+    [raffleId],
+  );
+
+  const confirmed_count = Math.max(0, Number(holdRow?.confirmed_count ?? 0));
+  const pending_review_count = Math.max(0, Number(holdRow?.pending_review_count ?? 0));
+  const reserved_count = Math.max(0, Number(holdRow?.reserved_count ?? 0));
+  const preassigned_count = Math.max(0, Number(preRow?.c ?? 0));
+  const occupied_count = confirmed_count + pending_review_count + reserved_count + preassigned_count;
+  const free_count = Math.max(0, ticketCount - occupied_count);
+
+  return {
+    ticket_count: ticketCount,
+    free_count,
+    occupied_count,
+    confirmed_count,
+    pending_review_count,
+    reserved_count,
+    preassigned_count,
+    rejected_tickets: Math.max(0, Number(rejectedRow?.rejected_tickets ?? 0)),
+    rejected_orders: Math.max(0, Number(rejectedRow?.rejected_orders ?? 0)),
+  };
+}
+
 export function buildStaffTicketAssignmentChatBody(
   raffleTitle: string,
   ticketNumbers: number[],

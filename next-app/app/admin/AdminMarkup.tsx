@@ -1421,6 +1421,40 @@ export default function AdminMarkup() {
       </div>
     </div>
 
+    <div id="modal-raffle-stats" className="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-raffle-stats-title">
+      <div className="modal admin-raffle-modal admin-raffle-modal--stats">
+        <div className="modal__top admin-raffle-modal__top">
+          <span className="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div className="admin-raffle-modal__title-wrap">
+            <span className="admin-raffle-modal__title-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+            </span>
+            <h2 id="modal-raffle-stats-title" className="modal__top-title admin-raffle-modal__title">Статистика номерков</h2>
+            <p id="modal-raffle-stats-subtitle" className="admin-raffle-modal__subtitle"></p>
+          </div>
+          <button type="button" className="modal__close admin-raffle-modal__close" id="modal-raffle-stats-close" aria-label="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div className="modal__body admin-raffle-modal__body">
+          <div id="raffle-stats-content" className="admin-raffle-stats" role="status">
+            <p className="admin-raffle-stats__loading">Загрузка…</p>
+          </div>
+          <div className="admin-raffle-stats__foot">
+            <button type="button" className="btn btn--secondary" id="modal-raffle-stats-refresh">
+              Обновить
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-raffle-participants" className="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-raffle-participants-title">
       <div className="modal admin-raffle-modal admin-raffle-modal--participants">
         <div className="modal__top admin-raffle-modal__top">
