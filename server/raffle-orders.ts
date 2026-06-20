@@ -36,6 +36,60 @@ export function getRaffleMaxSelect(raffle: { max_tickets_per_user?: number | nul
   return Math.min(n, 500);
 }
 
+/** 0 — без общего лимита; иначе максимум номерков на аккаунт за всю акцию. */
+export function getRaffleMaxTotalPerUser(
+  raffle: { max_tickets_per_user_total?: number | null } | null | undefined,
+): number {
+  const n = Math.floor(Number(raffle?.max_tickets_per_user_total ?? 0));
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(n, 5000);
+}
+
+/** Активные номерки пользователя в акции: бронь (не истекла), проверка, подтверждено. */
+export async function countUserActiveTicketsInRaffle(
+  raffleId: number,
+  userId: number,
+  client?: PoolClient,
+): Promise<number> {
+  await cleanupExpiredRaffleOrders(client);
+  const now = Date.now();
+  const row = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.user_id = ?
+         AND (
+           o.status IN ('confirmed', 'pending_review')
+           OR (o.status = 'reserved' AND o.reserved_until > ?)
+         )`,
+    [raffleId, userId, now],
+    client,
+  );
+  return Math.max(0, Number(row?.c ?? 0));
+}
+
+async function assertUserRaffleTotalTicketLimit(
+  raffle: { max_tickets_per_user_total?: number | null },
+  raffleId: number,
+  userId: number,
+  addingCount: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const maxTotal = getRaffleMaxTotalPerUser(raffle);
+  if (maxTotal <= 0 || addingCount < 1) return { ok: true };
+  const current = await countUserActiveTicketsInRaffle(raffleId, userId);
+  if (current + addingCount > maxTotal) {
+    const remaining = Math.max(0, maxTotal - current);
+    return {
+      ok: false,
+      error:
+        remaining > 0
+          ? `За эту акцию можно не больше ${maxTotal} номерков на аккаунт. У вас уже ${current}, можно добавить ещё ${remaining}.`
+          : `Достигнут лимит: не больше ${maxTotal} номерков на аккаунт за эту акцию.`,
+    };
+  }
+  return { ok: true };
+}
+
 export async function countOccupiedTicketsInRange(
   raffleId: number,
   from: number,
@@ -916,6 +970,9 @@ export async function createReservation(
           : "Не удалось забронировать номерки. Попробуйте снова.",
     };
   }
+
+  const totalCheck = await assertUserRaffleTotalTicketLimit(raffle, raffleId, userId, toReserve.length);
+  if (!totalCheck.ok) return totalCheck;
 
   const reservedUntil = now + RAFFLE_RESERVE_MS;
   const cenopadApplied = isRaffleCenopadActive(raffle) ? 1 : 0;
@@ -2587,9 +2644,9 @@ async function preassignmentExactExists(
 }
 
 /**
- * Одна строка — один телефон; желаемый номерок = start + индекс строки среди непустых.
+ * Одна строка — один номерок; желаемый номерок = start + индекс строки среди непустых.
  * Если занят — берём следующий свободный до max.
- * Если у телефона уже есть номерок в акции или он уже получил номер в этой загрузке — строка пропускается (без второго номерка).
+ * Повторы телефона в списке учитываются: две строки с одним номером — два номерка.
  */
 export async function adminBulkAssignPhoneLinesToRaffle(
   raffleId: number,
@@ -2626,31 +2683,8 @@ export async function adminBulkAssignPhoneLinesToRaffle(
   /** Номерки, выбранные в этой загрузке (пока не в БД). */
   const virt = new Set<number>();
   const valid: Entry[] = [];
-  /** Первое вхождение телефона в файле — дальше строки с тем же номером пропускаем. */
-  const seenPhoneInFile = new Set<string>();
 
   for (const p of parsed) {
-    if (seenPhoneInFile.has(p.phone)) {
-      skipped.push({
-        line: p.line,
-        phone: p.phone,
-        ticket_number: p.idealFirst,
-        reason: "Повтор телефона в списке — одному номеру один номерок за загрузку",
-      });
-      continue;
-    }
-    seenPhoneInFile.add(p.phone);
-
-    if (await phoneHasAssignmentInRaffle(raffleId, p.phone)) {
-      skipped.push({
-        line: p.line,
-        phone: p.phone,
-        ticket_number: p.idealFirst,
-        reason: "Уже есть номерок в этой акции",
-      });
-      continue;
-    }
-
     let found: number | null = null;
     for (let cand = p.idealFirst; cand <= ticketEnd; cand++) {
       if (!virt.has(cand) && !(await isRaffleTicketBlocked(raffleId, cand))) {
@@ -3208,8 +3242,10 @@ export async function addTicketsToReservedOrder(
   if (requested.length === 0) return { ok: false, error: "Укажите новые номера" };
   const maxSelect = getRaffleMaxSelect(raffle);
   if (existing.size + requested.length > maxSelect) {
-    return { ok: false, error: `Не больше ${maxSelect} номерков в брони` };
+    return { ok: false, error: `Не больше ${maxSelect} номерков в одной брони` };
   }
+  const totalCheck = await assertUserRaffleTotalTicketLimit(raffle, o.raffle_id, userId, requested.length);
+  if (!totalCheck.ok) return totalCheck;
   const sequentialWindow = await getSequentialTicketWindow(raffle);
   if (sequentialWindow) {
     for (const n of requested) {
@@ -3305,9 +3341,18 @@ export async function appendRandomTicketsToReservedOrder(
 
   const existing = await getTicketNumbersForOrder(orderId);
   const maxSelect = getRaffleMaxSelect(raffle);
-  const slots = maxSelect - existing.length;
+  let slots = maxSelect - existing.length;
+  const maxTotal = getRaffleMaxTotalPerUser(raffle);
+  if (maxTotal > 0) {
+    const userTotal = await countUserActiveTicketsInRaffle(o.raffle_id, userId);
+    slots = Math.min(slots, Math.max(0, maxTotal - userTotal));
+  }
   const nPick = Math.min(Math.max(1, Math.floor(want)), slots);
-  if (nPick < 1) return { ok: false, error: "Достигнут лимит номерков" };
+  if (nPick < 1) {
+    return maxTotal > 0
+      ? { ok: false, error: `Достигнут лимит: не больше ${maxTotal} номерков на аккаунт за эту акцию.` }
+      : { ok: false, error: "Достигнут лимит номерков в брони" };
+  }
 
   const sequentialWindow = await getSequentialTicketWindow(raffle);
   const rangeFrom = sequentialWindow?.from ?? getRaffleTicketStartNumber(raffle);

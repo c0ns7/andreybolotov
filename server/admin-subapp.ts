@@ -583,6 +583,7 @@ type RaffleInput = {
   hide_ticket_stats: boolean;
   sequential_batch_size: number;
   max_tickets_per_user: number;
+  max_tickets_per_user_total: number;
   ticket_start_number: number;
   public_start_at: number | null;
   card_payment_scope: "unlimited" | "wholesale_only" | "min_order_tickets";
@@ -768,7 +769,19 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       ? 25
       : Math.floor(Number(maxTicketsRaw));
   if (!Number.isFinite(max_tickets_per_user) || max_tickets_per_user < 1 || max_tickets_per_user > 500) {
-    return { ok: false, error: "Лимит номерков на участника: от 1 до 500" };
+    return { ok: false, error: "Лимит номерков за одну бронь: от 1 до 500" };
+  }
+  const maxTicketsTotalRaw = body.max_tickets_per_user_total;
+  const max_tickets_per_user_total =
+    maxTicketsTotalRaw === undefined || maxTicketsTotalRaw === null || maxTicketsTotalRaw === ""
+      ? 0
+      : Math.floor(Number(maxTicketsTotalRaw));
+  if (
+    !Number.isFinite(max_tickets_per_user_total) ||
+    max_tickets_per_user_total < 0 ||
+    max_tickets_per_user_total > 5000
+  ) {
+    return { ok: false, error: "Лимит номерков за всю акцию: 0 (без лимита) или от 1 до 5000" };
   }
   const ticketStartRaw = body.ticket_start_number;
   const ticket_start_number =
@@ -873,6 +886,7 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       hide_ticket_stats,
       sequential_batch_size,
       max_tickets_per_user,
+      max_tickets_per_user_total,
       ticket_start_number,
       public_start_at,
       card_payment_scope,
@@ -1614,6 +1628,7 @@ adminSubApp.post("/raffles", async (c) => {
     hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
     sequential_batch_size: v.sequential_batch_size,
     max_tickets_per_user: v.max_tickets_per_user,
+    max_tickets_per_user_total: v.max_tickets_per_user_total,
     ticket_start_number: v.ticket_start_number,
     public_start_at: v.public_start_at,
   });
@@ -1686,6 +1701,7 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
     sequential_batch_size: v.sequential_batch_size,
     max_tickets_per_user: v.max_tickets_per_user,
+    max_tickets_per_user_total: v.max_tickets_per_user_total,
     ticket_start_number: v.ticket_start_number,
     public_start_at: v.public_start_at,
   });

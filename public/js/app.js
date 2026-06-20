@@ -1592,11 +1592,44 @@
 
   const RAFFLE_MAX_SELECT_DEFAULT = 25;
   var raffleMaxSelect = RAFFLE_MAX_SELECT_DEFAULT;
+  var raffleMaxPerOrder = RAFFLE_MAX_SELECT_DEFAULT;
+  var raffleMaxTotal = 0;
+  var raffleUserTicketCount = 0;
 
   function resolveRaffleMaxSelect(r) {
     var n = Math.floor(Number(r && r.max_tickets_per_user != null ? r.max_tickets_per_user : RAFFLE_MAX_SELECT_DEFAULT));
     if (!Number.isFinite(n) || n < 1) return RAFFLE_MAX_SELECT_DEFAULT;
     return Math.min(n, 500);
+  }
+
+  function resolveRaffleMaxTotal(r) {
+    var n = Math.floor(Number(r && r.max_tickets_per_user_total != null ? r.max_tickets_per_user_total : 0));
+    if (!Number.isFinite(n) || n < 1) return 0;
+    return Math.min(n, 5000);
+  }
+
+  function refreshRaffleSelectionLimits(r, userTicketCount) {
+    raffleMaxPerOrder = resolveRaffleMaxSelect(r);
+    raffleMaxTotal = resolveRaffleMaxTotal(r);
+    raffleUserTicketCount = Math.max(0, Math.floor(Number(userTicketCount) || 0));
+    var remaining = raffleMaxTotal > 0 ? Math.max(0, raffleMaxTotal - raffleUserTicketCount) : raffleMaxPerOrder;
+    raffleMaxSelect = raffleMaxTotal > 0 ? Math.min(raffleMaxPerOrder, remaining) : raffleMaxPerOrder;
+  }
+
+  function raffleSelectionSubLabel(selN) {
+    if (raffleMaxTotal > 0) {
+      return (
+        "Выбрано: " +
+        String(selN) +
+        " / " +
+        String(raffleMaxSelect) +
+        " · за акцию " +
+        String(raffleUserTicketCount + selN) +
+        " / " +
+        String(raffleMaxTotal)
+      );
+    }
+    return "Выбрано: " + String(selN) + " / " + String(raffleMaxSelect);
   }
 
   function buildRaffleRangePartsFromRaffle(r) {
@@ -3377,7 +3410,7 @@
           stripSub.textContent = "Нажмите, чтобы продолжить оплату";
         } else if (IS_RAFFLE_PURCHASE_PAGE) {
           var selN = raffleDetailState.selected ? raffleDetailState.selected.size : 0;
-          stripSub.textContent = "Выбрано: " + String(selN) + " / " + String(raffleMaxSelect);
+          stripSub.textContent = raffleSelectionSubLabel(selN);
         } else {
           stripSub.textContent = "Номерков: " + String(total);
         }
@@ -5054,7 +5087,7 @@
   function updateRaffleSelectionLabel() {
     var n = raffleDetailState.selected.size;
     var el = raffleDetailEl("selection");
-    if (el) el.textContent = "Выбрано: " + String(n) + " / " + String(raffleMaxSelect);
+    if (el) el.textContent = raffleSelectionSubLabel(n);
     var reserveBtn = document.getElementById("raffle-page-reserve");
     var reserveLabel = document.getElementById("raffle-page-reserve-label");
     var labelText = n > 0 ? "Забронировать (" + String(n) + ")" : "Выберите номера";
@@ -5812,6 +5845,7 @@
     });
     if (!res.ok) throw new Error(data.error || "Ошибка");
     applyRaffleServerTimeSkewFromPayload(data);
+    refreshRaffleSelectionLimits(r, data.user_ticket_count_in_raffle);
     raffleDetailState.order = data.order || null;
     raffleDetailState.orderNumbers = Array.isArray(data.numbers) ? data.numbers : [];
     if (!raffleDetailState.order || String(raffleDetailState.order.status || "") !== "reserved") {
@@ -6246,7 +6280,7 @@
         return;
       }
       raffleDetailState.raffle = r;
-      raffleMaxSelect = resolveRaffleMaxSelect(r);
+      refreshRaffleSelectionLimits(r, 0);
       startRaffleViewHeartbeat(Number(r.id));
       syncRafflePaymentButtons(r);
       var heading = raffleDetailEl("heading");

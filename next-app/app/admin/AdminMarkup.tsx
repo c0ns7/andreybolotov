@@ -1059,10 +1059,17 @@ export default function AdminMarkup() {
                   </p>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="raffle-max-tickets-per-user">Лимит номерков в одних руках</label>
+                  <label htmlFor="raffle-max-tickets-per-user">Лимит за одну бронь</label>
                   <input id="raffle-max-tickets-per-user" className="input" type="number" min={1} max={500} step={1} defaultValue={25} inputMode="numeric" />
                   <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
-                    Сколько номерков участник может выбрать в одной брони (от 1 до 500).
+                    Сколько номерков участник может выбрать за один раз в одной брони (от 1 до 500).
+                  </p>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-max-tickets-per-user-total">Лимит за всю акцию на аккаунт</label>
+                  <input id="raffle-max-tickets-per-user-total" className="input" type="number" min={0} max={5000} step={1} defaultValue={0} inputMode="numeric" />
+                  <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                    0 — без общего лимита. Иначе максимум номерков на одном аккаунте за всю акцию (бронь, проверка и подтверждённые).
                   </p>
                 </div>
                 <div className="form-group">
@@ -1533,8 +1540,8 @@ export default function AdminMarkup() {
                 </label>
                 <p className="admin-raffle-bulk-assign__hint">
                   По одному номеру на строку. Желаемый номерок у первой строки — «Первый номерок», у следующих строк — по порядку; если
-                  номер занят, берётся следующий свободный. Одному телефону — один номер за загрузку; повторы в списке и те, у кого уже
-                  есть номерок в акции, пропускаются.
+                  номер занят, берётся следующий свободный. Один и тот же телефон можно указать несколько раз — столько номерков и будет
+                  выдано. Строка пропускается только если не нашлось свободного номерка с нужного места.
                 </p>
                 <textarea
                   id="raffle-bulk-phones"

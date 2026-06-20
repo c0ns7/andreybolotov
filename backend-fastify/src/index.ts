@@ -68,6 +68,7 @@ import {
   attachReceiptToOrder,
   buildRafflePaymentParticipationContext,
   clearAllUserReservedCartItems,
+  countUserActiveTicketsInRaffle,
   createReservation,
   getActiveOrderForUser,
   getOrderByIdForUser,
@@ -1527,6 +1528,7 @@ app.get("/api/raffles/:id/order", async (request, reply) => {
   const raffle = await raffleVisibleOrActiveOrder(user.id, id);
   if (!raffle) return reply.code(404).send({ error: "Не найдено" });
   const serverTimeMs = Date.now();
+  const userTicketCount = await countUserActiveTicketsInRaffle(id, user.id);
   const order = await getActiveOrderForUser(id, user.id);
   if (!order) {
     return {
@@ -1534,6 +1536,7 @@ app.get("/api/raffles/:id/order", async (request, reply) => {
       numbers: [],
       raffle: await raffleDtoWithBankCardMeta(raffle),
       server_time_ms: serverTimeMs,
+      user_ticket_count_in_raffle: userTicketCount,
       payment_participation: {
         has_confirmed_tickets: false,
         confirmed_ticket_numbers: [],
@@ -1549,6 +1552,7 @@ app.get("/api/raffles/:id/order", async (request, reply) => {
     numbers: await getTicketNumbersForOrder(order.id),
     raffle: await raffleDtoWithBankCardMeta(raffle),
     server_time_ms: serverTimeMs,
+    user_ticket_count_in_raffle: userTicketCount,
     payment_participation: await getCachedPaymentParticipation(user.id, id, order.id),
   };
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { loadAbSession } from "../../lib/ab-session";
 import {
@@ -50,6 +50,7 @@ type RaffleDto = Record<string, unknown> & {
   hide_ticket_stats?: boolean;
   sequential_batch_size?: number;
   max_tickets_per_user?: number;
+  max_tickets_per_user_total?: number;
   sequential_window_from?: number | null;
   sequential_window_to?: number | null;
   ticket_start_number?: number;
@@ -126,6 +127,36 @@ function resolveMaxSelect(raffle: RaffleDto | null | undefined): number {
   const n = Math.floor(Number(raffle?.max_tickets_per_user ?? RAFFLE_MAX_SELECT_DEFAULT));
   if (!Number.isFinite(n) || n < 1) return RAFFLE_MAX_SELECT_DEFAULT;
   return Math.min(n, 500);
+}
+
+function resolveMaxTotalPerUser(raffle: RaffleDto | null | undefined): number {
+  const n = Math.floor(Number(raffle?.max_tickets_per_user_total ?? 0));
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(n, 5000);
+}
+
+function computeEffectiveMaxSelect(perOrder: number, maxTotal: number, userTicketCount: number): number {
+  if (maxTotal <= 0) return perOrder;
+  const remaining = Math.max(0, maxTotal - userTicketCount);
+  return Math.min(perOrder, remaining);
+}
+
+function refreshSelectionLimits(
+  raffle: RaffleDto | null | undefined,
+  userTicketCount: number,
+  refs: {
+    maxPerOrderRef: MutableRefObject<number>;
+    maxTotalRef: MutableRefObject<number>;
+    userTicketCountRef: MutableRefObject<number>;
+    maxSelectRef: MutableRefObject<number>;
+  },
+) {
+  const perOrder = resolveMaxSelect(raffle);
+  const maxTotal = resolveMaxTotalPerUser(raffle);
+  refs.maxPerOrderRef.current = perOrder;
+  refs.maxTotalRef.current = maxTotal;
+  refs.userTicketCountRef.current = Math.max(0, Math.floor(Number(userTicketCount) || 0));
+  refs.maxSelectRef.current = computeEffectiveMaxSelect(perOrder, maxTotal, refs.userTicketCountRef.current);
 }
 
 function getRaffleTicketRange(raffle: RaffleDto | null | undefined) {
@@ -560,6 +591,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   );
 
   const raffleRef = useRef<RaffleDto | null>(null);
+  const maxPerOrderRef = useRef(RAFFLE_MAX_SELECT_DEFAULT);
+  const maxTotalRef = useRef(0);
+  const userTicketCountRef = useRef(0);
   const maxSelectRef = useRef(RAFFLE_MAX_SELECT_DEFAULT);
   raffleRef.current = raffle;
   const reservationLeftMsRef = useRef(reservationLeftMs);
@@ -796,6 +830,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     applySkewFromPayload(data);
     const o = (data.order as OrderDto | null) || null;
     const nums = (Array.isArray(data.numbers) ? data.numbers : []) as number[];
+    refreshSelectionLimits(raffleRef.current, Number(data.user_ticket_count_in_raffle ?? 0), {
+      maxPerOrderRef,
+      maxTotalRef,
+      userTicketCountRef,
+      maxSelectRef,
+    });
     setOrder(o);
     setOrderNumbers(nums);
     const st = String(o?.status || "");
@@ -851,7 +891,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         const prevFrom = rangeFromRef.current;
         const prevTo = rangeToRef.current;
         raffleRef.current = r;
-        maxSelectRef.current = resolveMaxSelect(r);
+        refreshSelectionLimits(r, userTicketCountRef.current, {
+          maxPerOrderRef,
+          maxTotalRef,
+          userTicketCountRef,
+          maxSelectRef,
+        });
         setRaffle(r);
         const parts = buildRangeParts(r);
         rangePartsRef.current = parts;
@@ -1046,7 +1091,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         if (cancelled) return;
         setLowStockModal(null);
         raffleRef.current = r;
-        maxSelectRef.current = resolveMaxSelect(r);
+        refreshSelectionLimits(r, 0, {
+          maxPerOrderRef,
+          maxTotalRef,
+          userTicketCountRef,
+          maxSelectRef,
+        });
         setRaffle(r);
         const parts = buildRangeParts(r);
         setRangeParts(parts);
@@ -1289,7 +1339,23 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         strip.classList.add("cart-action-strip--home-pending-pay");
       } else {
         if (title) title.textContent = "Забронировать (" + String(selected.length) + ")";
-        if (sub) sub.textContent = "Выбрано: " + String(selected.length) + " / " + String(maxSelectRef.current);
+        if (sub) {
+          const totalCap = maxTotalRef.current;
+          if (totalCap > 0) {
+            const accountTotal = userTicketCountRef.current + selected.length;
+            sub.textContent =
+              "Выбрано: " +
+              String(selected.length) +
+              " / " +
+              String(maxSelectRef.current) +
+              " · за акцию " +
+              String(accountTotal) +
+              " / " +
+              String(totalCap);
+          } else {
+            sub.textContent = "Выбрано: " + String(selected.length) + " / " + String(maxSelectRef.current);
+          }
+        }
         strip.classList.remove("cart-action-strip--home-pending-pay");
       }
     } else {

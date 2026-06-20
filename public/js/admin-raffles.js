@@ -1054,6 +1054,12 @@
         ? String(Math.max(1, Number(edit.max_tickets_per_user) || 25))
         : "25";
     }
+    var maxTicketsTotalEl = document.getElementById("raffle-max-tickets-per-user-total");
+    if (maxTicketsTotalEl) {
+      maxTicketsTotalEl.value = edit
+        ? String(Math.max(0, Number(edit.max_tickets_per_user_total) || 0))
+        : "0";
+    }
     var seqBatchEl = document.getElementById("raffle-sequential-batch-size");
     if (seqBatchEl) {
       seqBatchEl.value = edit ? String(Math.max(0, Number(edit.sequential_batch_size) || 0)) : "0";
@@ -1907,7 +1913,7 @@
           msg +=
             ". Пропущено строк: " +
             String(skipped.length) +
-            " (повтор телефона, уже есть в акции или не нашлось свободного номера с нужного места).";
+            " (не нашлось свободного номера с нужного места).";
           resultEl.className = "admin-raffle-bulk-assign__result is-warn";
             } else {
               resultEl.className = "admin-raffle-bulk-assign__result is-ok";
@@ -2122,6 +2128,11 @@
         var el = document.getElementById("raffle-max-tickets-per-user");
         var n = Number(el ? el.value : 25);
         return Number.isFinite(n) && n >= 1 ? Math.min(500, Math.floor(n)) : 25;
+      })(),
+      max_tickets_per_user_total: (function () {
+        var el = document.getElementById("raffle-max-tickets-per-user-total");
+        var n = Number(el ? el.value : 0);
+        return Number.isFinite(n) && n >= 0 ? Math.min(5000, Math.floor(n)) : 0;
       })(),
       sequential_batch_size: (function () {
         var el = document.getElementById("raffle-sequential-batch-size");
