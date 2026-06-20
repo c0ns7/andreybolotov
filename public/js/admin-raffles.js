@@ -1042,6 +1042,24 @@
     if (secondEndEl)
       secondEndEl.value = edit ? formatDateTimeLocalFromMs(edit.second_price_end_at || edit.cenopad_end_at) : "";
     document.getElementById("raffle-tickets").value = edit ? String(edit.ticket_count) : "0";
+    var ticketStartEl = document.getElementById("raffle-ticket-start-number");
+    if (ticketStartEl) {
+      ticketStartEl.value = edit
+        ? String(Math.max(1, Number(edit.ticket_start_number) || 1))
+        : "1";
+    }
+    var maxTicketsEl = document.getElementById("raffle-max-tickets-per-user");
+    if (maxTicketsEl) {
+      maxTicketsEl.value = edit
+        ? String(Math.max(1, Number(edit.max_tickets_per_user) || 25))
+        : "25";
+    }
+    var seqBatchEl = document.getElementById("raffle-sequential-batch-size");
+    if (seqBatchEl) {
+      seqBatchEl.value = edit ? String(Math.max(0, Number(edit.sequential_batch_size) || 0)) : "0";
+    }
+    var hideStatsEl = document.getElementById("raffle-hide-ticket-stats");
+    if (hideStatsEl) hideStatsEl.checked = edit ? !!edit.hide_ticket_stats : false;
     document.getElementById("raffle-collection-url").value = edit ? edit.collection_url || "" : "";
     var tbankUrlEl = document.getElementById("raffle-tbank-collection-url");
     if (tbankUrlEl) tbankUrlEl.value = edit ? edit.tbank_collection_url || "" : "";
@@ -2095,6 +2113,25 @@
       })(),
       old_price_rub: 0,
       ticket_count: Number(document.getElementById("raffle-tickets").value),
+      ticket_start_number: (function () {
+        var el = document.getElementById("raffle-ticket-start-number");
+        var n = Number(el ? el.value : 1);
+        return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+      })(),
+      max_tickets_per_user: (function () {
+        var el = document.getElementById("raffle-max-tickets-per-user");
+        var n = Number(el ? el.value : 25);
+        return Number.isFinite(n) && n >= 1 ? Math.min(500, Math.floor(n)) : 25;
+      })(),
+      sequential_batch_size: (function () {
+        var el = document.getElementById("raffle-sequential-batch-size");
+        var n = Number(el ? el.value : 0);
+        return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+      })(),
+      hide_ticket_stats: (function () {
+        var el = document.getElementById("raffle-hide-ticket-stats");
+        return el ? !!el.checked : false;
+      })(),
       collection_url: document.getElementById("raffle-collection-url").value.trim(),
       tbank_collection_url: (function () {
         var el = document.getElementById("raffle-tbank-collection-url");

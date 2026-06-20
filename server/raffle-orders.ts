@@ -3,6 +3,9 @@ import type { PoolClient } from "pg";
 import {
   getRaffleById,
   getRaffleEffectiveUnitPrice,
+  getRaffleTicketEndNumber,
+  getRaffleTicketStartNumber,
+  isRaffleTicketNumberInRange,
   isRaffleCenopadActive,
   getUserById,
   getUserByPhone,
@@ -26,6 +29,80 @@ import {
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 25;
+
+export function getRaffleMaxSelect(raffle: { max_tickets_per_user?: number | null } | null | undefined): number {
+  const n = Math.floor(Number(raffle?.max_tickets_per_user ?? RAFFLE_MAX_SELECT));
+  if (!Number.isFinite(n) || n < 1) return RAFFLE_MAX_SELECT;
+  return Math.min(n, 500);
+}
+
+export async function countOccupiedTicketsInRange(
+  raffleId: number,
+  from: number,
+  to: number,
+): Promise<number> {
+  await cleanupExpiredRaffleOrders();
+  const a = Math.max(1, Math.floor(from));
+  const b = Math.max(a, Math.floor(to));
+  const holds = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number BETWEEN ? AND ?
+         AND o.status NOT IN ('expired', 'rejected')`,
+    [raffleId, a, b],
+  );
+  const pre = await pgGet<{ c: number }>(
+    `SELECT COUNT(*) AS c
+       FROM raffle_phone_preassignments
+       WHERE raffle_id = ? AND ticket_number BETWEEN ? AND ?`,
+    [raffleId, a, b],
+  );
+  return Math.max(0, Number(holds?.c ?? 0) + Number(pre?.c ?? 0));
+}
+
+/** Текущий открытый блок номерков при поочерёдном показе таблиц; null — режим выключен. */
+export async function getSequentialTicketWindow(
+  raffle: {
+    id: number;
+    ticket_count: number;
+    sequential_batch_size?: number | null;
+    ticket_start_number?: number | null;
+  },
+): Promise<{ from: number; to: number } | null> {
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  if (batchSize <= 0) return null;
+  const start = getRaffleTicketStartNumber(raffle);
+  const end = getRaffleTicketEndNumber(raffle);
+  if (end < start) return null;
+  for (let batchStart = start; batchStart <= end; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize - 1, end);
+    const occupied = await countOccupiedTicketsInRange(raffle.id, batchStart, batchEnd);
+    const batchTotal = batchEnd - batchStart + 1;
+    if (occupied < batchTotal) return { from: batchStart, to: batchEnd };
+  }
+  const span = end - start + 1;
+  const lastStart = start + Math.floor((span - 1) / batchSize) * batchSize;
+  return { from: lastStart, to: end };
+}
+
+export async function enrichRaffleDtoSequentialWindow<T extends Record<string, unknown>>(
+  raffle: {
+    id: number;
+    ticket_count: number;
+    sequential_batch_size?: number | null;
+    ticket_start_number?: number | null;
+  },
+  dto: T,
+): Promise<T & { sequential_window_from?: number | null; sequential_window_to?: number | null }> {
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  if (batchSize <= 0) {
+    return { ...dto, sequential_window_from: null, sequential_window_to: null };
+  }
+  const win = await getSequentialTicketWindow(raffle);
+  if (!win) return { ...dto, sequential_window_from: null, sequential_window_to: null };
+  return { ...dto, sequential_window_from: win.from, sequential_window_to: win.to };
+}
 
 function resolveOrderUnitPrice(order: RaffleOrderRow, rafflePriceFallback: number): number {
   const cnt = Math.max(0, Math.floor(Number(order.ticket_count) || 0));
@@ -414,7 +491,7 @@ export async function isRaffleTicketBlocked(
   return Boolean(pre);
 }
 
-/** Все номера 1..N, свободные для брони (без активного hold и без предназначения по телефону). */
+/** Все свободные номерки акции (без активного hold и без предназначения по телефону). */
 export async function listGloballyFreeTicketNumbers(
   raffleId: number,
   client?: PoolClient,
@@ -423,8 +500,9 @@ export async function listGloballyFreeTicketNumbers(
   else await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return [];
-  const maxN = Math.max(0, Math.floor(Number(raffle.ticket_count)));
-  if (maxN < 1) return [];
+  const start = getRaffleTicketStartNumber(raffle);
+  const end = getRaffleTicketEndNumber(raffle);
+  if (end < start) return [];
   const occ = new Set<number>();
   const heldRows = await pgAll<{ n: number }>(
     `SELECT h.ticket_number AS n FROM raffle_ticket_holds h
@@ -441,7 +519,7 @@ export async function listGloballyFreeTicketNumbers(
   );
   for (const r of preRows) occ.add(Math.floor(Number(r.n)));
   const free: number[] = [];
-  for (let n = 1; n <= maxN; n++) {
+  for (let n = start; n <= end; n++) {
     if (!occ.has(n)) free.push(n);
   }
   return free;
@@ -452,31 +530,37 @@ export type RaffleTicketReplacement = { from: number; to: number };
 /** Ближайший свободный номерок: сначала anchor−d, затем anchor+d. */
 export function findNearestFreeTicketNumber(
   anchor: number,
-  ticketCount: number,
+  ticketEnd: number,
   blocked: Set<number>,
+  searchFrom = 1,
+  searchTo?: number,
 ): number | null {
   const n = Math.floor(Number(anchor));
-  const maxN = Math.max(0, Math.floor(Number(ticketCount)));
-  if (!Number.isFinite(n) || n < 1 || maxN < 1) return null;
-  for (let d = 1; d <= maxN; d++) {
+  const end = Math.max(0, Math.floor(Number(ticketEnd)));
+  const lo = Math.floor(Number(searchFrom));
+  const hi = Math.min(end, Math.floor(searchTo ?? end));
+  if (!Number.isFinite(n) || !Number.isFinite(lo) || !Number.isFinite(hi) || end < lo || lo > hi) return null;
+  for (let d = 1; d <= end - lo + 1; d++) {
     const low = n - d;
     const high = n + d;
-    if (low >= 1 && low <= maxN && !blocked.has(low)) return low;
-    if (high >= 1 && high <= maxN && !blocked.has(high)) return high;
+    if (low >= lo && low <= hi && !blocked.has(low)) return low;
+    if (high >= lo && high <= hi && !blocked.has(high)) return high;
   }
   return null;
 }
 
 async function buildBlockedTicketSetForRaffle(
   raffleId: number,
-  ticketCount: number,
   client?: PoolClient,
 ): Promise<Set<number>> {
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return new Set();
+  const start = getRaffleTicketStartNumber(raffle);
+  const end = getRaffleTicketEndNumber(raffle);
   const free = await listGloballyFreeTicketNumbers(raffleId, client);
   const freeSet = new Set(free);
   const blocked = new Set<number>();
-  const maxN = Math.max(0, Math.floor(Number(ticketCount)));
-  for (let n = 1; n <= maxN; n++) {
+  for (let n = start; n <= end; n++) {
     if (!freeSet.has(n)) blocked.add(n);
   }
   return blocked;
@@ -485,17 +569,19 @@ async function buildBlockedTicketSetForRaffle(
 /** Занятые номерки из wanted заменяются на ближайшие свободные, чтобы сохранить количество в брони. */
 async function applyNearestReplacementsForBlocked(
   raffleId: number,
-  ticketCount: number,
+  ticketEnd: number,
   wantedOrdered: number[],
   alreadyReserved: number[],
   blockedOccupied: number[],
   client?: PoolClient,
+  searchFrom = 1,
+  searchTo?: number,
 ): Promise<{
   toReserve: number[];
   skipped_still_occupied: number[];
   replaced_tickets: RaffleTicketReplacement[];
 }> {
-  const blocked = await buildBlockedTicketSetForRaffle(raffleId, ticketCount, client);
+  const blocked = await buildBlockedTicketSetForRaffle(raffleId, client);
   const toReserve = [...alreadyReserved];
   const toReserveSet = new Set(toReserve);
   for (const n of toReserve) blocked.add(n);
@@ -506,7 +592,7 @@ async function applyNearestReplacementsForBlocked(
 
   for (const anchor of wantedOrdered) {
     if (!blockedSet.has(anchor)) continue;
-    const repl = findNearestFreeTicketNumber(anchor, ticketCount, blocked);
+    const repl = findNearestFreeTicketNumber(anchor, ticketEnd, blocked, searchFrom, searchTo);
     if (repl === null) {
       stillSkipped.push(anchor);
       continue;
@@ -593,17 +679,31 @@ export async function getTicketGridSlice(
   userId: number,
   from: number,
   to: number,
-): Promise<{ cells: { n: number; kind: TicketCellKind }[]; free_count: number }> {
+): Promise<{
+  cells: { n: number; kind: TicketCellKind }[];
+  free_count: number;
+  sequential_window: { from: number; to: number } | null;
+}> {
   await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   if (!raffle) {
-    return { cells: [], free_count: 0 };
+    return { cells: [], free_count: 0, sequential_window: null };
   }
-  const maxN = raffle.ticket_count;
-  const a = Math.max(1, Math.floor(from));
-  const b = Math.min(maxN, Math.floor(to));
+  const sequentialWindow = await getSequentialTicketWindow(raffle);
+  const ticketStart = getRaffleTicketStartNumber(raffle);
+  const ticketEnd = getRaffleTicketEndNumber(raffle);
+  let a = Math.max(ticketStart, Math.floor(from));
+  let b = Math.min(ticketEnd, Math.floor(to));
+  if (sequentialWindow) {
+    a = Math.max(a, sequentialWindow.from);
+    b = Math.min(b, sequentialWindow.to);
+  }
   if (a > b) {
-    return { cells: [], free_count: Math.max(0, maxN) };
+    return {
+      cells: [],
+      free_count: Math.max(0, Math.floor(Number(raffle.ticket_count))),
+      sequential_window: sequentialWindow,
+    };
   }
 
   const holdRows = await pgAll<{ ticket_number: number; order_status: string; order_user_id: number }>(
@@ -687,8 +787,8 @@ export async function getTicketGridSlice(
     `SELECT COUNT(*) AS c FROM raffle_phone_preassignments WHERE raffle_id = ?`,
     [raffleId],
   );
-  const free_count = Math.max(0, maxN - (occupied?.c ?? 0) - (preC?.c ?? 0));
-  return { cells, free_count };
+  const free_count = Math.max(0, Math.floor(Number(raffle.ticket_count)) - (occupied?.c ?? 0) - (preC?.c ?? 0));
+  return { cells, free_count, sequential_window: sequentialWindow };
 }
 
 async function listNumbersWithExpiredReserveHold(
@@ -750,14 +850,29 @@ export async function createReservation(
     Number.isFinite(n),
   );
   uniq.sort((x, y) => x - y);
-  if (uniq.length < 1 || uniq.length > RAFFLE_MAX_SELECT) {
-    return { ok: false, error: `Выберите от 1 до ${RAFFLE_MAX_SELECT} номерков` };
+  const maxSelect = getRaffleMaxSelect(raffle);
+  if (uniq.length < 1 || uniq.length > maxSelect) {
+    return { ok: false, error: `Выберите от 1 до ${maxSelect} номерков` };
+  }
+  const sequentialWindow = await getSequentialTicketWindow(raffle);
+  if (sequentialWindow) {
+    for (const n of uniq) {
+      if (n < sequentialWindow.from || n > sequentialWindow.to) {
+        return {
+          ok: false,
+          error: `Сейчас доступны номерки только с ${sequentialWindow.from} по ${sequentialWindow.to}`,
+        };
+      }
+    }
   }
   for (const n of uniq) {
-    if (n < 1 || n > raffle.ticket_count) {
+    if (!isRaffleTicketNumberInRange(raffle, n)) {
       return { ok: false, error: "Некорректный номер" };
     }
   }
+
+  const ticketStart = getRaffleTicketStartNumber(raffle);
+  const ticketEnd = getRaffleTicketEndNumber(raffle);
 
   const now = Date.now();
   const hadExpiredReserveHold = await listNumbersWithExpiredReserveHold(raffleId, uniq, now);
@@ -778,10 +893,13 @@ export async function createReservation(
 
   const replacement = await applyNearestReplacementsForBlocked(
     raffleId,
-    raffle.ticket_count,
+    ticketEnd,
     uniq,
     toReserveDirect,
     skipped_still_occupied,
+    undefined,
+    sequentialWindow?.from ?? ticketStart,
+    sequentialWindow?.to ?? ticketEnd,
   );
   const toReserve = replacement.toReserve;
   const replaced_tickets = replacement.replaced_tickets;
@@ -1587,7 +1705,7 @@ export async function adminDetachParticipantTicket(
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
   const n = Math.floor(Number(ticketNumber));
-  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+  if (!isRaffleTicketNumberInRange(raffle, n)) {
     return { ok: false, error: "Некорректный номерок" };
   }
 
@@ -2300,7 +2418,7 @@ export async function createOrAppendConfirmedTicketsForUser(
   uniq.sort((a, b) => a - b);
   if (uniq.length === 0) return;
   for (const n of uniq) {
-    if (n < 1 || n > raffle.ticket_count) throw new Error("BAD_NUM");
+    if (!isRaffleTicketNumberInRange(raffle, n)) throw new Error("BAD_NUM");
   }
   const now = Date.now();
   const existing = await pgGet<{ id: number; ticket_count: number; amount_rub: number }>(
@@ -2482,7 +2600,7 @@ export async function adminBulkAssignPhoneLinesToRaffle(
 > {
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
-  const maxN = raffle.ticket_count;
+  const ticketEnd = getRaffleTicketEndNumber(raffle);
   const start = Math.max(1, Math.floor(Number(startNumber)) || 1);
 
   type Parsed = { line: number; phone: string; idealFirst: number };
@@ -2534,7 +2652,7 @@ export async function adminBulkAssignPhoneLinesToRaffle(
     }
 
     let found: number | null = null;
-    for (let cand = p.idealFirst; cand <= maxN; cand++) {
+    for (let cand = p.idealFirst; cand <= ticketEnd; cand++) {
       if (!virt.has(cand) && !(await isRaffleTicketBlocked(raffleId, cand))) {
         found = cand;
         break;
@@ -2615,7 +2733,8 @@ async function sequentialAdminAssignTicketSteps(
 }> {
   const raffle = await getRaffleById(targetRaffleId);
   if (!raffle) throw new Error("NO_RAFFLE");
-  const maxN = raffle.ticket_count;
+  const ticketStart = getRaffleTicketStartNumber(raffle);
+  const ticketEnd = getRaffleTicketEndNumber(raffle);
   const skipped: BulkAssignSkip[] = [];
   const userTicketSets = new Map<number, Set<number>>();
   let assigned = 0;
@@ -2636,12 +2755,12 @@ async function sequentialAdminAssignTicketSteps(
     await client.query("BEGIN");
     for (const p of steps) {
       const wish = Math.floor(Number(p.wish));
-      if (!Number.isFinite(wish) || wish < 1 || wish > maxN) {
+      if (!isRaffleTicketNumberInRange(raffle, wish)) {
         skipped.push({
           line: p.line,
           phone: p.phone,
           ticket_number: wish,
-          reason: "Номерок " + wish + " вне диапазона 1–" + maxN + " в этой акции",
+          reason: "Номерок " + wish + " вне диапазона " + ticketStart + "–" + ticketEnd + " в этой акции",
         });
         continue;
       }
@@ -2853,7 +2972,7 @@ export async function adminAssignPhoneToExactTicket(
     return { ok: false, error: "Некорректный мобильный номер РФ" };
   }
   const n = Math.floor(Number(ticketNumber));
-  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+  if (!isRaffleTicketNumberInRange(raffle, n)) {
     return { ok: false, error: "Некорректный номерок" };
   }
   if (await isRaffleTicketBlocked(raffleId, n)) {
@@ -3082,13 +3201,25 @@ export async function addTicketsToReservedOrder(
   );
   const requested: number[] = [];
   for (const n of uniq) {
-    if (n < 1 || n > raffle.ticket_count) return { ok: false, error: "Некорректный номер" };
+    if (!isRaffleTicketNumberInRange(raffle, n)) return { ok: false, error: "Некорректный номер" };
     if (existing.has(n)) continue;
     requested.push(n);
   }
   if (requested.length === 0) return { ok: false, error: "Укажите новые номера" };
-  if (existing.size + requested.length > RAFFLE_MAX_SELECT) {
-    return { ok: false, error: `Не больше ${RAFFLE_MAX_SELECT} номерков в брони` };
+  const maxSelect = getRaffleMaxSelect(raffle);
+  if (existing.size + requested.length > maxSelect) {
+    return { ok: false, error: `Не больше ${maxSelect} номерков в брони` };
+  }
+  const sequentialWindow = await getSequentialTicketWindow(raffle);
+  if (sequentialWindow) {
+    for (const n of requested) {
+      if (n < sequentialWindow.from || n > sequentialWindow.to) {
+        return {
+          ok: false,
+          error: `Сейчас доступны номерки только с ${sequentialWindow.from} по ${sequentialWindow.to}`,
+        };
+      }
+    }
   }
 
   const blockedNow: number[] = [];
@@ -3096,20 +3227,25 @@ export async function addTicketsToReservedOrder(
     if (await isRaffleTicketBlocked(o.raffle_id, n)) blockedNow.push(n);
   }
   const freeDirect = requested.filter((n) => !blockedNow.includes(n));
+  const ticketStart = getRaffleTicketStartNumber(raffle);
+  const ticketEnd = getRaffleTicketEndNumber(raffle);
   const replacement = await applyNearestReplacementsForBlocked(
     o.raffle_id,
-    raffle.ticket_count,
+    ticketEnd,
     requested,
     freeDirect,
     blockedNow,
+    undefined,
+    sequentialWindow?.from ?? ticketStart,
+    sequentialWindow?.to ?? ticketEnd,
   );
   const toAdd = replacement.toReserve.filter((n) => !existing.has(n));
   const replaced_tickets = replacement.replaced_tickets;
   if (toAdd.length === 0) {
     return { ok: false, error: "Не удалось добавить номерки — рядом нет свободных" };
   }
-  if (existing.size + toAdd.length > RAFFLE_MAX_SELECT) {
-    return { ok: false, error: `Не больше ${RAFFLE_MAX_SELECT} номерков в брони` };
+  if (existing.size + toAdd.length > maxSelect) {
+    return { ok: false, error: `Не больше ${maxSelect} номерков в брони` };
   }
 
   const now = Date.now();
@@ -3168,9 +3304,14 @@ export async function appendRandomTicketsToReservedOrder(
   if (!raffle) return { ok: false, error: "Акция не найдена" };
 
   const existing = await getTicketNumbersForOrder(orderId);
-  const slots = RAFFLE_MAX_SELECT - existing.length;
+  const maxSelect = getRaffleMaxSelect(raffle);
+  const slots = maxSelect - existing.length;
   const nPick = Math.min(Math.max(1, Math.floor(want)), slots);
   if (nPick < 1) return { ok: false, error: "Достигнут лимит номерков" };
+
+  const sequentialWindow = await getSequentialTicketWindow(raffle);
+  const rangeFrom = sequentialWindow?.from ?? getRaffleTicketStartNumber(raffle);
+  const rangeTo = sequentialWindow?.to ?? getRaffleTicketEndNumber(raffle);
 
   const occupiedRows = await pgAll<{ ticket_number: number }>(
     `SELECT h.ticket_number FROM raffle_ticket_holds h
@@ -3188,7 +3329,7 @@ export async function appendRandomTicketsToReservedOrder(
   ]);
 
   const free: number[] = [];
-  for (let n = 1; n <= raffle.ticket_count; n++) {
+  for (let n = rangeFrom; n <= rangeTo; n++) {
     if (!occ.has(n)) free.push(n);
   }
   if (free.length === 0) return { ok: false, error: "Нет свободных номерков" };

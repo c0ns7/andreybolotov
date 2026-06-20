@@ -49,6 +49,7 @@ import {
   updateUserProfile,
   updateUserRole,
   raffleToDto,
+  isRaffleTicketNumberInRange,
 } from "./db.js";
 import {
   adminAssignPhoneToExactTicket,
@@ -579,6 +580,10 @@ type RaffleInput = {
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   hidden_from_public: boolean;
+  hide_ticket_stats: boolean;
+  sequential_batch_size: number;
+  max_tickets_per_user: number;
+  ticket_start_number: number;
   public_start_at: number | null;
   card_payment_scope: "unlimited" | "wholesale_only" | "min_order_tickets";
   card_payment_min_tickets: number;
@@ -744,6 +749,35 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
     return { ok: false, error: "Включите только одну акцию: 5+1 или 5+2." };
   }
   const hidden_from_public = Boolean(body.hidden_from_public);
+  const hide_ticket_stats = Boolean(body.hide_ticket_stats);
+  const sequentialBatchRaw = body.sequential_batch_size;
+  const sequential_batch_size =
+    sequentialBatchRaw === undefined || sequentialBatchRaw === null || sequentialBatchRaw === ""
+      ? 0
+      : Math.floor(Number(sequentialBatchRaw));
+  if (
+    !Number.isFinite(sequential_batch_size) ||
+    sequential_batch_size < 0 ||
+    sequential_batch_size > 100_000_000
+  ) {
+    return { ok: false, error: "Размер блока для очереди таблиц: целое число от 0 (выкл.)" };
+  }
+  const maxTicketsRaw = body.max_tickets_per_user;
+  const max_tickets_per_user =
+    maxTicketsRaw === undefined || maxTicketsRaw === null || maxTicketsRaw === ""
+      ? 25
+      : Math.floor(Number(maxTicketsRaw));
+  if (!Number.isFinite(max_tickets_per_user) || max_tickets_per_user < 1 || max_tickets_per_user > 500) {
+    return { ok: false, error: "Лимит номерков на участника: от 1 до 500" };
+  }
+  const ticketStartRaw = body.ticket_start_number;
+  const ticket_start_number =
+    ticketStartRaw === undefined || ticketStartRaw === null || ticketStartRaw === ""
+      ? 1
+      : Math.floor(Number(ticketStartRaw));
+  if (!Number.isFinite(ticket_start_number) || ticket_start_number < 1 || ticket_start_number > 100_000_000) {
+    return { ok: false, error: "Начало первого номерка: целое число от 1" };
+  }
 
   const publicStartRaw = body.public_start_at;
   const public_start_at =
@@ -836,6 +870,10 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       promo_5_plus_1_enabled,
       promo_5_plus_2_enabled,
       hidden_from_public,
+      hide_ticket_stats,
+      sequential_batch_size,
+      max_tickets_per_user,
+      ticket_start_number,
       public_start_at,
       card_payment_scope,
       card_payment_min_tickets,
@@ -1573,6 +1611,10 @@ adminSubApp.post("/raffles", async (c) => {
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
+    hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
+    sequential_batch_size: v.sequential_batch_size,
+    max_tickets_per_user: v.max_tickets_per_user,
+    ticket_start_number: v.ticket_start_number,
     public_start_at: v.public_start_at,
   });
   await replaceRaffleBankCards(id, v.bank_cards);
@@ -1641,6 +1683,10 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
+    hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
+    sequential_batch_size: v.sequential_batch_size,
+    max_tickets_per_user: v.max_tickets_per_user,
+    ticket_start_number: v.ticket_start_number,
     public_start_at: v.public_start_at,
   });
   await replaceRaffleBankCards(id, v.bank_cards);
@@ -1724,7 +1770,7 @@ adminSubApp.get("/raffles/:id/tickets/:ticketNumber/availability", async (c) => 
   if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
   const ticketNumber = Number(c.req.param("ticketNumber"));
   const n = Math.floor(ticketNumber);
-  if (!Number.isFinite(n) || n < 1 || n > raffle.ticket_count) {
+  if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(raffle, n)) {
     return c.json({ error: "Некорректный номерок" }, 400);
   }
   const is_free = !await isRaffleTicketBlocked(id, n);

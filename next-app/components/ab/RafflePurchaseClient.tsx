@@ -17,7 +17,7 @@ import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration"
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
-const RAFFLE_MAX_SELECT = 25;
+const RAFFLE_MAX_SELECT_DEFAULT = 25;
 const DRAFT_PREFIX = "ab_raffle_draft_";
 const LOW_STOCK_FREE_THRESHOLD = 500;
 /** Карточка «мало свободных» — только если у пользователя в акции меньше 3 своих номерков. */
@@ -47,6 +47,13 @@ type RaffleDto = Record<string, unknown> & {
   card_payment_min_tickets?: number;
   wholesale_every_n_tickets?: number;
   has_bank_cards?: boolean;
+  hide_ticket_stats?: boolean;
+  sequential_batch_size?: number;
+  max_tickets_per_user?: number;
+  sequential_window_from?: number | null;
+  sequential_window_to?: number | null;
+  ticket_start_number?: number;
+  ticket_end_number?: number;
 };
 
 type OrderDto = Record<string, unknown> & {
@@ -115,21 +122,42 @@ function getBankCardTicketShortfall(r: RaffleDto, ticketCount: number): number |
   return null;
 }
 
-function buildRangeParts(ticketCount: number) {
-  const maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
+function resolveMaxSelect(raffle: RaffleDto | null | undefined): number {
+  const n = Math.floor(Number(raffle?.max_tickets_per_user ?? RAFFLE_MAX_SELECT_DEFAULT));
+  if (!Number.isFinite(n) || n < 1) return RAFFLE_MAX_SELECT_DEFAULT;
+  return Math.min(n, 500);
+}
+
+function getRaffleTicketRange(raffle: RaffleDto | null | undefined) {
+  const start = Math.max(1, Math.floor(Number(raffle?.ticket_start_number) || 1));
+  const endRaw = Math.floor(Number(raffle?.ticket_end_number) || 0);
+  const count = Math.max(0, Math.floor(Number(raffle?.ticket_count) || 0));
+  const end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
+  return { start, end };
+}
+
+function buildRangeParts(raffle: RaffleDto | null | undefined) {
+  const { start, end } = getRaffleTicketRange(raffle);
+  if (end < start) return [{ from: start, to: start }];
+  const batchSize = Math.max(0, Math.floor(Number(raffle?.sequential_batch_size) || 0));
+  if (batchSize > 0) {
+    const from = Math.max(start, Math.floor(Number(raffle?.sequential_window_from) || start));
+    const to = Math.min(end, Math.max(from, Math.floor(Number(raffle?.sequential_window_to) || from)));
+    return [{ from, to }];
+  }
   const chunk = 500;
   const parts: { from: number; to: number }[] = [];
-  let start = 1;
-  while (start <= maxN) {
-    const end = Math.min(start + chunk - 1, maxN);
-    parts.push({ from: start, to: end });
-    start = end + 1;
+  let partStart = start;
+  while (partStart <= end) {
+    const partEnd = Math.min(partStart + chunk - 1, end);
+    parts.push({ from: partStart, to: partEnd });
+    partStart = partEnd + 1;
   }
   return parts;
 }
 
-function getRangeTabForTicketN(ticketCount: number, n: number) {
-  const parts = buildRangeParts(ticketCount);
+function getRangeTabForTicketN(raffle: RaffleDto | null | undefined, n: number) {
+  const parts = buildRangeParts(raffle);
   for (const p of parts) {
     if (n >= p.from && n <= p.to) return p;
   }
@@ -532,6 +560,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   );
 
   const raffleRef = useRef<RaffleDto | null>(null);
+  const maxSelectRef = useRef(RAFFLE_MAX_SELECT_DEFAULT);
   raffleRef.current = raffle;
   const reservationLeftMsRef = useRef(reservationLeftMs);
   reservationLeftMsRef.current = reservationLeftMs;
@@ -789,7 +818,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       setSelected((prev) => {
         const next = new Set(prev);
         for (const x of nums) {
-          if (next.size >= RAFFLE_MAX_SELECT) break;
+          if (next.size >= maxSelectRef.current) break;
           next.add(x);
         }
         return Array.from(next).sort((a, b) => a - b);
@@ -806,20 +835,79 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const syncOrderRef = useRef(syncOrder);
   syncOrderRef.current = syncOrder;
 
-  const ensureRaffleActive = useCallback(async () => {
-    const r = raffleRef.current;
-    if (!r?.id) return;
-    try {
-      const res = await fetch("/api/raffles/" + String(r.id), { cache: "no-store", headers: abAuthHeaders() });
-      const data = (await res.json().catch(() => ({}))) as { raffle?: RaffleDto; error?: string };
-      if (!res.ok || !data.raffle || String(data.raffle.status || "") !== "active") {
-        toastRef.current("Продажи по этой акции недоступны.", "info");
-        if (!onHashRoute) router.replace("/home");
+  const refreshRaffleMeta = useCallback(
+    async (opts?: { forceReload?: boolean }) => {
+      const cur = raffleRef.current;
+      if (!cur?.id) return;
+      try {
+        const res = await fetch("/api/raffles/" + String(cur.id), { cache: "no-store", headers: abAuthHeaders() });
+        const data = (await res.json().catch(() => ({}))) as { raffle?: RaffleDto; error?: string };
+        if (!res.ok || !data.raffle || String(data.raffle.status || "") !== "active") {
+          toastRef.current("Продажи по этой акции недоступны.", "info");
+          if (!onHashRoute) router.replace("/home");
+          return;
+        }
+        const r = data.raffle;
+        const prevFrom = rangeFromRef.current;
+        const prevTo = rangeToRef.current;
+        raffleRef.current = r;
+        maxSelectRef.current = resolveMaxSelect(r);
+        setRaffle(r);
+        const parts = buildRangeParts(r);
+        rangePartsRef.current = parts;
+        setRangeParts(parts);
+        const tabs = document.getElementById("raffle-page-tabs");
+        if (tabs) {
+          tabs.innerHTML = parts
+            .map((p) => {
+              const label = String(p.from) + "–" + String(p.to);
+              return (
+                '<button type="button" role="tab" class="raffle-range-tab" data-from="' +
+                String(p.from) +
+                '" data-to="' +
+                String(p.to) +
+                '">' +
+                esc(label) +
+                "</button>"
+              );
+            })
+            .join("");
+          syncRangeTabsVisibilityRef.current();
+        }
+        const first = parts[0];
+        const windowChanged =
+          Boolean(first) &&
+          (prevFrom !== first.from ||
+            prevTo !== first.to ||
+            prevFrom < first.from ||
+            prevFrom > first.to ||
+            prevTo < first.from ||
+            prevTo > first.to);
+        if (first && windowChanged) {
+          rangeFromRef.current = first.from;
+          rangeToRef.current = first.to;
+          setRangeFrom(first.from);
+          setRangeTo(first.to);
+        }
+        if (windowChanged || opts?.forceReload) {
+          allSlicesLoadedRef.current = false;
+          sliceCacheRef.current.clear();
+          rangeHasFreeRef.current.clear();
+          await loadAllSlicesRef.current({ parts, force: true, showLoader: false });
+        }
+      } catch {
+        /* ignore transient refresh errors */
       }
-    } catch {
-      /* ignore transient ws checks */
-    }
-  }, [onHashRoute, router]);
+    },
+    [onHashRoute, router],
+  );
+
+  const ensureRaffleActive = useCallback(async () => {
+    await refreshRaffleMeta();
+  }, [refreshRaffleMeta]);
+
+  const refreshRaffleMetaRef = useRef(refreshRaffleMeta);
+  refreshRaffleMetaRef.current = refreshRaffleMeta;
 
   const ensureRaffleActiveRef = useRef(ensureRaffleActive);
   ensureRaffleActiveRef.current = ensureRaffleActive;
@@ -841,8 +929,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       stateEl.innerHTML = "";
       return;
     }
-    const maxN = Math.max(1, Math.floor(Number(r.ticket_count) || 1));
-    if (n > maxN) {
+    const { start, end } = getRaffleTicketRange(r);
+    if (n > end || n < start) {
       stateEl.innerHTML = '<span class="raffle-fast-input__badge raffle-fast-input__badge--invalid">Нет такого</span>';
       return;
     }
@@ -884,8 +972,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       renderFastInputState();
       return;
     }
-    const maxN = Math.max(1, Math.floor(Number(r.ticket_count) || 1));
-    if (n > maxN) {
+    const { start, end } = getRaffleTicketRange(r);
+    if (n > end || n < start) {
       fastLookupRef.current = { n, kind: "invalid" };
       renderFastInputState();
       return;
@@ -958,8 +1046,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         if (cancelled) return;
         setLowStockModal(null);
         raffleRef.current = r;
+        maxSelectRef.current = resolveMaxSelect(r);
         setRaffle(r);
-        const parts = buildRangeParts(Number(r.ticket_count) || 1);
+        const parts = buildRangeParts(r);
         setRangeParts(parts);
         if (parts[0]) {
           rangeFromRef.current = parts[0].from;
@@ -1023,7 +1112,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
             const arr = JSON.parse(raw) as unknown;
             if (Array.isArray(arr)) {
               const nums = arr.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
-              setSelected(nums.slice(0, RAFFLE_MAX_SELECT));
+              setSelected(nums.slice(0, maxSelectRef.current));
             }
           }
         } catch {
@@ -1200,7 +1289,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         strip.classList.add("cart-action-strip--home-pending-pay");
       } else {
         if (title) title.textContent = "Забронировать (" + String(selected.length) + ")";
-        if (sub) sub.textContent = "Выбрано: " + String(selected.length) + " / " + String(RAFFLE_MAX_SELECT);
+        if (sub) sub.textContent = "Выбрано: " + String(selected.length) + " / " + String(maxSelectRef.current);
         strip.classList.remove("cart-action-strip--home-pending-pay");
       }
     } else {
@@ -1345,14 +1434,14 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toastRef.current("Номер уже в корзине", "warning");
         return;
       }
-      if (selRef.current.size >= RAFFLE_MAX_SELECT) {
-        toastRef.current("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+      if (selRef.current.size >= maxSelectRef.current) {
+        toastRef.current("Можно выбрать не более " + String(maxSelectRef.current) + " номерков", "warning");
         return;
       }
       setSelected((prev) => {
         const set = new Set(prev);
         if (set.has(n)) return prev;
-        if (set.size >= RAFFLE_MAX_SELECT) return prev;
+        if (set.size >= maxSelectRef.current) return prev;
         set.add(n);
         return Array.from(set).sort((a, b) => a - b);
       });
@@ -1382,8 +1471,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       const rnd = free[Math.floor(Math.random() * free.length)];
       if (rnd === undefined) return;
-      const maxN = Math.max(1, Math.floor(Number(raffleRef.current?.ticket_count) || 1));
-      const part = getRangeTabForTicketN(maxN, rnd);
+      const part = getRangeTabForTicketN(raffleRef.current, rnd);
       if (part) switchRangeTabRef.current(part.from, part.to);
       const finp = document.getElementById("raffle-fast-number") as HTMLInputElement | null;
       if (finp) finp.value = String(rnd);
@@ -1439,8 +1527,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         const set = new Set(prev);
         if (set.has(n)) set.delete(n);
         else {
-          if (set.size >= RAFFLE_MAX_SELECT) {
-            toast("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+          if (set.size >= maxSelectRef.current) {
+            toast("Можно выбрать не более " + String(maxSelectRef.current) + " номерков", "warning");
             return prev;
           }
           set.add(n);
@@ -1976,18 +2064,12 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (!d || typeof d !== "object") return;
       const rid = raffleIdRef.current;
       if (d.type === "raffle_grid_updated" && Number(d.raffle_id) === rid) {
-        allSlicesLoadedRef.current = false;
-        sliceCacheRef.current.clear();
-        rangeHasFreeRef.current.clear();
-        void loadAllSlicesRef.current({ force: true, showLoader: false });
+        void refreshRaffleMetaRef.current({ forceReload: true });
         void syncOrderRef.current();
       }
       if (d.type === "raffle_tickets_updated") {
         if (d.raffle_id != null && Number(d.raffle_id) !== rid) return;
-        allSlicesLoadedRef.current = false;
-        sliceCacheRef.current.clear();
-        rangeHasFreeRef.current.clear();
-        void loadAllSlicesRef.current({ force: true, showLoader: false });
+        void refreshRaffleMetaRef.current({ forceReload: true });
         void syncOrderRef.current();
       }
       if (d.type === "raffles_feed_updated") {
@@ -2770,7 +2852,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         x.classList.toggle("ticket-search-random__preset--active", n === randomQty);
       });
       if (randomMinus) (randomMinus as HTMLButtonElement).disabled = randomQty <= 1;
-      if (randomPlus) (randomPlus as HTMLButtonElement).disabled = randomQty >= RAFFLE_MAX_SELECT;
+      if (randomPlus) (randomPlus as HTMLButtonElement).disabled = randomQty >= maxSelectRef.current;
     };
 
     const setMode = (m: "enter" | "random") => {
@@ -2823,8 +2905,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         setEnterUi("");
         return;
       }
-      const maxN = Math.max(1, Math.floor(Number(raffleRef.current?.ticket_count) || 1));
-      if (n > maxN) {
+      const { start, end } = getRaffleTicketRange(raffleRef.current);
+      if (n > end || n < start) {
         lookupState = { n, kind: "invalid" };
         setEnterUi("invalid");
         return;
@@ -2869,7 +2951,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (!selRef.current.has(n) && (lookupState.n !== n || lookupState.kind !== "free")) return;
       setSelected((prev) => {
         const set = new Set(prev);
-        if (set.size >= RAFFLE_MAX_SELECT || set.has(n)) return prev;
+        if (set.size >= maxSelectRef.current || set.has(n)) return prev;
         set.add(n);
         return Array.from(set).sort((a, b) => a - b);
       });
@@ -2890,11 +2972,11 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         return;
       }
       const shuffled = free.slice().sort(() => Math.random() - 0.5);
-      const add = shuffled.slice(0, Math.max(1, Math.min(randomQty, RAFFLE_MAX_SELECT)));
+      const add = shuffled.slice(0, Math.max(1, Math.min(randomQty, maxSelectRef.current)));
       setSelected((prev) => {
         const set = new Set(prev);
         for (const n of add) {
-          if (set.size >= RAFFLE_MAX_SELECT) break;
+          if (set.size >= maxSelectRef.current) break;
           set.add(n);
         }
         return Array.from(set).sort((a, b) => a - b);
@@ -2903,8 +2985,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       renderPicked();
       const first = add[0];
       if (first !== undefined) {
-        const maxN = Math.max(1, Math.floor(Number(raffleRef.current?.ticket_count) || 1));
-        const part = getRangeTabForTicketN(maxN, first);
+        const part = getRangeTabForTicketN(raffleRef.current, first);
         if (part) switchRangeTabRef.current(part.from, part.to);
       }
       setMode("enter");
@@ -2934,7 +3015,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       updateRandomUi();
     };
     const onPlus = () => {
-      randomQty = Math.min(RAFFLE_MAX_SELECT, randomQty + 1);
+      randomQty = Math.min(maxSelectRef.current, randomQty + 1);
       updateRandomUi();
     };
     const onPreset = (e: Event) => {
@@ -2942,7 +3023,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (!t) return;
       const n = Number(t.getAttribute("data-random-preset"));
       if (!Number.isFinite(n)) return;
-      randomQty = Math.max(1, Math.min(RAFFLE_MAX_SELECT, n));
+      randomQty = Math.max(1, Math.min(maxSelectRef.current, n));
       updateRandomUi();
     };
 

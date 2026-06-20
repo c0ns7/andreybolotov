@@ -52,6 +52,7 @@ type RaffleRow = {
   live_stream_show_on_card?: number | boolean;
   public_start_at?: number | null;
   sales_open?: boolean;
+  hide_ticket_stats?: boolean | number;
 };
 
 function formatRub(n: number) {
@@ -613,6 +614,7 @@ export default function HomeAppClient() {
                 const free = Math.max(0, total - occupied);
                 const freePct = total > 0 ? (free / total) * 100 : 0;
                 const isLowFree = free <= 300;
+                const hideTicketStats = Boolean(Number(r.hide_ticket_stats) || r.hide_ticket_stats === true);
                 const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
                 const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? currentPrice)));
                 const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
@@ -759,27 +761,29 @@ export default function HomeAppClient() {
                       <h3 className="raffle-card__title">{String(r.title || "")}</h3>
                     </div>
                     <div className="raffle-card__foot">
-                      <div className="raffle-card__progress-wrap">
-                        <div className="raffle-card__progress-meta">
-                          <span>
-                            Занято: <AnimatedStatNumber value={occupied} />
-                          </span>
-                          <span>
-                            Осталось: <AnimatedStatNumber value={free} />
-                          </span>
+                      {!hideTicketStats ? (
+                        <div className="raffle-card__progress-wrap">
+                          <div className="raffle-card__progress-meta">
+                            <span>
+                              Занято: <AnimatedStatNumber value={occupied} />
+                            </span>
+                            <span>
+                              Осталось: <AnimatedStatNumber value={free} />
+                            </span>
+                          </div>
+                          <div className="raffle-card__progress-track" role="img" aria-label={"Осталось " + Math.round(freePct) + " процентов"}>
+                            <span
+                              className={
+                                "raffle-card__progress-fill " +
+                                (isLowFree
+                                  ? "raffle-card__progress-fill--danger raffle-card__progress-fill--blink"
+                                  : "raffle-card__progress-fill--ok")
+                              }
+                              style={{ width: Math.max(0, Math.min(100, freePct)).toFixed(1) + "%" }}
+                            />
+                          </div>
                         </div>
-                        <div className="raffle-card__progress-track" role="img" aria-label={"Осталось " + Math.round(freePct) + " процентов"}>
-                          <span
-                            className={
-                              "raffle-card__progress-fill " +
-                              (isLowFree
-                                ? "raffle-card__progress-fill--danger raffle-card__progress-fill--blink"
-                                : "raffle-card__progress-fill--ok")
-                            }
-                            style={{ width: Math.max(0, Math.min(100, freePct)).toFixed(1) + "%" }}
-                          />
-                        </div>
-                      </div>
+                      ) : null}
                       <div className="raffle-card__price-row">
                         {st === "closed" && streamUrl ? (
                           <a href={streamUrl} target="_blank" rel="noopener noreferrer" className="raffle-card__stream-cta">

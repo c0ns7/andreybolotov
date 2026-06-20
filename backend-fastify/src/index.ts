@@ -31,6 +31,9 @@ import {
   markStaffMessagesReadByUser,
   messageToDto,
   raffleToDto,
+  getRaffleTicketEndNumber,
+  getRaffleTicketStartNumber,
+  isRaffleTicketNumberInRange,
   type RaffleRow,
 } from "../../server/db.js";
 import { pgAll } from "../../server/pg-sql.js";
@@ -72,6 +75,8 @@ import {
   getTicketCellKind,
   getTicketGridSlice,
   getTicketNumbersForOrder,
+  enrichRaffleDtoSequentialWindow,
+  getSequentialTicketWindow,
   getOrderPaymentBankCardSuggestion,
   listConfirmedTicketGroupsForUser,
   listGloballyFreeTicketNumbers,
@@ -126,7 +131,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 async function raffleDtoWithBankCardMeta(r: RaffleRow) {
   const extra = await publicRaffleExtraFields(r.id);
-  return { ...raffleToDto(r), ...extra };
+  const base = { ...raffleToDto(r), ...extra };
+  return enrichRaffleDtoSequentialWindow(r, base);
 }
 
 const rateLimitBuckets = new Map<string, { win: number; n: number }>();
@@ -758,20 +764,22 @@ app.get("/api/raffles", async (request, reply) => {
   return {
     server_time_ms: serverTimeMs,
     site_timezone: "Asia/Chita",
-    raffles: rows.map((r) => {
-      const dto = raffleToDto(r);
-      const occupied = Math.min(Math.max(0, occupiedByRaffle.get(r.id) ?? 0), Number(dto.ticket_count) || 0);
-      const myOrder = activeOrderByRaffle.get(r.id) ?? null;
-      return {
-        ...dto,
-        updated_at: Math.floor(Number(r.updated_at) || 0),
-        occupied_count: occupied,
-        free_count: Math.max(0, Number(dto.ticket_count) - occupied),
-        viewers_count: getRaffleViewerCount(r.id),
-        my_order_status: myOrder?.status ?? null,
-        my_order_id: myOrder?.id ?? null,
-      };
-    }),
+    raffles: await Promise.all(
+      rows.map(async (r) => {
+        const dto = raffleToDto(r);
+        const occupied = Math.min(Math.max(0, occupiedByRaffle.get(r.id) ?? 0), Number(dto.ticket_count) || 0);
+        const myOrder = activeOrderByRaffle.get(r.id) ?? null;
+        return enrichRaffleDtoSequentialWindow(r, {
+          ...dto,
+          updated_at: Math.floor(Number(r.updated_at) || 0),
+          occupied_count: occupied,
+          free_count: Math.max(0, Number(dto.ticket_count) - occupied),
+          viewers_count: getRaffleViewerCount(r.id),
+          my_order_status: myOrder?.status ?? null,
+          my_order_id: myOrder?.id ?? null,
+        });
+      }),
+    ),
   };
 });
 
@@ -792,6 +800,8 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   }
   const raffleId = Math.floor(Number(latest.id) || 0);
   const ticketCount = Math.max(0, Math.floor(Number(latest.ticket_count) || 0));
+  const ticketStart = getRaffleTicketStartNumber(latest);
+  const ticketEnd = getRaffleTicketEndNumber(latest);
   const now = Date.now();
   const cached = latestTableCache.get(raffleId);
   if (cached && now - cached.ts < 15_000) {
@@ -822,7 +832,7 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   };
   for (const row of holdRows) {
     const n = Math.floor(Number(row.n));
-    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prio = statusPrio(String(row.order_status || ""));
     const isSelf = Math.floor(Number(row.order_user_id) || 0) === user.id;
     const phone = String(row.phone || "").trim() || null;
@@ -854,7 +864,7 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   );
   for (const row of preRows) {
     const n = Math.floor(Number(row.n));
-    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prePhone = String(row.phone || "").trim();
     const isSelf = prePhone && prePhone === ownPhone;
     const status = isSelf ? "self_confirmed" : "taken";
@@ -867,8 +877,12 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     }
   }
 
+  const sequentialWindow = await getSequentialTicketWindow(latest);
+  const tableFrom = sequentialWindow?.from ?? 1;
+  const tableTo = sequentialWindow?.to ?? ticketCount;
+
   const tableRows: Array<{ n: number; status: "free" | "taken" | "self_reserved" | "self_pending" | "self_confirmed"; phone: string | null }> = [];
-  for (let n = 1; n <= ticketCount; n++) {
+  for (let n = tableFrom; n <= tableTo; n++) {
     const own = ownByNumber.get(n);
     if (own) {
       tableRows.push({ n, status: own.status, phone: own.phone });
@@ -888,6 +902,11 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
       title: String(latest.title || "Акция"),
       ticket_count: ticketCount,
       status: String(latest.status || ""),
+      hide_ticket_stats: Boolean(Number(latest.hide_ticket_stats ?? 0)),
+      sequential_window_from: sequentialWindow?.from ?? null,
+      sequential_window_to: sequentialWindow?.to ?? null,
+      ticket_start_number: ticketStart,
+      ticket_end_number: ticketEnd,
     },
     rows: tableRows,
   };
@@ -918,6 +937,8 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
 
   const raffleId = Math.floor(Number(latest.id) || 0);
   const ticketCount = Math.max(0, Math.floor(Number(latest.ticket_count) || 0));
+  const ticketStart = getRaffleTicketStartNumber(latest);
+  const ticketEnd = getRaffleTicketEndNumber(latest);
 
   const byNumber = new Map<number, { status: "taken"; phone: string | null; prio: number; orderId: number }>();
   const holdRows = await pgAll<{ n: number; order_status: string; phone: string | null; order_id: number }>(
@@ -942,7 +963,7 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
 
   for (const row of holdRows) {
     const n = Math.floor(Number(row.n));
-    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prio = statusPrio(String(row.order_status || ""));
     const phone = String(row.phone || "").trim() || null;
     const prev = byNumber.get(n);
@@ -960,7 +981,7 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
   );
   for (const row of preRows) {
     const n = Math.floor(Number(row.n));
-    if (!Number.isFinite(n) || n < 1 || n > ticketCount) continue;
+    if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prePhone = String(row.phone || "").trim() || null;
     const prev = byNumber.get(n);
     if (!prev || 6 > prev.prio) {
@@ -968,8 +989,12 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
     }
   }
 
+  const sequentialWindow = await getSequentialTicketWindow(latest);
+  const tableFrom = sequentialWindow?.from ?? 1;
+  const tableTo = sequentialWindow?.to ?? ticketCount;
+
   const tableRows: Array<{ n: number; status: "free" | "taken"; phone: string | null }> = [];
-  for (let n = 1; n <= ticketCount; n++) {
+  for (let n = tableFrom; n <= tableTo; n++) {
     const row = byNumber.get(n);
     if (row) {
       tableRows.push({ n, status: "taken", phone: row.phone });
@@ -985,6 +1010,11 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
       ticket_count: ticketCount,
       status: String(latest.status || ""),
       viewers_count: getPublicTableViewerCount(),
+      hide_ticket_stats: Boolean(Number(latest.hide_ticket_stats ?? 0)),
+      sequential_window_from: sequentialWindow?.from ?? null,
+      sequential_window_to: sequentialWindow?.to ?? null,
+      ticket_start_number: ticketStart,
+      ticket_end_number: ticketEnd,
     },
     rows: tableRows,
     server_time_ms: Date.now(),
@@ -1556,7 +1586,7 @@ app.get("/api/raffles/:id/ticket-lookup", async (request, reply) => {
   }
   const raffle = await raffleVisibleOrActiveOrder(user.id, id);
   if (!raffle) return reply.code(404).send({ error: "Не найдено" });
-  if (n < 1 || n > raffle.ticket_count) return reply.code(400).send({ error: "Некорректный номер" });
+  if (!isRaffleTicketNumberInRange(raffle, n)) return reply.code(400).send({ error: "Некорректный номер" });
   const ticketN = Math.floor(n);
   const kind = await getTicketCellKind(id, ticketN, user.id);
   return { n: ticketN, kind };

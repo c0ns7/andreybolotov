@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS raffles (
   promo_5_plus_2_enabled INTEGER NOT NULL DEFAULT 0,
   promo_5_plus_2_locked_free_count INTEGER NOT NULL DEFAULT 0,
   hidden_from_public INTEGER NOT NULL DEFAULT 0,
+  hide_ticket_stats INTEGER NOT NULL DEFAULT 0,
+  sequential_batch_size INTEGER NOT NULL DEFAULT 0,
+  max_tickets_per_user INTEGER NOT NULL DEFAULT 25,
+  ticket_start_number INTEGER NOT NULL DEFAULT 1,
   launch_notify_sent_at BIGINT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL

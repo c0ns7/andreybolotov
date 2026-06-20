@@ -65,6 +65,7 @@ export default function PublicTableClient() {
   const [cards, setCards] = useState<PublicTicketCard[]>([]);
   const [raffleTitle, setRaffleTitle] = useState("");
   const [ticketCount, setTicketCount] = useState(0);
+  const [hideTicketStats, setHideTicketStats] = useState(false);
   const [raffleId, setRaffleId] = useState(0);
   const [viewersCount, setViewersCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,6 +86,7 @@ export default function PublicTableClient() {
       if (!raffle) {
         setCards([]);
         setTicketCount(0);
+        setHideTicketStats(false);
         setRaffleId(0);
         setRaffleTitle("");
         setViewersCount(0);
@@ -93,6 +95,7 @@ export default function PublicTableClient() {
       const rid = Math.max(0, Math.floor(Number(raffle.id) || 0));
       const count = Math.max(0, Math.floor(Number(raffle.ticket_count) || 0));
       setTicketCount(count);
+      setHideTicketStats(Boolean(Number(raffle.hide_ticket_stats) || raffle.hide_ticket_stats === true));
       setRaffleId(rid);
       setRaffleTitle(String(raffle.title || "Акция"));
       setViewersCount(Math.max(0, Math.floor(Number(raffle.viewers_count) || 0)));
@@ -225,6 +228,7 @@ export default function PublicTableClient() {
               <span>Обновить</span>
             </button>
           </div>
+          {!hideTicketStats ? (
           <section className="table-page__summary" aria-label="Статистика по номеркам">
             <div className="table-page__summary-grid">
               <div className="table-page__summary-item table-page__summary-item--free">
@@ -245,6 +249,7 @@ export default function PublicTableClient() {
             </div>
             <p className="table-page__progress-caption">Заполнено: {takenPercent}%</p>
           </section>
+          ) : null}
           <div className="table-page__filters-actions">
             <button
               type="button"

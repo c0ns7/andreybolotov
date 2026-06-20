@@ -839,6 +839,14 @@ export type RaffleRow = {
   hidden_from_public?: number;
   /** Старт продаж / показа на сайте (epoch ms, агинское «настенное» время при вводе в админке). */
   public_start_at?: number | null;
+  /** Скрыть прогресс-бар и счётчики свободных/занятых номерков на сайте. */
+  hide_ticket_stats?: number;
+  /** Показывать таблицы номерков по очереди: размер блока (0 — все сразу). */
+  sequential_batch_size?: number;
+  /** Сколько номерков участник может держать в одной брони. */
+  max_tickets_per_user?: number;
+  /** Первый номерок в акции (по умолчанию 1). */
+  ticket_start_number?: number;
   launch_notify_sent_at?: number | null;
   created_at: number;
   updated_at: number;
@@ -894,7 +902,45 @@ export type RaffleDto = {
   public_start_at?: number | null;
   /** Продажи открыты по серверному времени (учитывает public_start_at). */
   sales_open?: boolean;
+  hide_ticket_stats: boolean;
+  /** 0 — все диапазоны сразу; иначе размер очередного блока номерков. */
+  sequential_batch_size: number;
+  max_tickets_per_user: number;
+  /** Первый номерок в акции. */
+  ticket_start_number: number;
+  /** Последний номерок (ticket_start_number + ticket_count − 1). */
+  ticket_end_number: number;
+  /** Текущий открытый блок при sequential_batch_size > 0 (заполняется API). */
+  sequential_window_from?: number | null;
+  sequential_window_to?: number | null;
 };
+
+export function getRaffleTicketStartNumber(
+  r: { ticket_start_number?: number | null } | null | undefined,
+): number {
+  const n = Math.floor(Number(r?.ticket_start_number ?? 1));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return n;
+}
+
+export function getRaffleTicketEndNumber(
+  r: { ticket_count: number; ticket_start_number?: number | null } | null | undefined,
+): number {
+  if (!r) return 0;
+  const start = getRaffleTicketStartNumber(r);
+  const count = Math.max(0, Math.floor(Number(r.ticket_count)));
+  if (count < 1) return start - 1;
+  return start + count - 1;
+}
+
+export function isRaffleTicketNumberInRange(
+  r: { ticket_count: number; ticket_start_number?: number | null },
+  n: number,
+): boolean {
+  const tn = Math.floor(Number(n));
+  if (!Number.isFinite(tn)) return false;
+  return tn >= getRaffleTicketStartNumber(r) && tn <= getRaffleTicketEndNumber(r);
+}
 
 export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): RaffleDto {
   const st = r.status === "closed" || r.status === "paused" ? r.status : "active";
@@ -988,6 +1034,17 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
       0,
       Math.floor(Number((r as RaffleRow).promo_5_plus_2_locked_free_count ?? 0)),
     ),
+    hide_ticket_stats: Boolean(Number((r as RaffleRow).hide_ticket_stats ?? 0)),
+    sequential_batch_size: Math.max(
+      0,
+      Math.floor(Number((r as RaffleRow).sequential_batch_size ?? 0)),
+    ),
+    max_tickets_per_user: Math.max(
+      1,
+      Math.min(500, Math.floor(Number((r as RaffleRow).max_tickets_per_user ?? 25))),
+    ),
+    ticket_start_number: getRaffleTicketStartNumber(r as RaffleRow),
+    ticket_end_number: getRaffleTicketEndNumber(r as RaffleRow),
   };
   const publicStartRaw = Number((r as RaffleRow).public_start_at ?? 0);
   const public_start_at =
@@ -1158,6 +1215,10 @@ export async function insertRaffle(data: {
   promo_5_plus_1_enabled: number;
   promo_5_plus_2_enabled: number;
   hidden_from_public: number;
+  hide_ticket_stats: number;
+  sequential_batch_size: number;
+  max_tickets_per_user: number;
+  ticket_start_number: number;
   public_start_at: number | null;
 }): Promise<number> {
   const now = Date.now();
@@ -1167,8 +1228,8 @@ export async function insertRaffle(data: {
       cenopad_start_at, cenopad_end_at,
       collection_url, tbank_collection_url, collection_recipient, sber_collection_recipient, tbank_collection_recipient, qr_image_url, qr_recipient, qr_payment_purpose,
       sber_enabled, tbank_enabled, qr_enabled, rules_url, live_stream_note, live_stream_url, live_stream_at, live_stream_status, live_stream_show_on_card,
-      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, public_start_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, sort_order, wholesale_enabled, wholesale_every_n_tickets, card_payment_scope, card_payment_min_tickets, promo_5_plus_1_enabled, promo_5_plus_2_enabled, hidden_from_public, hide_ticket_stats, sequential_batch_size, max_tickets_per_user, ticket_start_number, public_start_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
     [
       randomUUID(),
@@ -1208,6 +1269,10 @@ export async function insertRaffle(data: {
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,
+      data.hide_ticket_stats,
+      data.sequential_batch_size,
+      data.max_tickets_per_user,
+      data.ticket_start_number,
       data.public_start_at,
       now,
       now,
@@ -1255,6 +1320,10 @@ export async function updateRaffle(
     promo_5_plus_1_enabled: number;
     promo_5_plus_2_enabled: number;
     hidden_from_public: number;
+    hide_ticket_stats: number;
+    sequential_batch_size: number;
+    max_tickets_per_user: number;
+    ticket_start_number: number;
     public_start_at: number | null;
   },
 ): Promise<void> {
@@ -1266,7 +1335,7 @@ export async function updateRaffle(
       collection_url = ?, tbank_collection_url = ?, collection_recipient = ?, sber_collection_recipient = ?, tbank_collection_recipient = ?, qr_image_url = ?, qr_recipient = ?, qr_payment_purpose = ?, rules_url = ?, live_stream_note = ?, live_stream_url = ?,
       live_stream_at = ?, live_stream_status = ?, live_stream_show_on_card = ?,
       sber_enabled = ?, tbank_enabled = ?, qr_enabled = ?,
-      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, card_payment_min_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, public_start_at = ?, updated_at = ?
+      status = ?, sort_order = ?, wholesale_enabled = ?, wholesale_every_n_tickets = ?, card_payment_scope = ?, card_payment_min_tickets = ?, promo_5_plus_1_enabled = ?, promo_5_plus_2_enabled = ?, hidden_from_public = ?, hide_ticket_stats = ?, sequential_batch_size = ?, max_tickets_per_user = ?, ticket_start_number = ?, public_start_at = ?, updated_at = ?
     WHERE id = ?`,
     [
       data.title,
@@ -1305,6 +1374,10 @@ export async function updateRaffle(
       data.promo_5_plus_1_enabled,
       data.promo_5_plus_2_enabled,
       data.hidden_from_public,
+      data.hide_ticket_stats,
+      data.sequential_batch_size,
+      data.max_tickets_per_user,
+      data.ticket_start_number,
       data.public_start_at,
       Date.now(),
       id,

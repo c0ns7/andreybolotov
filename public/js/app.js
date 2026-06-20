@@ -1590,7 +1590,37 @@
   }
   var raffleCardPrevFreePct = Object.create(null);
 
-  const RAFFLE_MAX_SELECT = 25;
+  const RAFFLE_MAX_SELECT_DEFAULT = 25;
+  var raffleMaxSelect = RAFFLE_MAX_SELECT_DEFAULT;
+
+  function resolveRaffleMaxSelect(r) {
+    var n = Math.floor(Number(r && r.max_tickets_per_user != null ? r.max_tickets_per_user : RAFFLE_MAX_SELECT_DEFAULT));
+    if (!Number.isFinite(n) || n < 1) return RAFFLE_MAX_SELECT_DEFAULT;
+    return Math.min(n, 500);
+  }
+
+  function buildRaffleRangePartsFromRaffle(r) {
+    var start = Math.max(1, Math.floor(Number(r && r.ticket_start_number) || 1));
+    var endRaw = Math.floor(Number(r && r.ticket_end_number) || 0);
+    var count = Math.max(0, Math.floor(Number(r && r.ticket_count) || 0));
+    var end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
+    if (end < start) return [{ from: start, to: start }];
+    var batchSize = Math.max(0, Math.floor(Number(r && r.sequential_batch_size) || 0));
+    if (batchSize > 0) {
+      var from = Math.max(start, Math.floor(Number(r && r.sequential_window_from) || start));
+      var to = Math.min(end, Math.max(from, Math.floor(Number(r && r.sequential_window_to) || from)));
+      return [{ from: from, to: to }];
+    }
+    var chunk = 500;
+    var parts = [];
+    var partStart = start;
+    while (partStart <= end) {
+      var partEnd = Math.min(partStart + chunk - 1, end);
+      parts.push({ from: partStart, to: partEnd });
+      partStart = partEnd + 1;
+    }
+    return parts;
+  }
 
   /** Разница «серверное сейчас − локальное Date.now()» по последнему ответу API (неверные часы на устройстве ломали таймер брони). */
   var raffleServerTimeSkewMs = 0;
@@ -1728,7 +1758,7 @@
     if (!Number.isFinite(raffleId) || raffleId < 1) return;
     var fromStorage = loadRaffleDraftSelection(raffleId);
     for (var i = 0; i < fromStorage.length; i++) {
-      if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) break;
+      if (raffleDetailState.selected.size >= raffleMaxSelect) break;
       raffleDetailState.selected.add(fromStorage[i]);
     }
   }
@@ -1850,7 +1880,7 @@
 
   function getTicketSearchSlotsLeft() {
     if (!IS_RAFFLE_PURCHASE_PAGE || !raffleDetailState.raffle) return 0;
-    return Math.max(0, RAFFLE_MAX_SELECT - raffleDetailState.selected.size);
+    return Math.max(0, raffleMaxSelect - raffleDetailState.selected.size);
   }
 
   function randomTicketsPhrase(n) {
@@ -3347,7 +3377,7 @@
           stripSub.textContent = "Нажмите, чтобы продолжить оплату";
         } else if (IS_RAFFLE_PURCHASE_PAGE) {
           var selN = raffleDetailState.selected ? raffleDetailState.selected.size : 0;
-          stripSub.textContent = "Выбрано: " + String(selN) + " / " + String(RAFFLE_MAX_SELECT);
+          stripSub.textContent = "Выбрано: " + String(selN) + " / " + String(raffleMaxSelect);
         } else {
           stripSub.textContent = "Номерков: " + String(total);
         }
@@ -4443,6 +4473,7 @@
     var free = Math.max(0, total - occupied);
     var occupiedPct = total > 0 ? (occupied / total) * 100 : 0;
     var freePct = total > 0 ? (free / total) * 100 : 0;
+    var hideTicketStats = !!(Number(r.hide_ticket_stats) || r.hide_ticket_stats === true);
     var progressClass =
       occupiedPct >= 90
         ? "raffle-card__progress-fill--danger"
@@ -4532,27 +4563,29 @@
       "</h3>" +
       "</div>" +
       '<div class="raffle-card__foot">' +
-      '<div class="raffle-card__progress-wrap">' +
-      '<div class="raffle-card__progress-meta">' +
-      "<span>Занято: " +
-      escapeHtml(String(occupied)) +
-      "</span>" +
-      "<span>Осталось: " +
-      escapeHtml(String(free)) +
-      "</span>" +
-      "</div>" +
-      '<div class="raffle-card__progress-track" role="img" aria-label="Осталось ' +
-      escapeHtml(String(Math.round(freePct))) +
-      ' процентов">' +
-      '<span class="raffle-card__progress-fill ' +
-      progressClass +
-      '" style="width:' +
-      String(Math.max(0, Math.min(100, startPct)).toFixed(1)) +
-      '%" data-target-width="' +
-      String(Math.max(0, Math.min(100, freePct)).toFixed(1)) +
-      '%"></span>' +
-      "</div>" +
-      "</div>" +
+      (hideTicketStats
+        ? ""
+        : '<div class="raffle-card__progress-wrap">' +
+          '<div class="raffle-card__progress-meta">' +
+          "<span>Занято: " +
+          escapeHtml(String(occupied)) +
+          "</span>" +
+          "<span>Осталось: " +
+          escapeHtml(String(free)) +
+          "</span>" +
+          "</div>" +
+          '<div class="raffle-card__progress-track" role="img" aria-label="Осталось ' +
+          escapeHtml(String(Math.round(freePct))) +
+          ' процентов">' +
+          '<span class="raffle-card__progress-fill ' +
+          progressClass +
+          '" style="width:' +
+          String(Math.max(0, Math.min(100, startPct)).toFixed(1)) +
+          '%" data-target-width="' +
+          String(Math.max(0, Math.min(100, freePct)).toFixed(1)) +
+          '%"></span>' +
+          "</div>" +
+          "</div>") +
       '<div class="raffle-card__price-row">' +
       (st === "closed" && streamUrl
         ? '<a class="raffle-card__stream-cta" href="' +
@@ -5021,7 +5054,7 @@
   function updateRaffleSelectionLabel() {
     var n = raffleDetailState.selected.size;
     var el = raffleDetailEl("selection");
-    if (el) el.textContent = "Выбрано: " + String(n) + " / " + String(RAFFLE_MAX_SELECT);
+    if (el) el.textContent = "Выбрано: " + String(n) + " / " + String(raffleMaxSelect);
     var reserveBtn = document.getElementById("raffle-page-reserve");
     var reserveLabel = document.getElementById("raffle-page-reserve-label");
     var labelText = n > 0 ? "Забронировать (" + String(n) + ")" : "Выберите номера";
@@ -5368,15 +5401,16 @@
     }
   }
 
-  function getRangeTabForTicketN(ticketCount, n) {
-    var maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
-    var chunk = 500;
-    if (n < 1 || n > maxN) return null;
-    var start = 1;
-    while (start <= maxN) {
-      var end = Math.min(start + chunk - 1, maxN);
-      if (n >= start && n <= end) return { from: start, to: end };
-      start = end + 1;
+  function getRangeTabForTicketN(raffleOrCount, n) {
+    var parts;
+    if (raffleOrCount && typeof raffleOrCount === "object") {
+      parts = buildRaffleRangePartsFromRaffle(raffleOrCount);
+    } else {
+      parts = buildRaffleRangePartsFromRaffle({ ticket_count: raffleOrCount });
+    }
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (n >= p.from && n <= p.to) return p;
     }
     return null;
   }
@@ -5384,7 +5418,7 @@
   async function ensureRaffleTabForNumber(n) {
     var r = raffleDetailState.raffle;
     if (!r || !r.id) return;
-    var part = getRangeTabForTicketN(r.ticket_count, n);
+    var part = getRangeTabForTicketN(r, n);
     if (!part) return;
     if (raffleDetailState.rangeFrom === part.from && raffleDetailState.rangeTo === part.to) return;
     var tabs = raffleDetailEl("tabs");
@@ -5637,7 +5671,7 @@
     raffleFastLookupState = { n: n, kind: null };
     renderRaffleFastInputState();
     raffleFastLookupTimer = setTimeout(function () {
-      var part = getRangeTabForTicketN(Number(r.ticket_count), n);
+      var part = getRangeTabForTicketN(r, n);
       if (!part) {
         raffleFastLookupState = { n: n, kind: "invalid" };
         renderRaffleFastInputState();
@@ -5686,8 +5720,8 @@
       showToast("Номер уже в корзине", "warning");
       return;
     }
-    if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
-      showToast("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+    if (raffleDetailState.selected.size >= raffleMaxSelect) {
+      showToast("Можно выбрать не более " + String(raffleMaxSelect) + " номерков", "warning");
       return;
     }
     raffleDetailState.selected.add(n);
@@ -5724,17 +5758,14 @@
     renderRaffleFastInputState();
   }
 
-  function buildRaffleRangeTabs(ticketCount) {
+  function buildRaffleRangeTabs(raffleOrCount) {
     var tabs = raffleDetailEl("tabs");
     if (!tabs) return;
-    var maxN = Math.max(1, Math.floor(Number(ticketCount) || 1));
-    var chunk = 500;
-    var parts = [];
-    var start = 1;
-    while (start <= maxN) {
-      var end = Math.min(start + chunk - 1, maxN);
-      parts.push({ from: start, to: end });
-      start = end + 1;
+    var parts;
+    if (raffleOrCount && typeof raffleOrCount === "object") {
+      parts = buildRaffleRangePartsFromRaffle(raffleOrCount);
+    } else {
+      parts = buildRaffleRangePartsFromRaffle({ ticket_count: raffleOrCount });
     }
     raffleDetailState.rangeParts = parts.slice();
     tabs.innerHTML = parts
@@ -5791,7 +5822,7 @@
       if (orderStatus === "reserved") {
         restoreRaffleDraftSelectionFromStorage();
         for (var si = 0; si < raffleDetailState.orderNumbers.length; si++) {
-          if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) break;
+          if (raffleDetailState.selected.size >= raffleMaxSelect) break;
           raffleDetailState.selected.add(raffleDetailState.orderNumbers[si]);
         }
       } else if (raffleDetailState.selected.size) {
@@ -6055,8 +6086,8 @@
       if (!Number.isFinite(n) || n < 1) return;
       if (raffleDetailState.selected.has(n)) raffleDetailState.selected.delete(n);
       else {
-        if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
-          showToast("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+        if (raffleDetailState.selected.size >= raffleMaxSelect) {
+          showToast("Можно выбрать не более " + String(raffleMaxSelect) + " номерков", "warning");
           return;
         }
         raffleDetailState.selected.add(n);
@@ -6215,6 +6246,7 @@
         return;
       }
       raffleDetailState.raffle = r;
+      raffleMaxSelect = resolveRaffleMaxSelect(r);
       startRaffleViewHeartbeat(Number(r.id));
       syncRafflePaymentButtons(r);
       var heading = raffleDetailEl("heading");
@@ -6235,7 +6267,7 @@
         viewersEl.hidden = viewersCount <= 0;
       }
       startRafflePageViewersAutoRefresh(Number(r.id));
-      buildRaffleRangeTabs(r.ticket_count);
+      buildRaffleRangeTabs(r);
       await selectBestRangeByFreeCount();
       updateRaffleSelectionLabel();
       await syncRaffleOrderAndUi();
@@ -7512,8 +7544,8 @@
     }
     ensureRaffleTabForNumber(n)
       .then(function () {
-        if (raffleDetailState.selected.size >= RAFFLE_MAX_SELECT) {
-          showToast("Можно выбрать не более " + String(RAFFLE_MAX_SELECT) + " номерков", "warning");
+        if (raffleDetailState.selected.size >= raffleMaxSelect) {
+          showToast("Можно выбрать не более " + String(raffleMaxSelect) + " номерков", "warning");
           return false;
         }
         raffleDetailState.selected.add(n);

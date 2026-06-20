@@ -1050,6 +1050,39 @@ export default function AdminMarkup() {
                   <input id="raffle-tickets" className="input" type="number" min="0" step="1" required inputMode="numeric" />
                 </div>
               </div>
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label htmlFor="raffle-ticket-start-number">Начало первого номерка</label>
+                  <input id="raffle-ticket-start-number" className="input" type="number" min={1} step={1} defaultValue={1} inputMode="numeric" />
+                  <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                    По умолчанию 1. Например, 1000 при 5000 номерков даст диапазон 1000–5999.
+                  </p>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-max-tickets-per-user">Лимит номерков в одних руках</label>
+                  <input id="raffle-max-tickets-per-user" className="input" type="number" min={1} max={500} step={1} defaultValue={25} inputMode="numeric" />
+                  <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                    Сколько номерков участник может выбрать в одной брони (от 1 до 500).
+                  </p>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="raffle-sequential-batch-size">Очередь таблиц, номерков в блоке</label>
+                  <input id="raffle-sequential-batch-size" className="input" type="number" min={0} step={1} defaultValue={0} inputMode="numeric" />
+                  <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                    0 — все диапазоны сразу. Например, 1000: сначала блок из 1000 номерков, затем следующий.
+                  </p>
+                </div>
+              </div>
+              <div className="form-group admin-raffle-toggle-row">
+                <label className="admin-toggle" htmlFor="raffle-hide-ticket-stats">
+                  <input id="raffle-hide-ticket-stats" className="admin-toggle__input" type="checkbox" role="switch" />
+                  <span className="admin-toggle__track" aria-hidden="true"></span>
+                  <span className="admin-toggle__label">Скрыть прогресс и счётчики номерков</span>
+                </label>
+                <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  На карточке акции и в таблице не показывать «занято / свободно» и полоску прогресса.
+                </p>
+              </div>
               <div className="form-group admin-raffle-toggle-row">
                 <label className="admin-toggle" htmlFor="raffle-cenopad-enabled">
                   <input id="raffle-cenopad-enabled" className="admin-toggle__input" type="checkbox" role="switch" />
