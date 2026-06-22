@@ -53,6 +53,7 @@ type RaffleDto = Record<string, unknown> & {
   max_tickets_per_user_total?: number;
   sequential_window_from?: number | null;
   sequential_window_to?: number | null;
+  sequential_windows?: Array<{ from: number; to: number }> | null;
   ticket_start_number?: number;
   ticket_end_number?: number;
 };
@@ -172,9 +173,31 @@ function buildRangeParts(raffle: RaffleDto | null | undefined) {
   if (end < start) return [{ from: start, to: start }];
   const batchSize = Math.max(0, Math.floor(Number(raffle?.sequential_batch_size) || 0));
   if (batchSize > 0) {
-    const from = Math.max(start, Math.floor(Number(raffle?.sequential_window_from) || start));
-    const to = Math.min(end, Math.max(from, Math.floor(Number(raffle?.sequential_window_to) || from)));
-    return [{ from, to }];
+    const rawWindows = Array.isArray(raffle?.sequential_windows) ? raffle.sequential_windows : null;
+    const windows =
+      rawWindows && rawWindows.length
+        ? rawWindows
+            .map((w) => ({
+              from: Math.max(start, Math.floor(Number(w.from) || start)),
+              to: Math.min(end, Math.floor(Number(w.to) || start)),
+            }))
+            .filter((w) => w.to >= w.from)
+        : (() => {
+            const from = Math.max(start, Math.floor(Number(raffle?.sequential_window_from) || start));
+            const to = Math.min(end, Math.max(from, Math.floor(Number(raffle?.sequential_window_to) || from)));
+            return [{ from, to }];
+          })();
+    const chunk = 500;
+    const parts: { from: number; to: number }[] = [];
+    for (const win of windows) {
+      let partStart = win.from;
+      while (partStart <= win.to) {
+        const partEnd = Math.min(partStart + chunk - 1, win.to);
+        parts.push({ from: partStart, to: partEnd });
+        partStart = partEnd + 1;
+      }
+    }
+    return parts.length ? parts : [{ from: start, to: start }];
   }
   const chunk = 500;
   const parts: { from: number; to: number }[] = [];

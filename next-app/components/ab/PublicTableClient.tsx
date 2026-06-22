@@ -49,6 +49,7 @@ function buildTableRangeTabs(meta: {
   ticketCount: number;
   ticketStart?: number;
   ticketEnd?: number;
+  sequentialWindows?: Array<{ from: number; to: number }> | null;
   sequentialWindowFrom?: number | null;
   sequentialWindowTo?: number | null;
 }): Array<{ key: string; label: string; from: number; to: number }> {
@@ -56,6 +57,27 @@ function buildTableRangeTabs(meta: {
   const endRaw = Math.floor(Number(meta.ticketEnd) || 0);
   const count = Math.max(0, Math.floor(Number(meta.ticketCount) || 0));
   const end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
+
+  const chunk = 500;
+  const tabs: Array<{ key: string; label: string; from: number; to: number }> = [];
+
+  const rawWindows = Array.isArray(meta.sequentialWindows) ? meta.sequentialWindows : null;
+  if (rawWindows && rawWindows.length) {
+    for (const w of rawWindows) {
+      const winFrom = Math.max(start, Math.floor(Number(w.from) || start));
+      const winTo = Math.min(end, Math.floor(Number(w.to) || winFrom));
+      if (winTo < winFrom) continue;
+      if (winTo - winFrom + 1 <= chunk) {
+        tabs.push({ key: `${winFrom}-${winTo}`, label: `${winFrom}–${winTo}`, from: winFrom, to: winTo });
+        continue;
+      }
+      for (let from = winFrom; from <= winTo; from += chunk) {
+        const to = Math.min(from + chunk - 1, winTo);
+        tabs.push({ key: `${from}-${to}`, label: `${from}–${to}`, from, to });
+      }
+    }
+    return tabs.length ? tabs : [{ key: String(start), label: String(start), from: start, to: start }];
+  }
 
   const hasSequentialWindow =
     meta.sequentialWindowFrom != null &&
@@ -73,9 +95,6 @@ function buildTableRangeTabs(meta: {
   if (rangeEnd < rangeStart) {
     return [{ key: String(rangeStart), label: String(rangeStart), from: rangeStart, to: rangeStart }];
   }
-
-  const tabs: Array<{ key: string; label: string; from: number; to: number }> = [];
-  const chunk = 500;
 
   if (hasSequentialWindow) {
     for (let from = rangeStart; from <= rangeEnd; from += chunk) {
@@ -105,6 +124,7 @@ export default function PublicTableClient() {
   const [ticketCount, setTicketCount] = useState(0);
   const [ticketStart, setTicketStart] = useState(1);
   const [ticketEnd, setTicketEnd] = useState(0);
+  const [sequentialWindows, setSequentialWindows] = useState<Array<{ from: number; to: number }> | null>(null);
   const [sequentialWindowFrom, setSequentialWindowFrom] = useState<number | null>(null);
   const [sequentialWindowTo, setSequentialWindowTo] = useState<number | null>(null);
   const [hideTicketStats, setHideTicketStats] = useState(false);
@@ -141,18 +161,30 @@ export default function PublicTableClient() {
       const end = endRaw >= start ? endRaw : count > 0 ? start + count - 1 : start;
       const seqFromRaw = raffle.sequential_window_from;
       const seqToRaw = raffle.sequential_window_to;
+      const seqWindowsRaw = Array.isArray(raffle.sequential_windows) ? raffle.sequential_windows : null;
       const seqFrom =
         seqFromRaw != null && Number.isFinite(Number(seqFromRaw)) ? Math.floor(Number(seqFromRaw)) : null;
       const seqTo = seqToRaw != null && Number.isFinite(Number(seqToRaw)) ? Math.floor(Number(seqToRaw)) : null;
+      const seqWindows =
+        seqWindowsRaw && seqWindowsRaw.length
+          ? seqWindowsRaw
+              .map((w: { from?: number; to?: number }) => ({
+                from: Math.floor(Number(w.from)),
+                to: Math.floor(Number(w.to)),
+              }))
+              .filter((w: { from: number; to: number }) => Number.isFinite(w.from) && Number.isFinite(w.to) && w.to >= w.from)
+          : null;
       setTicketCount(count);
       setTicketStart(start);
       setTicketEnd(end);
+      setSequentialWindows(seqWindows);
       setSequentialWindowFrom(seqFrom);
       setSequentialWindowTo(seqTo);
       const tabs = buildTableRangeTabs({
         ticketCount: count,
         ticketStart: start,
         ticketEnd: end,
+        sequentialWindows: seqWindows,
         sequentialWindowFrom: seqFrom,
         sequentialWindowTo: seqTo,
       });
@@ -231,10 +263,11 @@ export default function PublicTableClient() {
         ticketCount,
         ticketStart,
         ticketEnd,
+        sequentialWindows,
         sequentialWindowFrom,
         sequentialWindowTo,
       }),
-    [ticketCount, ticketStart, ticketEnd, sequentialWindowFrom, sequentialWindowTo],
+    [ticketCount, ticketStart, ticketEnd, sequentialWindows, sequentialWindowFrom, sequentialWindowTo],
   );
   const activeRange = useMemo(
     () => rangeTabs.find((x) => x.key === activeRangeKey) || rangeTabs[0] || { key: "all", label: "Общий", from: 1, to: 999999 },

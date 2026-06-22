@@ -1640,9 +1640,36 @@
     if (end < start) return [{ from: start, to: start }];
     var batchSize = Math.max(0, Math.floor(Number(r && r.sequential_batch_size) || 0));
     if (batchSize > 0) {
-      var from = Math.max(start, Math.floor(Number(r && r.sequential_window_from) || start));
-      var to = Math.min(end, Math.max(from, Math.floor(Number(r && r.sequential_window_to) || from)));
-      return [{ from: from, to: to }];
+      var rawWindows = r && Array.isArray(r.sequential_windows) ? r.sequential_windows : null;
+      var windows =
+        rawWindows && rawWindows.length
+          ? rawWindows
+              .map(function (w) {
+                return {
+                  from: Math.max(start, Math.floor(Number(w && w.from) || start)),
+                  to: Math.min(end, Math.floor(Number(w && w.to) || start)),
+                };
+              })
+              .filter(function (w) {
+                return w.to >= w.from;
+              })
+          : (function () {
+              var from = Math.max(start, Math.floor(Number(r && r.sequential_window_from) || start));
+              var to = Math.min(end, Math.max(from, Math.floor(Number(r && r.sequential_window_to) || from)));
+              return [{ from: from, to: to }];
+            })();
+      var chunk = 500;
+      var parts = [];
+      for (var wi = 0; wi < windows.length; wi++) {
+        var win = windows[wi];
+        var partStart = win.from;
+        while (partStart <= win.to) {
+          var partEnd = Math.min(partStart + chunk - 1, win.to);
+          parts.push({ from: partStart, to: partEnd });
+          partStart = partEnd + 1;
+        }
+      }
+      return parts.length ? parts : [{ from: start, to: start }];
     }
     var chunk = 500;
     var parts = [];

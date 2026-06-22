@@ -115,7 +115,74 @@ export async function countOccupiedTicketsInRange(
   return Math.max(0, Number(holds?.c ?? 0) + Number(pre?.c ?? 0));
 }
 
-/** Текущий открытый блок номерков при поочерёдном показе таблиц; null — режим выключен. */
+/** Все открытые блоки при поочерёдном показе; пустой массив — режим выключен. */
+export async function getSequentialVisibleBatches(
+  raffle: {
+    id: number;
+    ticket_count: number;
+    sequential_batch_size?: number | null;
+    ticket_start_number?: number | null;
+  },
+): Promise<Array<{ from: number; to: number }>> {
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  if (batchSize <= 0) return [];
+  const start = getRaffleTicketStartNumber(raffle);
+  const end = getRaffleTicketEndNumber(raffle);
+  if (end < start) return [];
+
+  const batches: Array<{ from: number; to: number; occupied: number; total: number }> = [];
+  for (let batchStart = start; batchStart <= end; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize - 1, end);
+    const occupied = await countOccupiedTicketsInRange(raffle.id, batchStart, batchEnd);
+    batches.push({ from: batchStart, to: batchEnd, occupied, total: batchEnd - batchStart + 1 });
+  }
+  if (!batches.length) return [];
+
+  const suffixHasOccupied = new Array<boolean>(batches.length).fill(false);
+  for (let i = batches.length - 1; i >= 0; i--) {
+    suffixHasOccupied[i] =
+      batches[i]!.occupied > 0 || (i + 1 < batches.length && suffixHasOccupied[i + 1]!);
+  }
+
+  const visible: Array<{ from: number; to: number }> = [];
+  for (let i = 0; i < batches.length; i++) {
+    const b = batches[i]!;
+    const prevFull = i > 0 && batches[i - 1]!.occupied >= batches[i - 1]!.total;
+    const show =
+      i === 0 ||
+      prevFull ||
+      b.occupied > 0 ||
+      (i + 1 < batches.length && suffixHasOccupied[i + 1]!);
+    if (show) visible.push({ from: b.from, to: b.to });
+  }
+  return visible;
+}
+
+export async function isTicketInSequentialVisibleBatches(
+  raffle: {
+    id: number;
+    ticket_count: number;
+    sequential_batch_size?: number | null;
+    ticket_start_number?: number | null;
+  },
+  ticketNumber: number,
+): Promise<boolean> {
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  if (batchSize <= 0) return true;
+  const n = Math.floor(Number(ticketNumber));
+  if (!Number.isFinite(n)) return false;
+  const visible = await getSequentialVisibleBatches(raffle);
+  if (!visible.length) return false;
+  return visible.some((w) => n >= w.from && n <= w.to);
+}
+
+function formatSequentialVisibleBatchesError(windows: Array<{ from: number; to: number }>): string {
+  if (!windows.length) return "Сейчас нет открытых блоков номерков";
+  const parts = windows.map((w) => `${w.from}–${w.to}`);
+  return `Сейчас доступны номерки только в блоках: ${parts.join(", ")}`;
+}
+
+/** Объединённый диапазон всех открытых блоков (для обратной совместимости API). */
 export async function getSequentialTicketWindow(
   raffle: {
     id: number;
@@ -124,20 +191,9 @@ export async function getSequentialTicketWindow(
     ticket_start_number?: number | null;
   },
 ): Promise<{ from: number; to: number } | null> {
-  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
-  if (batchSize <= 0) return null;
-  const start = getRaffleTicketStartNumber(raffle);
-  const end = getRaffleTicketEndNumber(raffle);
-  if (end < start) return null;
-  for (let batchStart = start; batchStart <= end; batchStart += batchSize) {
-    const batchEnd = Math.min(batchStart + batchSize - 1, end);
-    const occupied = await countOccupiedTicketsInRange(raffle.id, batchStart, batchEnd);
-    const batchTotal = batchEnd - batchStart + 1;
-    if (occupied < batchTotal) return { from: batchStart, to: batchEnd };
-  }
-  const span = end - start + 1;
-  const lastStart = start + Math.floor((span - 1) / batchSize) * batchSize;
-  return { from: lastStart, to: end };
+  const visible = await getSequentialVisibleBatches(raffle);
+  if (!visible.length) return null;
+  return { from: visible[0]!.from, to: visible[visible.length - 1]!.to };
 }
 
 export async function enrichRaffleDtoSequentialWindow<T extends Record<string, unknown>>(
@@ -148,14 +204,21 @@ export async function enrichRaffleDtoSequentialWindow<T extends Record<string, u
     ticket_start_number?: number | null;
   },
   dto: T,
-): Promise<T & { sequential_window_from?: number | null; sequential_window_to?: number | null }> {
+): Promise<T & { sequential_window_from?: number | null; sequential_window_to?: number | null; sequential_windows?: Array<{ from: number; to: number }> | null }> {
   const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
   if (batchSize <= 0) {
-    return { ...dto, sequential_window_from: null, sequential_window_to: null };
+    return { ...dto, sequential_window_from: null, sequential_window_to: null, sequential_windows: null };
   }
-  const win = await getSequentialTicketWindow(raffle);
-  if (!win) return { ...dto, sequential_window_from: null, sequential_window_to: null };
-  return { ...dto, sequential_window_from: win.from, sequential_window_to: win.to };
+  const windows = await getSequentialVisibleBatches(raffle);
+  if (!windows.length) {
+    return { ...dto, sequential_window_from: null, sequential_window_to: null, sequential_windows: null };
+  }
+  return {
+    ...dto,
+    sequential_window_from: windows[0]!.from,
+    sequential_window_to: windows[windows.length - 1]!.to,
+    sequential_windows: windows,
+  };
 }
 
 function resolveOrderUnitPrice(order: RaffleOrderRow, rafflePriceFallback: number): number {
@@ -908,14 +971,11 @@ export async function createReservation(
   if (uniq.length < 1 || uniq.length > maxSelect) {
     return { ok: false, error: `Выберите от 1 до ${maxSelect} номерков` };
   }
-  const sequentialWindow = await getSequentialTicketWindow(raffle);
-  if (sequentialWindow) {
+  const sequentialVisible = await getSequentialVisibleBatches(raffle);
+  if (sequentialVisible.length) {
     for (const n of uniq) {
-      if (n < sequentialWindow.from || n > sequentialWindow.to) {
-        return {
-          ok: false,
-          error: `Сейчас доступны номерки только с ${sequentialWindow.from} по ${sequentialWindow.to}`,
-        };
+      if (!sequentialVisible.some((w) => n >= w.from && n <= w.to)) {
+        return { ok: false, error: formatSequentialVisibleBatchesError(sequentialVisible) };
       }
     }
   }
@@ -927,6 +987,10 @@ export async function createReservation(
 
   const ticketStart = getRaffleTicketStartNumber(raffle);
   const ticketEnd = getRaffleTicketEndNumber(raffle);
+  const sequentialRangeFrom = sequentialVisible.length ? sequentialVisible[0]!.from : ticketStart;
+  const sequentialRangeTo = sequentialVisible.length
+    ? sequentialVisible[sequentialVisible.length - 1]!.to
+    : ticketEnd;
 
   const now = Date.now();
   const hadExpiredReserveHold = await listNumbersWithExpiredReserveHold(raffleId, uniq, now);
@@ -952,8 +1016,8 @@ export async function createReservation(
     toReserveDirect,
     skipped_still_occupied,
     undefined,
-    sequentialWindow?.from ?? ticketStart,
-    sequentialWindow?.to ?? ticketEnd,
+    sequentialRangeFrom,
+    sequentialRangeTo,
   );
   const toReserve = replacement.toReserve;
   const replaced_tickets = replacement.replaced_tickets;
@@ -3246,14 +3310,11 @@ export async function addTicketsToReservedOrder(
   }
   const totalCheck = await assertUserRaffleTotalTicketLimit(raffle, o.raffle_id, userId, requested.length);
   if (!totalCheck.ok) return totalCheck;
-  const sequentialWindow = await getSequentialTicketWindow(raffle);
-  if (sequentialWindow) {
+  const sequentialVisible = await getSequentialVisibleBatches(raffle);
+  if (sequentialVisible.length) {
     for (const n of requested) {
-      if (n < sequentialWindow.from || n > sequentialWindow.to) {
-        return {
-          ok: false,
-          error: `Сейчас доступны номерки только с ${sequentialWindow.from} по ${sequentialWindow.to}`,
-        };
+      if (!sequentialVisible.some((w) => n >= w.from && n <= w.to)) {
+        return { ok: false, error: formatSequentialVisibleBatchesError(sequentialVisible) };
       }
     }
   }
@@ -3265,6 +3326,10 @@ export async function addTicketsToReservedOrder(
   const freeDirect = requested.filter((n) => !blockedNow.includes(n));
   const ticketStart = getRaffleTicketStartNumber(raffle);
   const ticketEnd = getRaffleTicketEndNumber(raffle);
+  const sequentialRangeFrom = sequentialVisible.length ? sequentialVisible[0]!.from : ticketStart;
+  const sequentialRangeTo = sequentialVisible.length
+    ? sequentialVisible[sequentialVisible.length - 1]!.to
+    : ticketEnd;
   const replacement = await applyNearestReplacementsForBlocked(
     o.raffle_id,
     ticketEnd,
@@ -3272,8 +3337,8 @@ export async function addTicketsToReservedOrder(
     freeDirect,
     blockedNow,
     undefined,
-    sequentialWindow?.from ?? ticketStart,
-    sequentialWindow?.to ?? ticketEnd,
+    sequentialRangeFrom,
+    sequentialRangeTo,
   );
   const toAdd = replacement.toReserve.filter((n) => !existing.has(n));
   const replaced_tickets = replacement.replaced_tickets;

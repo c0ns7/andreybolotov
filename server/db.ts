@@ -918,6 +918,8 @@ export type RaffleDto = {
   /** Текущий открытый блок при sequential_batch_size > 0 (заполняется API). */
   sequential_window_from?: number | null;
   sequential_window_to?: number | null;
+  /** Все открытые блоки очереди (включая полностью занятые). */
+  sequential_windows?: Array<{ from: number; to: number }> | null;
 };
 
 export function getRaffleTicketStartNumber(

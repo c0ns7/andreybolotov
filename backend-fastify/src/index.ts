@@ -78,6 +78,7 @@ import {
   getTicketNumbersForOrder,
   enrichRaffleDtoSequentialWindow,
   getSequentialTicketWindow,
+  getSequentialVisibleBatches,
   getOrderPaymentBankCardSuggestion,
   listConfirmedTicketGroupsForUser,
   listGloballyFreeTicketNumbers,
@@ -878,7 +879,11 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     }
   }
 
-  const sequentialWindow = await getSequentialTicketWindow(latest);
+  const sequentialWindows = await getSequentialVisibleBatches(latest);
+  const sequentialWindow =
+    sequentialWindows.length > 0
+      ? { from: sequentialWindows[0]!.from, to: sequentialWindows[sequentialWindows.length - 1]!.to }
+      : null;
   const tableFrom = sequentialWindow?.from ?? ticketStart;
   const tableTo = sequentialWindow?.to ?? ticketEnd;
 
@@ -906,6 +911,7 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
       hide_ticket_stats: Boolean(Number(latest.hide_ticket_stats ?? 0)),
       sequential_window_from: sequentialWindow?.from ?? null,
       sequential_window_to: sequentialWindow?.to ?? null,
+      sequential_windows: sequentialWindows.length ? sequentialWindows : null,
       ticket_start_number: ticketStart,
       ticket_end_number: ticketEnd,
     },
@@ -990,7 +996,11 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
     }
   }
 
-  const sequentialWindow = await getSequentialTicketWindow(latest);
+  const sequentialWindows = await getSequentialVisibleBatches(latest);
+  const sequentialWindow =
+    sequentialWindows.length > 0
+      ? { from: sequentialWindows[0]!.from, to: sequentialWindows[sequentialWindows.length - 1]!.to }
+      : null;
   const tableFrom = sequentialWindow?.from ?? ticketStart;
   const tableTo = sequentialWindow?.to ?? ticketEnd;
 
@@ -1014,6 +1024,7 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
       hide_ticket_stats: Boolean(Number(latest.hide_ticket_stats ?? 0)),
       sequential_window_from: sequentialWindow?.from ?? null,
       sequential_window_to: sequentialWindow?.to ?? null,
+      sequential_windows: sequentialWindows.length ? sequentialWindows : null,
       ticket_start_number: ticketStart,
       ticket_end_number: ticketEnd,
     },
