@@ -652,6 +652,7 @@ function extForReceiptMime(mime: string): string | null {
   if (m === "image/jpeg" || m === "image/jpg") return ".jpg";
   if (m === "image/png") return ".png";
   if (m === "image/webp") return ".webp";
+  if (m === "image/heic" || m === "image/heif") return ".jpg";
   if (m === "application/pdf") return ".pdf";
   return null;
 }
@@ -1765,12 +1766,14 @@ app.post("/api/raffles/receipt-upload", async (request, reply) => {
       request.log.warn({ route: "receipt-upload", userId: user.id }, "receipt_upload_no_file");
       return reply.code(400).send({ error: "Нет файла" });
     }
-    const mime = String(part.mimetype || "application/octet-stream").toLowerCase().split(";")[0].trim();
-    const ext = extForReceiptMime(mime);
+    const mimeRaw = String(part.mimetype || "application/octet-stream").toLowerCase().split(";")[0].trim();
+    const ext = extForReceiptMime(mimeRaw);
     if (!ext) {
-      request.log.warn({ route: "receipt-upload", userId: user.id, mime }, "receipt_upload_bad_mime");
+      request.log.warn({ route: "receipt-upload", userId: user.id, mime: mimeRaw }, "receipt_upload_bad_mime");
       return reply.code(400).send({ error: "Допустимы изображения или PDF" });
     }
+    const mime =
+      (mimeRaw === "image/heic" || mimeRaw === "image/heif") && ext === ".jpg" ? "image/jpeg" : mimeRaw;
     const chunks: Buffer[] = [];
     let total = 0;
     for await (const chunk of part.file) {

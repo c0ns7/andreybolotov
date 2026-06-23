@@ -22,7 +22,7 @@ export default function HomeRaffleConfirmPage() {
         <main className="raffle-confirm-main">
           <p id="raffle-confirm-lead" className="raffle-confirm-lead" />
           <div className="raffle-confirm-attach-wrap">
-            <label className="raffle-confirm-file-label" htmlFor="raffle-confirm-file">
+            <button type="button" className="raffle-confirm-file-label" id="raffle-confirm-file-btn">
               <span className="raffle-confirm-file-label__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -32,8 +32,14 @@ export default function HomeRaffleConfirmPage() {
               </span>
               <span className="raffle-confirm-file-label__text">Прикрепить чек</span>
               <span id="raffle-confirm-file-name" className="raffle-confirm-file-name" />
-            </label>
-            <input type="file" id="raffle-confirm-file" className="raffle-confirm-file-input" accept="image/*,application/pdf" />
+            </button>
+            <input
+              type="file"
+              id="raffle-confirm-file"
+              className="raffle-confirm-file-input"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+              tabIndex={-1}
+            />
             <div id="raffle-confirm-upload-progress" className="raffle-confirm-upload-progress" hidden>
               <div className="raffle-confirm-upload-progress__track">
                 <div id="raffle-confirm-upload-progress-fill" className="raffle-confirm-upload-progress__fill" />

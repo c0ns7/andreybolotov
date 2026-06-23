@@ -9,6 +9,7 @@ import {
   postReceiptWithRetries,
   RECEIPT_NETWORK_MODAL_TEXT,
   RECEIPT_NETWORK_MODAL_TITLE,
+  receiptUploadProgressLabel,
   uploadReceiptFile,
 } from "../../lib/receipt-client";
 import { useAbSession } from "./AbSessionContext";
@@ -141,6 +142,7 @@ export default function RaffleConfirmClient() {
   useEffect(() => {
     const back = document.getElementById("raffle-confirm-back");
     const file = document.getElementById("raffle-confirm-file") as HTMLInputElement | null;
+    const fileBtn = document.getElementById("raffle-confirm-file-btn");
     const send = document.getElementById("raffle-confirm-send") as HTMLButtonElement | null;
     const progressWrap = document.getElementById("raffle-confirm-upload-progress");
     const progressFill = document.getElementById("raffle-confirm-upload-progress-fill");
@@ -170,9 +172,9 @@ export default function RaffleConfirmClient() {
       }
       uploadInFlightRef.current = true;
       setProgress(0, "Загрузка: 0%");
-      void uploadReceiptFile(f, (p) => {
+      void uploadReceiptFile(f, (state) => {
         if (seq !== uploadSeqRef.current) return;
-        setProgress(p, `Загрузка: ${p}%`);
+        setProgress(state.percent, receiptUploadProgressLabel(state));
       })
         .then((payload) => {
           if (seq !== uploadSeqRef.current) return;
@@ -191,12 +193,22 @@ export default function RaffleConfirmClient() {
     };
     setSendReady(false);
     setProgress(0, "Загрузка: 0%", false);
+    const onFileBtn = () => {
+      if (!file || uploadInFlightRef.current) return;
+      try {
+        file.click();
+      } catch {
+        /* ignore */
+      }
+    };
     back?.addEventListener("click", onBack);
+    fileBtn?.addEventListener("click", onFileBtn);
     file?.addEventListener("change", onFile);
     send?.addEventListener("click", onSend);
     return () => {
       uploadSeqRef.current += 1;
       back?.removeEventListener("click", onBack);
+      fileBtn?.removeEventListener("click", onFileBtn);
       file?.removeEventListener("change", onFile);
       send?.removeEventListener("click", onSend);
     };

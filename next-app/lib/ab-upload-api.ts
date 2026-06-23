@@ -19,6 +19,12 @@ export function blogUploadApiUrl(): string {
   return "/api/admin/blog/upload";
 }
 
+export function receiptUploadApiUrl(): string {
+  const direct = abUploadHttpOrigin();
+  if (direct) return `${direct}/api/raffles/receipt-upload`;
+  return "/api/raffles/receipt-upload";
+}
+
 /** Таймаут XHR: отправка + запись файла на диск. */
 export function uploadTimeoutMs(fileSizeBytes: number): number {
   const mb = Math.max(1, fileSizeBytes / (1024 * 1024));

@@ -11,7 +11,7 @@ function isNextLocalApi(pathname: string): boolean {
   return pathname.startsWith("/api/auth/forgot") || pathname.startsWith("/api/auth/reset-password");
 }
 
-/** Мелкие загрузки — Route Handler Next; крупные (blog/raffles) — rewrite на Fastify. */
+/** Мелкие загрузки — Route Handler Next (`/api/raffles/receipt-upload`, `/api/chat/upload`); остальной /api — rewrite на Fastify. */
 function isApiUploadPath(pathname: string): boolean {
   return pathname === "/api/chat/upload" || pathname === "/api/raffles/receipt-upload";
 }

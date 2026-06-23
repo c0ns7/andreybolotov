@@ -9,6 +9,7 @@ import {
   postReceiptWithRetries,
   RECEIPT_NETWORK_MODAL_TEXT,
   RECEIPT_NETWORK_MODAL_TITLE,
+  receiptUploadProgressLabel,
   uploadReceiptFile,
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
@@ -2734,9 +2735,9 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       setReceiptPreviewUi(f);
       receiptUploadInFlightRef.current = true;
       setReceiptProgress(0, "Загрузка: 0%");
-      void uploadReceiptFile(f, (p) => {
+      void uploadReceiptFile(f, (state) => {
         if (currentSeq !== receiptUploadSeqRef.current) return;
-        setReceiptProgress(p, `Загрузка: ${p}%`);
+        setReceiptProgress(state.percent, receiptUploadProgressLabel(state));
       })
         .then((uploadData) => {
           if (currentSeq !== receiptUploadSeqRef.current) return;
@@ -2755,7 +2756,17 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           toastRef.current(msg, "error");
         });
     };
-    const elFile = document.getElementById("reserve-payment-file");
+    const elFile = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
+    const elFileDrop = document.getElementById("reserve-payment-file-drop");
+    const onFileDropClick = (e: Event) => {
+      e.preventDefault();
+      if (!elFile || receiptUploadInFlightRef.current) return;
+      try {
+        elFile.click();
+      } catch {
+        /* ignore */
+      }
+    };
     const elFileRemove = document.getElementById("reserve-payment-file-remove");
     const onFileRemove = (e: Event) => {
       e.preventDefault();
@@ -2763,6 +2774,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       clearReceiptFile();
     };
     elFile?.addEventListener("change", onFileChange);
+    elFileDrop?.addEventListener("click", onFileDropClick);
     elFileRemove?.addEventListener("click", onFileRemove);
     setReceiptSendReady(false);
     setReceiptProgress(0, "Загрузка: 0%", false);
@@ -2864,6 +2876,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elPayBackLink?.removeEventListener("click", onPayBack);
       elPurposeOk?.removeEventListener("click", onPurposeOk);
       elFile?.removeEventListener("change", onFileChange);
+      elFileDrop?.removeEventListener("click", onFileDropClick);
       elFileRemove?.removeEventListener("click", onFileRemove);
       revokeReceiptPreviewUrl();
       receiptUploadSeqRef.current += 1;

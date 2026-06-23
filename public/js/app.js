@@ -352,6 +352,14 @@
     return { Authorization: "Bearer " + s.token };
   }
 
+  function receiptUploadApiUrl() {
+    try {
+      var u = window.__AB_UPLOAD_ORIGIN__;
+      if (u && String(u).trim()) return String(u).replace(/\/$/, "") + "/api/raffles/receipt-upload";
+    } catch (_) {}
+    return "/api/raffles/receipt-upload";
+  }
+
   // --- Russian phone
   function digitsOnly(s) {
     return String(s).replace(/\D/g, "");
@@ -6427,7 +6435,7 @@
     try {
       var fd = new FormData();
       fd.append("file", file);
-      var up = await fetch("/api/raffles/receipt-upload", {
+      var up = await fetch(receiptUploadApiUrl(), {
         method: "POST",
         headers: authHeaders(),
         body: fd,
@@ -6726,6 +6734,11 @@
     if (input) input.value = "";
     setReserveReceiptPreviewUi(null);
   }
+  document.getElementById("reserve-payment-file-drop")?.addEventListener("click", function (e) {
+    e.preventDefault();
+    var input = document.getElementById("reserve-payment-file");
+    if (input) input.click();
+  });
   document.getElementById("reserve-payment-file")?.addEventListener("change", function () {
     var f = this.files && this.files[0];
     setReserveReceiptPreviewUi(f || null);
@@ -6746,7 +6759,7 @@
     try {
       var fd = new FormData();
       fd.append("file", file);
-      var up = await fetch("/api/raffles/receipt-upload", {
+      var up = await fetch(receiptUploadApiUrl(), {
         method: "POST",
         headers: authHeaders(),
         body: fd,

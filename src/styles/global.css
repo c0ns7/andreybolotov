@@ -5805,6 +5805,7 @@ html.theme-dark .pay-sheet-copy-btn--copied:hover {
 }
 
 .pay-sheet-receipt-upload-wrap {
+  position: relative;
   margin-bottom: 0.75rem;
 }
 
@@ -5812,8 +5813,13 @@ html.theme-dark .pay-sheet-copy-btn--copied:hover {
   position: absolute;
   width: 1px;
   height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
   opacity: 0;
-  pointer-events: none;
 }
 
 .pay-sheet-receipt-drop {
@@ -5825,6 +5831,10 @@ html.theme-dark .pay-sheet-copy-btn--copied:hover {
   border: 2px dashed #93c5fd;
   background: rgba(239, 246, 255, 0.5);
   cursor: pointer;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
   transition:
     border-color 0.15s ease,
     background 0.15s ease;
@@ -12679,11 +12689,16 @@ html.raffle-confirm-page body {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  width: 100%;
   padding: 28px 20px;
   border: 2px dashed #cbd5e1;
   border-radius: 20px;
   background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
   cursor: pointer;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
   transition:
     border-color 0.15s ease,
     background 0.15s ease;

@@ -603,8 +603,14 @@ export default function AbRafflePurchaseShellMarkup() {
             </ul>
           </div>
           <div className="pay-sheet-receipt-upload-wrap">
-            <input id="reserve-payment-file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/*,application/pdf" className="pay-sheet-receipt-input" hidden />
-            <label id="reserve-payment-file-drop" htmlFor="reserve-payment-file" className="pay-sheet-receipt-drop">
+            <input
+              id="reserve-payment-file"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+              className="pay-sheet-receipt-input"
+              tabIndex={-1}
+            />
+            <button type="button" id="reserve-payment-file-drop" className="pay-sheet-receipt-drop">
               <div className="pay-sheet-receipt-drop__icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3v12"></path>
@@ -616,7 +622,7 @@ export default function AbRafflePurchaseShellMarkup() {
                 <p className="pay-sheet-receipt-drop__title">Загрузить чек</p>
                 <p className="pay-sheet-receipt-drop__sub">Фото или PDF перевода</p>
               </div>
-            </label>
+            </button>
             <div id="reserve-payment-file-preview" className="pay-sheet-receipt-preview" hidden>
               <div className="pay-sheet-receipt-preview__frame">
                 <img id="reserve-payment-file-preview-img" className="pay-sheet-receipt-preview__img" alt="Превью чека" hidden />

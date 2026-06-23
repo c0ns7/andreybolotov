@@ -266,8 +266,10 @@ async function handleChatFileUpload(c: Context): Promise<Response> {
 }
 
 function extForReceiptMime(mime: string): string | null {
-  const ext = extForChatMime(mime.toLowerCase().split(";")[0].trim());
+  const m = String(mime || "").toLowerCase().split(";")[0].trim();
+  const ext = extForChatMime(m);
   if (!ext) return null;
+  if (m === "image/heic" || m === "image/heif") return ".jpg";
   if (ext === ".jpg" || ext === ".png" || ext === ".webp" || ext === ".gif" || ext === ".pdf") {
     return ext;
   }
