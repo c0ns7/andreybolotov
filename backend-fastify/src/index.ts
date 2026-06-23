@@ -97,6 +97,8 @@ import {
   swapUserConfirmedTicket,
   getUserTicketSwapContext,
   pickRandomVisibleFreeTicket,
+  checkRaffleAllowsUserTicketSwap,
+  notifyUserTicketSwapped,
   USER_TICKET_SWAPS_PER_SITE_DAY,
 } from "../../server/raffle-orders.js";
 import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
@@ -256,6 +258,24 @@ async function raffleVisibleOrActiveOrder(userId: number, raffleId: number) {
   const order = await getActiveOrderForUser(raffleId, userId);
   if (order) return raffle;
   return null;
+}
+
+async function raffleForUserTicketSwap(raffleId: number, reply: FastifyReply) {
+  const site = await getSiteSettings();
+  if (site.maintenance_enabled) {
+    void reply.code(503).send({
+      error: "Сейчас идут технические работы. Замена номерков временно недоступна.",
+      code: "maintenance",
+    });
+    return null;
+  }
+  const raffle = await getRaffleById(raffleId);
+  const gate = checkRaffleAllowsUserTicketSwap(raffle);
+  if (!gate.ok) {
+    void reply.code(400).send({ error: gate.error });
+    return null;
+  }
+  return gate.raffle;
 }
 
 const RAFFLE_VIEW_TTL_MS = 70_000;
@@ -1387,8 +1407,8 @@ app.get("/api/raffles/:id/ticket-swap", async (request, reply) => {
   const params = request.params as { id?: string };
   const id = Math.floor(Number(params?.id));
   if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: "Некорректный id" });
-  const raffle = await raffleVisibleOrActiveOrder(user.id, id);
-  if (!raffle) return reply.code(404).send({ error: "Не найдено" });
+  const raffle = await raffleForUserTicketSwap(id, reply);
+  if (!raffle) return;
   const ctx = await getUserTicketSwapContext(user.id, id);
   if (!ctx) {
     return reply.code(404).send({ error: "Нет оплаченных номерков для замены" });
@@ -1406,8 +1426,8 @@ app.get("/api/raffles/:id/ticket-swap/random-free", async (request, reply) => {
   const params = request.params as { id?: string };
   const id = Math.floor(Number(params?.id));
   if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: "Некорректный id" });
-  const raffle = await raffleVisibleOrActiveOrder(user.id, id);
-  if (!raffle) return reply.code(404).send({ error: "Не найдено" });
+  const raffle = await raffleForUserTicketSwap(id, reply);
+  if (!raffle) return;
   const ctx = await getUserTicketSwapContext(user.id, id);
   if (!ctx || ctx.swaps_remaining <= 0) {
     return reply.code(400).send({ error: "Сейчас нельзя заменить номерок" });
@@ -1431,10 +1451,21 @@ app.post("/api/raffles/:id/ticket-swap", async (request, reply) => {
   if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(fromN) || !Number.isFinite(toN)) {
     return reply.code(400).send({ error: "Некорректные данные" });
   }
-  const raffle = await raffleVisibleOrActiveOrder(user.id, id);
-  if (!raffle) return reply.code(404).send({ error: "Не найдено" });
+  const raffle = await raffleForUserTicketSwap(id, reply);
+  if (!raffle) return;
   const res = await swapUserConfirmedTicket(user.id, id, fromN, toN);
   if (!res.ok) return reply.code(400).send({ error: res.error });
+  const msgId = await notifyUserTicketSwapped(
+    user.id,
+    String(raffle.title || "акция"),
+    res.from,
+    res.to,
+    res.swaps_remaining,
+  );
+  if (msgId > 0) {
+    const row = await getSupportMessageById(msgId);
+    if (row) broadcastChatMessage(user.id, messageToDto(row));
+  }
   broadcastRaffleTicketsUpdated(user.id);
   notifyRaffleGridMutated(id);
   return { ok: true, from: res.from, to: res.to, swaps_remaining: res.swaps_remaining, server_time_ms: Date.now() };

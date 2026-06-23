@@ -15,6 +15,7 @@ import {
   getLatestVisibleActiveRaffle,
   listRafflesPublic,
   setRafflePromoGiftLockedCounts,
+  type RaffleRow,
 } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
 import { pgPool } from "./pg.js";
@@ -3672,6 +3673,59 @@ export async function countUserTicketSwapsToday(
   return Math.max(0, Math.floor(Number(row?.c ?? 0)));
 }
 
+/** Замена номерка доступна только на видимой активной акции с открытыми продажами. */
+export function checkRaffleAllowsUserTicketSwap(
+  raffle: RaffleRow | undefined | null,
+): { ok: true; raffle: RaffleRow } | { ok: false; error: string } {
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  if (!isRaffleVisibleOnSite(raffle)) {
+    return { ok: false, error: "Акция скрыта — замена номерков недоступна" };
+  }
+  if (String(raffle.status || "") !== "active") {
+    return { ok: false, error: "Продажи закрыты — замена номерков недоступна" };
+  }
+  if (!isRaffleSalesOpen(raffle)) {
+    return { ok: false, error: "Акция ещё не открыта — замена номерков недоступна" };
+  }
+  return { ok: true, raffle };
+}
+
+export function buildUserTicketSwapSuccessChatBody(
+  raffleTitle: string,
+  fromNumber: number,
+  toNumber: number,
+  swapsRemaining: number,
+): string {
+  const safeTitle = String(raffleTitle || "акция")
+    .trim()
+    .slice(0, 180);
+  const fromN = Math.floor(Number(fromNumber));
+  const toN = Math.floor(Number(toNumber));
+  const left = Math.max(0, Math.floor(Number(swapsRemaining)));
+  const lines = [
+    `Поздравляем! Вы успешно сменили номерок в акции «${safeTitle}»: с №${fromN} на №${toN}.`,
+    "",
+    "Предыдущий номерок освобождён и снова доступен для участия.",
+  ];
+  if (left > 0) {
+    lines.push(`Осталось замен сегодня: ${left} из ${USER_TICKET_SWAPS_PER_SITE_DAY}.`);
+  } else {
+    lines.push("Лимит замен на сегодня исчерпан — новая замена будет доступна завтра.");
+  }
+  return lines.join("\n");
+}
+
+export async function notifyUserTicketSwapped(
+  userId: number,
+  raffleTitle: string,
+  fromNumber: number,
+  toNumber: number,
+  swapsRemaining: number,
+): Promise<number> {
+  const body = buildUserTicketSwapSuccessChatBody(raffleTitle, fromNumber, toNumber, swapsRemaining);
+  return insertSupportMessage(userId, body, true, null);
+}
+
 async function listUserSwappableConfirmedTickets(userId: number, raffleId: number): Promise<number[]> {
   const rows = await pgAll<{ ticket_number: number }>(
     `SELECT h.ticket_number AS ticket_number
@@ -3693,6 +3747,7 @@ export async function getUserTicketSwapContext(
   await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return null;
+  if (!checkRaffleAllowsUserTicketSwap(raffle).ok) return null;
   const confirmed = await listUserSwappableConfirmedTickets(userId, raffleId);
   if (!confirmed.length) return null;
   const now = Date.now();
@@ -3740,9 +3795,8 @@ export async function swapUserConfirmedTicket(
   await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return { ok: false, error: "Акция не найдена" };
-  if (String(raffle.status || "") !== "active") {
-    return { ok: false, error: "Замена номерков сейчас недоступна" };
-  }
+  const gate = checkRaffleAllowsUserTicketSwap(raffle);
+  if (!gate.ok) return { ok: false, error: gate.error };
 
   const fromN = Math.floor(Number(fromNumber));
   const toN = Math.floor(Number(toNumber));
@@ -3847,6 +3901,7 @@ export async function pickRandomVisibleFreeTicket(raffleId: number): Promise<num
   await cleanupExpiredRaffleOrders();
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return null;
+  if (!checkRaffleAllowsUserTicketSwap(raffle).ok) return null;
   const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
   const allFree = await listGloballyFreeTicketNumbers(raffleId);
   if (!allFree.length) return null;
