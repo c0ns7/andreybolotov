@@ -27,6 +27,7 @@ import { loadAbSession } from "../../lib/ab-session";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { useAbSession } from "./AbSessionContext";
 import HomeBlogStubModal from "./HomeBlogStubModal";
+import TicketSwapSheet from "./TicketSwapSheet";
 
 type Props = {
   show: boolean;
@@ -447,7 +448,13 @@ function profileRaffleNumChips(nums: number[], variant: "reserved" | "pending" |
   );
 }
 
-function ProfileRaffleTicketsCard({ block }: { block: ProfileRaffleTicketsBlock }) {
+function ProfileRaffleTicketsCard({
+  block,
+  onManage,
+}: {
+  block: ProfileRaffleTicketsBlock;
+  onManage?: (block: ProfileRaffleTicketsBlock) => void;
+}) {
   const statuses: Array<{
     key: string;
     nums: number[];
@@ -511,6 +518,11 @@ function ProfileRaffleTicketsCard({ block }: { block: ProfileRaffleTicketsBlock 
           ) : null,
         )}
       </div>
+      {block.confirmed.length > 0 && onManage ? (
+        <button type="button" className="profile-raffle-block__manage" onClick={() => onManage(block)}>
+          Управление моими номерками
+        </button>
+      ) : null}
     </article>
   );
 }
@@ -527,7 +539,7 @@ export default function AppBottomNav({
   showBlog = false,
   blogEnabled = false,
 }: Props) {
-  const { session } = useAbSession();
+  const { session, toast } = useAbSession();
   const pathname = usePathname() || "";
   const router = useRouter();
   const hideChat =
@@ -549,6 +561,7 @@ export default function AppBottomNav({
   const [hasLatestVisibleRaffle, setHasLatestVisibleRaffle] = useState(false);
   const [latestVisibleRaffleId, setLatestVisibleRaffleId] = useState(0);
   const [reservedRaffleIdSummary, setReservedRaffleIdSummary] = useState<number | null>(null);
+  const [ticketSwap, setTicketSwap] = useState<{ raffleId: number; title: string } | null>(null);
   const historyOpenRef = useRef(false);
   historyOpenRef.current = historyOpen;
 
@@ -1136,6 +1149,11 @@ export default function AppBottomNav({
                       <ProfileRaffleTicketsCard
                         key={`raffle_${String(block.raffleId)}_${block.title}`}
                         block={block}
+                        onManage={(b) => {
+                          if (b.raffleId > 0) {
+                            setTicketSwap({ raffleId: b.raffleId, title: b.title });
+                          }
+                        }}
                       />
                     ))}
                   </div>
@@ -1240,6 +1258,17 @@ export default function AppBottomNav({
           </div>
         </div>
       </div>
+      <TicketSwapSheet
+        open={ticketSwap != null}
+        raffleId={ticketSwap?.raffleId ?? 0}
+        raffleTitle={ticketSwap?.title ?? ""}
+        onClose={() => setTicketSwap(null)}
+        onSwapped={() => {
+          invalidateAbMyTicketsCache();
+          void refreshMyTickets(true);
+        }}
+        toast={toast}
+      />
     </>
   );
 }

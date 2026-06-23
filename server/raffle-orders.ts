@@ -26,6 +26,7 @@ import {
   pickAvailableBankCard,
   refreshBankCardDailyLimitCooldown,
 } from "./raffle-bank-cards.js";
+import { parseSiteDateTimeLocalToUtcMs, SITE_TIMEZONE } from "./site-timezone.js";
 
 export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 25;
@@ -3618,4 +3619,225 @@ export async function adminAssignRandomTicketsToPhone(
   }
   assigned.sort((a, b) => a - b);
   return { ok: true, ticket_numbers: assigned };
+}
+
+/** Сколько раз в сутки (по часовому поясу сайта) пользователь может заменить свой оплаченный номерок. */
+export const USER_TICKET_SWAPS_PER_SITE_DAY = 3;
+
+export type UserTicketSwapContextDto = {
+  raffle_id: number;
+  confirmed_tickets: number[];
+  swaps_limit: number;
+  swaps_used_today: number;
+  swaps_remaining: number;
+  day_resets_at_ms: number;
+  sequential_batch_size: number;
+  sequential_windows: Array<{ from: number; to: number }> | null;
+  ticket_start_number: number;
+  ticket_end_number: number;
+};
+
+function getSiteCalendarDayStartUtcMs(nowMs = Date.now()): number {
+  try {
+    const parts = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: SITE_TIMEZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(nowMs));
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+    const y = get("year");
+    const mo = get("month");
+    const d = get("day");
+    if (!y || !mo || !d) return nowMs - (nowMs % 86_400_000);
+    const start = parseSiteDateTimeLocalToUtcMs(`${y}-${mo}-${d}T00:00`);
+    return start != null ? start : nowMs - (nowMs % 86_400_000);
+  } catch {
+    return nowMs - (nowMs % 86_400_000);
+  }
+}
+
+export async function countUserTicketSwapsToday(
+  userId: number,
+  raffleId: number,
+  nowMs = Date.now(),
+): Promise<number> {
+  const dayStart = getSiteCalendarDayStartUtcMs(nowMs);
+  const dayEnd = dayStart + 86_400_000;
+  const row = await pgGet<{ c?: number }>(
+    `SELECT COUNT(*) AS c FROM user_ticket_swaps
+       WHERE user_id = ? AND raffle_id = ? AND created_at >= ? AND created_at < ?`,
+    [userId, raffleId, dayStart, dayEnd],
+  );
+  return Math.max(0, Math.floor(Number(row?.c ?? 0)));
+}
+
+async function listUserSwappableConfirmedTickets(userId: number, raffleId: number): Promise<number[]> {
+  const rows = await pgAll<{ ticket_number: number }>(
+    `SELECT h.ticket_number AS ticket_number
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND o.user_id = ?
+         AND o.status = 'confirmed' AND h.hold_status = 'confirmed'
+         AND COALESCE(h.is_bonus, 0) = 0
+       ORDER BY h.ticket_number ASC`,
+    [raffleId, userId],
+  );
+  return rows.map((r) => Math.floor(Number(r.ticket_number))).filter((n) => Number.isFinite(n) && n > 0);
+}
+
+export async function getUserTicketSwapContext(
+  userId: number,
+  raffleId: number,
+): Promise<UserTicketSwapContextDto | null> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return null;
+  const confirmed = await listUserSwappableConfirmedTickets(userId, raffleId);
+  if (!confirmed.length) return null;
+  const now = Date.now();
+  const dayStart = getSiteCalendarDayStartUtcMs(now);
+  const used = await countUserTicketSwapsToday(userId, raffleId, now);
+  const limit = USER_TICKET_SWAPS_PER_SITE_DAY;
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  const windows = batchSize > 0 ? await getSequentialVisibleBatches(raffle) : [];
+  return {
+    raffle_id: raffleId,
+    confirmed_tickets: confirmed,
+    swaps_limit: limit,
+    swaps_used_today: used,
+    swaps_remaining: Math.max(0, limit - used),
+    day_resets_at_ms: dayStart + 86_400_000,
+    sequential_batch_size: batchSize,
+    sequential_windows: windows.length ? windows : null,
+    ticket_start_number: getRaffleTicketStartNumber(raffle),
+    ticket_end_number: getRaffleTicketEndNumber(raffle),
+  };
+}
+
+function isTicketInSequentialWindows(
+  ticketNumber: number,
+  windows: Array<{ from: number; to: number }>,
+): boolean {
+  const n = Math.floor(Number(ticketNumber));
+  return windows.some((w) => n >= w.from && n <= w.to);
+}
+
+function formatSequentialWindowsError(windows: Array<{ from: number; to: number }>): string {
+  const parts = windows.map((w) => `${w.from}–${w.to}`);
+  return `Сейчас можно выбрать номерок только в блоках: ${parts.join(", ")}`;
+}
+
+export async function swapUserConfirmedTicket(
+  userId: number,
+  raffleId: number,
+  fromNumber: number,
+  toNumber: number,
+): Promise<
+  | { ok: true; from: number; to: number; swaps_remaining: number }
+  | { ok: false; error: string }
+> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  if (String(raffle.status || "") !== "active") {
+    return { ok: false, error: "Замена номерков сейчас недоступна" };
+  }
+
+  const fromN = Math.floor(Number(fromNumber));
+  const toN = Math.floor(Number(toNumber));
+  if (!Number.isFinite(fromN) || !Number.isFinite(toN) || fromN <= 0 || toN <= 0) {
+    return { ok: false, error: "Некорректный номерок" };
+  }
+  if (fromN === toN) return { ok: false, error: "Выберите другой номерок" };
+  if (!isRaffleTicketNumberInRange(raffle, fromN) || !isRaffleTicketNumberInRange(raffle, toN)) {
+    return { ok: false, error: "Некорректный номерок" };
+  }
+
+  const now = Date.now();
+  const used = await countUserTicketSwapsToday(userId, raffleId, now);
+  if (used >= USER_TICKET_SWAPS_PER_SITE_DAY) {
+    return {
+      ok: false,
+      error: `Лимит замен на сегодня исчерпан (${USER_TICKET_SWAPS_PER_SITE_DAY} в сутки). Попробуйте завтра.`,
+    };
+  }
+
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  if (batchSize > 0) {
+    const windows = await getSequentialVisibleBatches(raffle);
+    if (windows.length) {
+      if (!isTicketInSequentialWindows(toN, windows)) {
+        return { ok: false, error: formatSequentialWindowsError(windows) };
+      }
+    }
+  }
+
+  const hold = await pgGet<{
+    order_id: number;
+    hold_status: string;
+    is_bonus: number;
+  }>(
+    `SELECT h.order_id AS order_id, h.hold_status AS hold_status, COALESCE(h.is_bonus, 0) AS is_bonus
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       WHERE h.raffle_id = ? AND h.ticket_number = ? AND o.user_id = ?
+         AND o.status = 'confirmed' AND h.hold_status = 'confirmed'`,
+    [raffleId, fromN, userId],
+  );
+  if (!hold) return { ok: false, error: "Этот номерок не найден среди ваших оплаченных" };
+  if (Number(hold.is_bonus) === 1) {
+    return { ok: false, error: "Подарочные номерки нельзя заменить" };
+  }
+
+  if (await isRaffleTicketBlocked(raffleId, toN)) {
+    return { ok: false, error: "Номерок уже занят — выберите свободный" };
+  }
+
+  const orderId = Math.floor(Number(hold.order_id));
+  const client = await pgPool.connect();
+  try {
+    await client.query("BEGIN");
+    if (await isRaffleTicketBlocked(raffleId, toN, client)) {
+      throw new Error("OCCUPIED");
+    }
+    const del = await pgExec(
+      `DELETE FROM raffle_ticket_holds WHERE raffle_id = ? AND order_id = ? AND ticket_number = ?`,
+      [raffleId, orderId, fromN],
+      client,
+    );
+    if (del === 0) throw new Error("HOLD_MISSING");
+    await pgExec(
+      `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, hold_status, expires_at, created_at)
+       VALUES (?, ?, ?, ?, 0, 'confirmed', NULL, ?)`,
+      [raffleId, orderId, userId, toN, now],
+      client,
+    );
+    await pgExec(
+      `INSERT INTO user_ticket_swaps (user_id, raffle_id, from_ticket_number, to_ticket_number, order_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, raffleId, fromN, toN, orderId, now],
+      client,
+    );
+    await insertRaffleOrderEvent(
+      orderId,
+      "ticket_swapped",
+      JSON.stringify({ from: fromN, to: toN }),
+      client,
+    );
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    const msg = String((e as Error).message || "");
+    if (msg === "OCCUPIED") return { ok: false, error: "Номерок уже занят — выберите свободный" };
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return { ok: false, error: "Номерок уже занят — выберите свободный" };
+    }
+    return { ok: false, error: "Не удалось заменить номерок. Попробуйте снова." };
+  } finally {
+    client.release();
+  }
+
+  const remaining = Math.max(0, USER_TICKET_SWAPS_PER_SITE_DAY - used - 1);
+  return { ok: true, from: fromN, to: toN, swaps_remaining: remaining };
 }

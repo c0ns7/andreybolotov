@@ -94,6 +94,9 @@ import {
   removeTicketFromReservedOrder,
   setOrderBank,
   userCancelReservedRaffleOrder,
+  swapUserConfirmedTicket,
+  getUserTicketSwapContext,
+  USER_TICKET_SWAPS_PER_SITE_DAY,
 } from "../../server/raffle-orders.js";
 import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
 import { validatePersonName } from "../../server/person-name.js";
@@ -1372,6 +1375,48 @@ app.get("/api/raffles/my-tickets", async (request, reply) => {
     wholesale_slots: await listWholesaleSlotsForUser(user.id),
     server_time_ms: Date.now(),
   };
+});
+
+app.get("/api/raffles/:id/ticket-swap", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (!rateLimitAllow(`get:ticket-swap:${user.id}`, 60, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  const params = request.params as { id?: string };
+  const id = Math.floor(Number(params?.id));
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: "Некорректный id" });
+  const raffle = await raffleVisibleOrActiveOrder(user.id, id);
+  if (!raffle) return reply.code(404).send({ error: "Не найдено" });
+  const ctx = await getUserTicketSwapContext(user.id, id);
+  if (!ctx) {
+    return reply.code(404).send({ error: "Нет оплаченных номерков для замены" });
+  }
+  reply.header("Cache-Control", "private, no-store");
+  return { ...ctx, server_time_ms: Date.now() };
+});
+
+app.post("/api/raffles/:id/ticket-swap", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  if (!rateLimitAllow(`post:ticket-swap:${user.id}`, 20, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  const params = request.params as { id?: string };
+  const body = (request.body ?? {}) as { from?: number; to?: number };
+  const id = Math.floor(Number(params?.id));
+  const fromN = Math.floor(Number(body.from));
+  const toN = Math.floor(Number(body.to));
+  if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(fromN) || !Number.isFinite(toN)) {
+    return reply.code(400).send({ error: "Некорректные данные" });
+  }
+  const raffle = await raffleVisibleOrActiveOrder(user.id, id);
+  if (!raffle) return reply.code(404).send({ error: "Не найдено" });
+  const res = await swapUserConfirmedTicket(user.id, id, fromN, toN);
+  if (!res.ok) return reply.code(400).send({ error: res.error });
+  broadcastRaffleTicketsUpdated(user.id);
+  notifyRaffleGridMutated(id);
+  return { ok: true, from: res.from, to: res.to, swaps_remaining: res.swaps_remaining, server_time_ms: Date.now() };
 });
 
 app.get("/api/raffles/participation-history", async (request, reply) => {
