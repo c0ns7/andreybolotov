@@ -11,6 +11,7 @@ import {
   Hash,
   Hourglass,
   MapPin,
+  Repeat2,
   Ticket,
   Trophy,
 } from "lucide-react";
@@ -448,13 +449,7 @@ function profileRaffleNumChips(nums: number[], variant: "reserved" | "pending" |
   );
 }
 
-function ProfileRaffleTicketsCard({
-  block,
-  onManage,
-}: {
-  block: ProfileRaffleTicketsBlock;
-  onManage?: (block: ProfileRaffleTicketsBlock) => void;
-}) {
+function ProfileRaffleTicketsCard({ block }: { block: ProfileRaffleTicketsBlock }) {
   const statuses: Array<{
     key: string;
     nums: number[];
@@ -518,11 +513,6 @@ function ProfileRaffleTicketsCard({
           ) : null,
         )}
       </div>
-      {block.confirmed.length > 0 && onManage ? (
-        <button type="button" className="profile-raffle-block__manage" onClick={() => onManage(block)}>
-          Управление моими номерками
-        </button>
-      ) : null}
     </article>
   );
 }
@@ -579,6 +569,11 @@ export default function AppBottomNav({
     blurIfFocusInsideModalRoot("modal-profile");
     setProfileOpen(false);
     setHistoryOpen(true);
+  }, []);
+
+  const closeTicketSwapModal = useCallback(() => {
+    blurIfFocusInsideModalRoot("modal-ticket-swap");
+    setTicketSwap(null);
   }, []);
   const isHome = pathname === "/home";
   const isChat = pathname === "/home/chat";
@@ -897,6 +892,20 @@ export default function AppBottomNav({
       ),
     [profileReserved, profilePending, profileConfirmed, wholesaleSlots, raffleTitleById],
   );
+  const canOpenTicketSwap = useMemo(
+    () => profileRaffleBlocks.some((b) => b.confirmed.length > 0),
+    [profileRaffleBlocks],
+  );
+  const openTicketSwapFromProfile = useCallback(() => {
+    const block = profileRaffleBlocks.find((b) => b.confirmed.length > 0);
+    if (!block || block.raffleId <= 0) {
+      toast("Нет оплаченных номерков для замены", "warning");
+      return;
+    }
+    blurIfFocusInsideModalRoot("modal-profile");
+    setProfileOpen(false);
+    setTicketSwap({ raffleId: block.raffleId, title: block.title });
+  }, [profileRaffleBlocks, toast]);
   const profilePhone = mounted ? formatPhoneRu(session?.phone) : "";
   const profileLocality = mounted ? (session?.locality?.trim() || "Не указано") : "Не указано";
   const profileUserId =
@@ -1119,19 +1128,33 @@ export default function AppBottomNav({
                     {profileTicketsCount} шт.
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  className="profile-modal__tickets-history-btn"
-                  id="profile-open-history"
-                  onClick={openHistoryFromProfile}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M3 3v5h5"></path>
-                    <path d="M3.05 13a9 9 0 1 0 .5-4.5L8 13"></path>
-                    <path d="M12 7v5l3 2"></path>
-                  </svg>
-                  <span>История</span>
-                </button>
+                <div className="profile-modal__tickets-actions">
+                  <button
+                    type="button"
+                    className="profile-modal__tickets-history-btn"
+                    id="profile-open-history"
+                    onClick={openHistoryFromProfile}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M3 3v5h5"></path>
+                      <path d="M3.05 13a9 9 0 1 0 .5-4.5L8 13"></path>
+                      <path d="M12 7v5l3 2"></path>
+                    </svg>
+                    <span>История</span>
+                  </button>
+                  {canOpenTicketSwap ? (
+                    <button
+                      type="button"
+                      className="profile-modal__tickets-manage-btn"
+                      id="profile-open-ticket-swap"
+                      aria-label="Управление моими номерками"
+                      title="Управление моими номерками"
+                      onClick={openTicketSwapFromProfile}
+                    >
+                      <Repeat2 size={15} strokeWidth={2.25} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div id="profile-tickets-body" className="profile-modal__tickets-body custom-scrollbar" data-profile-tickets="1">
                 {ticketsLoading ? (
@@ -1149,11 +1172,6 @@ export default function AppBottomNav({
                       <ProfileRaffleTicketsCard
                         key={`raffle_${String(block.raffleId)}_${block.title}`}
                         block={block}
-                        onManage={(b) => {
-                          if (b.raffleId > 0) {
-                            setTicketSwap({ raffleId: b.raffleId, title: b.title });
-                          }
-                        }}
                       />
                     ))}
                   </div>
@@ -1262,7 +1280,7 @@ export default function AppBottomNav({
         open={ticketSwap != null}
         raffleId={ticketSwap?.raffleId ?? 0}
         raffleTitle={ticketSwap?.title ?? ""}
-        onClose={() => setTicketSwap(null)}
+        onClose={closeTicketSwapModal}
         onSwapped={() => {
           invalidateAbMyTicketsCache();
           void refreshMyTickets(true);

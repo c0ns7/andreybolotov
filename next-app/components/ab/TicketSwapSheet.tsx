@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, X } from "lucide-react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { USER_TICKET_SWAPS_PER_SITE_DAY } from "../../lib/ab-ticket-swap";
 
@@ -11,11 +11,8 @@ type SwapContext = {
   swaps_limit: number;
   swaps_used_today: number;
   swaps_remaining: number;
-  day_resets_at_ms: number;
   sequential_batch_size: number;
   sequential_windows: Array<{ from: number; to: number }> | null;
-  ticket_start_number: number;
-  ticket_end_number: number;
 };
 
 type Props = {
@@ -27,28 +24,14 @@ type Props = {
   toast: (message: string, kind?: "success" | "error" | "warning" | "info" | "neutral") => void;
 };
 
-function buildRangeTabs(ctx: SwapContext | null): Array<{ key: string; label: string; from: number; to: number }> {
-  if (!ctx) return [];
-  const windows = Array.isArray(ctx.sequential_windows) ? ctx.sequential_windows : null;
-  if (windows && windows.length) {
-    const tabs: Array<{ key: string; label: string; from: number; to: number }> = [];
-    const chunk = 500;
-    for (const w of windows) {
-      const winFrom = Math.max(ctx.ticket_start_number, Math.floor(w.from));
-      const winTo = Math.min(ctx.ticket_end_number, Math.floor(w.to));
-      if (winTo < winFrom) continue;
-      if (winTo - winFrom + 1 <= chunk) {
-        tabs.push({ key: `${winFrom}-${winTo}`, label: `${winFrom}–${winTo}`, from: winFrom, to: winTo });
-        continue;
-      }
-      for (let from = winFrom; from <= winTo; from += chunk) {
-        const to = Math.min(from + chunk - 1, winTo);
-        tabs.push({ key: `${from}-${to}`, label: `${from}–${to}`, from, to });
-      }
-    }
-    return tabs.length ? tabs : [{ key: "all", label: "Все", from: ctx.ticket_start_number, to: ctx.ticket_end_number }];
-  }
-  return [{ key: "all", label: "Все", from: ctx.ticket_start_number, to: ctx.ticket_end_number }];
+type SearchMode = "enter" | "random";
+
+function isInVisibleWindows(n: number, ctx: SwapContext): boolean {
+  const batch = Math.max(0, Math.floor(Number(ctx.sequential_batch_size) || 0));
+  if (batch <= 0) return true;
+  const windows = Array.isArray(ctx.sequential_windows) ? ctx.sequential_windows : [];
+  if (!windows.length) return true;
+  return windows.some((w) => n >= w.from && n <= w.to);
 }
 
 export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, onSwapped, toast }: Props) {
@@ -60,13 +43,14 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
   const [lookupKind, setLookupKind] = useState<string | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [submitBusy, setSubmitBusy] = useState(false);
-  const [rangeKey, setRangeKey] = useState("all");
+  const [randomBusy, setRandomBusy] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>("enter");
 
-  const rangeTabs = useMemo(() => buildRangeTabs(ctx), [ctx]);
-  const activeRange = useMemo(
-    () => rangeTabs.find((t) => t.key === rangeKey) || rangeTabs[0] || null,
-    [rangeTabs, rangeKey],
-  );
+  const resetPickState = useCallback(() => {
+    setNewNumber("");
+    setLookupKind(null);
+    setSearchMode("enter");
+  }, []);
 
   const load = useCallback(async () => {
     if (!raffleId) return;
@@ -75,17 +59,15 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
     try {
       const data = await abApiJson<SwapContext>(`/api/raffles/${String(raffleId)}/ticket-swap`);
       setCtx(data);
-      setRangeKey(buildRangeTabs(data)[0]?.key || "all");
-      setActiveFrom(null);
-      setNewNumber("");
-      setLookupKind(null);
+      setActiveFrom(data.confirmed_tickets[0] ?? null);
+      resetPickState();
     } catch (e) {
       setCtx(null);
       setError(e instanceof AbApiError ? e.message : "Не удалось загрузить данные");
     } finally {
       setLoading(false);
     }
-  }, [raffleId]);
+  }, [raffleId, resetPickState]);
 
   useEffect(() => {
     if (!open) return;
@@ -93,28 +75,14 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
   }, [open, load]);
 
   useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open || !activeFrom || !raffleId) return;
+    if (!open || !ctx || activeFrom == null) return;
     const raw = String(newNumber || "").replace(/\D/g, "");
     const n = Math.floor(Number(raw));
     if (!Number.isFinite(n) || n <= 0) {
       setLookupKind(null);
       return;
     }
-    if (activeRange && (n < activeRange.from || n > activeRange.to)) {
+    if (!isInVisibleWindows(n, ctx)) {
       setLookupKind("out_of_range");
       return;
     }
@@ -141,17 +109,35 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, activeFrom, newNumber, raffleId, activeRange]);
+  }, [open, ctx, activeFrom, newNumber, raffleId]);
+
+  const pickRandomFree = async () => {
+    if (!ctx || activeFrom == null || randomBusy || ctx.swaps_remaining <= 0) return;
+    setRandomBusy(true);
+    try {
+      const data = await abApiJson<{ n: number }>(`/api/raffles/${String(raffleId)}/ticket-swap/random-free`);
+      const n = Math.floor(Number(data.n));
+      if (!Number.isFinite(n) || n <= 0) throw new Error("Не удалось подобрать номерок");
+      setNewNumber(String(n));
+      setLookupKind("free");
+      setSearchMode("enter");
+      toast(`Подобран свободный номерок: ${n}`, "info");
+    } catch (e) {
+      toast(e instanceof AbApiError ? e.message : "Не удалось подобрать номерок", "error");
+    } finally {
+      setRandomBusy(false);
+    }
+  };
 
   const submitSwap = async () => {
     if (!ctx || activeFrom == null || submitBusy) return;
     const toN = Math.floor(Number(String(newNumber).replace(/\D/g, "")));
     if (!Number.isFinite(toN) || toN <= 0) {
-      toast("Введите новый номерок", "warning");
+      toast("Укажите новый номерок", "warning");
       return;
     }
-    if (activeRange && (toN < activeRange.from || toN > activeRange.to)) {
-      toast(`Новый номерок должен быть в диапазоне ${activeRange.from}–${activeRange.to}`, "warning");
+    if (!isInVisibleWindows(toN, ctx)) {
+      toast("Номерок вне открытых блоков", "warning");
       return;
     }
     if (lookupKind !== "free") {
@@ -160,14 +146,11 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
     }
     setSubmitBusy(true);
     try {
-      await abApiJson<{ ok: boolean; from: number; to: number; swaps_remaining: number }>(
-        `/api/raffles/${String(raffleId)}/ticket-swap`,
-        {
-          method: "POST",
-          headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ from: activeFrom, to: toN }),
-        },
-      );
+      await abApiJson(`/api/raffles/${String(raffleId)}/ticket-swap`, {
+        method: "POST",
+        headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ from: activeFrom, to: toN }),
+      });
       toast(`Номерок ${activeFrom} заменён на ${toN}`, "success");
       onSwapped();
       await load();
@@ -178,144 +161,222 @@ export default function TicketSwapSheet({ open, raffleId, raffleTitle, onClose, 
     }
   };
 
-  if (!open) return null;
-
   const swapsLeft = ctx?.swaps_remaining ?? 0;
   const canSwap = swapsLeft > 0;
+  const toN = Math.floor(Number(String(newNumber).replace(/\D/g, "")));
+  const readyToSwap = canSwap && activeFrom != null && lookupKind === "free" && Number.isFinite(toN) && toN > 0;
+
+  const badgeText =
+    lookupBusy && newNumber
+      ? "…"
+      : lookupKind === "free"
+        ? "Свободен"
+        : lookupKind === "taken"
+          ? "Занят"
+          : lookupKind === "out_of_range"
+            ? "Вне блока"
+            : lookupKind === "self_confirmed" || lookupKind === "self_reserved" || lookupKind === "self_pending"
+              ? "Ваш"
+              : lookupKind === "invalid" && newNumber
+                ? "Нет в акции"
+                : "";
+  const fieldKind =
+    lookupKind === "free"
+      ? "free"
+      : lookupKind === "taken"
+        ? "taken"
+        : lookupKind === "out_of_range" || lookupKind === "invalid"
+          ? "invalid"
+          : "";
+  const badgeClass =
+    lookupKind === "free"
+      ? "ticket-search-status-badge--free"
+      : lookupKind === "taken"
+        ? "ticket-search-status-badge--taken"
+        : lookupKind === "self_confirmed" || lookupKind === "self_reserved" || lookupKind === "self_pending"
+          ? "ticket-search-status-badge--self"
+          : lookupKind === "out_of_range" || lookupKind === "invalid"
+            ? "ticket-search-status-badge--invalid"
+            : "ticket-search-status-badge--empty";
 
   return (
-    <div className="ticket-swap-sheet" role="dialog" aria-modal="true" aria-labelledby="ticket-swap-title">
-      <button type="button" className="ticket-swap-sheet__backdrop" aria-label="Закрыть" onClick={onClose} />
-      <div className="ticket-swap-sheet__panel">
-        <header className="ticket-swap-sheet__head">
-          <div>
-            <h2 id="ticket-swap-title" className="ticket-swap-sheet__title">
+    <div
+      id="modal-ticket-swap"
+      className={"modal-overlay history-modal ticket-swap-modal" + (open ? " is-open" : "")}
+      aria-hidden={open ? "false" : "true"}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-ticket-swap-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="history-modal__dialog" role="document">
+        <button type="button" className="history-modal__close" aria-label="Закрыть" onClick={onClose}>
+          <X size={20} aria-hidden="true" />
+        </button>
+        <div className="history-modal__inner">
+          <div className="history-modal__head">
+            <button type="button" className="history-modal__back" aria-label="Назад" onClick={onClose}>
+              <ArrowLeft size={20} aria-hidden="true" />
+            </button>
+            <h2 id="modal-ticket-swap-title" className="history-modal__title">
               Управление номерками
             </h2>
-            <p className="ticket-swap-sheet__sub">{raffleTitle}</p>
           </div>
-          <button type="button" className="ticket-swap-sheet__close" onClick={onClose} aria-label="Закрыть">
-            <X size={20} aria-hidden="true" />
-          </button>
-        </header>
 
-        {loading ? <p className="ticket-swap-sheet__muted">Загрузка…</p> : null}
-        {!loading && error ? <p className="ticket-swap-sheet__err">{error}</p> : null}
-
-        {!loading && ctx ? (
-          <>
-            <p className="ticket-swap-sheet__quota">
-              Замен сегодня: <strong>{ctx.swaps_used_today}</strong> из{" "}
-              <strong>{ctx.swaps_limit || USER_TICKET_SWAPS_PER_SITE_DAY}</strong>
-              {swapsLeft > 0 ? (
-                <>
-                  {" "}
-                  · осталось <strong>{swapsLeft}</strong>
-                </>
-              ) : (
-                <span className="ticket-swap-sheet__quota-warn"> · лимит исчерпан до завтра</span>
-              )}
-            </p>
-
-            {rangeTabs.length > 1 ? (
-              <div className="ticket-swap-sheet__tabs" role="tablist" aria-label="Диапазоны номерков">
-                {rangeTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={rangeKey === tab.key}
-                    className={"ticket-swap-sheet__tab" + (rangeKey === tab.key ? " is-active" : "")}
-                    onClick={() => {
-                      setRangeKey(tab.key);
-                      setNewNumber("");
-                      setLookupKind(null);
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+          <div className="history-modal__body custom-scrollbar ticket-swap-modal__body">
+            {loading ? (
+              <div className="history-modal__loader-wrap" role="status" aria-live="polite">
+                <div className="history-modal__loader" />
               </div>
             ) : null}
 
-            <p className="ticket-swap-sheet__hint">
-              Выберите свой номерок и укажите свободный новый. Старый освободится автоматически.
-            </p>
+            {!loading && error ? <p className="history-modal__status history-modal__status--error">{error}</p> : null}
 
-            <ul className="ticket-swap-sheet__list">
-              {ctx.confirmed_tickets.map((n) => {
-                const openRow = activeFrom === n;
-                return (
-                  <li key={String(n)} className={"ticket-swap-sheet__item" + (openRow ? " is-open" : "")}>
-                    <div className="ticket-swap-sheet__item-row">
-                      <span className="ticket-swap-sheet__num">№ {n}</span>
+            {!loading && ctx ? (
+              <div className="ticket-swap-modal__content">
+                <p className="ticket-swap-modal__raffle">{raffleTitle}</p>
+                <p className="ticket-swap-modal__quota">
+                  Замен сегодня: <strong>{ctx.swaps_used_today}</strong> /{" "}
+                  <strong>{ctx.swaps_limit || USER_TICKET_SWAPS_PER_SITE_DAY}</strong>
+                  {swapsLeft > 0 ? (
+                    <>
+                      {" "}
+                      · осталось <strong>{swapsLeft}</strong>
+                    </>
+                  ) : (
+                    <span className="ticket-swap-modal__quota-warn"> · лимит исчерпан</span>
+                  )}
+                </p>
+
+                <section className="ticket-swap-modal__section">
+                  <h3 className="ticket-swap-modal__section-title">Какой номерок заменить</h3>
+                  <p className="ticket-swap-modal__section-hint">Выберите один из ваших оплаченных номерков.</p>
+                  <div className="ticket-swap-modal__mine-chips" role="listbox" aria-label="Ваши номерки">
+                    {ctx.confirmed_tickets.map((n) => (
                       <button
+                        key={String(n)}
                         type="button"
-                        className="ticket-swap-sheet__pick"
+                        role="option"
+                        aria-selected={activeFrom === n}
                         disabled={!canSwap}
+                        className={
+                          "ticket-swap-modal__mine-chip" + (activeFrom === n ? " is-active" : "")
+                        }
                         onClick={() => {
-                          if (openRow) {
-                            setActiveFrom(null);
-                            setNewNumber("");
-                            setLookupKind(null);
-                          } else {
-                            setActiveFrom(n);
-                            setNewNumber("");
-                            setLookupKind(null);
-                          }
+                          setActiveFrom(n);
+                          resetPickState();
                         }}
                       >
-                        {openRow ? "Отмена" : "Заменить"}
+                        {n}
                       </button>
-                    </div>
-                    {openRow ? (
-                      <div className="ticket-swap-sheet__form">
-                        <label className="ticket-swap-sheet__label">
-                          Новый номерок
-                          {activeRange && rangeTabs.length > 1 ? (
-                            <span className="ticket-swap-sheet__range-note">
-                              {" "}
-                              ({activeRange.from}–{activeRange.to})
-                            </span>
-                          ) : null}
-                        </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="ticket-swap-modal__section">
+                  <h3 className="ticket-swap-modal__section-title">Новый номерок</h3>
+                  <p className="ticket-swap-modal__section-hint">
+                    Только свободные номерки из открытых сейчас блоков. Старый номерок освободится.
+                  </p>
+
+                  <div className="ticket-search-sheet__segment" role="tablist" aria-label="Режим поиска">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={searchMode === "enter"}
+                      className={
+                        "ticket-search-sheet__seg" + (searchMode === "enter" ? " ticket-search-sheet__seg--active" : "")
+                      }
+                      onClick={() => setSearchMode("enter")}
+                    >
+                      Ввести номер
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={searchMode === "random"}
+                      className={
+                        "ticket-search-sheet__seg" + (searchMode === "random" ? " ticket-search-sheet__seg--active" : "")
+                      }
+                      onClick={() => setSearchMode("random")}
+                      disabled={!canSwap || activeFrom == null}
+                    >
+                      Случайный выбор
+                    </button>
+                  </div>
+
+                  {searchMode === "enter" ? (
+                    <div className="ticket-swap-modal__search-panel">
+                      <h4 className="ticket-search-sheet__label">Номер билета</h4>
+                      <div
+                        className={
+                          "ticket-search-sheet__field" + (fieldKind ? ` ticket-search-sheet__field--${fieldKind}` : "")
+                        }
+                      >
                         <input
+                          className="ticket-search-sheet__input"
                           type="text"
                           inputMode="numeric"
-                          className="ticket-swap-sheet__input"
+                          pattern="[0-9]*"
+                          autoComplete="off"
                           value={newNumber}
+                          disabled={!canSwap || activeFrom == null}
                           placeholder="Введите номер"
                           onChange={(e) => setNewNumber(e.target.value.replace(/[^\d]/g, ""))}
                         />
-                        {lookupBusy ? <p className="ticket-swap-sheet__lookup">Проверка…</p> : null}
-                        {!lookupBusy && lookupKind === "free" ? (
-                          <p className="ticket-swap-sheet__lookup ticket-swap-sheet__lookup--ok">Свободен</p>
-                        ) : null}
-                        {!lookupBusy && lookupKind && lookupKind !== "free" ? (
-                          <p className="ticket-swap-sheet__lookup ticket-swap-sheet__lookup--bad">
-                            {lookupKind === "out_of_range"
-                              ? "Вне открытого блока"
-                              : lookupKind === "taken"
-                                ? "Занят"
-                                : "Недоступен"}
-                          </p>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="ticket-swap-sheet__submit"
-                          disabled={submitBusy || lookupKind !== "free"}
-                          onClick={() => void submitSwap()}
+                        <span
+                          className={"ticket-search-status-badge " + badgeClass}
+                          aria-live="polite"
                         >
-                          {submitBusy ? "Сохранение…" : `Заменить ${n} → новый`}
-                        </button>
+                          {badgeText}
+                        </span>
                       </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        ) : null}
+                    </div>
+                  ) : (
+                    <div className="ticket-swap-modal__search-panel">
+                      <p className="ticket-swap-modal__random-text">
+                        Подберём случайный свободный номерок среди доступных сейчас.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn--primary ticket-search-sheet__cta ticket-search-sheet__cta--blue"
+                        disabled={randomBusy || !canSwap || activeFrom == null}
+                        onClick={() => void pickRandomFree()}
+                      >
+                        {randomBusy ? "Подбор…" : "Случайный свободный номерок"}
+                      </button>
+                    </div>
+                  )}
+                </section>
+
+                {readyToSwap && activeFrom != null ? (
+                  <div className="ticket-swap-modal__preview">
+                    <span className="ticket-swap-modal__preview-label">Замена</span>
+                    <span className="ticket-swap-modal__preview-nums">
+                      № {activeFrom} → № {toN}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            className={
+              "ticket-swap-modal__confirm" + (readyToSwap ? " ticket-swap-modal__confirm--ready" : "")
+            }
+            disabled={!readyToSwap || submitBusy}
+            onClick={() => void submitSwap()}
+          >
+            {submitBusy ? "Сохранение…" : readyToSwap ? `Заменить № ${activeFrom} на № ${toN}` : "Выберите номерки"}
+          </button>
+          <button type="button" className="history-modal__btn-back" onClick={onClose}>
+            Назад
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -3841,3 +3841,22 @@ export async function swapUserConfirmedTicket(
   const remaining = Math.max(0, USER_TICKET_SWAPS_PER_SITE_DAY - used - 1);
   return { ok: true, from: fromN, to: toN, swaps_remaining: remaining };
 }
+
+/** Случайный свободный номерок в открытых блоках (или во всей акции без очереди). */
+export async function pickRandomVisibleFreeTicket(raffleId: number): Promise<number | null> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return null;
+  const batchSize = Math.max(0, Math.floor(Number(raffle.sequential_batch_size ?? 0)));
+  const allFree = await listGloballyFreeTicketNumbers(raffleId);
+  if (!allFree.length) return null;
+  let pool = allFree;
+  if (batchSize > 0) {
+    const windows = await getSequentialVisibleBatches(raffle);
+    if (windows.length) {
+      pool = allFree.filter((n) => windows.some((w) => n >= w.from && n <= w.to));
+    }
+  }
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+}
