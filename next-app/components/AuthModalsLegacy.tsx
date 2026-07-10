@@ -188,7 +188,7 @@ export default function AuthModalsLegacy() {
       </div>
 
       <div id="modal-forgot" className="modal-overlay" aria-hidden="true" role="dialog" aria-labelledby="forgot-heading">
-        <div className="modal">
+        <div className="modal forgot-password-modal">
           <div className="modal__top">
             <button type="button" className="modal__back" id="modal-forgot-back" aria-label="Назад">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -202,12 +202,30 @@ export default function AuthModalsLegacy() {
               </svg>
             </button>
           </div>
-          <div className="modal__body">
-            <p className="modal__lead">Для сброса пароля обратитесь к администратору в личные сообщения в MAX.</p>
-            <p className="modal__lead modal__lead--muted">Я пользуюсь мессенджером MAX. Присоединяйся!</p>
-            <div className="form-actions">
-              <a className="btn btn--primary" href="https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w" target="_blank" rel="noopener noreferrer">Написать в MAX</a>
+          <div className="modal__body forgot-password-modal__body">
+            <div className="forgot-password-modal__icon" aria-hidden="true">
+              <img src="https://maxicons.ru/icons/MAX.svg" alt="" width={40} height={40} />
             </div>
+            <p className="forgot-password-modal__lead">
+              Сброс пароля через сайт недоступен. Напишите администратору в MAX — поможем восстановить доступ.
+            </p>
+            <div className="forgot-password-modal__hint">
+              <p className="forgot-password-modal__hint-title">В сообщении укажите:</p>
+              <ul className="forgot-password-modal__list">
+                <li>номер телефона</li>
+                <li>ФИО</li>
+                <li>населённый пункт</li>
+              </ul>
+            </div>
+            <a
+              id="forgot-password-max-link"
+              className="btn btn--primary forgot-password-modal__cta"
+              href="https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Написать в MAX
+            </a>
           </div>
         </div>
       </div>

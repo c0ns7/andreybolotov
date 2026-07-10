@@ -8350,6 +8350,18 @@
 
   document.getElementById("link-forgot")?.addEventListener("click", function (e) {
     e.preventDefault();
+    var maxLink = document.getElementById("forgot-password-max-link");
+    if (maxLink) {
+      fetch("/api/site/status", { cache: "no-store" })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (j) {
+          var url = j && j.support_max_url ? String(j.support_max_url).trim() : "";
+          if (url) maxLink.setAttribute("href", url);
+        })
+        .catch(function () {});
+    }
     closeModal(modalLogin);
     openModal(modalForgot);
   });

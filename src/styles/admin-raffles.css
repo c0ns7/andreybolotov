@@ -1862,6 +1862,24 @@
   justify-content: center;
 }
 
+.admin-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.admin-settings-field__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.admin-settings-field__input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .admin-payments-toolbar__text {
   display: flex;
   align-items: flex-start;

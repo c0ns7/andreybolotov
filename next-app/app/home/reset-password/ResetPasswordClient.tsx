@@ -1,85 +1,74 @@
 "use client";
 
-import { useEffect } from "react";
-
-const BTN_DEFAULT =
-  '<svg class="reset-pw-submit__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>Сохранить пароль';
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  AB_ADMIN_MAX_LINK_LABEL,
+  AB_ADMIN_MAX_URL_DEFAULT,
+  AB_MAX_LOGO_SVG,
+  AB_PASSWORD_RESET_ADMIN_TEXT,
+  AB_PASSWORD_RESET_REQUIRED_FIELDS,
+} from "../../../lib/ab-support-links";
+import "./reset-password.css";
 
 export default function ResetPasswordClient() {
+  const [maxUrl, setMaxUrl] = useState(AB_ADMIN_MAX_URL_DEFAULT);
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    const form = document.getElementById("form-reset-pw");
-    const errBox = document.getElementById("reset-pw-error");
-    const errText = document.getElementById("reset-pw-error-text");
-    const doneEl = document.getElementById("reset-pw-done");
-    const lead = document.getElementById("reset-pw-lead");
-    const btn = document.getElementById("reset-pw-btn") as HTMLButtonElement | null;
-    const stateForm = document.getElementById("reset-pw-state-form");
-    const stateBad = document.getElementById("reset-pw-state-bad");
-
-    function showErr(msg: string) {
-      if (!errBox || !errText) return;
-      errText.textContent = msg || "";
-      errBox.hidden = !msg;
-    }
-
-    if (!token || token.length < 64) {
-      if (stateForm) stateForm.hidden = true;
-      if (stateBad) stateBad.hidden = false;
-      return;
-    }
-
-    if (!form) return;
-
-    const onSubmit = (e: Event) => {
-      e.preventDefault();
-      showErr("");
-      const p1 = document.getElementById("reset-pw-pass") as HTMLInputElement | null;
-      const p2 = document.getElementById("reset-pw-pass2") as HTMLInputElement | null;
-      const a = p1 ? String(p1.value) : "";
-      const b = p2 ? String(p2.value) : "";
-      if (a.length < 6) {
-        showErr("Пароль не короче 6 символов.");
-        return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/site/status", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const url = String(data?.support_max_url || "").trim();
+        if (!cancelled && url) setMaxUrl(url);
+      } catch {
+        /* keep default */
       }
-      if (a !== b) {
-        showErr("Пароли не совпадают.");
-        return;
-      }
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML =
-          '<span class="reset-pw-spinner" aria-hidden="true"></span><span>Сохранение…</span>';
-      }
-      fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password: a }),
-      })
-        .then((res) =>
-          res.json().then((d) => {
-            return { ok: res.ok, d: d as { error?: string } };
-          }),
-        )
-        .then((x) => {
-          if (!x.ok) throw new Error(x.d && x.d.error ? String(x.d.error) : "Ошибка");
-          if (stateForm) stateForm.hidden = true;
-          if (lead) lead.hidden = true;
-          if (doneEl) doneEl.hidden = false;
-        })
-        .catch((err: Error) => {
-          showErr(err.message || "Ошибка");
-          if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = BTN_DEFAULT;
-          }
-        });
+    })();
+    return () => {
+      cancelled = true;
     };
-
-    form.addEventListener("submit", onSubmit);
-    return () => form.removeEventListener("submit", onSubmit);
   }, []);
 
-  return null;
+  return (
+    <div className="reset-pw-page">
+      <Link className="reset-pw-back" href="/">
+        <svg
+          className="reset-pw-back__icon"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+        На главную
+      </Link>
+
+      <div className="reset-pw-card forgot-password-modal">
+        <div className="forgot-password-modal__icon" aria-hidden="true">
+          <img src={AB_MAX_LOGO_SVG} alt="" width={40} height={40} />
+        </div>
+        <h1 className="reset-pw-title">Сброс пароля</h1>
+        <p className="forgot-password-modal__lead">{AB_PASSWORD_RESET_ADMIN_TEXT}</p>
+        <div className="forgot-password-modal__hint">
+          <p className="forgot-password-modal__hint-title">В сообщении укажите:</p>
+          <ul className="forgot-password-modal__list">
+            {AB_PASSWORD_RESET_REQUIRED_FIELDS.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+        <a className="btn btn--primary forgot-password-modal__cta reset-pw-cta" href={maxUrl} target="_blank" rel="noopener noreferrer">
+          {AB_ADMIN_MAX_LINK_LABEL}
+        </a>
+      </div>
+    </div>
+  );
 }

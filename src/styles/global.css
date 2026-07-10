@@ -1,5 +1,6 @@
 @import "./chat-action-cards.css";
 @import "./bonus-table.css";
+@import "./forgot-password-modal.css";
 
 /* Андрей Болотов — колонка max 520px, светлая тема */
 :root {

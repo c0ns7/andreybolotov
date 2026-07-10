@@ -2,6 +2,8 @@
   "use strict";
 
   const STORAGE_KEY = "ab_auth_v2";
+  const DEFAULT_SUPPORT_MAX_URL =
+    "https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w";
 
   function loadSession() {
     try {
@@ -21,10 +23,11 @@
     return { Authorization: "Bearer " + x.token };
   }
 
-  function fetchSettings(toggle, statusEl, blogToggle, blogStatusEl) {
+  function fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput) {
     if (!toggle) return;
     toggle.disabled = true;
     if (blogToggle) blogToggle.disabled = true;
+    if (maxUrlInput) maxUrlInput.disabled = true;
     fetch("/api/admin/settings", { headers: authHeaders(), cache: "no-store" })
       .then(function (r) {
         return r.json().then(function (d) {
@@ -34,18 +37,23 @@
       .then(function (x) {
         toggle.disabled = false;
         if (blogToggle) blogToggle.disabled = false;
+        if (maxUrlInput) maxUrlInput.disabled = false;
         if (!x.ok) {
           if (statusEl) statusEl.textContent = x.d.error || "Не удалось загрузить настройки";
           return;
         }
         toggle.checked = !!x.d.maintenance_enabled;
         if (blogToggle) blogToggle.checked = !!x.d.blog_enabled;
+        if (maxUrlInput) {
+          maxUrlInput.value = String(x.d.support_max_url || DEFAULT_SUPPORT_MAX_URL);
+        }
         if (statusEl) statusEl.textContent = "";
         if (blogStatusEl) blogStatusEl.textContent = "";
       })
       .catch(function () {
         toggle.disabled = false;
         if (blogToggle) blogToggle.disabled = false;
+        if (maxUrlInput) maxUrlInput.disabled = false;
         if (statusEl) statusEl.textContent = "Ошибка сети";
       });
   }
@@ -116,17 +124,54 @@
     });
   }
 
+  function bindSupportMaxUrl(maxUrlInput, saveBtn, statusEl) {
+    if (!maxUrlInput || !saveBtn) return;
+    if (saveBtn.dataset.abSupportMaxBound === "1") return;
+    saveBtn.dataset.abSupportMaxBound = "1";
+    saveBtn.addEventListener("click", function () {
+      const url = String(maxUrlInput.value || "").trim();
+      if (!url) {
+        if (statusEl) statusEl.textContent = "Укажите ссылку";
+        return;
+      }
+      saveBtn.disabled = true;
+      maxUrlInput.disabled = true;
+      if (statusEl) statusEl.textContent = "Сохранение…";
+      patchSettings(
+        { support_max_url: url },
+        function (d) {
+          saveBtn.disabled = false;
+          maxUrlInput.disabled = false;
+          maxUrlInput.value = String(d.support_max_url || url);
+          if (statusEl) statusEl.textContent = "Сохранено";
+          setTimeout(function () {
+            if (statusEl && statusEl.textContent === "Сохранено") statusEl.textContent = "";
+          }, 2000);
+        },
+        function (d) {
+          saveBtn.disabled = false;
+          maxUrlInput.disabled = false;
+          if (statusEl) statusEl.textContent = d.error || "Не удалось сохранить";
+        },
+      );
+    });
+  }
+
   window.abInitSettings = function () {
     const toggle = document.getElementById("admin-settings-maintenance");
     const statusEl = document.getElementById("admin-settings-status");
     const blogToggle = document.getElementById("admin-settings-blog-enabled");
     const blogStatusEl = document.getElementById("admin-settings-blog-status");
+    const maxUrlInput = document.getElementById("admin-settings-support-max-url");
+    const maxSaveBtn = document.getElementById("admin-settings-support-max-save");
+    const maxStatusEl = document.getElementById("admin-settings-support-max-status");
     if (!toggle) return;
     const s = loadSession();
     if (!s || !s.token) return;
 
-    fetchSettings(toggle, statusEl, blogToggle, blogStatusEl);
+    fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput);
     bindMaxBroadcast();
+    bindSupportMaxUrl(maxUrlInput, maxSaveBtn, maxStatusEl);
 
     if (toggle.dataset.abSettingsChangeBound !== "1") {
       toggle.dataset.abSettingsChangeBound = "1";

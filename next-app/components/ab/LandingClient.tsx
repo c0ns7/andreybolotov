@@ -6,8 +6,10 @@ import { abApiJson, AbApiError } from "../../lib/ab-api";
 import { formatRuPhoneInput, isValidRuMobilePhone, phoneToNormalized } from "../../lib/ab-phone";
 import {
   AB_ADMIN_MAX_LINK_LABEL,
-  AB_ADMIN_MAX_URL,
+  AB_ADMIN_MAX_URL_DEFAULT,
+  AB_MAX_LOGO_SVG,
   AB_PASSWORD_RESET_ADMIN_TEXT,
+  AB_PASSWORD_RESET_REQUIRED_FIELDS,
 } from "../../lib/ab-support-links";
 import { useAbSession } from "./AbSessionContext";
 import { normalizePersonName, validatePersonName } from "../../lib/person-name";
@@ -59,6 +61,24 @@ export default function LandingClient() {
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [showLoginPass, setShowLoginPass] = useState(false);
+  const [supportMaxUrl, setSupportMaxUrl] = useState(AB_ADMIN_MAX_URL_DEFAULT);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/site/status", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const url = String(data?.support_max_url || "").trim();
+        if (!cancelled && url) setSupportMaxUrl(url);
+      } catch {
+        /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Не скрываем заставку, пока сессия не подтверждена — иначе кнопка «Войти» пропадает при проверке токена.
   const showAuthedUi = !!(session?.token && session?.phone && authVerified);
@@ -584,9 +604,10 @@ export default function LandingClient() {
         className={"modal-overlay" + (modal === "forgot" ? " is-open" : "")}
         aria-hidden={modal !== "forgot"}
         role="dialog"
+        aria-labelledby="forgot-heading"
         onClick={(e) => e.target === e.currentTarget && setModal("none")}
       >
-        <div className="modal">
+        <div className="modal forgot-password-modal">
           <div className="modal__top">
             <button
               type="button"
@@ -601,28 +622,36 @@ export default function LandingClient() {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            <h2 className="modal__top-title">Сброс пароля</h2>
+            <h2 id="forgot-heading" className="modal__top-title">
+              Сброс пароля
+            </h2>
             <button type="button" className="modal__close" aria-label="Закрыть" onClick={() => setModal("none")}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div className="modal__body">
-            <p className="modal__lead">{AB_PASSWORD_RESET_ADMIN_TEXT}</p>
-            <p className="modal__lead modal__lead--muted">
-              Я пользуюсь мессенджером MAX. Присоединяйся!
-            </p>
-            <div className="form-actions">
-              <a
-                className="btn btn--primary"
-                href={AB_ADMIN_MAX_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {AB_ADMIN_MAX_LINK_LABEL}
-              </a>
+          <div className="modal__body forgot-password-modal__body">
+            <div className="forgot-password-modal__icon" aria-hidden="true">
+              <img src={AB_MAX_LOGO_SVG} alt="" width={40} height={40} />
             </div>
+            <p className="forgot-password-modal__lead">{AB_PASSWORD_RESET_ADMIN_TEXT}</p>
+            <div className="forgot-password-modal__hint">
+              <p className="forgot-password-modal__hint-title">В сообщении укажите:</p>
+              <ul className="forgot-password-modal__list">
+                {AB_PASSWORD_RESET_REQUIRED_FIELDS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <a
+              className="btn btn--primary forgot-password-modal__cta"
+              href={supportMaxUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {AB_ADMIN_MAX_LINK_LABEL}
+            </a>
           </div>
         </div>
       </div>

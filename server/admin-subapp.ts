@@ -18,6 +18,7 @@ import {
   setMusicEnabled,
   setMusicDefaultVolume,
   setMusicPlaybackMode,
+  setSupportMaxUrl,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -1124,7 +1125,7 @@ adminSubApp.post("/music/upload", async (c) => {
 adminSubApp.patch("/settings", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
-  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown };
+  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown; support_max_url?: unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -1139,6 +1140,22 @@ adminSubApp.patch("/settings", async (c) => {
     const blogOn = Boolean(body.blog_enabled);
     await setBlogEnabled(blogOn);
     broadcastBlogEnabledUpdated(blogOn);
+  }
+  if (body.support_max_url !== undefined) {
+    const raw = String(body.support_max_url ?? "").trim();
+    if (!raw) return c.json({ error: "Укажите ссылку на MAX" }, 400);
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "https:" && u.protocol !== "http:") {
+        return c.json({ error: "Ссылка должна начинаться с https://" }, 400);
+      }
+      if (!/(^|\.)max\.ru$/i.test(u.hostname)) {
+        return c.json({ error: "Разрешены только ссылки на max.ru" }, 400);
+      }
+    } catch {
+      return c.json({ error: "Некорректная ссылка" }, 400);
+    }
+    await setSupportMaxUrl(raw);
   }
   c.header("Cache-Control", "no-store");
   return c.json(await getSiteSettings());

@@ -434,6 +434,7 @@ app.get("/api/site/status", async (c) => {
     maintenance: site.maintenance_enabled,
     blog_enabled: site.blog_enabled,
     music_enabled: site.music_enabled,
+    support_max_url: site.support_max_url,
   });
 });
 
@@ -726,20 +727,20 @@ app.post("/api/auth/logout", async (c) => {
 });
 
 app.post("/api/auth/forgot", async (c) => {
+  const site = await getSiteSettings();
   return c.json(
     {
-      error:
-        "Сброс пароля по email отключён. Обратитесь к администратору в MAX: https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w",
+      error: `Сброс пароля по email отключён. Напишите администратору в MAX: ${site.support_max_url}`,
     },
     410,
   );
 });
 
 app.post("/api/auth/reset-password", async (c) => {
+  const site = await getSiteSettings();
   return c.json(
     {
-      error:
-        "Сброс пароля по ссылке отключён. Обратитесь к администратору в MAX: https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w",
+      error: `Сброс пароля по ссылке отключён. Напишите администратору в MAX: ${site.support_max_url}`,
     },
     410,
   );

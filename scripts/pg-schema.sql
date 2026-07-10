@@ -181,10 +181,11 @@ CREATE TABLE IF NOT EXISTS site_settings (
   maintenance_enabled INTEGER NOT NULL DEFAULT 0,
   blog_enabled INTEGER NOT NULL DEFAULT 0,
   music_enabled INTEGER NOT NULL DEFAULT 0,
-  music_default_volume INTEGER NOT NULL DEFAULT 35
+  music_default_volume INTEGER NOT NULL DEFAULT 35,
+  support_max_url TEXT NOT NULL DEFAULT 'https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w'
 );
-INSERT INTO site_settings (id, maintenance_enabled, blog_enabled, music_enabled, music_default_volume)
-VALUES (1, 0, 0, 0, 35)
+INSERT INTO site_settings (id, maintenance_enabled, blog_enabled, music_enabled, music_default_volume, support_max_url)
+VALUES (1, 0, 0, 0, 35, 'https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS site_music_tracks (

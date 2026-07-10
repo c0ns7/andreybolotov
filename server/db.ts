@@ -1429,6 +1429,7 @@ export async function getSiteSettings(): Promise<{
   music_enabled: boolean;
   music_default_volume: number;
   music_playback_mode: MusicPlaybackMode;
+  support_max_url: string;
 }> {
   const row = await pgGet<{
     maintenance_enabled: number;
@@ -1436,8 +1437,9 @@ export async function getSiteSettings(): Promise<{
     music_enabled?: number;
     music_default_volume?: number;
     music_playback_mode?: string;
+    support_max_url?: string;
   }>(
-    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode FROM site_settings WHERE id = 1`,
+    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode, support_max_url FROM site_settings WHERE id = 1`,
   );
   const vol = Math.floor(Number(row?.music_default_volume ?? 35));
   return {
@@ -1446,7 +1448,32 @@ export async function getSiteSettings(): Promise<{
     music_enabled: Boolean(Number(row?.music_enabled)),
     music_default_volume: Math.max(0, Math.min(100, Number.isFinite(vol) ? vol : 35)),
     music_playback_mode: normalizeMusicPlaybackMode(row?.music_playback_mode),
+    support_max_url: normalizeSupportMaxUrl(row?.support_max_url),
   };
+}
+
+const DEFAULT_SUPPORT_MAX_URL =
+  "https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w";
+
+export function normalizeSupportMaxUrl(raw: unknown): string {
+  const s = String(raw ?? "")
+    .trim()
+    .slice(0, 500);
+  if (!s) return DEFAULT_SUPPORT_MAX_URL;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return DEFAULT_SUPPORT_MAX_URL;
+    if (!/(^|\.)max\.ru$/i.test(u.hostname)) return DEFAULT_SUPPORT_MAX_URL;
+    return u.toString();
+  } catch {
+    return DEFAULT_SUPPORT_MAX_URL;
+  }
+}
+
+export async function setSupportMaxUrl(url: string): Promise<string> {
+  const normalized = normalizeSupportMaxUrl(url);
+  await pgExec(`UPDATE site_settings SET support_max_url = ? WHERE id = 1`, [normalized]);
+  return normalized;
 }
 
 export async function setMaintenanceEnabled(on: boolean): Promise<void> {

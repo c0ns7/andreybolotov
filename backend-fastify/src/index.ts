@@ -727,6 +727,7 @@ app.get("/api/site/status", async (_request, reply) => {
     maintenance: settings.maintenance_enabled,
     blog_enabled: settings.blog_enabled,
     music_enabled: settings.music_enabled,
+    support_max_url: settings.support_max_url,
   };
 });
 
