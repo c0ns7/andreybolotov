@@ -205,19 +205,19 @@
     return out.join("<br/>");
   }
 
-  function parseAdminActionCard(rawBody) {
+  function parseAdminActionCards(rawBody) {
     var body = String(rawBody || "");
-    var m = body.match(/\[\[AB_CARD:([^\]]+)\]\]\s*$/);
-    if (!m) return { text: body, card: null };
-    var encoded = String(m[1] || "").trim();
-    var text = body.replace(/\n?\[\[AB_CARD:[^\]]+\]\]\s*$/, "").trim();
-    try {
-      var parsed = JSON.parse(decodeURIComponent(encoded));
-      if (!parsed || typeof parsed !== "object") return { text: text, card: null };
-      return { text: text, card: parsed };
-    } catch (_) {
-      return { text: text, card: null };
+    var cards = [];
+    var re = /\[\[AB_CARD:([^\]]+)\]\]/g;
+    var m;
+    while ((m = re.exec(body)) !== null) {
+      try {
+        var parsed = JSON.parse(decodeURIComponent(String(m[1] || "").trim()));
+        if (parsed && typeof parsed === "object") cards.push(parsed);
+      } catch (_) {}
     }
+    var text = body.replace(/\n?\[\[AB_CARD:[^\]]+\]\]/g, "").trim();
+    return { text: text, cards: cards };
   }
 
   function adminActionCardHtml(card) {
@@ -239,6 +239,35 @@
         "</p>" +
         subtitle +
         action +
+        "</div>"
+      );
+    }
+    if (card && card.kind === "bonus_table") {
+      var bonusSubtitle = card.subtitle ? '<p class="chat-action-card__reason">' + esc(String(card.subtitle)) + "</p>" : "";
+      var posHint = "";
+      if (Array.isArray(card.positions) && card.positions.length) {
+        posHint =
+          '<p class="chat-action-card__reason">Место: ' +
+          esc(card.positions.map(function (p) { return "#" + p; }).join(", ")) +
+          "</p>";
+      }
+      var openHref = String(card.open_url || "").trim();
+      var openCta = esc(String(card.cta || "Открыть бонусную таблицу"));
+      var openAction = openHref
+        ? '<a class="chat-action-card__btn chat-action-card__btn--bonus-table" href="' +
+          openHref.replace(/"/g, "&quot;") +
+          '" target="_blank" rel="noopener noreferrer">' +
+          openCta +
+          "</a>"
+        : '<span class="chat-action-card__btn chat-action-card__btn--bonus-table">' + openCta + "</span>";
+      return (
+        '<div class="chat-action-card chat-action-card--bonus-table">' +
+        '<p class="chat-action-card__title">' +
+        esc(String(card.title || "Бонусная таблица")) +
+        "</p>" +
+        bonusSubtitle +
+        posHint +
+        openAction +
         "</div>"
       );
     }
@@ -264,12 +293,13 @@
 
   function messageBubbleInnerHtml(m) {
     var att = attachmentHtml(m);
-    var parsed = parseAdminActionCard(m.body);
+    var parsed = parseAdminActionCards(m.body);
     var body = String(parsed.text || "").trim();
     var text = body
       ? '<div class="admin-msg-bubble__body">' + formatAdminBodyWithMaxJoinLineAsButton(esc(body)) + "</div>"
       : "";
-    return att + text + adminActionCardHtml(parsed.card);
+    var cardsHtml = (parsed.cards || []).map(adminActionCardHtml).join("");
+    return att + text + cardsHtml;
   }
 
   const ADMIN_CHAT_IMAGE_SKIP_COMPRESS_BELOW_BYTES = 1.2 * 1024 * 1024;

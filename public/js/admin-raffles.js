@@ -432,6 +432,8 @@
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21a2 2 0 0 0 4 0"></path></svg>',
     stats:
       '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
+    bonus:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"></rect><path d="M12 8V21"></path><path d="M3 12h18"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5C9 3 12 8 12 8s3-5 4.5-5a2.5 2.5 0 0 1 0 5H7.5z"></path></svg>',
   };
 
   function bankCardRowHtml(row) {
@@ -806,6 +808,13 @@
       '">' +
       BTN_ICO.stats +
       "<span>Статистика</span></button>" +
+      '<button type="button" class="admin-raffle-btn admin-raffle-btn--bonus admin-raffle-bonus-btn" data-id="' +
+      r.id +
+      '" data-title="' +
+      esc(String(r.title || "")) +
+      '">' +
+      BTN_ICO.bonus +
+      "<span>Бонусные таблицы</span></button>" +
       '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-raffle-edit" data-id="' +
       r.id +
       '">' +
@@ -971,6 +980,15 @@
       btn.addEventListener("click", function () {
         const id = Number(btn.getAttribute("data-id"));
         openRaffleStats(id);
+      });
+    });
+    listEl.querySelectorAll(".admin-raffle-bonus-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const id = Number(btn.getAttribute("data-id"));
+        const title = String(btn.getAttribute("data-title") || "");
+        if (window.AbAdminBonusTables && typeof window.AbAdminBonusTables.open === "function") {
+          window.AbAdminBonusTables.open(id, title);
+        }
       });
     });
     listEl.querySelectorAll(".admin-raffle-pause").forEach(function (btn) {

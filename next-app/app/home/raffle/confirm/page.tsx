@@ -31,7 +31,6 @@ export default function HomeRaffleConfirmPage() {
                 </svg>
               </span>
               <span className="raffle-confirm-file-label__text">Прикрепить чек</span>
-              <span id="raffle-confirm-file-name" className="raffle-confirm-file-name" />
             </button>
             <input
               type="file"
@@ -40,13 +39,29 @@ export default function HomeRaffleConfirmPage() {
               accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
               tabIndex={-1}
             />
-            <div id="raffle-confirm-upload-progress" className="raffle-confirm-upload-progress" hidden>
-              <div className="raffle-confirm-upload-progress__track">
-                <div id="raffle-confirm-upload-progress-fill" className="raffle-confirm-upload-progress__fill" />
+            <div id="raffle-confirm-file-preview" className="pay-sheet-receipt-preview" hidden>
+              <div className="pay-sheet-receipt-preview__frame">
+                <img id="raffle-confirm-file-preview-img" className="pay-sheet-receipt-preview__img" alt="Превью чека" hidden />
+                <div id="raffle-confirm-file-preview-pdf" className="pay-sheet-receipt-preview__pdf" hidden>
+                  <span className="pay-sheet-receipt-preview__pdf-badge">PDF</span>
+                  <span id="raffle-confirm-file-preview-pdf-name" className="pay-sheet-receipt-preview__pdf-name" />
+                </div>
+                <button
+                  type="button"
+                  id="raffle-confirm-file-remove"
+                  className="pay-sheet-receipt-preview__remove"
+                  aria-label="Удалить файл и выбрать другой"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                </button>
               </div>
-              <p id="raffle-confirm-upload-progress-text" className="raffle-confirm-upload-progress__text">
-                Загрузка: 0%
-              </p>
+              <p id="raffle-confirm-file-name" className="pay-sheet-receipt-preview__caption" />
             </div>
           </div>
           <p className="raffle-confirm-hint">

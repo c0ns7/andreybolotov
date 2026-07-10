@@ -1815,6 +1815,131 @@ export default function AdminMarkup() {
       </div>
     </div>
 
+    <div id="modal-bonus-tables" className="modal-overlay modal-overlay--raffle-form" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-bonus-tables-title">
+      <div className="modal admin-raffle-modal admin-raffle-modal--bonus-tables">
+        <div className="modal__top admin-raffle-modal__top">
+          <span className="admin-raffle-modal__top-spacer" aria-hidden="true"></span>
+          <div className="admin-raffle-modal__title-wrap">
+            <span className="admin-raffle-modal__title-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18"></path>
+                <path d="M3 9h18"></path>
+                <path d="M3 15h18"></path>
+                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              </svg>
+            </span>
+            <div>
+              <h2 id="modal-bonus-tables-title" className="modal__top-title admin-raffle-modal__title">Бонусные таблицы</h2>
+              <p id="modal-bonus-tables-subtitle" className="admin-raffle-modal__subtitle"></p>
+            </div>
+          </div>
+          <button type="button" className="modal__close admin-raffle-modal__close" id="modal-bonus-tables-close" aria-label="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div className="modal__body admin-raffle-modal__body">
+          <div className="admin-bonus-tables-toolbar">
+            <button type="button" className="btn btn--primary" id="btn-bonus-table-new">Создать таблицу</button>
+          </div>
+          <div id="bonus-tables-form-wrap" className="admin-bonus-tables-form-wrap" hidden>
+            <h3 id="bonus-table-form-title" className="admin-bonus-tables-form-title">Новая бонусная таблица</h3>
+            <form id="form-bonus-table" className="admin-bonus-tables-form" noValidate>
+              <div className="form-group">
+                <label htmlFor="bonus-table-title">Заголовок</label>
+                <input id="bonus-table-title" className="input" type="text" required maxLength={200} placeholder="Например: Бонус за 2 номерка" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="bonus-table-description">Описание (необязательно)</label>
+                <textarea id="bonus-table-description" className="input" rows={2} maxLength={2000} placeholder="Дополнительные условия или пояснение"></textarea>
+              </div>
+              <div className="admin-bonus-tables-form-grid">
+                <div className="form-group">
+                  <label htmlFor="bonus-table-start">Начало (Агинское)</label>
+                  <input id="bonus-table-start" className="input" type="datetime-local" required />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bonus-table-end">Завершение (Агинское)</label>
+                  <input id="bonus-table-end" className="input" type="datetime-local" required />
+                </div>
+              </div>
+              <div className="admin-bonus-tables-form-grid">
+                <div className="form-group">
+                  <label htmlFor="bonus-table-access-mode">Доступ</label>
+                  <select id="bonus-table-access-mode" className="input">
+                    <option value="closed">Закрытая (только админы)</option>
+                    <option value="link">Публичная по ссылке</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bonus-table-view-privacy">Кто может открывать</label>
+                  <select id="bonus-table-view-privacy" className="input">
+                    <option value="participants_admins">Участники и админы</option>
+                    <option value="all_auth">Все авторизованные</option>
+                    <option value="admins_only">Только админы</option>
+                  </select>
+                </div>
+              </div>
+              <div id="bonus-table-public-link-wrap" className="form-group" hidden>
+                <label htmlFor="bonus-table-public-link">Ссылка для участников</label>
+                <div className="admin-bonus-tables-link-row">
+                  <input id="bonus-table-public-link" className="input" type="text" readOnly />
+                  <button type="button" className="btn btn--secondary" id="btn-bonus-table-copy-link">Копировать</button>
+                </div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="bonus-table-count-from">Учёт покупок</label>
+                <select id="bonus-table-count-from" className="input">
+                  <option value="table_created">С момента создания таблицы</option>
+                  <option value="include_prior_same_day">Включая покупки до создания в этот день</option>
+                </select>
+              </div>
+              <div className="admin-bonus-tables-form-grid admin-bonus-tables-form-grid--3">
+                <div className="form-group">
+                  <label htmlFor="bonus-table-tickets-required">Купить номерков</label>
+                  <input id="bonus-table-tickets-required" className="input" type="number" min={1} max={100} defaultValue={2} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bonus-table-bonus-slots">Бонусных мест</label>
+                  <input id="bonus-table-bonus-slots" className="input" type="number" min={1} max={20} defaultValue={1} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bonus-table-period-scope">Период</label>
+                  <select id="bonus-table-period-scope" className="input">
+                    <option value="same_day">За сегодня</option>
+                    <option value="full_period">За весь период акции</option>
+                  </select>
+                </div>
+              </div>
+              <div className="admin-bonus-tables-form-grid">
+                <div className="form-group">
+                  <label htmlFor="bonus-table-aggregation">Условие</label>
+                  <select id="bonus-table-aggregation" className="input">
+                    <option value="cumulative">Разом или в общем</option>
+                    <option value="per_order">Только разом (в одной покупке)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="bonus-table-status">Статус</label>
+                  <select id="bonus-table-status" className="input">
+                    <option value="active">Активна</option>
+                    <option value="draft">Черновик</option>
+                    <option value="ended">Завершена</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-actions admin-bonus-tables-form-actions">
+                <button type="button" className="btn btn--secondary" id="btn-bonus-table-cancel">Отмена</button>
+                <button type="submit" className="btn btn--primary">Сохранить</button>
+              </div>
+            </form>
+          </div>
+          <div id="bonus-tables-list" className="admin-bonus-tables-list"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-edit-user" className="modal-overlay" aria-hidden="true" role="dialog" aria-labelledby="edit-user-title">
       <div className="modal admin-edit-modal">
         <div className="modal__top">

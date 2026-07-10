@@ -24,9 +24,11 @@ type ChatActionCard = {
   subtitle?: string;
   retry_url?: string;
   claim_url?: string;
+  open_url?: string;
   prize_id?: number;
   prize_type?: string;
   cta?: string;
+  positions?: number[];
 };
 type ChatTextPart = { type: "text"; value: string } | { type: "max_join"; href: string };
 type ChatAttachmentDto = { url: string; name: string; mime: string };
@@ -130,19 +132,22 @@ function formatDayLabel(ts?: number) {
   }
 }
 
-function parseChatActionCard(rawBody?: string): { text: string; card: ChatActionCard | null } {
+function parseChatActionCards(rawBody?: string): { text: string; cards: ChatActionCard[] } {
   const body = String(rawBody || "");
-  const m = body.match(/\[\[AB_CARD:([^\]]+)\]\]\s*$/);
-  if (!m) return { text: body, card: null };
-  const encoded = String(m[1] || "").trim();
-  const text = body.replace(/\n?\[\[AB_CARD:[^\]]+\]\]\s*$/, "").trim();
-  try {
-    const parsed = JSON.parse(decodeURIComponent(encoded)) as ChatActionCard;
-    if (!parsed || typeof parsed !== "object") return { text, card: null };
-    return { text, card: parsed };
-  } catch {
-    return { text: body, card: null };
+  const cards: ChatActionCard[] = [];
+  const cardRe = /\[\[AB_CARD:([^\]]+)\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = cardRe.exec(body)) !== null) {
+    const encoded = String(m[1] || "").trim();
+    try {
+      const parsed = JSON.parse(decodeURIComponent(encoded)) as ChatActionCard;
+      if (parsed && typeof parsed === "object") cards.push(parsed);
+    } catch {
+      /* ignore malformed card */
+    }
   }
+  const text = body.replace(/\n?\[\[AB_CARD:[^\]]+\]\]/g, "").trim();
+  return { text, cards };
 }
 
 function ChatMessageAttachment({
@@ -497,8 +502,8 @@ export default function ChatPageClient() {
                   <div key={item.msg.id} className={"chat-bubble-row " + (item.msg.is_staff ? "chat-bubble-row--in" : "chat-bubble-row--out")}>
                     <div className={"chat-bubble " + (item.msg.is_staff ? "chat-bubble--in" : "chat-bubble--out")}>
                       {(() => {
-                        const parsed = parseChatActionCard(item.msg.body);
-                        const card = item.msg.is_staff ? parsed.card : null;
+                        const parsed = parseChatActionCards(item.msg.body);
+                        const cards = item.msg.is_staff ? parsed.cards : [];
                         const textParts = splitChatTextParts(parsed.text);
                         return (
                           <>
@@ -532,38 +537,67 @@ export default function ChatPageClient() {
                                 onOpenImage={setLightboxImageUrl}
                               />
                             ) : null}
-                            {card?.kind === "prize_claim" ? (
-                              <div className="chat-action-card chat-action-card--prize">
-                                <p className="chat-action-card__title">{String(card.title || "Получить приз")}</p>
-                                {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
-                                <button
-                                  type="button"
-                                  className="chat-action-card__btn chat-action-card__btn--prize"
-                                  onClick={() => {
-                                    const url = String(card.claim_url || "").trim();
-                                    if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
-                                  }}
-                                >
-                                  {String(card.cta || "Получить приз")}
-                                </button>
-                              </div>
-                            ) : null}
-                            {card?.kind === "receipt_rejected" ? (
-                              <div className="chat-action-card chat-action-card--payment-retry">
-                                <p className="chat-action-card__title">Оплата отклонена</p>
-                                {card.reason ? <p className="chat-action-card__reason">{card.reason}</p> : null}
-                                <button
-                                  type="button"
-                                  className="chat-action-card__btn chat-action-card__btn--payment-retry"
-                                  onClick={() => {
-                                    const url = String(card.retry_url || "").trim();
-                                    if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
-                                  }}
-                                >
-                                  {String(card.cta || "Повторить оплату")}
-                                </button>
-                              </div>
-                            ) : null}
+                            {cards.map((card, cardIdx) => {
+                              if (card?.kind === "prize_claim") {
+                                return (
+                                  <div key={"card_prize_" + String(cardIdx)} className="chat-action-card chat-action-card--prize">
+                                    <p className="chat-action-card__title">{String(card.title || "Получить приз")}</p>
+                                    {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
+                                    <button
+                                      type="button"
+                                      className="chat-action-card__btn chat-action-card__btn--prize"
+                                      onClick={() => {
+                                        const url = String(card.claim_url || "").trim();
+                                        if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
+                                      }}
+                                    >
+                                      {String(card.cta || "Получить приз")}
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              if (card?.kind === "receipt_rejected") {
+                                return (
+                                  <div key={"card_retry_" + String(cardIdx)} className="chat-action-card chat-action-card--payment-retry">
+                                    <p className="chat-action-card__title">Оплата отклонена</p>
+                                    {card.reason ? <p className="chat-action-card__reason">{card.reason}</p> : null}
+                                    <button
+                                      type="button"
+                                      className="chat-action-card__btn chat-action-card__btn--payment-retry"
+                                      onClick={() => {
+                                        const url = String(card.retry_url || "").trim();
+                                        if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
+                                      }}
+                                    >
+                                      {String(card.cta || "Повторить оплату")}
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              if (card?.kind === "bonus_table") {
+                                const posHint = Array.isArray(card.positions) && card.positions.length
+                                  ? `Место: ${card.positions.map((p) => `#${p}`).join(", ")}`
+                                  : "";
+                                return (
+                                  <div key={"card_bonus_" + String(cardIdx)} className="chat-action-card chat-action-card--bonus-table">
+                                    <p className="chat-action-card__title">{String(card.title || "Бонусная таблица")}</p>
+                                    {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
+                                    {posHint ? <p className="chat-action-card__reason">{posHint}</p> : null}
+                                    <button
+                                      type="button"
+                                      className="chat-action-card__btn chat-action-card__btn--bonus-table"
+                                      onClick={() => {
+                                        const url = String(card.open_url || "").trim();
+                                        if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
+                                      }}
+                                    >
+                                      {String(card.cta || "Открыть бонусную таблицу")}
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })}
                           </>
                         );
                       })()}

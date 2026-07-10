@@ -105,6 +105,38 @@ export function formatStreamCardShort(ms: number): string {
   }
 }
 
+/** Календарный день в часовом поясе сайта (YYYY-MM-DD) для epoch ms. */
+export function getSiteCalendarDayKey(ms: number): string {
+  const n = Math.floor(Number(ms));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  try {
+    const parts = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: SITE_TIMEZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(n));
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+    const y = get("year");
+    const mo = get("month");
+    const d = get("day");
+    if (!y || !mo || !d) return "";
+    return `${y}-${mo}-${d}`;
+  } catch {
+    return "";
+  }
+}
+
+/** Начало и конец календарного дня сайта (UTC ms). */
+export function getSiteCalendarDayBoundsUtcMs(ms: number): { startMs: number; endMs: number } | null {
+  const key = getSiteCalendarDayKey(ms);
+  if (!key) return null;
+  const startMs = parseSiteDateTimeLocalToUtcMs(`${key}T00:00`);
+  const endMs = parseSiteDateTimeLocalToUtcMs(`${key}T23:59`);
+  if (startMs == null || endMs == null) return null;
+  return { startMs, endMs: endMs + 59_999 };
+}
+
 /** Продажи и публичное открытие — только по серверным часам (Date.now), не по часам устройства. */
 export function isEpochReached(atMs: number | null | undefined, nowMs = Date.now()): boolean {
   const at = Math.floor(Number(atMs ?? 0));

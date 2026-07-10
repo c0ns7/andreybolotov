@@ -9,8 +9,8 @@ import {
   postReceiptWithRetries,
   RECEIPT_NETWORK_MODAL_TEXT,
   RECEIPT_NETWORK_MODAL_TITLE,
-  receiptUploadProgressLabel,
   uploadReceiptFile,
+  validateReceiptFileForUpload,
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
@@ -554,9 +554,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   const paymentStepRef = useRef<"requisites" | "confirm">("requisites");
   const payTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoOpenPaymentTriggeredRef = useRef(false);
-  const receiptUploadDataRef = useRef<Record<string, unknown> | null>(null);
   const receiptUploadInFlightRef = useRef(false);
-  const receiptUploadSeqRef = useRef(0);
   const fastLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fastLookupRef = useRef<{ n: number; kind: string | null }>({ n: NaN, kind: null });
   const cellByNumberRef = useRef(new Map<number, Cell>());
@@ -2653,17 +2651,19 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const setReceiptSendReady = (ready: boolean) => {
       const btn = document.getElementById("reserve-payment-send") as HTMLButtonElement | null;
       if (!btn) return;
+      if (receiptUploadInFlightRef.current) return;
       btn.disabled = !ready;
       btn.classList.toggle("pay-sheet-receipt-send--disabled", !ready);
       btn.classList.toggle("pay-sheet-receipt-send--ready", ready);
     };
-    const setReceiptProgress = (percent: number, text: string, visible = true) => {
-      const wrap = document.getElementById("reserve-payment-upload-progress");
-      const fill = document.getElementById("reserve-payment-upload-progress-fill");
-      const txt = document.getElementById("reserve-payment-upload-progress-text");
-      if (wrap) wrap.hidden = !visible;
-      if (fill) fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-      if (txt) txt.textContent = text;
+    const setReceiptSendBusy = (busy: boolean) => {
+      const btn = document.getElementById("reserve-payment-send") as HTMLButtonElement | null;
+      if (!btn) return;
+      receiptUploadInFlightRef.current = busy;
+      btn.disabled = busy;
+      btn.classList.toggle("pay-sheet-receipt-send--disabled", busy);
+      btn.classList.toggle("pay-sheet-receipt-send--ready", !busy);
+      btn.textContent = busy ? "Отправка…" : "Отправить чек";
     };
     let receiptPreviewObjectUrl: string | null = null;
     const revokeReceiptPreviewUrl = () => {
@@ -2714,47 +2714,25 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     const clearReceiptFile = () => {
       const input = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
       if (input) input.value = "";
-      receiptUploadSeqRef.current += 1;
-      receiptUploadDataRef.current = null;
       receiptUploadInFlightRef.current = false;
       setReceiptSendReady(false);
-      setReceiptProgress(0, "Загрузка: 0%", false);
       setReceiptPreviewUi(null);
     };
     const onFileChange = (e: Event) => {
       const f = (e.target as HTMLInputElement).files?.[0];
-      const currentSeq = ++receiptUploadSeqRef.current;
-      receiptUploadDataRef.current = null;
-      receiptUploadInFlightRef.current = false;
-      setReceiptSendReady(false);
       if (!f) {
         setReceiptPreviewUi(null);
-        setReceiptProgress(0, "Загрузка: 0%", false);
+        setReceiptSendReady(false);
+        return;
+      }
+      const bad = validateReceiptFileForUpload(f);
+      if (bad) {
+        toastRef.current(bad, "error");
+        clearReceiptFile();
         return;
       }
       setReceiptPreviewUi(f);
-      receiptUploadInFlightRef.current = true;
-      setReceiptProgress(0, "Загрузка: 0%");
-      void uploadReceiptFile(f, (state) => {
-        if (currentSeq !== receiptUploadSeqRef.current) return;
-        setReceiptProgress(state.percent, receiptUploadProgressLabel(state));
-      })
-        .then((uploadData) => {
-          if (currentSeq !== receiptUploadSeqRef.current) return;
-          receiptUploadDataRef.current = uploadData;
-          receiptUploadInFlightRef.current = false;
-          setReceiptProgress(100, "Загрузка: 100%");
-          setReceiptSendReady(true);
-        })
-        .catch((err) => {
-          if (currentSeq !== receiptUploadSeqRef.current) return;
-          receiptUploadDataRef.current = null;
-          receiptUploadInFlightRef.current = false;
-          setReceiptProgress(0, "Загрузка: 0%", false);
-          clearReceiptFile();
-          const msg = String((err as Error).message || "Не удалось загрузить файл");
-          toastRef.current(msg, "error");
-        });
+      setReceiptSendReady(true);
     };
     const elFile = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
     const elFileDrop = document.getElementById("reserve-payment-file-drop");
@@ -2777,26 +2755,24 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
     elFileDrop?.addEventListener("click", onFileDropClick);
     elFileRemove?.addEventListener("click", onFileRemove);
     setReceiptSendReady(false);
-    setReceiptProgress(0, "Загрузка: 0%", false);
 
     const sendReceiptFromModal = async () => {
       const input = document.getElementById("reserve-payment-file") as HTMLInputElement | null;
       const file = input?.files?.[0];
       const oid = reserveDraftRef.current?.orderId;
       if (!file || !oid) {
-        toastRef.current("Сначала нажмите «Загрузить чек» и выберите файл", "warning");
+        toastRef.current("Сначала выберите файл чека", "warning");
         return;
       }
-      if (receiptUploadInFlightRef.current) {
-        toastRef.current("Дождитесь завершения загрузки файла (100%)", "warning");
+      if (receiptUploadInFlightRef.current) return;
+      const bad = validateReceiptFileForUpload(file);
+      if (bad) {
+        toastRef.current(bad, "error");
         return;
       }
-      const uploadData = receiptUploadDataRef.current;
-      if (!uploadData) {
-        toastRef.current("Файл ещё не загружен. Выберите чек и дождитесь 100%.", "warning");
-        return;
-      }
+      setReceiptSendBusy(true);
       try {
+        const uploadData = await uploadReceiptFile(file);
         const res = await postReceiptWithRetries(oid, {
           url: uploadData.url,
           name: uploadData.name,
@@ -2808,7 +2784,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         clearPayTimer();
         closeOverlay(document.getElementById("modal-reserve-payment"));
         reserveDraftRef.current = null;
-        receiptUploadDataRef.current = null;
         receiptUploadInFlightRef.current = false;
         revokeReceiptPreviewUrl();
         openReceiptSentSuccessModal({
@@ -2829,6 +2804,10 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
           return;
         }
         toastRef.current(String((e as Error).message || "Не получилось отправить чек"), "error");
+      } finally {
+        const stillHasFile = !!(document.getElementById("reserve-payment-file") as HTMLInputElement | null)?.files?.[0];
+        setReceiptSendBusy(false);
+        setReceiptSendReady(stillHasFile);
       }
     };
     const onSendReceipt = () => void sendReceiptFromModal();
@@ -2879,8 +2858,6 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elFileDrop?.removeEventListener("click", onFileDropClick);
       elFileRemove?.removeEventListener("click", onFileRemove);
       revokeReceiptPreviewUrl();
-      receiptUploadSeqRef.current += 1;
-      receiptUploadDataRef.current = null;
       receiptUploadInFlightRef.current = false;
       elSend?.removeEventListener("click", onSendReceipt);
       elActionErrRetry?.removeEventListener("click", onActionErrorRetry);

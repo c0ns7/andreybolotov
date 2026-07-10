@@ -1,0 +1,218 @@
+.admin-bonus-tables-toolbar {
+  margin-bottom: 1rem;
+}
+
+.admin-bonus-tables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-bonus-tables-empty {
+  margin: 0;
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--admin-muted, #8b93a7);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+
+.admin-bonus-table-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-bonus-table-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.admin-bonus-table-card__head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.admin-bonus-table-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-bonus-table-badge--active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.admin-bonus-table-badge--draft {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+}
+
+.admin-bonus-table-badge--ended {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}
+
+.admin-bonus-table-card__meta,
+.admin-bonus-table-card__stats {
+  margin: 0.2rem 0;
+  font-size: 0.86rem;
+  color: var(--admin-muted, #9aa3b2);
+}
+
+.admin-bonus-table-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.admin-bonus-table-card__actions button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 10px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.admin-bonus-table-card__actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-bonus-tables-form-wrap {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.admin-bonus-tables-form-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.admin-bonus-tables-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.admin-bonus-tables-form-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .admin-bonus-tables-form-grid,
+  .admin-bonus-tables-form-grid--3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-bonus-tables-link-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-bonus-tables-link-row .input {
+  flex: 1;
+}
+
+.admin-bonus-tables-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.admin-bonus-table-card__manual {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-bonus-table-card__manual-label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--admin-muted, #9aa3b2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-bonus-table-card__manual-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 72px auto auto;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.admin-bonus-table-card__phone {
+  min-width: 0;
+}
+
+.admin-bonus-table-card__slots {
+  width: 100%;
+  text-align: center;
+}
+
+.admin-bonus-table-card__notify {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-bonus-table-card__add {
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border-radius: 10px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-bonus-table-card__add:hover {
+  background: rgba(99, 102, 241, 0.28);
+}
+
+.admin-bonus-table-card__add:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .admin-bonus-table-card__manual-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-bonus-table-card__notify {
+    grid-column: 1 / -1;
+  }
+
+  .admin-bonus-table-card__add {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+.admin-raffle-modal--bonus-tables {
+  max-width: 760px;
+}

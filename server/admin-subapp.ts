@@ -80,6 +80,19 @@ import {
   raffleMaxRejectReworksFromEnv,
 } from "./raffle-orders.js";
 import {
+  addManualBonusTableEntry,
+  backfillBonusTablePriorSameDay,
+  buildBonusTableAwardChatAppendix,
+  buildBonusTableManualChatBody,
+  createBonusTable,
+  deleteBonusTable,
+  getBonusTableById,
+  getBonusTableViewForUser,
+  listBonusTablesForRaffle,
+  processBonusTablesForConfirmedOrder,
+  updateBonusTable,
+} from "./raffle-bonus-tables.js";
+import {
   createBlogPost,
   deleteBlogPost,
   getBlogPostById,
@@ -1401,7 +1414,18 @@ adminSubApp.post("/raffle-payments/:orderId/confirm", async (c) => {
       const raffleRow = await getRaffleById(Number(owner.raffle_id));
       const bonusPromoLabel =
         bonusNums.length > 0 && Number(raffleRow?.promo_5_plus_2_enabled) === 1 ? "5+2" : "5+1";
-      const body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums, bonusPromoLabel);
+      let body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums, bonusPromoLabel);
+      try {
+        const bonusAwards = await processBonusTablesForConfirmedOrder(orderId);
+        if (bonusAwards.length) {
+          body += buildBonusTableAwardChatAppendix(bonusAwards);
+        }
+      } catch (e) {
+        console.error(
+          "[admin/raffle-payments confirm] bonus tables:",
+          e instanceof Error ? e.message : e,
+        );
+      }
       const msgId = await insertSupportMessage(uid, body, true, null);
       await markThreadReadByStaff(uid);
       broadcastThreadReadByStaff(uid);
@@ -1983,6 +2007,185 @@ adminSubApp.delete("/raffles/:id/participant-tickets/:ticketNumber", async (c) =
   notifyRaffleGridMutated(id);
   if (r.affected_user_id != null) broadcastRaffleTicketsUpdated(r.affected_user_id);
   return c.json({ ok: true });
+});
+
+adminSubApp.get("/raffles/:id/bonus-tables", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = await getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  const tables = await listBonusTablesForRaffle(id);
+  return c.json({ tables });
+});
+
+adminSubApp.post("/raffles/:id/bonus-tables", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const raffle = await getRaffleById(id);
+  if (!raffle) return c.json({ error: "Акция не найдена" }, 404);
+  let body: Record<string, unknown>;
+  try {
+    body = (await c.req.json()) as Record<string, unknown>;
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await createBonusTable({
+    raffleId: id,
+    title: String(body.title ?? ""),
+    description: String(body.description ?? ""),
+    accessMode: body.access_mode === "link" ? "link" : "closed",
+    viewPrivacy:
+      body.view_privacy === "all_auth" || body.view_privacy === "admins_only"
+        ? (body.view_privacy as "all_auth" | "admins_only")
+        : "participants_admins",
+    startAtLocal: String(body.start_at_local ?? ""),
+    endAtLocal: String(body.end_at_local ?? ""),
+    countFrom: body.count_from === "include_prior_same_day" ? "include_prior_same_day" : "table_created",
+    ticketsRequired: Number(body.tickets_required),
+    bonusSlotsPerReward: Number(body.bonus_slots_per_reward),
+    aggregation: body.aggregation === "per_order" ? "per_order" : "cumulative",
+    periodScope: body.period_scope === "full_period" ? "full_period" : "same_day",
+    status: body.status === "draft" || body.status === "ended" ? body.status : "active",
+    createdByUserId: auth.id,
+  });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ table: res.table });
+});
+
+adminSubApp.patch("/bonus-tables/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  let body: Record<string, unknown>;
+  try {
+    body = (await c.req.json()) as Record<string, unknown>;
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await updateBonusTable(id, {
+    title: body.title !== undefined ? String(body.title) : undefined,
+    description: body.description !== undefined ? String(body.description) : undefined,
+    accessMode:
+      body.access_mode === "link" || body.access_mode === "closed"
+        ? body.access_mode
+        : undefined,
+    viewPrivacy:
+      body.view_privacy === "all_auth" ||
+      body.view_privacy === "admins_only" ||
+      body.view_privacy === "participants_admins"
+        ? (body.view_privacy as "all_auth" | "admins_only" | "participants_admins")
+        : undefined,
+    startAtLocal: body.start_at_local !== undefined ? String(body.start_at_local) : undefined,
+    endAtLocal: body.end_at_local !== undefined ? String(body.end_at_local) : undefined,
+    countFrom:
+      body.count_from === "include_prior_same_day" || body.count_from === "table_created"
+        ? body.count_from
+        : undefined,
+    ticketsRequired: body.tickets_required !== undefined ? Number(body.tickets_required) : undefined,
+    bonusSlotsPerReward:
+      body.bonus_slots_per_reward !== undefined ? Number(body.bonus_slots_per_reward) : undefined,
+    aggregation:
+      body.aggregation === "per_order" || body.aggregation === "cumulative" ? body.aggregation : undefined,
+    periodScope:
+      body.period_scope === "full_period" || body.period_scope === "same_day" ? body.period_scope : undefined,
+    status:
+      body.status === "draft" || body.status === "active" || body.status === "ended"
+        ? body.status
+        : undefined,
+  });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ table: res.table });
+});
+
+adminSubApp.delete("/bonus-tables/:id", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const res = await deleteBonusTable(id);
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  return c.json({ ok: true });
+});
+
+adminSubApp.post("/bonus-tables/:id/backfill", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const table = await getBonusTableById(id);
+  if (!table) return c.json({ error: "Таблица не найдена" }, 404);
+  await backfillBonusTablePriorSameDay(id);
+  const cnt = await listBonusTablesForRaffle(table.raffle_id);
+  const updated = cnt.find((t) => t.id === id);
+  return c.json({ ok: true, table: updated ?? null });
+});
+
+adminSubApp.post("/bonus-tables/:id/entries", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  let body: { phone?: unknown; slots?: unknown; send_chat?: unknown };
+  try {
+    body = (await c.req.json()) as { phone?: unknown; slots?: unknown; send_chat?: unknown };
+  } catch {
+    return c.json({ error: "Некорректный JSON" }, 400);
+  }
+  const res = await addManualBonusTableEntry({
+    tableId: id,
+    phone: String(body.phone ?? ""),
+    slots: body.slots !== undefined ? Number(body.slots) : 1,
+    sendChat: body.send_chat !== false,
+  });
+  if (!res.ok) return c.json({ error: res.error }, 400);
+  if (res.message_id) {
+    const uid = res.user_id;
+    try {
+      await markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = await getSupportMessageById(res.message_id);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      const chatBody = buildBonusTableManualChatBody(
+        res.table.title,
+        res.table.public_slug,
+        res.positions,
+      );
+      notifyUserEmailStaffReply(uid, { body: chatBody, attachmentName: null, attachmentMime: null });
+    } catch (e) {
+      console.error(
+        "[admin/bonus-tables entries] chat notify:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+  return c.json({
+    ok: true,
+    positions: res.positions,
+    user_id: res.user_id,
+    table: res.table,
+  });
+});
+
+adminSubApp.get("/bonus-tables/:slug/view", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const slug = String(c.req.param("slug") || "").trim();
+  const res = await getBonusTableViewForUser(slug, auth.id, auth.role);
+  if (!res.ok) {
+    const code = res.status === 403 ? 403 : 404;
+    return c.json({ error: res.error }, code);
+  }
+  return c.json({
+    table: res.table,
+    entries: res.entries,
+    my_positions: res.my_positions,
+    raffle_title: res.raffle_title,
+  });
 });
 
 adminSubApp.patch("/users/:userId", async (c) => {

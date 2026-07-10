@@ -137,6 +137,7 @@ export function resolveAdminArea(path: string, method: string): AdminArea {
   if (p.startsWith("/users/")) return "users";
 
   if (p.startsWith("/raffle-payments") || p.startsWith("/raffle-orders")) return "payments";
+  if (p.startsWith("/bonus-tables")) return "raffles";
   if (p.startsWith("/raffles")) return "raffles";
   if (p.startsWith("/prizes")) return "prizes";
   if (p.startsWith("/settings")) return "settings";

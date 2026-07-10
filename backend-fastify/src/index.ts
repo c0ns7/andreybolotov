@@ -101,6 +101,7 @@ import {
   notifyUserTicketSwapped,
   USER_TICKET_SWAPS_PER_SITE_DAY,
 } from "../../server/raffle-orders.js";
+import { getBonusTableViewForUser } from "../../server/raffle-bonus-tables.js";
 import { isValidRuMobile, normalizePhone } from "../../server/phone.js";
 import { validatePersonName } from "../../server/person-name.js";
 import {
@@ -950,6 +951,26 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     }
   }
   return { ...payload, server_time_ms: now };
+});
+
+app.get("/api/bonus-tables/:slug", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const slug = String((request.params as { slug?: string }).slug || "").trim();
+  if (!slug) return reply.code(400).send({ error: "Некорректная ссылка" });
+  if (!rateLimitAllow(`get:bonus-table:${user.id}:${slug}`, 40, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
+  reply.header("Cache-Control", "private, no-store");
+  const res = await getBonusTableViewForUser(slug, user.id, user.role);
+  if (!res.ok) return reply.code(res.status).send({ error: res.error });
+  return {
+    table: res.table,
+    entries: res.entries,
+    my_positions: res.my_positions,
+    raffle_title: res.raffle_title,
+    server_time_ms: Date.now(),
+  };
 });
 
 app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
