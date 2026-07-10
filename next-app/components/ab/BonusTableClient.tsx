@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Award, ChevronLeft, Gift, Phone, Search, Sparkles, Trophy } from "lucide-react";
+import { Award, ChevronLeft, Gift, Hash, Phone, Sparkles, Trophy } from "lucide-react";
 import { abApiJson, AbApiError } from "../../lib/ab-api";
+import { formatRuPhoneInput, phoneToNormalized } from "../../lib/ab-phone";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
 
@@ -34,6 +35,14 @@ function normalizePhone(raw?: string) {
   return String(raw || "").replace(/\D/g, "");
 }
 
+function phoneSearchKey(raw?: string) {
+  return phoneToNormalized(String(raw || ""));
+}
+
+function hasPhoneSearch(raw: string) {
+  return phoneSearchKey(raw).length > 1;
+}
+
 function formatPhoneRu(raw?: string) {
   const d = normalizePhone(raw);
   if (d.length < 11) return raw || "—";
@@ -48,7 +57,8 @@ export default function BonusTableClient({ slug }: { slug: string }) {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
+  const [positionQuery, setPositionQuery] = useState("");
+  const [phoneQuery, setPhoneQuery] = useState("");
   const [payload, setPayload] = useState<BonusTablePayload | null>(null);
 
   useEffect(() => {
@@ -89,16 +99,22 @@ export default function BonusTableClient({ slug }: { slug: string }) {
     return [...rows].sort((a, b) => a.position - b.position);
   }, [payload]);
 
-  const queryDigits = useMemo(() => normalizePhone(query), [query]);
+  const positionDigits = useMemo(() => String(positionQuery || "").replace(/\D/g, ""), [positionQuery]);
+  const phoneDigits = useMemo(() => phoneSearchKey(phoneQuery), [phoneQuery]);
+  const phoneSearchActive = phoneDigits.length > 1;
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return entries;
+    if (!positionDigits && !phoneSearchActive) return entries;
     return entries.filter((item) => {
-      const byPos = String(item.position).includes(q);
-      const byPhone = normalizePhone(item.phone).includes(queryDigits);
-      return byPos || byPhone;
+      const byPos = !positionDigits || String(item.position).includes(positionDigits);
+      const entryPhone = phoneSearchKey(item.phone);
+      const byPhone =
+        !phoneSearchActive ||
+        entryPhone.includes(phoneDigits) ||
+        entryPhone.slice(1).includes(phoneDigits.slice(1));
+      return byPos && byPhone;
     });
-  }, [entries, query, queryDigits]);
+  }, [entries, positionDigits, phoneDigits, phoneSearchActive]);
 
   const myPositions = useMemo(() => {
     const fromApi = Array.isArray(payload?.my_positions) ? payload!.my_positions! : [];
@@ -153,16 +169,36 @@ export default function BonusTableClient({ slug }: { slug: string }) {
               </div>
             ) : null}
 
-            <label className="bonus-table-page__search">
-              <Search size={16} aria-hidden="true" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск по номеру телефона или месту"
-                aria-label="Поиск"
-              />
-            </label>
+            <div className="bonus-table-page__searches">
+              <label className="bonus-table-page__search">
+                <Hash size={16} aria-hidden="true" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={positionQuery}
+                  onChange={(e) => setPositionQuery(String(e.target.value || "").replace(/\D/g, "").slice(0, 6))}
+                  placeholder="Место, например 3"
+                  aria-label="Поиск по месту в таблице"
+                />
+              </label>
+              <label
+                className={
+                  "bonus-table-page__search" +
+                  (hasPhoneSearch(phoneQuery) && phoneDigits.length < 11 ? " bonus-table-page__search--partial" : "")
+                }
+              >
+                <Phone size={16} aria-hidden="true" />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phoneQuery}
+                  onChange={(e) => setPhoneQuery(formatRuPhoneInput(e.target.value))}
+                  placeholder="+7 (___) ___-__-__"
+                  aria-label="Поиск по номеру телефона"
+                />
+              </label>
+            </div>
           </header>
 
           <div className="bonus-table-page__stats">

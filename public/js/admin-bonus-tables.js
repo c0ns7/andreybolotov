@@ -45,6 +45,30 @@
       .replace(/"/g, "&quot;");
   }
 
+  const BTN_ICO = {
+    view:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>',
+    edit:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>',
+    trash:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+    link:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+    refresh:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+    plus:
+      '<svg class="admin-raffle-btn__ico" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>',
+    manual:
+      '<svg class="admin-bonus-table-card__manual-ico" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>',
+  };
+
+  function cardStatusClass(status) {
+    const s = String(status || "active");
+    if (s === "draft") return "admin-bonus-table-card--draft";
+    if (s === "ended") return "admin-bonus-table-card--ended";
+    return "admin-bonus-table-card--active";
+  }
+
   function $(id) {
     return document.getElementById(id);
   }
@@ -147,18 +171,24 @@
       .map(function (t) {
         const linkBtn =
           t.access_mode === "link" && t.public_url
-            ? '<button type="button" class="admin-bonus-table-card__link" data-copy-url="' +
+            ? '<button type="button" class="admin-raffle-btn admin-raffle-btn--participants admin-bonus-table-card__link" data-copy-url="' +
               esc(t.public_url) +
-              '">Скопировать ссылку</button>'
+              '">' +
+              BTN_ICO.link +
+              "Скопировать ссылку</button>"
             : "";
         const backfillBtn =
           t.count_from === "include_prior_same_day"
-            ? '<button type="button" class="admin-bonus-table-card__backfill" data-id="' +
+            ? '<button type="button" class="admin-raffle-btn admin-raffle-btn--stats admin-bonus-table-card__backfill" data-id="' +
               esc(String(t.id)) +
-              '">Пересчитать за день</button>'
+              '">' +
+              BTN_ICO.refresh +
+              "Пересчитать за день</button>"
             : "";
         return (
-          '<article class="admin-bonus-table-card" data-id="' +
+          '<article class="admin-bonus-table-card ' +
+          cardStatusClass(t.status) +
+          '" data-id="' +
           esc(String(t.id)) +
           '">' +
           '<div class="admin-bonus-table-card__head">' +
@@ -167,10 +197,10 @@
           "</h3>" +
           statusBadge(t.status) +
           "</div>" +
-          '<p class="admin-bonus-table-card__meta">' +
-          esc(t.condition_label || "") +
-          "</p>" +
-          '<p class="admin-bonus-table-card__stats">Записей: <strong>' +
+          (t.condition_label
+            ? '<p class="admin-bonus-table-card__condition">' + esc(t.condition_label || "") + "</p>"
+            : "") +
+          '<p class="admin-bonus-table-card__stats"><span class="admin-bonus-table-card__stats-label">Записей</span> <strong>' +
           esc(String(t.entry_count || 0)) +
           "</strong> · " +
           esc(String(t.start_at_local || "").replace("T", " ")) +
@@ -178,20 +208,29 @@
           esc(String(t.end_at_local || "").replace("T", " ")) +
           " (Агинское)</p>" +
           '<div class="admin-bonus-table-card__actions">' +
-          '<button type="button" class="admin-bonus-table-card__view" data-slug="' +
+          '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-bonus-table-card__view" data-slug="' +
           esc(String(t.public_slug || "")) +
-          '">Открыть</button>' +
-          '<button type="button" class="admin-bonus-table-card__edit" data-id="' +
+          '">' +
+          BTN_ICO.view +
+          "Открыть</button>" +
+          '<button type="button" class="admin-raffle-btn admin-bonus-table-card__edit" data-id="' +
           esc(String(t.id)) +
-          '">Изменить</button>' +
-          '<button type="button" class="admin-bonus-table-card__delete" data-id="' +
+          '">' +
+          BTN_ICO.edit +
+          "Изменить</button>" +
+          '<button type="button" class="admin-raffle-btn admin-raffle-btn--danger admin-bonus-table-card__delete" data-id="' +
           esc(String(t.id)) +
-          '">Удалить</button>' +
+          '">' +
+          BTN_ICO.trash +
+          "Удалить</button>" +
           linkBtn +
           backfillBtn +
           "</div>" +
           '<div class="admin-bonus-table-card__manual">' +
-          '<label class="admin-bonus-table-card__manual-label">Добавить вручную</label>' +
+          '<div class="admin-bonus-table-card__manual-head">' +
+          BTN_ICO.manual +
+          '<span class="admin-bonus-table-card__manual-label">Добавить вручную</span>' +
+          "</div>" +
           '<div class="admin-bonus-table-card__manual-row">' +
           '<input type="tel" class="input admin-bonus-table-card__phone" inputmode="numeric" placeholder="+7 (___) ___-__-__" data-table-id="' +
           esc(String(t.id)) +
@@ -205,9 +244,11 @@
           '" checked />' +
           " Чат" +
           "</label>" +
-          '<button type="button" class="admin-bonus-table-card__add" data-id="' +
+          '<button type="button" class="admin-raffle-btn admin-raffle-btn--primary admin-bonus-table-card__add" data-id="' +
           esc(String(t.id)) +
-          '">Добавить</button>' +
+          '">' +
+          BTN_ICO.plus +
+          "Добавить</button>" +
           "</div></div></article>"
         );
       })

@@ -86,6 +86,12 @@
   animation: bonusTablePulse 2.4s ease-in-out infinite;
 }
 
+.bonus-table-page__searches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .bonus-table-page__search {
   display: flex;
   align-items: center;
@@ -105,6 +111,10 @@
   font: inherit;
   outline: none;
   min-width: 0;
+}
+
+.bonus-table-page__search--partial {
+  border-color: color-mix(in srgb, #a78bfa 45%, var(--border, #e2e8f0));
 }
 
 .bonus-table-page__stats {

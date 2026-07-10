@@ -12,5 +12,9 @@ type PageProps = {
 
 export default async function BonusTablePage({ params }: PageProps) {
   const { slug } = await params;
-  return <BonusTableClient slug={slug} />;
+  return (
+    <div className="app-shell app-shell--with-tabbar" id="app-shell">
+      <BonusTableClient slug={slug} />
+    </div>
+  );
 }
