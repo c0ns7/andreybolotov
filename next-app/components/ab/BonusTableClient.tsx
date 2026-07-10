@@ -44,7 +44,7 @@ function formatPhoneRu(raw?: string) {
 
 export default function BonusTableClient({ slug }: { slug: string }) {
   const router = useRouter();
-  const { session, authVerified, authCheckInFlight } = useAbSession();
+  const { session, authVerified, authCheckInFlight, toast } = useAbSession();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -105,6 +105,11 @@ export default function BonusTableClient({ slug }: { slug: string }) {
     if (fromApi.length) return fromApi;
     return entries.filter((e) => e.is_mine).map((e) => e.position);
   }, [payload, entries]);
+
+  const profileLetter = useMemo(() => {
+    const n = session?.name?.trim()?.[0] || session?.phone?.replace(/\D/g, "")?.slice(-1) || "К";
+    return n.toUpperCase();
+  }, [session?.name, session?.phone]);
 
   const table = payload?.table;
   const raffleTitle = String(payload?.raffle_title || "Акция");
@@ -206,7 +211,13 @@ export default function BonusTableClient({ slug }: { slug: string }) {
           </div>
         </div>
       </div>
-      <AppBottomNav active="home" />
+      <AppBottomNav
+        show={mounted}
+        profileLetter={profileLetter}
+        authVerified={authVerified}
+        onChat={() => router.push("/home/chat")}
+        onChatBlocked={() => toast("Войдите, чтобы написать в чат", "warning")}
+      />
     </>
   );
 }

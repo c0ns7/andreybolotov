@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import BonusTableClient from "../../../components/ab/BonusTableClient";
+import BonusTableClient from "../../../../components/ab/BonusTableClient";
 
 export const metadata: Metadata = {
   title: "Бонусная таблица",
