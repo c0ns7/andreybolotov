@@ -55,6 +55,8 @@
 .chat-bubble .chat-action-card__btn,
 .chat-bubble .chat-action-card__btn.chat-action-card__btn--prize,
 .chat-bubble .chat-action-card__btn.chat-action-card__btn--payment-retry,
+.chat-bubble .chat-action-card__btn.chat-action-card__btn--bonus-table,
+.chat-bubble .chat-action-card__btn.chat-action-card__btn--max,
 .chat-bubble__text .chat-action-card__btn,
 .admin-msg-bubble .chat-action-card__btn,
 .admin-msg-bubble a.chat-action-card__btn,
@@ -62,6 +64,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -82,6 +85,251 @@
   color: #fff;
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
   transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.chat-action-card__btn svg {
+  flex-shrink: 0;
+}
+
+.chat-action-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.chat-action-card__head-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-action-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.chat-action-card__icon--bonus {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  color: #6d28d9;
+  box-shadow: 0 4px 12px rgba(109, 40, 217, 0.18);
+}
+
+.chat-action-card__icon--success {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #15803d;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.16);
+}
+
+.chat-action-card__eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.chat-action-card__subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.chat-action-card__detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: inherit;
+}
+
+.chat-action-card__detail-row > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+
+.chat-action-card__detail-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-action-card__detail-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.88;
+}
+
+.chat-action-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-action-card__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.chat-action-card__chip--ticket {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.chat-action-card__chip--gift {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.chat-action-card__chip--bonus {
+  background: rgba(124, 58, 237, 0.12);
+  color: #6d28d9;
+  border: 1px solid rgba(124, 58, 237, 0.22);
+}
+
+.chat-action-card--receipt-confirmed {
+  border: 1px solid #86efac;
+  background: linear-gradient(145deg, #f0fdf4 0%, #ecfdf5 55%, #eff6ff 100%);
+}
+
+.chat-action-card--receipt-confirmed .chat-action-card__eyebrow {
+  color: #15803d;
+}
+
+.chat-action-card--receipt-confirmed .chat-action-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #14532d;
+}
+
+.chat-action-card--receipt-confirmed .chat-action-card__subtitle {
+  color: #166534;
+}
+
+.chat-action-card--receipt-confirmed .chat-action-card__reason {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #166534;
+}
+
+.chat-action-card--bonus-table {
+  border: 1px solid #c4b5fd;
+  background: linear-gradient(145deg, #f5f3ff 0%, #fce7f3 100%);
+}
+
+.chat-action-card--bonus-table .chat-action-card__eyebrow {
+  color: #7c3aed;
+}
+
+.chat-action-card--bonus-table .chat-action-card__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #6d28d9;
+}
+
+.chat-action-card--bonus-table .chat-action-card__subtitle {
+  color: #5b21b6;
+}
+
+.chat-action-card--bonus-table .chat-action-card__reason {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #5b21b6;
+}
+
+.chat-action-card__btn--bonus-table {
+  background: linear-gradient(145deg, #8b5cf6 0%, #7c3aed 48%, #6d28d9 100%);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
+.chat-action-card__btn--bonus-table:hover,
+.chat-action-card__btn--bonus-table:active {
+  filter: brightness(1.05);
+}
+
+.chat-action-card__btn--max {
+  background: linear-gradient(145deg, #0ea5e9 0%, #0284c7 48%, #0369a1 100%);
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.32);
+}
+
+.chat-action-card__btn--max:hover,
+.chat-action-card__btn--max:active {
+  filter: brightness(1.05);
+}
+
+html.theme-dark .chat-action-card--receipt-confirmed {
+  border-color: #059669;
+  background: linear-gradient(145deg, #052e16 0%, #064e3b 100%);
+}
+
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__eyebrow,
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__title,
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__subtitle,
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__reason {
+  color: #bbf7d0;
+}
+
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__chip--ticket {
+  background: rgba(37, 99, 235, 0.2);
+  color: #bfdbfe;
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+html.theme-dark .chat-action-card--receipt-confirmed .chat-action-card__chip--gift {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+html.theme-dark .chat-action-card--bonus-table {
+  background: linear-gradient(145deg, #312e81 0%, #1e1b4b 100%);
+  border-color: #7c3aed;
+}
+
+html.theme-dark .chat-action-card--bonus-table .chat-action-card__eyebrow,
+html.theme-dark .chat-action-card--bonus-table .chat-action-card__title,
+html.theme-dark .chat-action-card--bonus-table .chat-action-card__subtitle,
+html.theme-dark .chat-action-card--bonus-table .chat-action-card__reason {
+  color: #ddd6fe;
+}
+
+html.theme-dark .chat-action-card--bonus-table .chat-action-card__chip--bonus {
+  background: rgba(124, 58, 237, 0.22);
+  color: #e9d5ff;
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+html.theme-dark .chat-action-card__icon--bonus {
+  background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
+  color: #ede9fe;
+}
+
+html.theme-dark .chat-action-card__icon--success {
+  background: linear-gradient(135deg, #14532d 0%, #166534 100%);
+  color: #bbf7d0;
 }
 
 .chat-action-card__btn--payment-retry {

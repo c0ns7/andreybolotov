@@ -638,11 +638,21 @@ export function buildBonusTableChatCardPayload(input: {
   tableTitle: string;
   publicSlug: string;
   positions: number[];
+  variant?: "auto" | "manual";
 }): string {
+  const safeTitle = String(input.tableTitle || "Бонусная таблица").trim() || "Бонусная таблица";
+  const variant = input.variant === "manual" ? "manual" : "auto";
   const payload = {
     kind: "bonus_table",
-    title: "Бонусная таблица",
-    subtitle: input.tableTitle,
+    variant,
+    eyebrow: "Бонусная таблица",
+    headline:
+      variant === "manual" ? "Вас добавили в список" : "Вы попали в бонусную таблицу!",
+    subtitle: safeTitle,
+    message:
+      variant === "manual"
+        ? "Администратор закрепил за вами место в таблице участников."
+        : "Условие акции выполнено — ваше место в общем списке.",
     table_slug: input.publicSlug,
     positions: input.positions,
     open_url: `/home/bonus-table/${encodeURIComponent(input.publicSlug)}`,
@@ -656,20 +666,12 @@ export function buildBonusTableManualChatBody(
   publicSlug: string,
   positions: number[],
 ): string {
-  const safeTitle = String(tableTitle || "Бонусная таблица").trim() || "Бонусная таблица";
-  const posHuman = positions.map((p) => `#${p}`).join(", ");
-  const lines = [
-    `🎁 Вас добавили в бонусную таблицу «${safeTitle}».`,
-    `Ваше место: ${posHuman}.`,
-    "",
-    "Нажмите кнопку ниже, чтобы открыть список.",
-  ];
-  const card = buildBonusTableChatCardPayload({
-    tableTitle: safeTitle,
+  return buildBonusTableChatCardPayload({
+    tableTitle,
     publicSlug,
     positions,
+    variant: "manual",
   });
-  return lines.join("\n") + "\n\n" + card;
 }
 
 export async function addManualBonusTableEntry(input: {
@@ -726,20 +728,16 @@ export async function addManualBonusTableEntry(input: {
 
 export function buildBonusTableAwardChatAppendix(awards: BonusTableAwardResult[]): string {
   if (!awards.length) return "";
-  const lines: string[] = ["", "🎁 Вы попали в бонусную таблицу!"];
-  for (const a of awards) {
-    const posHuman = a.positions.map((p) => `#${p}`).join(", ");
-    lines.push(`«${a.table_title}» — место ${posHuman}.`);
-  }
-  lines.push("", "Нажмите кнопку ниже, чтобы открыть список.");
-  const cards = awards.map((a) =>
-    buildBonusTableChatCardPayload({
-      tableTitle: a.table_title,
-      publicSlug: a.public_slug,
-      positions: a.positions,
-    }),
-  );
-  return lines.join("\n") + "\n\n" + cards.join("\n");
+  return awards
+    .map((a) =>
+      buildBonusTableChatCardPayload({
+        tableTitle: a.table_title,
+        publicSlug: a.public_slug,
+        positions: a.positions,
+        variant: "auto",
+      }),
+    )
+    .join("\n\n");
 }
 
 export async function userCanViewBonusTable(

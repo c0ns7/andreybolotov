@@ -337,7 +337,7 @@ function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
 const MAX_PRIVATE_CHAT_JOIN_URL =
   "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
 
-function buildStaffRaffleReceiptConfirmedChatBody(
+function buildReceiptConfirmedChatCard(
   raffleTitle: string,
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
@@ -353,22 +353,31 @@ function buildStaffRaffleReceiptConfirmedChatBody(
     ),
   ];
   bonusUniq.sort((a, b) => a - b);
-  const paidHuman = paidUniq.length ? paidUniq.map((n) => `№${n}`).join(", ") : "—";
-  const bonusHuman = bonusUniq.length ? bonusUniq.map((n) => `№${n}`).join(", ") : "—";
   const safeTitle = String(raffleTitle || "акция")
     .trim()
     .slice(0, 180);
-  const bonusBlock = bonusUniq.length
-    ? `\n\n🎁 По акции ${bonusPromoLabel} дополнительно закреплены бонусные номерки: ${bonusHuman}.`
-    : "";
-  return (
-    `Поздравляем! Чек по акции «${safeTitle}» закреплён.\n` +
-    `Оплаченные номерки: ${paidHuman}.` +
-    bonusBlock +
-    `\n\n` +
-    `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
-    MAX_PRIVATE_CHAT_JOIN_URL
-  );
+  const payload = {
+    kind: "receipt_confirmed",
+    eyebrow: "Оплата подтверждена",
+    headline: "Поздравляем!",
+    subtitle: safeTitle,
+    message: "Чек принят — номерки закреплены за вами.",
+    paid_tickets: paidUniq,
+    bonus_tickets: bonusUniq,
+    bonus_promo: bonusUniq.length ? bonusPromoLabel : null,
+    max_join_url: MAX_PRIVATE_CHAT_JOIN_URL,
+    max_cta: "Присоединиться к чату в MAX",
+  };
+  return `[[AB_CARD:${encodeURIComponent(JSON.stringify(payload))}]]`;
+}
+
+function buildStaffRaffleReceiptConfirmedChatBody(
+  raffleTitle: string,
+  paidTicketNumbers: number[],
+  bonusTicketNumbers: number[],
+  bonusPromoLabel: "5+1" | "5+2" = "5+1",
+): string {
+  return buildReceiptConfirmedChatCard(raffleTitle, paidTicketNumbers, bonusTicketNumbers, bonusPromoLabel);
 }
 
 function buildStaffMaxPrivateInviteOnlyChatBody(): string {

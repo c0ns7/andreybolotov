@@ -220,7 +220,142 @@
     return { text: text, cards: cards };
   }
 
+  var CHAT_ICO_GIFT =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"></rect><path d="M12 8V21"></path><path d="M3 12h18"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5C9 3 12 8 12 8s3-5 4.5-5a2.5 2.5 0 0 1 0 5H7.5z"></path></svg>';
+  var CHAT_ICO_EXTERNAL =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>';
+  var CHAT_ICO_PARTY =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.8"></path><path d="M4 3h.01"></path><path d="M22 8h.01"></path><path d="M15 2h.01"></path><path d="M22 20h.01"></path><path d="m22 2-2 2.5"></path><path d="M9 9 13 5 22 14l-4 4-9-9Z"></path></svg>';
+  var CHAT_ICO_MESSAGE =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+
+  function adminBonusTableCardHtml(card) {
+    var headline =
+      String(card.headline || card.title || "").trim() ||
+      (card.variant === "manual" ? "Вас добавили в список" : "Вы попали в бонусную таблицу!");
+    var eyebrow = esc(String(card.eyebrow || "Бонусная таблица"));
+    var subtitle = card.subtitle ? '<p class="chat-action-card__subtitle">' + esc(String(card.subtitle)) + "</p>" : "";
+    var message = card.message || card.reason;
+    var messageHtml = message ? '<p class="chat-action-card__reason">' + esc(String(message)) + "</p>" : "";
+    var chips = "";
+    if (Array.isArray(card.positions) && card.positions.length) {
+      chips =
+        '<div class="chat-action-card__chips">' +
+        card.positions
+          .map(function (p) {
+            return (
+              '<span class="chat-action-card__chip chat-action-card__chip--bonus">#' +
+              esc(String(p)) +
+              "</span>"
+            );
+          })
+          .join("") +
+        "</div>";
+    }
+    var openHref = String(card.open_url || "").trim();
+    var openCta = esc(String(card.cta || "Открыть бонусную таблицу"));
+    var openAction = openHref
+      ? '<a class="chat-action-card__btn chat-action-card__btn--bonus-table" href="' +
+        openHref.replace(/"/g, "&quot;") +
+        '" target="_blank" rel="noopener noreferrer">' +
+        CHAT_ICO_EXTERNAL +
+        "<span>" +
+        openCta +
+        "</span></a>"
+      : '<span class="chat-action-card__btn chat-action-card__btn--bonus-table">' + openCta + "</span>";
+    return (
+      '<div class="chat-action-card chat-action-card--bonus-table">' +
+      '<div class="chat-action-card__head">' +
+      '<span class="chat-action-card__icon chat-action-card__icon--bonus" aria-hidden="true">' +
+      CHAT_ICO_GIFT +
+      "</span>" +
+      '<div class="chat-action-card__head-text">' +
+      '<p class="chat-action-card__eyebrow">' +
+      eyebrow +
+      "</p>" +
+      '<p class="chat-action-card__title">' +
+      esc(headline) +
+      "</p></div></div>" +
+      subtitle +
+      messageHtml +
+      chips +
+      openAction +
+      "</div>"
+    );
+  }
+
+  function adminReceiptConfirmedCardHtml(card) {
+    var eyebrow = esc(String(card.eyebrow || "Оплата подтверждена"));
+    var headline = esc(String(card.headline || "Поздравляем!"));
+    var subtitle = card.subtitle
+      ? '<p class="chat-action-card__subtitle">Акция «' + esc(String(card.subtitle)) + "»</p>"
+      : "";
+    var message = card.message ? '<p class="chat-action-card__reason">' + esc(String(card.message)) + "</p>" : "";
+    var paidHtml = "";
+    if (Array.isArray(card.paid_tickets) && card.paid_tickets.length) {
+      paidHtml =
+        '<div class="chat-action-card__detail-row"><div class="chat-action-card__detail-body">' +
+        '<span class="chat-action-card__detail-label">Оплаченные номерки</span>' +
+        '<div class="chat-action-card__chips">' +
+        card.paid_tickets
+          .map(function (n) {
+            return '<span class="chat-action-card__chip chat-action-card__chip--ticket">№' + esc(String(n)) + "</span>";
+          })
+          .join("") +
+        "</div></div></div>";
+    }
+    var bonusHtml = "";
+    if (Array.isArray(card.bonus_tickets) && card.bonus_tickets.length) {
+      var promo = card.bonus_promo ? " · акция " + esc(String(card.bonus_promo)) : "";
+      bonusHtml =
+        '<div class="chat-action-card__detail-row"><div class="chat-action-card__detail-body">' +
+        '<span class="chat-action-card__detail-label">Бонусные номерки' +
+        promo +
+        "</span>" +
+        '<div class="chat-action-card__chips">' +
+        card.bonus_tickets
+          .map(function (n) {
+            return '<span class="chat-action-card__chip chat-action-card__chip--gift">№' + esc(String(n)) + "</span>";
+          })
+          .join("") +
+        "</div></div></div>";
+    }
+    var maxUrl = String(card.max_join_url || "").trim();
+    var maxBtn = maxUrl
+      ? '<a class="chat-action-card__btn chat-action-card__btn--max" href="' +
+        maxUrl.replace(/"/g, "&quot;") +
+        '" target="_blank" rel="noopener noreferrer">' +
+        CHAT_ICO_MESSAGE +
+        "<span>" +
+        esc(String(card.max_cta || "Присоединиться к чату в MAX")) +
+        "</span></a>"
+      : "";
+    return (
+      '<div class="chat-action-card chat-action-card--receipt-confirmed">' +
+      '<div class="chat-action-card__head">' +
+      '<span class="chat-action-card__icon chat-action-card__icon--success" aria-hidden="true">' +
+      CHAT_ICO_PARTY +
+      "</span>" +
+      '<div class="chat-action-card__head-text">' +
+      '<p class="chat-action-card__eyebrow">' +
+      eyebrow +
+      "</p>" +
+      '<p class="chat-action-card__title">' +
+      headline +
+      "</p></div></div>" +
+      subtitle +
+      message +
+      paidHtml +
+      bonusHtml +
+      maxBtn +
+      "</div>"
+    );
+  }
+
   function adminActionCardHtml(card) {
+    if (card && card.kind === "receipt_confirmed") {
+      return adminReceiptConfirmedCardHtml(card);
+    }
     if (card && card.kind === "prize_claim") {
       var subtitle = card.subtitle ? '<p class="chat-action-card__reason">' + esc(String(card.subtitle)) + "</p>" : "";
       var href = String(card.claim_url || "").trim();
@@ -243,33 +378,7 @@
       );
     }
     if (card && card.kind === "bonus_table") {
-      var bonusSubtitle = card.subtitle ? '<p class="chat-action-card__reason">' + esc(String(card.subtitle)) + "</p>" : "";
-      var posHint = "";
-      if (Array.isArray(card.positions) && card.positions.length) {
-        posHint =
-          '<p class="chat-action-card__reason">Место: ' +
-          esc(card.positions.map(function (p) { return "#" + p; }).join(", ")) +
-          "</p>";
-      }
-      var openHref = String(card.open_url || "").trim();
-      var openCta = esc(String(card.cta || "Открыть бонусную таблицу"));
-      var openAction = openHref
-        ? '<a class="chat-action-card__btn chat-action-card__btn--bonus-table" href="' +
-          openHref.replace(/"/g, "&quot;") +
-          '" target="_blank" rel="noopener noreferrer">' +
-          openCta +
-          "</a>"
-        : '<span class="chat-action-card__btn chat-action-card__btn--bonus-table">' + openCta + "</span>";
-      return (
-        '<div class="chat-action-card chat-action-card--bonus-table">' +
-        '<p class="chat-action-card__title">' +
-        esc(String(card.title || "Бонусная таблица")) +
-        "</p>" +
-        bonusSubtitle +
-        posHint +
-        openAction +
-        "</div>"
-      );
+      return adminBonusTableCardHtml(card);
     }
     if (!card || card.kind !== "receipt_rejected") return "";
     var reason = card.reason ? '<p class="chat-action-card__reason">' + esc(String(card.reason)) + "</p>" : "";

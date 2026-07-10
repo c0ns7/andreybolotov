@@ -2,6 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ExternalLink,
+  Gift,
+  MessageCircle,
+  PartyPopper,
+  Sparkles,
+  Ticket,
+  Trophy,
+} from "lucide-react";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { prefetchMediaUrl } from "../../lib/ab-media-cache";
 import { useAbSession } from "./AbSessionContext";
@@ -22,6 +31,10 @@ type ChatActionCard = {
   title?: string;
   reason?: string;
   subtitle?: string;
+  headline?: string;
+  eyebrow?: string;
+  message?: string;
+  variant?: string;
   retry_url?: string;
   claim_url?: string;
   open_url?: string;
@@ -29,6 +42,11 @@ type ChatActionCard = {
   prize_type?: string;
   cta?: string;
   positions?: number[];
+  paid_tickets?: number[];
+  bonus_tickets?: number[];
+  bonus_promo?: string | null;
+  max_join_url?: string;
+  max_cta?: string;
 };
 type ChatTextPart = { type: "text"; value: string } | { type: "max_join"; href: string };
 type ChatAttachmentDto = { url: string; name: string; mime: string };
@@ -228,6 +246,117 @@ function splitChatTextParts(text: string): ChatTextPart[] {
     else parts.push({ type: "text", value: line });
   }
   return parts;
+}
+
+function ChatBonusTableActionCard({ card, onOpen }: { card: ChatActionCard; onOpen: (url: string) => void }) {
+  const positions = Array.isArray(card.positions) ? card.positions : [];
+  const headline =
+    String(card.headline || card.title || "").trim() ||
+    (card.variant === "manual" ? "Вас добавили в список" : "Вы попали в бонусную таблицу!");
+  const eyebrow = String(card.eyebrow || "Бонусная таблица").trim();
+  const message = String(card.message || card.reason || "").trim();
+  const openUrl = String(card.open_url || "").trim();
+
+  return (
+    <div className="chat-action-card chat-action-card--bonus-table">
+      <div className="chat-action-card__head">
+        <span className="chat-action-card__icon chat-action-card__icon--bonus" aria-hidden="true">
+          <Gift size={20} strokeWidth={2.1} />
+        </span>
+        <div className="chat-action-card__head-text">
+          <p className="chat-action-card__eyebrow">{eyebrow}</p>
+          <p className="chat-action-card__title">{headline}</p>
+        </div>
+      </div>
+      {card.subtitle ? <p className="chat-action-card__subtitle">{String(card.subtitle)}</p> : null}
+      {message ? <p className="chat-action-card__reason">{message}</p> : null}
+      {positions.length ? (
+        <div className="chat-action-card__chips" aria-label="Место в таблице">
+          {positions.map((pos) => (
+            <span key={String(pos)} className="chat-action-card__chip chat-action-card__chip--bonus">
+              <Trophy size={12} aria-hidden="true" />
+              #{pos}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="chat-action-card__btn chat-action-card__btn--bonus-table"
+        onClick={() => {
+          if (openUrl) onOpen(openUrl);
+        }}
+      >
+        <ExternalLink size={16} aria-hidden="true" />
+        <span>{String(card.cta || "Открыть бонусную таблицу")}</span>
+      </button>
+    </div>
+  );
+}
+
+function ChatReceiptConfirmedActionCard({ card }: { card: ChatActionCard }) {
+  const paid = Array.isArray(card.paid_tickets) ? card.paid_tickets : [];
+  const bonus = Array.isArray(card.bonus_tickets) ? card.bonus_tickets : [];
+  const maxUrl = String(card.max_join_url || "").trim();
+
+  return (
+    <div className="chat-action-card chat-action-card--receipt-confirmed">
+      <div className="chat-action-card__head">
+        <span className="chat-action-card__icon chat-action-card__icon--success" aria-hidden="true">
+          <PartyPopper size={20} strokeWidth={2.1} />
+        </span>
+        <div className="chat-action-card__head-text">
+          <p className="chat-action-card__eyebrow">{String(card.eyebrow || "Оплата подтверждена")}</p>
+          <p className="chat-action-card__title">{String(card.headline || "Поздравляем!")}</p>
+        </div>
+      </div>
+      {card.subtitle ? <p className="chat-action-card__subtitle">Акция «{String(card.subtitle)}»</p> : null}
+      {card.message ? <p className="chat-action-card__reason">{String(card.message)}</p> : null}
+      {paid.length ? (
+        <div className="chat-action-card__detail-row">
+          <Ticket size={15} aria-hidden="true" />
+          <div className="chat-action-card__detail-body">
+            <span className="chat-action-card__detail-label">Оплаченные номерки</span>
+            <div className="chat-action-card__chips">
+              {paid.map((num) => (
+                <span key={"paid_" + String(num)} className="chat-action-card__chip chat-action-card__chip--ticket">
+                  №{num}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {bonus.length ? (
+        <div className="chat-action-card__detail-row">
+          <Sparkles size={15} aria-hidden="true" />
+          <div className="chat-action-card__detail-body">
+            <span className="chat-action-card__detail-label">
+              Бонусные номерки{card.bonus_promo ? ` · акция ${String(card.bonus_promo)}` : ""}
+            </span>
+            <div className="chat-action-card__chips">
+              {bonus.map((num) => (
+                <span key={"bonus_" + String(num)} className="chat-action-card__chip chat-action-card__chip--gift">
+                  №{num}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {maxUrl ? (
+        <a
+          className="chat-action-card__btn chat-action-card__btn--max"
+          href={maxUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <MessageCircle size={16} aria-hidden="true" />
+          <span>{String(card.max_cta || "Присоединиться к чату в MAX")}</span>
+        </a>
+      ) : null}
+    </div>
+  );
 }
 
 export default function ChatPageClient() {
@@ -538,6 +667,9 @@ export default function ChatPageClient() {
                               />
                             ) : null}
                             {cards.map((card, cardIdx) => {
+                              if (card?.kind === "receipt_confirmed") {
+                                return <ChatReceiptConfirmedActionCard key={"card_rc_" + String(cardIdx)} card={card} />;
+                              }
                               if (card?.kind === "prize_claim") {
                                 return (
                                   <div key={"card_prize_" + String(cardIdx)} className="chat-action-card chat-action-card--prize">
@@ -575,25 +707,12 @@ export default function ChatPageClient() {
                                 );
                               }
                               if (card?.kind === "bonus_table") {
-                                const posHint = Array.isArray(card.positions) && card.positions.length
-                                  ? `Место: ${card.positions.map((p) => `#${p}`).join(", ")}`
-                                  : "";
                                 return (
-                                  <div key={"card_bonus_" + String(cardIdx)} className="chat-action-card chat-action-card--bonus-table">
-                                    <p className="chat-action-card__title">{String(card.title || "Бонусная таблица")}</p>
-                                    {card.subtitle ? <p className="chat-action-card__reason">{card.subtitle}</p> : null}
-                                    {posHint ? <p className="chat-action-card__reason">{posHint}</p> : null}
-                                    <button
-                                      type="button"
-                                      className="chat-action-card__btn chat-action-card__btn--bonus-table"
-                                      onClick={() => {
-                                        const url = String(card.open_url || "").trim();
-                                        if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
-                                      }}
-                                    >
-                                      {String(card.cta || "Открыть бонусную таблицу")}
-                                    </button>
-                                  </div>
+                                  <ChatBonusTableActionCard
+                                    key={"card_bonus_" + String(cardIdx)}
+                                    card={card}
+                                    onOpen={(url) => router.push(url.replace(/^https?:\/\/[^/]+/i, ""))}
+                                  />
                                 );
                               }
                               return null;
