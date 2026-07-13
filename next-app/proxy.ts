@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { encodeCdnSafeToken, looksLikeCdnBlockedToken } from "./lib/ab-cdn-safe-token";
 
 const STATIC_EXT_RE = /\.(?:png|jpe?g|webp|gif|svg|ico|css|js|map|woff2?|ttf|eot|mp3|mp4|webm|json)$/i;
 
@@ -16,11 +17,53 @@ function isApiUploadPath(pathname: string): boolean {
   return pathname === "/api/chat/upload" || pathname === "/api/raffles/receipt-upload";
 }
 
+/**
+ * Beeline CDN 403 on bare UUID / 32-hex in URL → redirect to ab.* form.
+ * Cold UUID hits on my. still 403 at edge until secure links are disabled in Beeline.
+ */
+function redirectCdnUnsafeTokens(request: NextRequest): NextResponse | null {
+  const url = request.nextUrl.clone();
+  const path = url.pathname;
+  let changed = false;
+
+  const raffleMatch = path.match(/^\/raffle\/([^/]+)\/?$/);
+  if (raffleMatch) {
+    let seg = raffleMatch[1];
+    try {
+      seg = decodeURIComponent(seg);
+    } catch {
+      /* keep */
+    }
+    if (looksLikeCdnBlockedToken(seg)) {
+      url.pathname = "/raffle/" + encodeURIComponent(encodeCdnSafeToken(seg));
+      changed = true;
+    }
+  }
+
+  const t = url.searchParams.get("t");
+  if (t && looksLikeCdnBlockedToken(t)) {
+    url.searchParams.set("t", encodeCdnSafeToken(t));
+    changed = true;
+  }
+
+  const hash = url.searchParams.get("hash");
+  if (hash && looksLikeCdnBlockedToken(hash)) {
+    url.searchParams.set("hash", encodeCdnSafeToken(hash));
+    changed = true;
+  }
+
+  if (!changed) return null;
+  return NextResponse.redirect(url, 308);
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname.startsWith("/_next") || pathname.startsWith("/static-proxy")) {
     return NextResponse.next();
   }
+
+  const cdnRedirect = redirectCdnUnsafeTokens(request);
+  if (cdnRedirect) return cdnRedirect;
 
   if (pathname.startsWith("/api/")) {
     if (isNextLocalApi(pathname) || isApiUploadPath(pathname)) return NextResponse.next();
