@@ -109,14 +109,64 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="ab-clear-auth-cookies" strategy="beforeInteractive">
           {`!function(){try{var d=location.hostname==="andreybolotov.ru"||/\\.andreybolotov\\.ru$/.test(location.hostname)?"; Domain=.andreybolotov.ru":"";["ab_auth_v2","ab_tok","ab_sess"].forEach(function(n){document.cookie=n+"=; path=/; max-age=0"+d;document.cookie=n+"=; path=/; max-age=0";});}catch(_){}}();`}
         </Script>
-        <Script id="ab-api-ws" strategy="beforeInteractive">
-          {`try{var o=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "")};if(o){window.__AB_WS_ORIGIN__=String(o).replace(/\\/$/,"");}}catch(_){}`}
-        </Script>
-        <Script id="ab-api-http" strategy="beforeInteractive">
-          {`try{var h=${JSON.stringify(process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "")};if(h){window.__AB_HTTP_ORIGIN__=String(h).replace(/\\/$/,"");}}catch(_){}`}
-        </Script>
-        <Script id="ab-upload-http" strategy="beforeInteractive">
-          {`try{var u=${JSON.stringify(process.env.NEXT_PUBLIC_AB_UPLOAD_ORIGIN || "")};if(u){window.__AB_UPLOAD_ORIGIN__=String(u).replace(/\\/$/,"");}}catch(_){}`}
+        {/*
+          Beeline CDN (my.) отдаёт HTML/статику, но /api и /ws часто 403/404.
+          На my. API+WS идут на apex; env при необходимости переопределяет.
+        */}
+        <Script id="ab-api-origins" strategy="beforeInteractive">
+          {`!function(){try{
+var envWs=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "")};
+var envHttp=${JSON.stringify(process.env.NEXT_PUBLIC_AB_HTTP_ORIGIN || "")};
+var envUp=${JSON.stringify(process.env.NEXT_PUBLIC_AB_UPLOAD_ORIGIN || "")};
+var h=location.hostname||"";
+var onCdn=h==="my.andreybolotov.ru"||/\\.a\\.trbcdn\\.net$/.test(h);
+var apex="https://andreybolotov.ru";
+var http=String(envHttp||"").replace(/\\/$/,"");
+var ws=String(envWs||"").replace(/\\/$/,"");
+var up=String(envUp||"").replace(/\\/$/,"");
+if(!http&&onCdn)http=apex;
+if(!ws&&onCdn)ws=apex;
+if(http)window.__AB_HTTP_ORIGIN__=http;
+if(ws)window.__AB_WS_ORIGIN__=ws;
+if(up)window.__AB_UPLOAD_ORIGIN__=up;
+if(!http)return;
+function rewrite(u){
+  if(typeof u!=="string")return u;
+  if(u.charAt(0)==="/"){
+    if(u.indexOf("/api/")===0||u==="/api"||u.indexOf("/ws")===0)return http+u;
+    return u;
+  }
+  try{
+    var x=new URL(u,location.href);
+    if(x.origin===location.origin&&(x.pathname.indexOf("/api/")===0||x.pathname==="/api"||x.pathname.indexOf("/ws")===0)){
+      return http+x.pathname+x.search+x.hash;
+    }
+  }catch(_){}
+  return u;
+}
+var of=window.fetch;
+if(typeof of==="function"){
+  window.fetch=function(input,init){
+    try{
+      if(typeof input==="string"){input=rewrite(input);}
+      else if(input&&typeof Request!=="undefined"&&input instanceof Request){
+        var nu=rewrite(input.url);
+        if(nu!==input.url)input=new Request(nu,input);
+      }
+    }catch(_){}
+    return of.call(this,input,init);
+  };
+}
+var XO=XMLHttpRequest&&XMLHttpRequest.prototype;
+if(XO&&XO.open){
+  var oo=XO.open;
+  XO.open=function(){
+    var args=Array.prototype.slice.call(arguments);
+    try{if(typeof args[1]==="string")args[1]=rewrite(args[1]);}catch(_){}
+    return oo.apply(this,args);
+  };
+}
+}catch(_){}}();`}
         </Script>
         <AbSessionProvider>
           <SiteMusicProvider>
