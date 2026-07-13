@@ -19,25 +19,64 @@
   /** Пара localStorage+cookie: если удалили только cookie — считаем выходом */
   const PAIR_KEY = "ab_sess_pair";
   const SESS_COOKIE = "ab_sess";
+  const AUTH_COOKIE_MAX_AGE = 31536000;
 
-  function cookieExists() {
+  /** SSO: andreybolotov.ru + my.andreybolotov.ru */
+  function cookieDomainAttr() {
+    var h = location.hostname || "";
+    if (h === "andreybolotov.ru" || /\.andreybolotov\.ru$/.test(h)) {
+      return "; Domain=.andreybolotov.ru";
+    }
+    return "";
+  }
+
+  function cookieSecureAttr() {
+    return location.protocol === "https:" ? "; Secure" : "";
+  }
+
+  function cookieBaseAttrs(maxAge) {
+    return "path=/; max-age=" + maxAge + "; SameSite=Lax" + cookieSecureAttr() + cookieDomainAttr();
+  }
+
+  function readCookie(name) {
+    var prefix = name + "=";
     var parts = document.cookie.split(";");
     for (var i = 0; i < parts.length; i++) {
-      if (parts[i].trim().indexOf(SESS_COOKIE + "=") === 0) return true;
+      var p = parts[i].trim();
+      if (p.indexOf(prefix) === 0) {
+        try {
+          return decodeURIComponent(p.slice(prefix.length));
+        } catch (_) {
+          return p.slice(prefix.length);
+        }
+      }
     }
-    return false;
+    return null;
+  }
+
+  function writeCookie(name, value, maxAge) {
+    document.cookie = name + "=" + encodeURIComponent(value) + "; " + cookieBaseAttrs(maxAge);
+  }
+
+  function deleteCookie(name) {
+    document.cookie = name + "=; path=/; max-age=0" + cookieDomainAttr();
+    document.cookie = name + "=; path=/; max-age=0";
+  }
+
+  function cookieExists() {
+    return readCookie(SESS_COOKIE) != null || readCookie(STORAGE_KEY) != null;
   }
 
   function setSessionCookie() {
-    var sec = location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = SESS_COOKIE + "=1; path=/; max-age=31536000; SameSite=Lax" + sec;
+    writeCookie(SESS_COOKIE, "1", AUTH_COOKIE_MAX_AGE);
   }
 
   function clearSessionCookie() {
-    document.cookie = SESS_COOKIE + "=; path=/; max-age=0";
+    deleteCookie(SESS_COOKIE);
+    deleteCookie(STORAGE_KEY);
   }
 
-  /** Сессия в localStorage, не в cookies: при удалении cookies сбрасываем вход */
+  /** Сессия: localStorage + cookie Domain=.andreybolotov.ru (SSO my. + apex) */
   function reconcileCookiePair() {
     var s = loadSession();
     if (!s || !s.token) {
@@ -101,10 +140,26 @@
 
   function loadSession() {
     try {
+      var rawCookie = readCookie(STORAGE_KEY);
+      if (rawCookie) {
+        var jc = JSON.parse(rawCookie);
+        if (jc && jc.token && jc.phone) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(jc));
+          } catch (_) {}
+          return jc;
+        }
+      }
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const j = JSON.parse(raw);
-      if (j && j.token && j.phone) return j;
+      if (j && j.token && j.phone) {
+        try {
+          writeCookie(STORAGE_KEY, JSON.stringify(j), AUTH_COOKIE_MAX_AGE);
+          setSessionCookie();
+        } catch (_) {}
+        return j;
+      }
       return null;
     } catch {
       return null;
@@ -264,11 +319,15 @@
   })();
 
   function saveSession(data) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    var raw = JSON.stringify(data);
+    localStorage.setItem(STORAGE_KEY, raw);
     session = data;
     if (data && data.token) {
       try {
         localStorage.setItem(PAIR_KEY, "1");
+      } catch (_) {}
+      try {
+        writeCookie(STORAGE_KEY, raw, AUTH_COOKIE_MAX_AGE);
       } catch (_) {}
       setSessionCookie();
     }

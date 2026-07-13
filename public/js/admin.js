@@ -2,6 +2,73 @@
   "use strict";
 
   const STORAGE_KEY = "ab_auth_v2";
+  const AUTH_COOKIE_MAX_AGE = 31536000;
+
+  function cookieDomainAttr() {
+    var h = location.hostname || "";
+    if (h === "andreybolotov.ru" || /\.andreybolotov\.ru$/.test(h)) {
+      return "; Domain=.andreybolotov.ru";
+    }
+    return "";
+  }
+
+  function writeAuthCookie(raw) {
+    var sec = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie =
+      STORAGE_KEY +
+      "=" +
+      encodeURIComponent(raw) +
+      "; path=/; max-age=" +
+      AUTH_COOKIE_MAX_AGE +
+      "; SameSite=Lax" +
+      sec +
+      cookieDomainAttr();
+    document.cookie =
+      "ab_sess=1; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + cookieDomainAttr();
+  }
+
+  function readAuthCookie() {
+    var prefix = STORAGE_KEY + "=";
+    var parts = document.cookie.split(";");
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim();
+      if (p.indexOf(prefix) === 0) {
+        try {
+          return decodeURIComponent(p.slice(prefix.length));
+        } catch (_) {
+          return p.slice(prefix.length);
+        }
+      }
+    }
+    return null;
+  }
+
+  function loadSession() {
+    try {
+      var rawCookie = readAuthCookie();
+      if (rawCookie) {
+        var jc = JSON.parse(rawCookie);
+        if (jc && jc.token && jc.phone) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(jc));
+          } catch (_) {}
+          return jc;
+        }
+      }
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const j = JSON.parse(raw);
+      if (j && j.token && j.phone) {
+        try {
+          writeAuthCookie(JSON.stringify(j));
+        } catch (_) {}
+        return j;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   /** @type {Array<{id:number;phone:string;name:string;locality?:string;role:string;last_body:string|null;last_at:number|null;last_is_staff:number|null;unread_count:number}>} */
   let allUsersCache = [];
@@ -22,18 +89,6 @@
   let adminTypingIdleTimer = null;
   /** @type {number | null} */
   let userTypingPollTimer = null;
-
-  function loadSession() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const j = JSON.parse(raw);
-      if (j && j.token && j.phone) return j;
-      return null;
-    } catch {
-      return null;
-    }
-  }
 
   async function apiJson(path, options) {
     const opts = options || {};
@@ -1603,6 +1658,9 @@
         role: me.user.role != null ? me.user.role : s.role || "user",
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      try {
+        writeAuthCookie(JSON.stringify(merged));
+      } catch (_) {}
       adminSessionRole = merged.role;
       adminStaffAreas = resolveAdminStaffAreas(merged.role, me.user.is_staff, me.user.staff_areas);
       window.abAdminStaffAreas = adminStaffAreas.slice();
