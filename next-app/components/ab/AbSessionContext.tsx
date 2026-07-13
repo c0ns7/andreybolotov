@@ -244,7 +244,7 @@ export function AbSessionProvider({ children }: { children: ReactNode }) {
   }, [session?.token, authVerified, isAdminRoute]);
 
   const setSessionFromLogin = useCallback((s: AbSession) => {
-    saveAbSession(s);
+    saveAbSession(s); // also clears auth cookies (CDN 403)
     setSession(s);
     setAuthVerified(true);
   }, []);

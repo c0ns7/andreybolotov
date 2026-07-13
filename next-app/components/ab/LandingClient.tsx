@@ -12,6 +12,7 @@ import {
   AB_PASSWORD_RESET_REQUIRED_FIELDS,
 } from "../../lib/ab-support-links";
 import { useAbSession } from "./AbSessionContext";
+import { clearAbAuthCookies } from "../../lib/ab-session";
 import { normalizePersonName, validatePersonName } from "../../lib/person-name";
 
 type AuthResp = {
@@ -116,9 +117,11 @@ export default function LandingClient() {
       } catch {
         /* ignore */
       }
-      router.replace("/home");
+      // Full reload without Cookie — soft RSC fetch to /home was 403 on Beeline CDN
+      clearAbAuthCookies();
+      window.location.replace("/home");
     }
-  }, [authVerified, session, router]);
+  }, [authVerified, session]);
 
   useEffect(() => {
     if (modal !== "auth" || authStep !== "phone") return;

@@ -106,6 +106,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {`!function(){try{var p=location.pathname||"";while(p.length>1&&p.charAt(p.length-1)==="/")p=p.slice(0,-1);if(p==="/home/raffle"||p.indexOf("/raffle/")===0){document.documentElement.classList.add("raffle-purchase-page","raffle-grid-page");}else if(p.indexOf("/home/raffle/confirm")===0){document.documentElement.classList.add("raffle-confirm-page");}if(p==="/"||p==="/home"||p==="/home/blog"||p.indexOf("/home/blog/")===0||p==="/home/raffle"||p.indexOf("/home/raffle/")===0||p.indexOf("/raffle/")===0){document.documentElement.classList.add("ab-ui-no-select");}}catch(_){}}();`}
         </Script>
         <AbRouteHtmlClasses />
+        <Script id="ab-clear-auth-cookies" strategy="beforeInteractive">
+          {`!function(){try{var d=location.hostname==="andreybolotov.ru"||/\\.andreybolotov\\.ru$/.test(location.hostname)?"; Domain=.andreybolotov.ru":"";["ab_auth_v2","ab_tok","ab_sess"].forEach(function(n){document.cookie=n+"=; path=/; max-age=0"+d;document.cookie=n+"=; path=/; max-age=0";});}catch(_){}}();`}
+        </Script>
         <Script id="ab-api-ws" strategy="beforeInteractive">
           {`try{var o=${JSON.stringify(process.env.NEXT_PUBLIC_AB_WS_ORIGIN || "")};if(o){window.__AB_WS_ORIGIN__=String(o).replace(/\\/$/,"");}}catch(_){}`}
         </Script>

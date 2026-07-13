@@ -13,62 +13,25 @@
     return "";
   }
 
-  function writeAuthCookie(token) {
-    var sec = location.protocol === "https:" ? "; Secure" : "";
+  function writeAuthCookie(_token) {
+    // Beeline CDN 403 when Cookie present — do not set auth cookies
     var dom = cookieDomainAttr();
-    var t = String(token || "").trim();
-    if (!t) return;
-    document.cookie =
-      TOKEN_COOKIE + "=" + encodeURIComponent(t) + "; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + dom;
-    document.cookie =
-      "ab_sess=1; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + dom;
-    // drop legacy fat JSON cookie
     document.cookie = STORAGE_KEY + "=; path=/; max-age=0" + dom;
     document.cookie = STORAGE_KEY + "=; path=/; max-age=0";
-  }
-
-  function readAuthTokenCookie() {
-    var prefix = TOKEN_COOKIE + "=";
-    var parts = document.cookie.split(";");
-    for (var i = 0; i < parts.length; i++) {
-      var p = parts[i].trim();
-      if (p.indexOf(prefix) === 0) {
-        try {
-          return decodeURIComponent(p.slice(prefix.length));
-        } catch (_) {
-          return p.slice(prefix.length);
-        }
-      }
-    }
-    // legacy fat cookie
-    var legacyPrefix = STORAGE_KEY + "=";
-    for (var j = 0; j < parts.length; j++) {
-      var q = parts[j].trim();
-      if (q.indexOf(legacyPrefix) === 0) {
-        try {
-          var raw = decodeURIComponent(q.slice(legacyPrefix.length));
-          var o = JSON.parse(raw);
-          if (o && o.token) return String(o.token);
-        } catch (_) {}
-      }
-    }
-    return null;
+    document.cookie = TOKEN_COOKIE + "=; path=/; max-age=0" + dom;
+    document.cookie = TOKEN_COOKIE + "=; path=/; max-age=0";
+    document.cookie = "ab_sess=; path=/; max-age=0" + dom;
+    document.cookie = "ab_sess=; path=/; max-age=0";
   }
 
   function loadSession() {
     try {
+      writeAuthCookie("");
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const j = JSON.parse(raw);
-        if (j && j.token && j.phone) {
-          try {
-            writeAuthCookie(j.token);
-          } catch (_) {}
-          return j;
-        }
-      }
-      var tok = readAuthTokenCookie();
-      if (tok) return { token: tok, phone: "" };
+      if (!raw) return null;
+      const j = JSON.parse(raw);
+      if (j && j.token && j.phone) return j;
+      if (j && j.token) return j;
       return null;
     } catch {
       return null;
