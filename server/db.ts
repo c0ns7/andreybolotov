@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { raffleHashLookupCandidates } from "./ab-cdn-safe-token.js";
 import { normalizePhone } from "./phone.js";
 import {
   cleanupExpiredPasswordResetTokensPg,
@@ -1184,9 +1185,11 @@ export async function getRaffleById(id: number): Promise<RaffleRow | undefined> 
 }
 
 export async function getRaffleByHash(hash: string): Promise<RaffleRow | undefined> {
-  const h = String(hash || "").trim();
-  if (!h) return undefined;
-  return pgGet<RaffleRow>(`SELECT * FROM raffles WHERE raffle_hash = ?`, [h]);
+  for (const h of raffleHashLookupCandidates(hash)) {
+    const row = await pgGet<RaffleRow>(`SELECT * FROM raffles WHERE raffle_hash = ?`, [h]);
+    if (row) return row;
+  }
+  return undefined;
 }
 
 export async function insertRaffle(data: {

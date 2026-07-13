@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
+import { decodeCdnSafeToken } from "./ab-cdn-safe-token.js";
 import {
   getRaffleById,
   getRaffleEffectiveUnitPrice,
@@ -1561,7 +1562,7 @@ export function receiptReviewEtaHintFromEnv(): string {
 }
 
 export async function getPublicOrderStatusByToken(rawToken: string): Promise<PublicOrderStatusDto | null> {
-  const t = String(rawToken ?? "").trim().toLowerCase();
+  const t = decodeCdnSafeToken(String(rawToken ?? "")).toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(t)) return null;
   const o = await pgGet<RaffleOrderRow>(`SELECT * FROM raffle_orders WHERE public_status_token = ?`, [t]);
   if (!o) return null;

@@ -17,6 +17,7 @@ import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration";
 import AppBottomNav from "./AppBottomNav";
 import { useAbSession } from "./AbSessionContext";
+import { raffleHashFromCdnSafe } from "../../lib/ab-cdn-safe-token";
 
 const RAFFLE_MAX_SELECT_DEFAULT = 25;
 const DRAFT_PREFIX = "ab_raffle_draft_";
@@ -510,10 +511,17 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
   }, [params]);
   const hash = useMemo(() => {
     const fromProp = String(raffleHash || "").trim();
-    if (fromProp) return fromProp;
     const rawRouteHash = routeParams?.hash;
-    if (Array.isArray(rawRouteHash)) return String(rawRouteHash[0] || "").trim();
-    return String(rawRouteHash || "").trim();
+    const fromRoute = Array.isArray(rawRouteHash)
+      ? String(rawRouteHash[0] || "").trim()
+      : String(rawRouteHash || "").trim();
+    let raw = fromProp || fromRoute;
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      /* keep */
+    }
+    return raffleHashFromCdnSafe(raw);
   }, [raffleHash, routeParams]);
   const onHashRoute = pathname.startsWith("/raffle/");
 

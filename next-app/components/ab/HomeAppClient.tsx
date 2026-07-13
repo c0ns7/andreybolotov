@@ -21,6 +21,7 @@ import RaffleCardMedia from "./RaffleCardMedia";
 import { useAbSession } from "./AbSessionContext";
 import { formatStreamTimeLeft } from "../../lib/site-timezone";
 import { isPersonNameComplete, normalizePersonName, validatePersonName } from "../../lib/person-name";
+import { rafflePublicPath } from "../../lib/ab-cdn-safe-token";
 
 type RaffleRow = {
   id: number;
@@ -636,7 +637,7 @@ export default function HomeAppClient() {
                 const go = () => {
                   if (st === "active" && salesOpen) {
                     const hash = String(r.raffle_hash || "").trim();
-                    if (hash) router.push("/raffle/" + encodeURIComponent(hash));
+                    if (hash) router.push(rafflePublicPath(hash));
                     else router.push("/home/raffle?id=" + encodeURIComponent(String(r.id)));
                   }
                 };
@@ -879,7 +880,7 @@ export default function HomeAppClient() {
               const raffleById = raffles.find((it) => Number(it.id) === reservedRaffleId);
               const raffleHash = String(raffleById?.raffle_hash || "").trim();
               if (raffleHash) {
-                router.push("/raffle/" + encodeURIComponent(raffleHash) + "?openPayment=1");
+                router.push(rafflePublicPath(raffleHash) + "?openPayment=1");
               } else {
                 router.push("/home/raffle?id=" + encodeURIComponent(String(reservedRaffleId)) + "&openPayment=1");
               }

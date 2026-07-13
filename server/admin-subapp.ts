@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import bcrypt from "bcryptjs";
+import { orderStatusPublicPath } from "./ab-cdn-safe-token.js";
 import type { SessionUser } from "./db.js";
 import { getUserBySessionTokenPg } from "./db-auth-pg.js";
 import {
@@ -1490,9 +1491,7 @@ adminSubApp.post("/raffle-payments/:orderId/reject", async (c) => {
     const updated = await getOrderById(orderId);
     const raffle = await getRaffleById(pendingRow.raffle_id);
     const tok = updated ? String((updated as { public_status_token?: string }).public_status_token ?? "").trim() : "";
-    const statusPageUrl = tok
-      ? `${publicAppOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
-      : "";
+    const statusPageUrl = tok ? `${publicAppOrigin()}${orderStatusPublicPath(tok)}` : "";
     const rulesUrl = raffle ? String(raffle.rules_url ?? "").trim() : "";
     if (updated && raffle) {
       if (res.mode === "rework") {
@@ -1557,9 +1556,7 @@ adminSubApp.post("/raffle-orders/:orderId/release", async (c) => {
     const uid = Number(before.user_id);
     const raffle = await getRaffleById(before.raffle_id);
     const tok = String((before as { public_status_token?: string }).public_status_token ?? "").trim();
-    const statusPageUrl = tok
-      ? `${publicAppOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
-      : "";
+    const statusPageUrl = tok ? `${publicAppOrigin()}${orderStatusPublicPath(tok)}` : "";
     const rulesUrl = raffle ? String(raffle.rules_url ?? "").trim() : "";
     if (raffle) {
       notifyUserOrderFullyReleased(uid, {

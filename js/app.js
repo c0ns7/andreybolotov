@@ -3106,13 +3106,25 @@
     );
   }
 
+  function encodeCdnSafeToken(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return s;
+    if (/^ab\./i.test(s)) return s;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      return "ab." + s.replace(/-/g, "").toLowerCase();
+    }
+    if (/^[0-9a-f]{32}$/i.test(s)) return "ab." + s.toLowerCase();
+    return s;
+  }
+
   function buildTrackingStatusLink(order) {
     var tok = order && order.tracking_token ? String(order.tracking_token).trim() : "";
     if (!tok) return "";
+    var safe = encodeCdnSafeToken(tok);
     var url =
       typeof location !== "undefined" && location.origin
-        ? location.origin + "/home/order-status?t=" + encodeURIComponent(tok)
-        : "/home/order-status?t=" + encodeURIComponent(tok);
+        ? location.origin + "/home/order-status?t=" + encodeURIComponent(safe)
+        : "/home/order-status?t=" + encodeURIComponent(safe);
     return (
       '<p class="tickets-group__track">' +
       '<a href="' +

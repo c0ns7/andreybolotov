@@ -7,6 +7,7 @@ import {
   markRaffleLaunchNotifySent,
 } from "./db.js";
 import type { RaffleRow } from "./db.js";
+import { orderStatusPublicPath } from "./ab-cdn-safe-token.js";
 import {
   formatRuMoscowDateTime,
   sendOrderFullyReleasedEmail,
@@ -152,9 +153,7 @@ export async function tickReserveExpiryEmailReminders(): Promise<void> {
     const minutesLeft = Math.ceil((r.reserved_until - now) / 60_000);
     const ord = fresh;
     const tok = ord ? String((ord as { public_status_token?: string }).public_status_token ?? "").trim() : "";
-    const statusPageUrl = tok
-      ? `${appOrigin()}/home/order-status?t=${encodeURIComponent(tok)}`
-      : "";
+    const statusPageUrl = tok ? `${appOrigin()}${orderStatusPublicPath(tok)}` : "";
     const rulesUrl = String(raffle.rules_url ?? "").trim();
     void sendReserveExpiringSoonEmail({
       to: email,
