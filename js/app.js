@@ -19,6 +19,7 @@
   /** Пара localStorage+cookie: если удалили только cookie — считаем выходом */
   const PAIR_KEY = "ab_sess_pair";
   const SESS_COOKIE = "ab_sess";
+  const TOKEN_COOKIE = "ab_tok";
   const AUTH_COOKIE_MAX_AGE = 31536000;
 
   /** SSO: andreybolotov.ru + my.andreybolotov.ru */
@@ -64,7 +65,7 @@
   }
 
   function cookieExists() {
-    return readCookie(SESS_COOKIE) != null || readCookie(STORAGE_KEY) != null;
+    return readCookie(SESS_COOKIE) != null || readCookie(TOKEN_COOKIE) != null;
   }
 
   function setSessionCookie() {
@@ -73,7 +74,8 @@
 
   function clearSessionCookie() {
     deleteCookie(SESS_COOKIE);
-    deleteCookie(STORAGE_KEY);
+    deleteCookie(TOKEN_COOKIE);
+    deleteCookie(STORAGE_KEY); // legacy fat JSON cookie
   }
 
   /** Сессия: localStorage + cookie Domain=.andreybolotov.ru (SSO my. + apex) */
@@ -140,25 +142,35 @@
 
   function loadSession() {
     try {
+      var rawLs = localStorage.getItem(STORAGE_KEY);
+      if (rawLs) {
+        var jLs = JSON.parse(rawLs);
+        if (jLs && jLs.token && jLs.phone) {
+          try {
+            writeCookie(TOKEN_COOKIE, String(jLs.token), AUTH_COOKIE_MAX_AGE);
+            setSessionCookie();
+            deleteCookie(STORAGE_KEY);
+          } catch (_) {}
+          return jLs;
+        }
+      }
+      var tok = readCookie(TOKEN_COOKIE);
+      if (tok) {
+        deleteCookie(STORAGE_KEY);
+        return { token: tok, phone: "" };
+      }
       var rawCookie = readCookie(STORAGE_KEY);
       if (rawCookie) {
         var jc = JSON.parse(rawCookie);
-        if (jc && jc.token && jc.phone) {
+        if (jc && jc.token) {
           try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(jc));
+            writeCookie(TOKEN_COOKIE, String(jc.token), AUTH_COOKIE_MAX_AGE);
+            setSessionCookie();
+            deleteCookie(STORAGE_KEY);
           } catch (_) {}
           return jc;
         }
-      }
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const j = JSON.parse(raw);
-      if (j && j.token && j.phone) {
-        try {
-          writeCookie(STORAGE_KEY, JSON.stringify(j), AUTH_COOKIE_MAX_AGE);
-          setSessionCookie();
-        } catch (_) {}
-        return j;
       }
       return null;
     } catch {
@@ -327,7 +339,8 @@
         localStorage.setItem(PAIR_KEY, "1");
       } catch (_) {}
       try {
-        writeCookie(STORAGE_KEY, raw, AUTH_COOKIE_MAX_AGE);
+        writeCookie(TOKEN_COOKIE, String(data.token), AUTH_COOKIE_MAX_AGE);
+        deleteCookie(STORAGE_KEY);
       } catch (_) {}
       setSessionCookie();
     }

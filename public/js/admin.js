@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "ab_auth_v2";
+  const TOKEN_COOKIE = "ab_tok";
   const AUTH_COOKIE_MAX_AGE = 31536000;
 
   function cookieDomainAttr() {
@@ -12,23 +13,22 @@
     return "";
   }
 
-  function writeAuthCookie(raw) {
+  function writeAuthCookie(token) {
     var sec = location.protocol === "https:" ? "; Secure" : "";
+    var dom = cookieDomainAttr();
+    var t = String(token || "").trim();
+    if (!t) return;
     document.cookie =
-      STORAGE_KEY +
-      "=" +
-      encodeURIComponent(raw) +
-      "; path=/; max-age=" +
-      AUTH_COOKIE_MAX_AGE +
-      "; SameSite=Lax" +
-      sec +
-      cookieDomainAttr();
+      TOKEN_COOKIE + "=" + encodeURIComponent(t) + "; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + dom;
     document.cookie =
-      "ab_sess=1; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + cookieDomainAttr();
+      "ab_sess=1; path=/; max-age=" + AUTH_COOKIE_MAX_AGE + "; SameSite=Lax" + sec + dom;
+    // drop legacy fat JSON cookie
+    document.cookie = STORAGE_KEY + "=; path=/; max-age=0" + dom;
+    document.cookie = STORAGE_KEY + "=; path=/; max-age=0";
   }
 
-  function readAuthCookie() {
-    var prefix = STORAGE_KEY + "=";
+  function readAuthTokenCookie() {
+    var prefix = TOKEN_COOKIE + "=";
     var parts = document.cookie.split(";");
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i].trim();
@@ -40,30 +40,35 @@
         }
       }
     }
+    // legacy fat cookie
+    var legacyPrefix = STORAGE_KEY + "=";
+    for (var j = 0; j < parts.length; j++) {
+      var q = parts[j].trim();
+      if (q.indexOf(legacyPrefix) === 0) {
+        try {
+          var raw = decodeURIComponent(q.slice(legacyPrefix.length));
+          var o = JSON.parse(raw);
+          if (o && o.token) return String(o.token);
+        } catch (_) {}
+      }
+    }
     return null;
   }
 
   function loadSession() {
     try {
-      var rawCookie = readAuthCookie();
-      if (rawCookie) {
-        var jc = JSON.parse(rawCookie);
-        if (jc && jc.token && jc.phone) {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const j = JSON.parse(raw);
+        if (j && j.token && j.phone) {
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(jc));
+            writeAuthCookie(j.token);
           } catch (_) {}
-          return jc;
+          return j;
         }
       }
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const j = JSON.parse(raw);
-      if (j && j.token && j.phone) {
-        try {
-          writeAuthCookie(JSON.stringify(j));
-        } catch (_) {}
-        return j;
-      }
+      var tok = readAuthTokenCookie();
+      if (tok) return { token: tok, phone: "" };
       return null;
     } catch {
       return null;
@@ -1659,7 +1664,7 @@
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       try {
-        writeAuthCookie(JSON.stringify(merged));
+        writeAuthCookie(merged.token);
       } catch (_) {}
       adminSessionRole = merged.role;
       adminStaffAreas = resolveAdminStaffAreas(merged.role, me.user.is_staff, me.user.staff_areas);
