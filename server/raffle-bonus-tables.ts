@@ -171,7 +171,16 @@ function isWithinTableWindow(table: RaffleBonusTableRow, atMs: number): boolean 
   const t = Math.floor(Number(atMs));
   if (!Number.isFinite(t) || t <= 0) return false;
   if (table.status !== "active") return false;
-  return t >= table.start_at && t <= table.end_at;
+  if (t > table.end_at) return false;
+  if (t >= table.start_at) return true;
+  // Старт формы часто = «сейчас», а покупки утром того же дня должны попадать
+  // в режим «включая покупки до создания в этот день».
+  if (table.count_from === "include_prior_same_day") {
+    const createdDay = getSiteCalendarDayKey(table.created_at);
+    const orderDay = getSiteCalendarDayKey(t);
+    return Boolean(createdDay && orderDay && createdDay === orderDay);
+  }
+  return false;
 }
 
 function orderCountsForTable(table: RaffleBonusTableRow, confirmedAt: number, tableCreatedAt: number): boolean {
@@ -182,6 +191,21 @@ function orderCountsForTable(table: RaffleBonusTableRow, confirmedAt: number, ta
     return confirmedAt >= tableCreatedAt;
   }
   return confirmedAt >= tableCreatedAt;
+}
+
+async function orderAlreadyCreditedToTable(
+  tableId: number,
+  orderId: number,
+  client?: PoolClient,
+): Promise<boolean> {
+  const row = await pgGet<{ x: number }>(
+    `SELECT 1 AS x FROM raffle_bonus_table_entries
+     WHERE bonus_table_id = ? AND order_id = ?
+     LIMIT 1`,
+    [tableId, orderId],
+    client,
+  );
+  return Boolean(row);
 }
 
 async function getPaidTicketCountForOrder(orderId: number, client?: PoolClient): Promise<number> {
@@ -311,6 +335,7 @@ async function processOrderForTable(
 ): Promise<number[]> {
   if (!isWithinTableWindow(table, confirmedAt)) return [];
   if (!orderCountsForTable(table, confirmedAt, table.created_at)) return [];
+  if (await orderAlreadyCreditedToTable(table.id, orderId, client)) return [];
 
   const paidCount = await getPaidTicketCountForOrder(orderId, client);
   if (paidCount <= 0) return [];
@@ -447,7 +472,11 @@ export async function createBonusTable(
     await backfillBonusTablePriorSameDay(id);
   }
 
-  return { ok: true, table: bonusTableToDto(row, 0) };
+  const cnt = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM raffle_bonus_table_entries WHERE bonus_table_id = ?`,
+    [id],
+  );
+  return { ok: true, table: bonusTableToDto(row, Math.floor(Number(cnt?.c) || 0)) };
 }
 
 export type UpdateBonusTableInput = Partial<{
@@ -557,23 +586,69 @@ export async function deleteBonusTable(id: number): Promise<{ ok: true } | { ok:
 export async function backfillBonusTablePriorSameDay(tableId: number): Promise<void> {
   const table = await getBonusTableById(tableId);
   if (!table || table.count_from !== "include_prior_same_day") return;
+  if (table.status !== "active") return;
 
   const bounds = getSiteCalendarDayBoundsUtcMs(table.created_at);
   if (!bounds) return;
+  const dayKey = getSiteCalendarDayKey(table.created_at);
+  const rangeEnd = Math.min(Date.now(), table.end_at, bounds.endMs);
+  if (rangeEnd < bounds.startMs) return;
 
-  const orders = await pgAll<{ id: number; user_id: number; updated_at: number }>(
-    `SELECT o.id, o.user_id, o.updated_at
+  const orders = await pgAll<{ id: number; user_id: number; updated_at: number; confirmed_at: number | null }>(
+    `SELECT o.id, o.user_id, o.updated_at,
+            (SELECT MIN(e.created_at) FROM raffle_order_events e
+             WHERE e.order_id = o.id AND e.kind = 'confirmed') AS confirmed_at
      FROM raffle_orders o
      WHERE o.raffle_id = ? AND o.status = 'confirmed'
-       AND o.updated_at >= ? AND o.updated_at < ?
-     ORDER BY o.updated_at ASC, o.id ASC`,
-    [table.raffle_id, bounds.startMs, table.created_at],
+     ORDER BY COALESCE(
+       (SELECT MIN(e.created_at) FROM raffle_order_events e
+        WHERE e.order_id = o.id AND e.kind = 'confirmed'),
+       o.updated_at
+     ) ASC, o.id ASC`,
+    [table.raffle_id],
   );
 
+  type DayOrder = { id: number; user_id: number; confirmedAt: number };
+  const qualifying: DayOrder[] = [];
   for (const order of orders) {
+    const confirmedAt = Math.floor(Number(order.confirmed_at) || Number(order.updated_at) || 0);
+    if (!confirmedAt || confirmedAt < bounds.startMs || confirmedAt > rangeEnd) continue;
+    if (!orderCountsForTable(table, confirmedAt, table.created_at)) continue;
+    if (!isWithinTableWindow(table, confirmedAt)) continue;
+    qualifying.push({ id: order.id, user_id: order.user_id, confirmedAt });
+  }
+
+  if (table.period_scope === "same_day") {
+    // Полный пересчёт календарного дня создания таблицы.
+    if (qualifying.length) {
+      const ids = qualifying.map((o) => o.id);
+      const placeholders = ids.map(() => "?").join(", ");
+      await pgExec(
+        `DELETE FROM raffle_bonus_table_entries
+         WHERE bonus_table_id = ? AND order_id IN (${placeholders})`,
+        [tableId, ...ids],
+      );
+    }
+    if (dayKey) {
+      await pgExec(
+        `DELETE FROM raffle_bonus_table_progress WHERE bonus_table_id = ? AND period_key = ?`,
+        [tableId, dayKey],
+      );
+    }
+    for (const order of qualifying) {
+      const user = await getUserById(order.user_id);
+      if (!user) continue;
+      await processOrderForTable(table, order.id, order.user_id, user.phone, order.confirmedAt);
+    }
+    return;
+  }
+
+  // full_period: только добрать покупки до создания в этот день, без сброса уже накопленного.
+  for (const order of qualifying) {
+    if (order.confirmedAt >= table.created_at) continue;
     const user = await getUserById(order.user_id);
     if (!user) continue;
-    await processOrderForTable(table, order.id, order.user_id, user.phone, order.updated_at);
+    await processOrderForTable(table, order.id, order.user_id, user.phone, order.confirmedAt);
   }
 }
 
