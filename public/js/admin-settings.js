@@ -4,6 +4,8 @@
   const STORAGE_KEY = "ab_auth_v2";
   const DEFAULT_SUPPORT_MAX_URL =
     "https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w";
+  const DEFAULT_MAX_CHAT_JOIN_URL =
+    "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
 
   function loadSession() {
     try {
@@ -23,11 +25,12 @@
     return { Authorization: "Bearer " + x.token };
   }
 
-  function fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput) {
+  function fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput, maxChatJoinInput) {
     if (!toggle) return;
     toggle.disabled = true;
     if (blogToggle) blogToggle.disabled = true;
     if (maxUrlInput) maxUrlInput.disabled = true;
+    if (maxChatJoinInput) maxChatJoinInput.disabled = true;
     fetch("/api/admin/settings", { headers: authHeaders(), cache: "no-store" })
       .then(function (r) {
         return r.json().then(function (d) {
@@ -38,6 +41,7 @@
         toggle.disabled = false;
         if (blogToggle) blogToggle.disabled = false;
         if (maxUrlInput) maxUrlInput.disabled = false;
+        if (maxChatJoinInput) maxChatJoinInput.disabled = false;
         if (!x.ok) {
           if (statusEl) statusEl.textContent = x.d.error || "Не удалось загрузить настройки";
           return;
@@ -47,6 +51,9 @@
         if (maxUrlInput) {
           maxUrlInput.value = String(x.d.support_max_url || DEFAULT_SUPPORT_MAX_URL);
         }
+        if (maxChatJoinInput) {
+          maxChatJoinInput.value = String(x.d.max_chat_join_url || DEFAULT_MAX_CHAT_JOIN_URL);
+        }
         if (statusEl) statusEl.textContent = "";
         if (blogStatusEl) blogStatusEl.textContent = "";
       })
@@ -54,6 +61,7 @@
         toggle.disabled = false;
         if (blogToggle) blogToggle.disabled = false;
         if (maxUrlInput) maxUrlInput.disabled = false;
+        if (maxChatJoinInput) maxChatJoinInput.disabled = false;
         if (statusEl) statusEl.textContent = "Ошибка сети";
       });
   }
@@ -157,6 +165,39 @@
     });
   }
 
+  function bindMaxChatJoinUrl(maxChatJoinInput, saveBtn, statusEl) {
+    if (!maxChatJoinInput || !saveBtn) return;
+    if (saveBtn.dataset.abMaxChatJoinBound === "1") return;
+    saveBtn.dataset.abMaxChatJoinBound = "1";
+    saveBtn.addEventListener("click", function () {
+      const url = String(maxChatJoinInput.value || "").trim();
+      if (!url) {
+        if (statusEl) statusEl.textContent = "Укажите ссылку";
+        return;
+      }
+      saveBtn.disabled = true;
+      maxChatJoinInput.disabled = true;
+      if (statusEl) statusEl.textContent = "Сохранение…";
+      patchSettings(
+        { max_chat_join_url: url },
+        function (d) {
+          saveBtn.disabled = false;
+          maxChatJoinInput.disabled = false;
+          maxChatJoinInput.value = String(d.max_chat_join_url || url);
+          if (statusEl) statusEl.textContent = "Сохранено";
+          setTimeout(function () {
+            if (statusEl && statusEl.textContent === "Сохранено") statusEl.textContent = "";
+          }, 2000);
+        },
+        function (d) {
+          saveBtn.disabled = false;
+          maxChatJoinInput.disabled = false;
+          if (statusEl) statusEl.textContent = d.error || "Не удалось сохранить";
+        },
+      );
+    });
+  }
+
   window.abInitSettings = function () {
     const toggle = document.getElementById("admin-settings-maintenance");
     const statusEl = document.getElementById("admin-settings-status");
@@ -165,13 +206,17 @@
     const maxUrlInput = document.getElementById("admin-settings-support-max-url");
     const maxSaveBtn = document.getElementById("admin-settings-support-max-save");
     const maxStatusEl = document.getElementById("admin-settings-support-max-status");
+    const maxChatJoinInput = document.getElementById("admin-settings-max-chat-join-url");
+    const maxChatJoinSaveBtn = document.getElementById("admin-settings-max-chat-join-save");
+    const maxChatJoinStatusEl = document.getElementById("admin-settings-max-chat-join-status");
     if (!toggle) return;
     const s = loadSession();
     if (!s || !s.token) return;
 
-    fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput);
+    fetchSettings(toggle, statusEl, blogToggle, blogStatusEl, maxUrlInput, maxChatJoinInput);
     bindMaxBroadcast();
     bindSupportMaxUrl(maxUrlInput, maxSaveBtn, maxStatusEl);
+    bindMaxChatJoinUrl(maxChatJoinInput, maxChatJoinSaveBtn, maxChatJoinStatusEl);
 
     if (toggle.dataset.abSettingsChangeBound !== "1") {
       toggle.dataset.abSettingsChangeBound = "1";

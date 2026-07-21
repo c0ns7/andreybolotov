@@ -20,6 +20,7 @@ import {
   setMusicDefaultVolume,
   setMusicPlaybackMode,
   setSupportMaxUrl,
+  setMaxChatJoinUrl,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -343,6 +344,7 @@ function buildReceiptConfirmedChatCard(
   raffleTitle: string,
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
+  maxJoinUrl: string,
   bonusPromoLabel: "5+1" | "5+2" = "5+1",
 ): string {
   const paidUniq = [
@@ -367,7 +369,7 @@ function buildReceiptConfirmedChatCard(
     paid_tickets: paidUniq,
     bonus_tickets: bonusUniq,
     bonus_promo: bonusUniq.length ? bonusPromoLabel : null,
-    max_join_url: MAX_PRIVATE_CHAT_JOIN_URL,
+    max_join_url: maxJoinUrl || MAX_PRIVATE_CHAT_JOIN_URL,
     max_cta: "Присоединиться к чату в MAX",
   };
   return `[[AB_CARD:${encodeURIComponent(JSON.stringify(payload))}]]`;
@@ -377,15 +379,17 @@ function buildStaffRaffleReceiptConfirmedChatBody(
   raffleTitle: string,
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
+  maxJoinUrl: string,
   bonusPromoLabel: "5+1" | "5+2" = "5+1",
 ): string {
-  return buildReceiptConfirmedChatCard(raffleTitle, paidTicketNumbers, bonusTicketNumbers, bonusPromoLabel);
+  return buildReceiptConfirmedChatCard(raffleTitle, paidTicketNumbers, bonusTicketNumbers, maxJoinUrl, bonusPromoLabel);
 }
 
-function buildStaffMaxPrivateInviteOnlyChatBody(): string {
+function buildStaffMaxPrivateInviteOnlyChatBody(maxJoinUrl: string): string {
+  const url = String(maxJoinUrl || MAX_PRIVATE_CHAT_JOIN_URL).trim() || MAX_PRIVATE_CHAT_JOIN_URL;
   return (
     `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
-    MAX_PRIVATE_CHAT_JOIN_URL
+    url
   );
 }
 
@@ -1126,7 +1130,7 @@ adminSubApp.post("/music/upload", async (c) => {
 adminSubApp.patch("/settings", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
-  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown; support_max_url?: unknown };
+  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown; support_max_url?: unknown; max_chat_join_url?: unknown };
   try {
     body = await c.req.json();
   } catch {
@@ -1157,6 +1161,22 @@ adminSubApp.patch("/settings", async (c) => {
       return c.json({ error: "Некорректная ссылка" }, 400);
     }
     await setSupportMaxUrl(raw);
+  }
+  if (body.max_chat_join_url !== undefined) {
+    const raw = String(body.max_chat_join_url ?? "").trim();
+    if (!raw) return c.json({ error: "Укажите ссылку-приглашение в чат MAX" }, 400);
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "https:" && u.protocol !== "http:") {
+        return c.json({ error: "Ссылка должна начинаться с https://" }, 400);
+      }
+      if (!/(^|\.)max\.ru$/i.test(u.hostname)) {
+        return c.json({ error: "Разрешены только ссылки на max.ru" }, 400);
+      }
+    } catch {
+      return c.json({ error: "Некорректная ссылка" }, 400);
+    }
+    await setMaxChatJoinUrl(raw);
   }
   c.header("Cache-Control", "no-store");
   return c.json(await getSiteSettings());
@@ -1318,7 +1338,8 @@ adminSubApp.post("/broadcast-max-chat-invite", async (c) => {
   if (!userIds.length) {
     return c.json({ ok: true, sent: 0, total: 0, message: "Нет пользователей с закреплёнными оплатами" });
   }
-  const body = buildStaffMaxPrivateInviteOnlyChatBody();
+  const site = await getSiteSettings();
+  const body = buildStaffMaxPrivateInviteOnlyChatBody(site.max_chat_join_url);
   let sent = 0;
   const errors: string[] = [];
   for (const uid of userIds) {
@@ -1441,7 +1462,14 @@ adminSubApp.post("/raffle-payments/:orderId/confirm", async (c) => {
       const raffleRow = await getRaffleById(Number(owner.raffle_id));
       const bonusPromoLabel =
         bonusNums.length > 0 && Number(raffleRow?.promo_5_plus_2_enabled) === 1 ? "5+2" : "5+1";
-      let body = buildStaffRaffleReceiptConfirmedChatBody(title, ticketNumsBefore, bonusNums, bonusPromoLabel);
+      const site = await getSiteSettings();
+      let body = buildStaffRaffleReceiptConfirmedChatBody(
+        title,
+        ticketNumsBefore,
+        bonusNums,
+        site.max_chat_join_url,
+        bonusPromoLabel,
+      );
       try {
         const bonusAwards = await processBonusTablesForConfirmedOrder(orderId);
         if (bonusAwards.length) {

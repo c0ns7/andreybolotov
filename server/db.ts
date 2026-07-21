@@ -1433,6 +1433,7 @@ export async function getSiteSettings(): Promise<{
   music_default_volume: number;
   music_playback_mode: MusicPlaybackMode;
   support_max_url: string;
+  max_chat_join_url: string;
 }> {
   const row = await pgGet<{
     maintenance_enabled: number;
@@ -1441,8 +1442,9 @@ export async function getSiteSettings(): Promise<{
     music_default_volume?: number;
     music_playback_mode?: string;
     support_max_url?: string;
+    max_chat_join_url?: string;
   }>(
-    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode, support_max_url FROM site_settings WHERE id = 1`,
+    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode, support_max_url, max_chat_join_url FROM site_settings WHERE id = 1`,
   );
   const vol = Math.floor(Number(row?.music_default_volume ?? 35));
   return {
@@ -1452,30 +1454,48 @@ export async function getSiteSettings(): Promise<{
     music_default_volume: Math.max(0, Math.min(100, Number.isFinite(vol) ? vol : 35)),
     music_playback_mode: normalizeMusicPlaybackMode(row?.music_playback_mode),
     support_max_url: normalizeSupportMaxUrl(row?.support_max_url),
+    max_chat_join_url: normalizeMaxChatJoinUrl(row?.max_chat_join_url),
   };
 }
 
 const DEFAULT_SUPPORT_MAX_URL =
   "https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w";
 
-export function normalizeSupportMaxUrl(raw: unknown): string {
+const DEFAULT_MAX_CHAT_JOIN_URL =
+  "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
+
+function normalizeMaxRuUrl(raw: unknown, fallback: string): string {
   const s = String(raw ?? "")
     .trim()
     .slice(0, 500);
-  if (!s) return DEFAULT_SUPPORT_MAX_URL;
+  if (!s) return fallback;
   try {
     const u = new URL(s);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return DEFAULT_SUPPORT_MAX_URL;
-    if (!/(^|\.)max\.ru$/i.test(u.hostname)) return DEFAULT_SUPPORT_MAX_URL;
+    if (u.protocol !== "https:" && u.protocol !== "http:") return fallback;
+    if (!/(^|\.)max\.ru$/i.test(u.hostname)) return fallback;
     return u.toString();
   } catch {
-    return DEFAULT_SUPPORT_MAX_URL;
+    return fallback;
   }
+}
+
+export function normalizeSupportMaxUrl(raw: unknown): string {
+  return normalizeMaxRuUrl(raw, DEFAULT_SUPPORT_MAX_URL);
+}
+
+export function normalizeMaxChatJoinUrl(raw: unknown): string {
+  return normalizeMaxRuUrl(raw, DEFAULT_MAX_CHAT_JOIN_URL);
 }
 
 export async function setSupportMaxUrl(url: string): Promise<string> {
   const normalized = normalizeSupportMaxUrl(url);
   await pgExec(`UPDATE site_settings SET support_max_url = ? WHERE id = 1`, [normalized]);
+  return normalized;
+}
+
+export async function setMaxChatJoinUrl(url: string): Promise<string> {
+  const normalized = normalizeMaxChatJoinUrl(url);
+  await pgExec(`UPDATE site_settings SET max_chat_join_url = ? WHERE id = 1`, [normalized]);
   return normalized;
 }
 

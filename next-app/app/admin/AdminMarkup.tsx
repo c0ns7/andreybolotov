@@ -894,6 +894,35 @@ export default function AdminMarkup() {
             <p className="admin-settings-card__status" id="admin-settings-blog-status" role="status"></p>
           </div>
           <div className="admin-settings-card">
+            <h2 className="admin-settings-card__title">Приглашение в чат MAX</h2>
+            <p className="admin-settings-card__text">
+              Ссылка «Присоединиться к чату в MAX» в сообщении после закрепления номерков и в массовой рассылке по закреплённым оплатам.
+              Обновляйте, когда меняется invite-ссылка на приватный чат.
+            </p>
+            <label className="admin-settings-field" htmlFor="admin-settings-max-chat-join-url">
+              <span className="admin-settings-field__label">Ссылка-приглашение (max.ru/join/…)</span>
+              <input
+                id="admin-settings-max-chat-join-url"
+                className="input admin-settings-field__input"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                placeholder="https://max.ru/join/..."
+              />
+            </label>
+            <button type="button" className="admin-settings-action-btn" id="admin-settings-max-chat-join-save">
+              <span className="admin-settings-action-btn__ico" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+              </span>
+              <span>Сохранить ссылку</span>
+            </button>
+            <p className="admin-settings-card__status" id="admin-settings-max-chat-join-status" role="status"></p>
+          </div>
+          <div className="admin-settings-card">
             <h2 className="admin-settings-card__title">Ссылка MAX для сброса пароля</h2>
             <p className="admin-settings-card__text">
               Эта ссылка показывается в окне «Забыли пароль?» на главной. Пользователи пишут вам в MAX для восстановления доступа.

@@ -95,52 +95,6 @@ function notifyRaffleGridMutated(raffleId: number | undefined | null): void {
   if (Number.isFinite(r) && r > 0) broadcastRaffleGridUpdated(r);
 }
 
-/** Ссылка-приглашение в приватный чат Андрея Болотова в MAX (показывается в авто-сообщении после утверждения чека). */
-const MAX_PRIVATE_CHAT_JOIN_URL =
-  "https://max.ru/join/_vIVZ3_FIwNimrGLFBwVEDWR408uZ3uynFc336CYX2k";
-
-function buildStaffRaffleReceiptConfirmedChatBody(
-  raffleTitle: string,
-  paidTicketNumbers: number[],
-  bonusTicketNumbers: number[],
-  bonusPromoLabel: "5+1" | "5+2" = "5+1",
-): string {
-  const paidUniq = [
-    ...new Set(paidTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
-  ];
-  paidUniq.sort((a, b) => a - b);
-  const bonusUniq = [
-    ...new Set(
-      bonusTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
-    ),
-  ];
-  bonusUniq.sort((a, b) => a - b);
-  const paidHuman = paidUniq.length ? paidUniq.map((n) => `№${n}`).join(", ") : "—";
-  const bonusHuman = bonusUniq.length ? bonusUniq.map((n) => `№${n}`).join(", ") : "—";
-  const safeTitle = String(raffleTitle || "акция")
-    .trim()
-    .slice(0, 180);
-  const bonusBlock = bonusUniq.length
-    ? `\n\n🎁 По акции ${bonusPromoLabel} дополнительно закреплены бонусные номерки: ${bonusHuman}.`
-    : "";
-  return (
-    `Поздравляем! Чек по акции «${safeTitle}» закреплён.\n` +
-    `Оплаченные номерки: ${paidHuman}.` +
-    bonusBlock +
-    `\n\n` +
-    `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
-    MAX_PRIVATE_CHAT_JOIN_URL
-  );
-}
-
-/** Только приглашение в MAX (без текста про закрепление номерков) — массовая рассылка в чат. */
-function buildStaffMaxPrivateInviteOnlyChatBody(): string {
-  return (
-    `Если вас ещё нет в нашем приватном чате в MAX, вы можете присоединиться по кнопке ниже.\n` +
-    MAX_PRIVATE_CHAT_JOIN_URL
-  );
-}
-
 const RAFFLE_VIEW_TTL_MS = 70_000;
 const raffleViewersByRaffle = new Map<number, Map<number, number>>();
 
