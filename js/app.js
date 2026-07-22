@@ -4603,12 +4603,18 @@
         '" alt="" width="480" height="160" loading="lazy" data-raffle-media-img="1" />';
     }
     var promoPackKind = resolvePromoPackFromRaffle(r);
-    var hasPromoPack = !hasSecondPrice && !!promoPackKind;
+    var hasPromoPackKind = !!promoPackKind;
+    var hasPromoPack = hasPromoPackKind;
+    var promoPackCorner = hasSecondPrice && hasPromoPackKind;
     var promoPackLabel =
       String(r.promo_pack_label || "").trim() ||
       (promoPackKind ? PROMO_PACK_META[promoPackKind].label : "");
     var promoBadge = hasPromoPack
-      ? '<div class="raffle-card__promo-badge">АКЦИЯ ' + escapeHtml(promoPackLabel) + "</div>"
+      ? '<div class="raffle-card__promo-badge' +
+        (promoPackCorner ? " raffle-card__promo-badge--cover-br" : "") +
+        '">АКЦИЯ ' +
+        escapeHtml(promoPackLabel) +
+        "</div>"
       : "";
     var promoInfoBtn = hasPromoPack
       ? '<button type="button" class="raffle-card__promo-info-btn" data-promo-info-open="1" data-promo-pack="' +
@@ -4699,6 +4705,9 @@
       '<article class="raffle-card' +
       (st === "active" && salesOpen ? " raffle-card--active" : "") +
       (isScheduled ? " raffle-card--scheduled" : "") +
+      (hasSecondPrice ? " raffle-card--cenopad" : "") +
+      (hasPromoPack ? " raffle-card--promo-5plus1" : "") +
+      (promoPackCorner ? " raffle-card--promo-pack-corner" : "") +
       (hideTicketStats ? " raffle-card--hide-stats" : "") +
       '" data-raffle-open="1" data-raffle-idx="' +
       idx +

@@ -3228,6 +3228,23 @@ html.theme-dark .home-faq-item__a {
   animation: rafflePromoBadgePulse 1.9s ease-in-out infinite;
 }
 
+.raffle-card__promo-badge--cover-br {
+  top: auto;
+  left: auto;
+  bottom: 10px;
+  right: 10px;
+  z-index: 4;
+}
+
+.raffle-card__media:has(.raffle-card__promo-badge--cover-br) .raffle-card__viewers {
+  bottom: 44px;
+  right: 10px;
+}
+
+.raffle-card__media:has(.raffle-card__promo-badge--cover-br) .raffle-card__title {
+  padding-right: 92px;
+}
+
 .raffle-card__promo-special {
   position: absolute;
   top: 0;

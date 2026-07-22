@@ -627,6 +627,7 @@ export default function HomeAppClient() {
                 const promoPack = resolvePromoPackFromRaffle(r);
                 const promoPackLabel = String(r.promo_pack_label || "").trim() || promoPack?.label || "";
                 const hasPromoPack = Boolean(promoPack);
+                const promoPackCorner = hasSecondPriceActive && hasPromoPack;
                 const showTableBtn =
                   canOpenTable && tableRaffleId > 0 && Math.floor(Number(r.id) || 0) === tableRaffleId;
                 const secondPriceEndAt = Math.floor(
@@ -659,6 +660,7 @@ export default function HomeAppClient() {
                       (isScheduled ? " raffle-card--scheduled" : "") +
                       (hasSecondPriceActive ? " raffle-card--cenopad" : "") +
                       (hasPromoPack ? " raffle-card--promo-5plus1" : "") +
+                      (promoPackCorner ? " raffle-card--promo-pack-corner" : "") +
                       (hideTicketStats ? " raffle-card--hide-stats" : "")
                     }
                     data-status={st}
@@ -683,7 +685,15 @@ export default function HomeAppClient() {
                         autoPlayVideo={false}
                       />
                       <div className="raffle-card__grad" />
-                      {hasPromoPack ? <div className="raffle-card__promo-badge">{promoPackLabel}</div> : null}
+                      {hasPromoPack ? (
+                        <div
+                          className={
+                            "raffle-card__promo-badge" + (promoPackCorner ? " raffle-card__promo-badge--cover-br" : "")
+                          }
+                        >
+                          {promoPackLabel}
+                        </div>
+                      ) : null}
                       {hasSecondPriceActive ? (
                         <div className="raffle-card__promo-special" aria-label="Акция по второй цене">
                           <div className="raffle-card__promo-special-title">АКЦИЯ СПЕЦИАЛЬНО ДЛЯ ВАС</div>
