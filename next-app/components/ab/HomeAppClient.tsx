@@ -8,6 +8,7 @@ import { isFullAccessStaff } from "../../lib/ab-admin-roles";
 import { abApiJson, abAuthHeaders, AbApiError } from "../../lib/ab-api";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
+import { resolvePromoPackFromRaffle } from "../../lib/ab-promo-pack";
 import AppBottomNav from "./AppBottomNav";
 import { useSiteFlags } from "../../lib/use-site-flags";
 import HomeFeedEmpty from "./HomeFeedEmpty";
@@ -46,6 +47,8 @@ type RaffleRow = {
   my_order_status?: string;
   promo_5_plus_1_enabled?: number | boolean;
   promo_5_plus_2_enabled?: number | boolean;
+  promo_10_plus_1_enabled?: number | boolean;
+  promo_10_plus_2_enabled?: number | boolean;
   live_stream_note?: string | null;
   live_stream_url?: string | null;
   live_stream_at?: number | null;
@@ -621,8 +624,9 @@ export default function HomeAppClient() {
                 const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
                 const hasPromo5plus2 = Boolean(Number(r.promo_5_plus_2_enabled) || r.promo_5_plus_2_enabled === true);
                 const hasPromo5plus1 = Boolean(Number(r.promo_5_plus_1_enabled) || r.promo_5_plus_1_enabled === true);
-                const hasPromoPack = hasPromo5plus1 || hasPromo5plus2;
-                const promoPackLabel = hasPromo5plus2 ? "5+2" : "5+1";
+                const promoPack = resolvePromoPackFromRaffle(r);
+                const hasPromoPack = Boolean(promoPack);
+                const promoPackLabel = promoPack?.label ?? "";
                 const showTableBtn =
                   canOpenTable && tableRaffleId > 0 && Math.floor(Number(r.id) || 0) === tableRaffleId;
                 const secondPriceEndAt = Math.floor(
@@ -654,7 +658,8 @@ export default function HomeAppClient() {
                       (st === "active" && salesOpen ? " raffle-card--active" : "") +
                       (isScheduled ? " raffle-card--scheduled" : "") +
                       (hasSecondPriceActive ? " raffle-card--cenopad" : "") +
-                      (hasPromoPack ? " raffle-card--promo-5plus1" : "")
+                      (hasPromoPack ? " raffle-card--promo-5plus1" : "") +
+                      (hideTicketStats ? " raffle-card--hide-stats" : "")
                     }
                     data-status={st}
                     role={st === "active" && salesOpen ? "link" : undefined}

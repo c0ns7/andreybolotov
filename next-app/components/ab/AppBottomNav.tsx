@@ -60,7 +60,23 @@ type TicketGroup = {
   order?: { id?: number };
 };
 
-type HistoryTimelineStatus = "reserved" | "pending_review" | "confirmed" | "bonus_5plus1" | "bonus_5plus2";
+type HistoryTimelineStatus =
+  | "reserved"
+  | "pending_review"
+  | "confirmed"
+  | "bonus_5plus1"
+  | "bonus_5plus2"
+  | "bonus_10plus1"
+  | "bonus_10plus2";
+
+function isBonusHistoryStatus(status?: HistoryTimelineStatus): boolean {
+  return (
+    status === "bonus_5plus1" ||
+    status === "bonus_5plus2" ||
+    status === "bonus_10plus1" ||
+    status === "bonus_10plus2"
+  );
+}
 
 type HistoryTimelineEntry = {
   at?: number;
@@ -79,6 +95,8 @@ type HistoryPayload = {
       bonus_confirmed?: number[];
       bonus_5plus1_confirmed?: number[];
       bonus_5plus2_confirmed?: number[];
+      bonus_10plus1_confirmed?: number[];
+      bonus_10plus2_confirmed?: number[];
     };
     last_activity_at?: number;
   }>;
@@ -161,7 +179,7 @@ function raffleHistoryStatusBadge(status?: string) {
 function historyEventChipVariant(status?: HistoryTimelineStatus): "reserved" | "pending" | "confirmed" | "bonus" {
   if (status === "pending_review") return "pending";
   if (status === "confirmed") return "confirmed";
-  if (status === "bonus_5plus1" || status === "bonus_5plus2") return "bonus";
+  if (isBonusHistoryStatus(status)) return "bonus";
   return "reserved";
 }
 
@@ -177,7 +195,7 @@ function historyEventMeta(
   }
   if (status === "pending_review") return { text: "На проверке", mod: "pending" };
   if (status === "reserved") return { text: "В брони", mod: "reserved" };
-  if (status === "bonus_5plus1" || status === "bonus_5plus2") return { text: "Бонус", mod: "bonus" };
+  if (isBonusHistoryStatus(status)) return { text: "Бонус", mod: "bonus" };
   return null;
 }
 
@@ -200,6 +218,8 @@ function buildFallbackHistoryTimeline(
       [
         ...(it.numbers?.bonus_5plus1_confirmed || []),
         ...(it.numbers?.bonus_5plus2_confirmed || []),
+        ...(it.numbers?.bonus_10plus1_confirmed || []),
+        ...(it.numbers?.bonus_10plus2_confirmed || []),
         ...(it.numbers?.bonus_confirmed || []),
       ]
         .map((n) => Math.floor(Number(n)))

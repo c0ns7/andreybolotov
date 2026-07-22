@@ -24,6 +24,8 @@ export function hasEverConfirmedTickets(
         nums.bonus_confirmed,
         nums.bonus_5plus1_confirmed,
         nums.bonus_5plus2_confirmed,
+        nums.bonus_10plus1_confirmed,
+        nums.bonus_10plus2_confirmed,
       ];
       for (const arr of buckets) {
         if (Array.isArray(arr) && arr.length > 0) return true;

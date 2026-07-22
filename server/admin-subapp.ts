@@ -95,6 +95,7 @@ import {
   processBonusTablesForConfirmedOrder,
   updateBonusTable,
 } from "./raffle-bonus-tables.js";
+import { resolvePromoPackFromRaffle, type PromoPackLabel } from "./promo-pack.js";
 import {
   createBlogPost,
   deleteBlogPost,
@@ -345,7 +346,7 @@ function buildReceiptConfirmedChatCard(
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
   maxJoinUrl: string,
-  bonusPromoLabel: "5+1" | "5+2" = "5+1",
+  bonusPromoLabel: PromoPackLabel = "5+1",
 ): string {
   const paidUniq = [
     ...new Set(paidTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0)),
@@ -380,7 +381,7 @@ function buildStaffRaffleReceiptConfirmedChatBody(
   paidTicketNumbers: number[],
   bonusTicketNumbers: number[],
   maxJoinUrl: string,
-  bonusPromoLabel: "5+1" | "5+2" = "5+1",
+  bonusPromoLabel: PromoPackLabel = "5+1",
 ): string {
   return buildReceiptConfirmedChatCard(raffleTitle, paidTicketNumbers, bonusTicketNumbers, maxJoinUrl, bonusPromoLabel);
 }
@@ -608,6 +609,8 @@ type RaffleInput = {
   wholesale_every_n_tickets: number;
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
+  promo_10_plus_1_enabled: boolean;
+  promo_10_plus_2_enabled: boolean;
   hidden_from_public: boolean;
   hide_ticket_stats: boolean;
   sequential_batch_size: number;
@@ -775,8 +778,16 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   }
   const promo_5_plus_1_enabled = Boolean(body.promo_5_plus_1_enabled);
   const promo_5_plus_2_enabled = Boolean(body.promo_5_plus_2_enabled);
-  if (promo_5_plus_1_enabled && promo_5_plus_2_enabled) {
-    return { ok: false, error: "Включите только одну акцию: 5+1 или 5+2." };
+  const promo_10_plus_1_enabled = Boolean(body.promo_10_plus_1_enabled);
+  const promo_10_plus_2_enabled = Boolean(body.promo_10_plus_2_enabled);
+  const promoEnabledCount = [
+    promo_5_plus_1_enabled,
+    promo_5_plus_2_enabled,
+    promo_10_plus_1_enabled,
+    promo_10_plus_2_enabled,
+  ].filter(Boolean).length;
+  if (promoEnabledCount > 1) {
+    return { ok: false, error: "Включите только одну акцию: 5+1, 5+2, 10+1 или 10+2." };
   }
   const hidden_from_public = Boolean(body.hidden_from_public);
   const hide_ticket_stats = Boolean(body.hide_ticket_stats);
@@ -911,6 +922,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       wholesale_every_n_tickets,
       promo_5_plus_1_enabled,
       promo_5_plus_2_enabled,
+      promo_10_plus_1_enabled,
+      promo_10_plus_2_enabled,
       hidden_from_public,
       hide_ticket_stats,
       sequential_batch_size,
@@ -1461,7 +1474,7 @@ adminSubApp.post("/raffle-payments/:orderId/confirm", async (c) => {
       const title = String(owner.raffle_title ?? "").trim() || "Акция";
       const raffleRow = await getRaffleById(Number(owner.raffle_id));
       const bonusPromoLabel =
-        bonusNums.length > 0 && Number(raffleRow?.promo_5_plus_2_enabled) === 1 ? "5+2" : "5+1";
+        bonusNums.length > 0 ? resolvePromoPackFromRaffle(raffleRow)?.label ?? "5+1" : "5+1";
       const site = await getSiteSettings();
       let body = buildStaffRaffleReceiptConfirmedChatBody(
         title,
@@ -1700,6 +1713,8 @@ adminSubApp.post("/raffles", async (c) => {
     card_payment_min_tickets: v.card_payment_min_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
+    promo_10_plus_1_enabled: v.promo_10_plus_1_enabled ? 1 : 0,
+    promo_10_plus_2_enabled: v.promo_10_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
     hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
     sequential_batch_size: v.sequential_batch_size,
@@ -1773,6 +1788,8 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     card_payment_min_tickets: v.card_payment_min_tickets,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
+    promo_10_plus_1_enabled: v.promo_10_plus_1_enabled ? 1 : 0,
+    promo_10_plus_2_enabled: v.promo_10_plus_2_enabled ? 1 : 0,
     hidden_from_public: v.hidden_from_public ? 1 : 0,
     hide_ticket_stats: v.hide_ticket_stats ? 1 : 0,
     sequential_batch_size: v.sequential_batch_size,

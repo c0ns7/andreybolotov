@@ -1428,10 +1428,10 @@ export default function AdminMarkup() {
               </div>
               <div className="form-group admin-raffle-toggle-row" role="group" aria-labelledby="raffle-promo-pack-legend">
                 <div id="raffle-promo-pack-legend" className="admin-toggle__label">
-                  Акция «5 + бонус»
+                  Акция «N + бонус»
                 </div>
                 <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
-                  Можно включить только один вариант. Счётчики закреплённых бонусных номерков ведутся отдельно для 5+1 и 5+2.
+                  Можно включить только один вариант. Счётчики закреплённых бонусных номерков ведутся отдельно для каждого типа акции.
                 </p>
                 <div className="admin-promo-pack-radios" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
                   <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
@@ -1445,6 +1445,14 @@ export default function AdminMarkup() {
                   <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
                     <input id="raffle-promo-pack-5plus2" type="radio" name="raffle-promo-pack" value="5plus2" />
                     <span>5+2 — за каждые 5 оплаченных закрепляется 2 бонусных номерка</span>
+                  </label>
+                  <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                    <input id="raffle-promo-pack-10plus1" type="radio" name="raffle-promo-pack" value="10plus1" />
+                    <span>10+1 — за каждые 10 оплаченных закрепляется 1 бонусный номерок</span>
+                  </label>
+                  <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                    <input id="raffle-promo-pack-10plus2" type="radio" name="raffle-promo-pack" value="10plus2" />
+                    <span>10+2 — за каждые 10 оплаченных закрепляется 2 бонусных номерка</span>
                   </label>
                 </div>
                 <p className="admin-raffle-field-hint admin-raffle-field-hint--tight" id="raffle-promo-5-plus-1-stats"></p>

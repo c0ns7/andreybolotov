@@ -3699,6 +3699,11 @@ html.theme-dark .home-faq-item__a {
   padding: 16px 12px;
 }
 
+.raffle-card--hide-stats .raffle-card__price-row,
+.raffle-card__foot:not(:has(.raffle-card__progress-wrap)) .raffle-card__price-row {
+  margin-top: 0;
+}
+
 .raffle-card__actions {
   display: inline-flex;
   align-items: center;

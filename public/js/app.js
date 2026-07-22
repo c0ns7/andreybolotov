@@ -3781,10 +3781,19 @@
     return { text: "Акция", mod: "default" };
   }
 
+  function isBonusHistoryStatus(st) {
+    return (
+      st === "bonus_5plus1" ||
+      st === "bonus_5plus2" ||
+      st === "bonus_10plus1" ||
+      st === "bonus_10plus2"
+    );
+  }
+
   function historyEventChipVariant(st) {
     if (st === "pending_review") return "pending";
     if (st === "confirmed") return "confirmed";
-    if (st === "bonus_5plus1" || st === "bonus_5plus2") return "bonus";
+    if (isBonusHistoryStatus(st)) return "bonus";
     return "reserved";
   }
 
@@ -3800,7 +3809,7 @@
     if (st === "reserved") {
       return '<span class="history-event__tag history-event__tag--reserved">В брони</span>';
     }
-    if (st === "bonus_5plus1" || st === "bonus_5plus2") {
+    if (isBonusHistoryStatus(st)) {
       return '<span class="history-event__tag history-event__tag--bonus">Бонус</span>';
     }
     return "";
@@ -3968,12 +3977,56 @@
     closeModal(modalParticipationHistory);
   }
 
+  var PROMO_PACK_META = {
+    "5plus1": { base: 5, mult: 1, label: "5+1" },
+    "5plus2": { base: 5, mult: 2, label: "5+2" },
+    "10plus1": { base: 10, mult: 1, label: "10+1" },
+    "10plus2": { base: 10, mult: 2, label: "10+2" },
+  };
+
+  function resolvePromoPackFromRaffle(r) {
+    if (!r) return null;
+    if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) return "10plus2";
+    if (Number(r.promo_10_plus_1_enabled) === 1 || r.promo_10_plus_1_enabled === true) return "10plus1";
+    if (Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true) return "5plus2";
+    if (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true) return "5plus1";
+    return null;
+  }
+
+  function promoPackHeroHtml(meta) {
+    var double = meta.base * 2;
+    var bonusDouble = meta.mult * 2;
+    if (meta.mult === 2) {
+      return (
+        "Если вы приобретаете <strong>" +
+        String(meta.base) +
+        " номерков</strong>, после проверки оплаты вам добавляются <strong>2 случайных номерка в подарок</strong>. Если покупаете <strong>" +
+        String(double) +
+        "</strong>, получите <strong>+" +
+        String(bonusDouble) +
+        "</strong>, и так далее."
+      );
+    }
+    return (
+      "Если вы приобретаете <strong>" +
+      String(meta.base) +
+      " номерков</strong>, после проверки оплаты вам добавляется <strong>1 случайный номерок в подарок</strong>. Если покупаете <strong>" +
+      String(double) +
+      "</strong>, получите <strong>+" +
+      String(bonusDouble) +
+      "</strong>, и так далее."
+    );
+  }
+
   function updatePromo5Plus1Calc() {
     var input = document.getElementById("promo-5-plus-1-input");
     var result = document.getElementById("promo-5-plus-1-result");
     if (!result) return;
     var mult = 1;
+    var base = 5;
     if (modalPromo5Plus1) {
+      var b = Number(modalPromo5Plus1.getAttribute("data-promo-base") || "5");
+      base = Number.isFinite(b) && b > 0 ? b : 5;
       var m = Number(modalPromo5Plus1.getAttribute("data-promo-per-five") || "1");
       mult = Number.isFinite(m) && m > 0 ? m : 1;
     }
@@ -3985,7 +4038,7 @@
       result.textContent = "В подарок: 0 номерков";
       return;
     }
-    var bonus = Math.floor(paid / 5) * mult;
+    var bonus = Math.floor(paid / base) * mult;
     result.textContent =
       "В подарок: " +
       String(bonus) +
@@ -4004,19 +4057,15 @@
     closeParticipationHistoryModal();
     closeTicketSearchModal();
     if (!modalPromo5Plus1) return;
-    var mult = kind === "5plus2" ? 2 : 1;
-    modalPromo5Plus1.setAttribute("data-promo-per-five", String(mult));
+    var meta = PROMO_PACK_META[kind] || PROMO_PACK_META["5plus1"];
+    modalPromo5Plus1.setAttribute("data-promo-base", String(meta.base));
+    modalPromo5Plus1.setAttribute("data-promo-per-five", String(meta.mult));
     var titleEl = document.getElementById("modal-promo-5-plus-1-title");
-    if (titleEl) titleEl.textContent = mult === 2 ? "Что за акция 5+2?" : "Что за акция 5+1?";
+    if (titleEl) titleEl.textContent = "Что за акция " + meta.label + "?";
     var badgeEl = document.getElementById("promo-sheet-hero-badge");
-    if (badgeEl) badgeEl.textContent = mult === 2 ? "АКЦИЯ 5+2" : "АКЦИЯ 5+1";
+    if (badgeEl) badgeEl.textContent = "АКЦИЯ " + meta.label;
     var heroEl = document.getElementById("promo-sheet-hero-text");
-    if (heroEl) {
-      heroEl.innerHTML =
-        mult === 2
-          ? "Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляются <strong>2 случайных номерка в подарок</strong>. Если покупаете <strong>10</strong>, получите <strong>+4</strong>, и так далее."
-          : "Если вы приобретаете <strong>5 номерков</strong>, после проверки оплаты вам добавляется <strong>1 случайный номерок в подарок</strong>. Если покупаете <strong>10</strong>, получите <strong>+2</strong>, и так далее.";
-    }
+    if (heroEl) heroEl.innerHTML = promoPackHeroHtml(meta);
     var input = document.getElementById("promo-5-plus-1-input");
     if (input) input.value = "";
     updatePromo5Plus1Calc();
@@ -4551,11 +4600,9 @@
         escapeHtml(coverImgSrc || coverGifSrc) +
         '" alt="" width="480" height="160" loading="lazy" data-raffle-media-img="1" />';
     }
-    var hasPromo5plus1 = Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true;
-    var hasPromo5plus2 = Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true;
-    var hasPromoPack = !hasSecondPrice && (hasPromo5plus1 || hasPromo5plus2);
-    var promoPackKind = hasPromo5plus2 ? "5plus2" : "5plus1";
-    var promoPackLabel = hasPromo5plus2 ? "5+2" : "5+1";
+    var promoPackKind = resolvePromoPackFromRaffle(r);
+    var hasPromoPack = !hasSecondPrice && !!promoPackKind;
+    var promoPackLabel = promoPackKind ? PROMO_PACK_META[promoPackKind].label : "";
     var promoBadge = hasPromoPack
       ? '<div class="raffle-card__promo-badge">АКЦИЯ ' + escapeHtml(promoPackLabel) + "</div>"
       : "";
@@ -4648,6 +4695,7 @@
       '<article class="raffle-card' +
       (st === "active" && salesOpen ? " raffle-card--active" : "") +
       (isScheduled ? " raffle-card--scheduled" : "") +
+      (hideTicketStats ? " raffle-card--hide-stats" : "") +
       '" data-raffle-open="1" data-raffle-idx="' +
       idx +
       '" data-status="' +
@@ -4963,7 +5011,7 @@
         e.preventDefault();
         e.stopPropagation();
         var k = String(node.getAttribute("data-promo-pack") || "5plus1");
-        openPromoPackModal(k === "5plus2" ? "5plus2" : "5plus1");
+        openPromoPackModal(PROMO_PACK_META[k] ? k : "5plus1");
       });
     });
     el.querySelectorAll(".raffle-card__stream-cta").forEach(function (node) {

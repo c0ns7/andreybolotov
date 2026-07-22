@@ -8,7 +8,9 @@ export type AbParticipationHistoryTimelineStatus =
   | "pending_review"
   | "confirmed"
   | "bonus_5plus1"
-  | "bonus_5plus2";
+  | "bonus_5plus2"
+  | "bonus_10plus1"
+  | "bonus_10plus2";
 
 export type AbParticipationHistoryTimelineEntry = {
   at?: number;
@@ -27,6 +29,8 @@ export type AbParticipationHistoryPayload = {
       bonus_confirmed?: number[];
       bonus_5plus1_confirmed?: number[];
       bonus_5plus2_confirmed?: number[];
+      bonus_10plus1_confirmed?: number[];
+      bonus_10plus2_confirmed?: number[];
     };
     last_activity_at?: number;
   }>;

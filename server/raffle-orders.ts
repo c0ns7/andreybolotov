@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
 import { decodeCdnSafeToken } from "./ab-cdn-safe-token.js";
+import { calcPromoGiftCount, resolvePromoPackFromRaffle } from "./promo-pack.js";
 import {
   getRaffleById,
   getRaffleEffectiveUnitPrice,
@@ -1292,15 +1293,9 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
   const now = Date.now();
   const raffleId = o.raffle_id;
   const paidCount = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
-  const bonusPerFive =
-    Number(raffle.promo_5_plus_2_enabled) === 1
-      ? 2
-      : Number(raffle.promo_5_plus_1_enabled) === 1
-        ? 1
-        : 0;
-  const giftWant =
-    bonusPerFive > 0 && paidCount >= 5 ? Math.floor(paidCount / 5) * bonusPerFive : 0;
-  const bonusPromoKind = bonusPerFive === 2 ? "5plus2" : bonusPerFive === 1 ? "5plus1" : null;
+  const promoPack = resolvePromoPackFromRaffle(raffle);
+  const giftWant = promoPack ? calcPromoGiftCount(paidCount, promoPack) : 0;
+  const bonusPromoKind = promoPack?.kind ?? null;
   const giftedNumbers: number[] = [];
   const client = await pgPool.connect();
   try {
@@ -1334,7 +1329,7 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
     }
     const eventDetail = giftedNumbers.length
       ? JSON.stringify({
-          promo: bonusPerFive === 2 ? "5+2" : "5+1",
+          promo: promoPack?.label ?? null,
           gift_count: giftedNumbers.length,
           gift_numbers: giftedNumbers,
         })
@@ -1931,7 +1926,9 @@ export type ParticipationHistoryTimelineStatus =
   | "pending_review"
   | "confirmed"
   | "bonus_5plus1"
-  | "bonus_5plus2";
+  | "bonus_5plus2"
+  | "bonus_10plus1"
+  | "bonus_10plus2";
 
 export type ParticipationHistoryTimelineEntry = {
   at: number;
@@ -1951,8 +1948,30 @@ export type ParticipationHistoryRaffle = {
     bonus_confirmed: number[];
     bonus_5plus1_confirmed: number[];
     bonus_5plus2_confirmed: number[];
+    bonus_10plus1_confirmed: number[];
+    bonus_10plus2_confirmed: number[];
   };
 };
+
+function participationHistoryBonusMeta(kind: string): {
+  status: ParticipationHistoryTimelineStatus;
+  arrayKey:
+    | "bonus_5plus1_confirmed"
+    | "bonus_5plus2_confirmed"
+    | "bonus_10plus1_confirmed"
+    | "bonus_10plus2_confirmed";
+} {
+  switch (String(kind || "").trim()) {
+    case "5plus2":
+      return { status: "bonus_5plus2", arrayKey: "bonus_5plus2_confirmed" };
+    case "10plus1":
+      return { status: "bonus_10plus1", arrayKey: "bonus_10plus1_confirmed" };
+    case "10plus2":
+      return { status: "bonus_10plus2", arrayKey: "bonus_10plus2_confirmed" };
+    default:
+      return { status: "bonus_5plus1", arrayKey: "bonus_5plus1_confirmed" };
+  }
+}
 
 function participationHistoryTimelineKey(
   raffleId: number,
@@ -2045,6 +2064,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
           bonus_confirmed: [],
           bonus_5plus1_confirmed: [],
           bonus_5plus2_confirmed: [],
+          bonus_10plus1_confirmed: [],
+          bonus_10plus2_confirmed: [],
         },
       };
       map.set(rid, entry);
@@ -2074,25 +2095,15 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
       if (Number(row.is_bonus) === 1) {
         if (!entry.numbers.bonus_confirmed.includes(n)) entry.numbers.bonus_confirmed.push(n);
         const kind = String(row.bonus_promo_kind || "").trim();
-        if (kind === "5plus2") {
-          if (!entry.numbers.bonus_5plus2_confirmed.includes(n)) entry.numbers.bonus_5plus2_confirmed.push(n);
-          pushParticipationHistoryTimelineNumber(
-            tlMap,
-            rid,
-            "bonus_5plus2",
-            holdAt || confirmedAt || ordUpdatedAt,
-            n,
-          );
-        } else {
-          if (!entry.numbers.bonus_5plus1_confirmed.includes(n)) entry.numbers.bonus_5plus1_confirmed.push(n);
-          pushParticipationHistoryTimelineNumber(
-            tlMap,
-            rid,
-            "bonus_5plus1",
-            holdAt || confirmedAt || ordUpdatedAt,
-            n,
-          );
-        }
+        const meta = participationHistoryBonusMeta(kind);
+        if (!entry.numbers[meta.arrayKey].includes(n)) entry.numbers[meta.arrayKey].push(n);
+        pushParticipationHistoryTimelineNumber(
+          tlMap,
+          rid,
+          meta.status,
+          holdAt || confirmedAt || ordUpdatedAt,
+          n,
+        );
       } else {
         if (!entry.numbers.confirmed.includes(n)) entry.numbers.confirmed.push(n);
         pushParticipationHistoryTimelineNumber(tlMap, rid, "confirmed", confirmedAt || ordUpdatedAt || holdAt, n);
@@ -2108,6 +2119,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     it.numbers.bonus_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus1_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus2_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_10plus1_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_10plus2_confirmed.sort((a, b) => a - b);
     const tlMap = timelineByRaffle.get(it.raffle.id);
     const timeline = tlMap ? [...tlMap.values()] : [];
     for (const row of timeline) row.numbers.sort((a, b) => a - b);
@@ -2484,23 +2497,31 @@ export async function recalculateWholesaleForRaffle(raffleId: number): Promise<v
   }
 }
 
-/** Сколько бонусных номерков по акциям 5+1 и 5+2 закреплено подтверждёнными заказами. */
+/** Сколько бонусных номерков по акциям 5+1, 5+2, 10+1 и 10+2 закреплено подтверждёнными заказами. */
 export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Promise<void> {
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
-  const row = await pgGet<{ c1: number; c2: number }>(
+  const row = await pgGet<{ c1: number; c2: number; c3: number; c4: number }>(
     `SELECT
        COUNT(*) FILTER (
          WHERE COALESCE(h.is_bonus, 0) = 1
            AND (h.bonus_promo_kind IS NULL OR h.bonus_promo_kind = '5plus1')
        )::bigint AS c1,
-       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '5plus2')::bigint AS c2
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '5plus2')::bigint AS c2,
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '10plus1')::bigint AS c3,
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '10plus2')::bigint AS c4
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status = 'confirmed'`,
     [raffleId],
   );
-  await setRafflePromoGiftLockedCounts(raffleId, Number(row?.c1 ?? 0), Number(row?.c2 ?? 0));
+  await setRafflePromoGiftLockedCounts(
+    raffleId,
+    Number(row?.c1 ?? 0),
+    Number(row?.c2 ?? 0),
+    Number(row?.c3 ?? 0),
+    Number(row?.c4 ?? 0),
+  );
 }
 
 export async function recalculateRaffleDerivedStatsForRaffle(raffleId: number): Promise<void> {
