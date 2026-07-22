@@ -3572,9 +3572,18 @@ html.theme-dark .home-faq-item__a {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
+.raffle-card__stream-pill--start {
+  border-color: rgba(147, 197, 253, 0.35);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.raffle-card__stream-pill--start .raffle-card__stream-pill-time {
+  color: #bfdbfe;
+}
+
 .raffle-card--scheduled .raffle-card__media,
 .raffle-card__media:has(.raffle-card__shutter--scheduled) {
-  filter: saturate(0.92) brightness(0.96);
+  filter: none;
 }
 
 .raffle-card__media:has(.raffle-card__shutter--paused) {

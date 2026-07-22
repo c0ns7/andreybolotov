@@ -687,14 +687,6 @@ export default function HomeAppClient() {
                           </div>
                         </div>
                       ) : null}
-                      {isScheduled ? (
-                        <RaffleCardShutter variant="scheduled">
-                          <p className="raffle-card__shutter-line">До старта акции</p>
-                          {publicStartCountdown ? (
-                            <p className="raffle-card__shutter-timer">{publicStartCountdown}</p>
-                          ) : null}
-                        </RaffleCardShutter>
-                      ) : null}
                       {isPendingReview ? (
                         <div className="raffle-card__badge-wrap raffle-card__badge-wrap--pending-review">
                           <div className="raffle-card__badge raffle-card__badge--pending-review">На проверке</div>
@@ -710,8 +702,17 @@ export default function HomeAppClient() {
                           <p className="raffle-card__shutter-line">Скоро вернёмся</p>
                         </RaffleCardShutter>
                       ) : null}
-                      {priceStartPill || streamPill ? (
+                      {isScheduled || priceStartPill || streamPill ? (
                         <div className="raffle-card__info-pills">
+                          {isScheduled ? (
+                            <div
+                              className="raffle-card__stream-pill raffle-card__stream-pill--start"
+                              aria-label={"До старта " + (publicStartCountdown || "")}
+                            >
+                              <span className="raffle-card__stream-pill-kicker">до старта</span>
+                              <span className="raffle-card__stream-pill-time">{publicStartCountdown || "—"}</span>
+                            </div>
+                          ) : null}
                           {priceStartPill ? (
                             <div
                               className="raffle-card__stream-pill raffle-card__stream-pill--price"

@@ -4469,9 +4469,18 @@
           "</span></div>";
       }
     }
+    var scheduledStartPillHtml = "";
+    if (isScheduled) {
+      scheduledStartPillHtml =
+        '<div class="raffle-card__stream-pill raffle-card__stream-pill--start" aria-label="До старта акции">' +
+        '<span class="raffle-card__stream-pill-kicker">до старта</span>' +
+        '<span class="raffle-card__stream-pill-time" data-raffle-public-start-countdown="' +
+        escapeHtml(String(publicStartAt)) +
+        '"></span></div>';
+    }
     var infoPillsHtml =
-      pricePillHtml || streamPillHtml
-        ? '<div class="raffle-card__info-pills">' + pricePillHtml + streamPillHtml + "</div>"
+      scheduledStartPillHtml || pricePillHtml || streamPillHtml
+        ? '<div class="raffle-card__info-pills">' + scheduledStartPillHtml + pricePillHtml + streamPillHtml + "</div>"
         : "";
     function raffleShutterHtml(variant, bodyInner) {
       var heads = {
@@ -4503,15 +4512,7 @@
     }
 
     var badgeBlock = "";
-    if (isScheduled) {
-      badgeBlock = raffleShutterHtml(
-        "scheduled",
-        '<p class="raffle-card__shutter-line">До старта акции</p>' +
-          '<p class="raffle-card__shutter-timer" data-raffle-public-start-countdown="' +
-          escapeHtml(String(publicStartAt)) +
-          '"></p>',
-      );
-    } else if (st === "active" && myOrderStatus === "pending_review") {
+    if (st === "active" && myOrderStatus === "pending_review") {
       badgeBlock =
         '<div class="raffle-card__badge-wrap raffle-card__badge-wrap--pending-review">' +
         '<div class="raffle-card__badge raffle-card__badge--pending-review">На проверке</div>' +
