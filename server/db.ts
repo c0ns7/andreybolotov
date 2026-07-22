@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { raffleHashLookupCandidates } from "./ab-cdn-safe-token.js";
+import { resolvePromoPackFromRaffle, type PromoPackKind, type PromoPackLabel } from "./promo-pack.js";
 import { normalizePhone } from "./phone.js";
 import {
   cleanupExpiredPasswordResetTokensPg,
@@ -909,6 +910,8 @@ export type RaffleDto = {
   promo_10_plus_1_locked_free_count: number;
   promo_10_plus_2_enabled: boolean;
   promo_10_plus_2_locked_free_count: number;
+  promo_pack_kind: PromoPackKind | null;
+  promo_pack_label: PromoPackLabel | null;
   hidden_from_public?: boolean;
   public_start_at?: number | null;
   /** Продажи открыты по серверному времени (учитывает public_start_at). */
@@ -984,6 +987,7 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
     !opts?.forAdmin && isRaffleCenopadActive(r) && cenopadPrice > 0
       ? cenopadPrice
       : Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
+  const promoPack = resolvePromoPackFromRaffle(r as RaffleRow);
   const dto: RaffleDto = {
     id: r.id,
     raffle_hash: String((r as RaffleRow).raffle_hash ?? ""),
@@ -1060,6 +1064,8 @@ export function raffleToDto(r: RaffleRow, opts?: { forAdmin?: boolean }): Raffle
       0,
       Math.floor(Number((r as RaffleRow).promo_10_plus_2_locked_free_count ?? 0)),
     ),
+    promo_pack_kind: promoPack?.kind ?? null,
+    promo_pack_label: promoPack?.label ?? null,
     hide_ticket_stats: Boolean(Number((r as RaffleRow).hide_ticket_stats ?? 0)),
     sequential_batch_size: Math.max(
       0,

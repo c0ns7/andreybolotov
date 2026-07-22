@@ -27,13 +27,46 @@ function flagOn(v: number | boolean | null | undefined): boolean {
   return Number(v) === 1 || v === true;
 }
 
-export function resolvePromoPackFromRaffle(raffle: RafflePromoFlags | null | undefined): PromoPackSpec | null {
+export function detectPromoPackKind(
+  raffle: (RafflePromoFlags & { promo_pack?: string | null; promo_pack_kind?: string | null }) | null | undefined,
+): PromoPackKind | null {
   if (!raffle) return null;
-  if (flagOn(raffle.promo_10_plus_2_enabled)) return SPECS["10plus2"];
-  if (flagOn(raffle.promo_10_plus_1_enabled)) return SPECS["10plus1"];
-  if (flagOn(raffle.promo_5_plus_2_enabled)) return SPECS["5plus2"];
-  if (flagOn(raffle.promo_5_plus_1_enabled)) return SPECS["5plus1"];
+  const kindField = String(raffle.promo_pack_kind ?? "")
+    .trim()
+    .toLowerCase();
+  if (kindField === "10plus1" || kindField === "10plus2" || kindField === "5plus1" || kindField === "5plus2") {
+    return kindField;
+  }
+  const pack = String(raffle.promo_pack ?? "")
+    .trim()
+    .toLowerCase();
+  if (pack === "10plus1" || pack === "10plus2" || pack === "5plus1" || pack === "5plus2") {
+    return pack;
+  }
+  if (flagOn(raffle.promo_10_plus_1_enabled)) return "10plus1";
+  if (flagOn(raffle.promo_10_plus_2_enabled)) return "10plus2";
+  if (flagOn(raffle.promo_5_plus_1_enabled)) return "5plus1";
+  if (flagOn(raffle.promo_5_plus_2_enabled)) return "5plus2";
   return null;
+}
+
+export function promoFlagsFromKind(kind: PromoPackKind | null): {
+  promo_5_plus_1_enabled: boolean;
+  promo_5_plus_2_enabled: boolean;
+  promo_10_plus_1_enabled: boolean;
+  promo_10_plus_2_enabled: boolean;
+} {
+  return {
+    promo_5_plus_1_enabled: kind === "5plus1",
+    promo_5_plus_2_enabled: kind === "5plus2",
+    promo_10_plus_1_enabled: kind === "10plus1",
+    promo_10_plus_2_enabled: kind === "10plus2",
+  };
+}
+
+export function resolvePromoPackFromRaffle(raffle: RafflePromoFlags | null | undefined): PromoPackSpec | null {
+  const kind = detectPromoPackKind(raffle);
+  return kind ? SPECS[kind] : null;
 }
 
 export function calcPromoGiftCount(paidCount: number, spec: PromoPackSpec): number {

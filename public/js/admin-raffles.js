@@ -24,14 +24,24 @@
   let participantsSearchTimer = null;
   const PARTICIPANTS_PAGE_SIZE = 120;
   const revealedPhones = new Set();
+  const PROMO_PACK_LABELS = {
+    "5plus1": "5+1",
+    "5plus2": "5+2",
+    "10plus1": "10+1",
+    "10plus2": "10+2",
+  };
 
   function resolvePromoPackFromRaffle(r) {
     if (!r) return null;
-    if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) {
-      return { kind: "10plus2", label: "10+2" };
+    var kind = String(r.promo_pack_kind || "").trim();
+    if (kind === "10plus1" || kind === "10plus2" || kind === "5plus1" || kind === "5plus2") {
+      return { kind: kind, label: PROMO_PACK_LABELS[kind] };
     }
     if (Number(r.promo_10_plus_1_enabled) === 1 || r.promo_10_plus_1_enabled === true) {
       return { kind: "10plus1", label: "10+1" };
+    }
+    if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) {
+      return { kind: "10plus2", label: "10+2" };
     }
     if (Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true) {
       return { kind: "5plus2", label: "5+2" };
@@ -1307,15 +1317,17 @@
     }
     syncWholesaleEveryNRow();
     var pack =
-      edit && edit.promo_10_plus_2_enabled
-        ? "10plus2"
+      edit && edit.promo_pack_kind
+        ? String(edit.promo_pack_kind)
         : edit && edit.promo_10_plus_1_enabled
           ? "10plus1"
-          : edit && edit.promo_5_plus_2_enabled
-            ? "5plus2"
-            : edit && edit.promo_5_plus_1_enabled
-              ? "5plus1"
-              : "none";
+          : edit && edit.promo_10_plus_2_enabled
+            ? "10plus2"
+            : edit && edit.promo_5_plus_2_enabled
+              ? "5plus2"
+              : edit && edit.promo_5_plus_1_enabled
+                ? "5plus1"
+                : "none";
     ["none", "5plus1", "5plus2", "10plus1", "10plus2"].forEach(function (v) {
       var el = document.getElementById("raffle-promo-pack-" + v);
       if (el) el.checked = pack === v;
@@ -2424,21 +2436,10 @@
         return n;
       })(),
       bank_cards: bank_cards,
-      promo_5_plus_1_enabled: (function () {
+      promo_pack: (function () {
         var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
-        return el && el.value === "5plus1";
-      })(),
-      promo_5_plus_2_enabled: (function () {
-        var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
-        return el && el.value === "5plus2";
-      })(),
-      promo_10_plus_1_enabled: (function () {
-        var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
-        return el && el.value === "10plus1";
-      })(),
-      promo_10_plus_2_enabled: (function () {
-        var el = document.querySelector('input[name="raffle-promo-pack"]:checked');
-        return el && el.value === "10plus2";
+        var v = el ? String(el.value || "").trim() : "";
+        return v && v !== "none" ? v : null;
       })(),
       hidden_from_public: (function () {
         var h = document.getElementById("raffle-hidden-from-public");

@@ -3986,8 +3986,10 @@
 
   function resolvePromoPackFromRaffle(r) {
     if (!r) return null;
-    if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) return "10plus2";
+    var kind = String(r.promo_pack_kind || "").trim();
+    if (kind === "10plus1" || kind === "10plus2" || kind === "5plus1" || kind === "5plus2") return kind;
     if (Number(r.promo_10_plus_1_enabled) === 1 || r.promo_10_plus_1_enabled === true) return "10plus1";
+    if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) return "10plus2";
     if (Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true) return "5plus2";
     if (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true) return "5plus1";
     return null;
@@ -4602,7 +4604,9 @@
     }
     var promoPackKind = resolvePromoPackFromRaffle(r);
     var hasPromoPack = !hasSecondPrice && !!promoPackKind;
-    var promoPackLabel = promoPackKind ? PROMO_PACK_META[promoPackKind].label : "";
+    var promoPackLabel =
+      String(r.promo_pack_label || "").trim() ||
+      (promoPackKind ? PROMO_PACK_META[promoPackKind].label : "");
     var promoBadge = hasPromoPack
       ? '<div class="raffle-card__promo-badge">АКЦИЯ ' + escapeHtml(promoPackLabel) + "</div>"
       : "";

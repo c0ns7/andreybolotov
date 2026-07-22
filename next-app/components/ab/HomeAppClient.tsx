@@ -49,6 +49,8 @@ type RaffleRow = {
   promo_5_plus_2_enabled?: number | boolean;
   promo_10_plus_1_enabled?: number | boolean;
   promo_10_plus_2_enabled?: number | boolean;
+  promo_pack_kind?: string | null;
+  promo_pack_label?: string | null;
   live_stream_note?: string | null;
   live_stream_url?: string | null;
   live_stream_at?: number | null;
@@ -622,11 +624,9 @@ export default function HomeAppClient() {
                 const currentPrice = Math.max(0, Math.floor(Number(r.price_rub ?? 0)));
                 const basePrice = Math.max(0, Math.floor(Number(r.base_price_rub ?? currentPrice)));
                 const hasSecondPriceActive = basePrice > currentPrice && currentPrice > 0;
-                const hasPromo5plus2 = Boolean(Number(r.promo_5_plus_2_enabled) || r.promo_5_plus_2_enabled === true);
-                const hasPromo5plus1 = Boolean(Number(r.promo_5_plus_1_enabled) || r.promo_5_plus_1_enabled === true);
                 const promoPack = resolvePromoPackFromRaffle(r);
+                const promoPackLabel = String(r.promo_pack_label || "").trim() || promoPack?.label || "";
                 const hasPromoPack = Boolean(promoPack);
-                const promoPackLabel = promoPack?.label ?? "";
                 const showTableBtn =
                   canOpenTable && tableRaffleId > 0 && Math.floor(Number(r.id) || 0) === tableRaffleId;
                 const secondPriceEndAt = Math.floor(

@@ -95,7 +95,7 @@ import {
   processBonusTablesForConfirmedOrder,
   updateBonusTable,
 } from "./raffle-bonus-tables.js";
-import { resolvePromoPackFromRaffle, type PromoPackLabel } from "./promo-pack.js";
+import { detectPromoPackKind, promoFlagsFromKind, resolvePromoPackFromRaffle, type PromoPackLabel } from "./promo-pack.js";
 import {
   createBlogPost,
   deleteBlogPost,
@@ -780,11 +780,19 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   const promo_5_plus_2_enabled = Boolean(body.promo_5_plus_2_enabled);
   const promo_10_plus_1_enabled = Boolean(body.promo_10_plus_1_enabled);
   const promo_10_plus_2_enabled = Boolean(body.promo_10_plus_2_enabled);
-  const promoEnabledCount = [
+  const promoPackKind = detectPromoPackKind({
+    promo_pack: typeof body.promo_pack === "string" ? body.promo_pack : null,
     promo_5_plus_1_enabled,
     promo_5_plus_2_enabled,
     promo_10_plus_1_enabled,
     promo_10_plus_2_enabled,
+  });
+  const promoFlags = promoFlagsFromKind(promoPackKind);
+  const promoEnabledCount = [
+    promoFlags.promo_5_plus_1_enabled,
+    promoFlags.promo_5_plus_2_enabled,
+    promoFlags.promo_10_plus_1_enabled,
+    promoFlags.promo_10_plus_2_enabled,
   ].filter(Boolean).length;
   if (promoEnabledCount > 1) {
     return { ok: false, error: "Включите только одну акцию: 5+1, 5+2, 10+1 или 10+2." };
@@ -920,10 +928,10 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       sort_order,
       wholesale_enabled,
       wholesale_every_n_tickets,
-      promo_5_plus_1_enabled,
-      promo_5_plus_2_enabled,
-      promo_10_plus_1_enabled,
-      promo_10_plus_2_enabled,
+      promo_5_plus_1_enabled: promoFlags.promo_5_plus_1_enabled,
+      promo_5_plus_2_enabled: promoFlags.promo_5_plus_2_enabled,
+      promo_10_plus_1_enabled: promoFlags.promo_10_plus_1_enabled,
+      promo_10_plus_2_enabled: promoFlags.promo_10_plus_2_enabled,
       hidden_from_public,
       hide_ticket_stats,
       sequential_batch_size,
