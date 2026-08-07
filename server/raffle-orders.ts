@@ -3129,6 +3129,140 @@ export async function getAdminRaffleParticipantsBundle(raffleId: number): Promis
   };
 }
 
+export type AdminRafflePurchasedExportTicket = {
+  number: number;
+  is_bonus: boolean;
+  bonus_promo_kind: string | null;
+};
+
+export type AdminRafflePurchasedExportParticipant = {
+  user_id: number;
+  name: string;
+  phone: string;
+  locality: string;
+  email: string;
+  ticket_count: number;
+  paid_ticket_count: number;
+  bonus_ticket_count: number;
+  tickets: AdminRafflePurchasedExportTicket[];
+};
+
+export type AdminRafflePurchasedExportPayload = {
+  exported_at: string;
+  format_version: 1;
+  raffle: {
+    id: number;
+    title: string;
+    status: string;
+    ticket_count: number;
+  };
+  stats: {
+    participants_count: number;
+    tickets_count: number;
+    paid_tickets_count: number;
+    bonus_tickets_count: number;
+  };
+  participants: AdminRafflePurchasedExportParticipant[];
+};
+
+/** JSON-экспорт подтверждённых (купленных) номерков с данными пользователя. */
+export async function buildAdminRafflePurchasedTicketsExport(
+  raffleId: number,
+): Promise<AdminRafflePurchasedExportPayload | null> {
+  await cleanupExpiredRaffleOrders();
+  const raffle = await getRaffleById(raffleId);
+  if (!raffle) return null;
+  const rows = await pgAll<{
+    ticket_number: number;
+    user_id: number;
+    is_bonus: number;
+    bonus_promo_kind: string | null;
+    user_phone: string;
+    user_name: string;
+    user_email: string;
+    user_locality: string;
+  }>(
+    `SELECT h.ticket_number AS ticket_number,
+            h.user_id AS user_id,
+            COALESCE(h.is_bonus, 0)::int AS is_bonus,
+            h.bonus_promo_kind AS bonus_promo_kind,
+            u.phone AS user_phone,
+            COALESCE(u.name, '') AS user_name,
+            COALESCE(u.email, '') AS user_email,
+            COALESCE(u.locality, '') AS user_locality
+       FROM raffle_ticket_holds h
+       INNER JOIN raffle_orders o ON o.id = h.order_id
+       INNER JOIN users u ON u.id = o.user_id
+      WHERE h.raffle_id = ? AND o.status = 'confirmed'
+      ORDER BY h.ticket_number ASC`,
+    [raffleId],
+  );
+  const byUser = new Map<number, AdminRafflePurchasedExportParticipant>();
+  for (const row of rows) {
+    const userId = Math.floor(Number(row.user_id) || 0);
+    if (!userId) continue;
+    const ticketNumber = Math.floor(Number(row.ticket_number) || 0);
+    if (!ticketNumber) continue;
+    const isBonus = Number(row.is_bonus) === 1;
+    const bonusKind = String(row.bonus_promo_kind ?? "").trim() || null;
+    let participant = byUser.get(userId);
+    if (!participant) {
+      participant = {
+        user_id: userId,
+        name: String(row.user_name ?? "").trim(),
+        phone: String(row.user_phone ?? "").trim(),
+        locality: String(row.user_locality ?? "").trim(),
+        email: String(row.user_email ?? "").trim(),
+        ticket_count: 0,
+        paid_ticket_count: 0,
+        bonus_ticket_count: 0,
+        tickets: [],
+      };
+      byUser.set(userId, participant);
+    }
+    participant.tickets.push({
+      number: ticketNumber,
+      is_bonus: isBonus,
+      bonus_promo_kind: bonusKind,
+    });
+  }
+  const participants = [...byUser.values()].map((p) => {
+    p.tickets.sort((a, b) => a.number - b.number);
+    p.ticket_count = p.tickets.length;
+    p.paid_ticket_count = p.tickets.filter((t) => !t.is_bonus).length;
+    p.bonus_ticket_count = p.tickets.filter((t) => t.is_bonus).length;
+    return p;
+  });
+  participants.sort((a, b) => {
+    const an = a.name.toLocaleLowerCase("ru");
+    const bn = b.name.toLocaleLowerCase("ru");
+    if (an && bn && an !== bn) return an.localeCompare(bn, "ru");
+    if (an && !bn) return -1;
+    if (!an && bn) return 1;
+    return a.phone.localeCompare(b.phone, "ru");
+  });
+  const ticketsCount = participants.reduce((sum, p) => sum + p.ticket_count, 0);
+  const paidTicketsCount = participants.reduce((sum, p) => sum + p.paid_ticket_count, 0);
+  const bonusTicketsCount = participants.reduce((sum, p) => sum + p.bonus_ticket_count, 0);
+  return {
+    exported_at: new Date().toISOString(),
+    format_version: 1,
+    raffle: {
+      id: raffleId,
+      title: String(raffle.title || ""),
+      status: String(raffle.status || ""),
+      ticket_count: Math.max(0, Math.floor(Number(raffle.ticket_count) || 0)),
+    },
+    stats: {
+      participants_count: participants.length,
+      tickets_count: ticketsCount,
+      paid_tickets_count: paidTicketsCount,
+      bonus_tickets_count: bonusTicketsCount,
+    },
+    participants,
+  };
+}
+
 function normalizeAdminParticipantsSearch(raw: string): { kind: "ticket" | "phone"; value: string } | null {
   const digits = String(raw || "").replace(/[^\d]/g, "");
   if (!digits) return null;

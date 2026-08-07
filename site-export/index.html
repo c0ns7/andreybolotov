@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Поиск участников акции</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="top__brand">
+          <p class="top__kicker">Локальный просмотр</p>
+          <h1 class="top__title">Участники акции</h1>
+        </div>
+        <div class="top__actions">
+          <label class="file-btn">
+            <input id="file-input" type="file" accept=".json,application/json" hidden />
+            <span>Открыть JSON</span>
+          </label>
+        </div>
+      </header>
+
+      <section id="empty-state" class="empty">
+        <div class="empty__card">
+          <h2>Загрузите экспорт акции</h2>
+          <p>
+            В админке откройте акцию → <strong>Участники</strong> → <strong>Экспорт JSON</strong>.
+            Затем откройте скачанный файл здесь — можно искать по ФИО, телефону или номерку.
+          </p>
+          <label class="file-btn file-btn--primary">
+            <input id="file-input-empty" type="file" accept=".json,application/json" hidden />
+            <span>Выбрать файл</span>
+          </label>
+          <p class="empty__hint">Файл остаётся только в браузере, никуда не отправляется.</p>
+        </div>
+      </section>
+
+      <section id="workspace" class="workspace" hidden>
+        <div class="meta">
+          <div class="meta__main">
+            <h2 id="raffle-title" class="meta__title">—</h2>
+            <p id="raffle-sub" class="meta__sub">—</p>
+          </div>
+          <div class="meta__stats" id="stats"></div>
+        </div>
+
+        <div class="search">
+          <label class="search__label" for="search-input">Поиск</label>
+          <input
+            id="search-input"
+            class="search__input"
+            type="search"
+            placeholder="ФИО / телефон / номерок / населённый пункт"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p id="search-status" class="search__status"></p>
+        </div>
+
+        <div id="results" class="results"></div>
+      </section>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

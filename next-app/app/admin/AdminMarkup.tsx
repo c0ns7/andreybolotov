@@ -1562,23 +1562,38 @@ export default function AdminMarkup() {
               aria-labelledby="raffle-participants-tab-list"
               aria-hidden="false"
             >
-              <label className="form-group admin-raffle-participants__search" htmlFor="raffle-participants-search">
-                <span className="admin-raffle-participants__search-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <div className="admin-raffle-participants__toolbar">
+                <label className="form-group admin-raffle-participants__search" htmlFor="raffle-participants-search">
+                  <span className="admin-raffle-participants__search-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    Поиск: номерок или телефон
+                  </span>
+                  <input
+                    id="raffle-participants-search"
+                    className="input admin-raffle-participants__search-input"
+                    type="search"
+                    inputMode="numeric"
+                    placeholder="До 6 цифр — номерок; от 7 — телефон"
+                    autoComplete="off"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="admin-raffle-btn admin-raffle-participants__export-btn"
+                  id="raffle-participants-export"
+                  title="Скачать JSON всех купленных номерков с данными участников"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
                   </svg>
-                  Поиск: номерок или телефон
-                </span>
-                <input
-                  id="raffle-participants-search"
-                  className="input admin-raffle-participants__search-input"
-                  type="search"
-                  inputMode="numeric"
-                  placeholder="До 6 цифр — номерок; от 7 — телефон"
-                  autoComplete="off"
-                />
-              </label>
+                  <span>Экспорт JSON</span>
+                </button>
+              </div>
               <div id="raffle-participants-list" className="admin-raffle-participants__list"></div>
             </section>
             <section id="raffle-participants-panel-wholesalers" className="admin-raffle-participants-panel" data-panel="wholesalers" role="tabpanel" aria-labelledby="raffle-participants-tab-wholesalers" aria-hidden="true" hidden>

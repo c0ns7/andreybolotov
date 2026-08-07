@@ -61,6 +61,7 @@ import {
   adminDetachParticipantTicket,
   adminFullyReleaseRaffleOrder,
   adminUserTicketsForPrimaryRaffle,
+  buildAdminRafflePurchasedTicketsExport,
   listAdminRaffleParticipantsPage,
   listAdminRaffleWholesalers,
   listActiveOrdersForAdmin,
@@ -1889,6 +1890,27 @@ adminSubApp.get("/raffles/:id/participants", async (c) => {
     limit,
     has_more: offset + page.participants.length < page.total,
   });
+});
+
+adminSubApp.get("/raffles/:id/participants/export", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Некорректный id" }, 400);
+  const payload = await buildAdminRafflePurchasedTicketsExport(id);
+  if (!payload) return c.json({ error: "Акция не найдена" }, 404);
+  const safeTitle = String(payload.raffle.title || "raffle")
+    .trim()
+    .replace(/[^\p{L}\p{N}\-_]+/gu, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 60);
+  const stamp = payload.exported_at.slice(0, 19).replace(/[-:T]/g, "");
+  const filename = `raffle-${id}-${safeTitle || "export"}-${stamp}.json`;
+  c.header("Cache-Control", "no-store");
+  c.header("Content-Type", "application/json; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${filename}"`);
+  return c.body(JSON.stringify(payload, null, 2));
 });
 
 adminSubApp.get("/raffles/:id/tickets/:ticketNumber/availability", async (c) => {

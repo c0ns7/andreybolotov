@@ -1090,6 +1090,45 @@
   color: #b45309;
 }
 
+.admin-raffle-participants__toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.admin-raffle-participants__toolbar .admin-raffle-participants__search {
+  flex: 1 1 220px;
+  margin-bottom: 0;
+}
+.admin-raffle-participants__export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.admin-raffle-participants__export-btn:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+.admin-raffle-participants__export-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.admin-raffle-participants__export-btn svg {
+  flex-shrink: 0;
+  color: #64748b;
+}
 .admin-raffle-participants__search-label {
   display: inline-flex;
   align-items: center;

@@ -601,6 +601,7 @@
   const statsSubtitle = document.getElementById("modal-raffle-stats-subtitle");
   let statsRaffleId = null;
   const participantsSearch = document.getElementById("raffle-participants-search");
+  const participantsExportBtn = document.getElementById("raffle-participants-export");
   const participantsList = document.getElementById("raffle-participants-list");
 
   function participantTabButtons() {
@@ -1765,6 +1766,43 @@
     }
   }
 
+  async function exportParticipantsJson() {
+    if (!participantsRaffleId) return;
+    if (participantsExportBtn) participantsExportBtn.disabled = true;
+    try {
+      const res = await fetch("/api/admin/raffles/" + participantsRaffleId + "/participants/export", {
+        method: "GET",
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        var errData = await res.json().catch(function () {
+          return {};
+        });
+        throw new Error(errData.error || errData.message || "Не удалось скачать экспорт");
+      }
+      var blob = await res.blob();
+      var cd = String(res.headers.get("Content-Disposition") || "");
+      var filename = "raffle-" + String(participantsRaffleId) + "-export.json";
+      var m = /filename=\"([^\"]+)\"/i.exec(cd);
+      if (m && m[1]) filename = m[1];
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () {
+        URL.revokeObjectURL(url);
+      }, 1500);
+    } catch (err) {
+      alert(err && err.message ? err.message : "Ошибка экспорта");
+    } finally {
+      if (participantsExportBtn) participantsExportBtn.disabled = false;
+    }
+  }
+
   async function openParticipants(raffleId) {
     if (!modalParticipants || !participantsList) return;
     participantsRaffleId = raffleId;
@@ -2000,6 +2038,9 @@
           "</p>";
       });
     }, 250);
+  });
+  participantsExportBtn?.addEventListener("click", function () {
+    void exportParticipantsJson();
   });
   participantsList?.addEventListener("scroll", function () {
     if (!participantsRaffleId || participantsActiveTab !== "participants") return;
