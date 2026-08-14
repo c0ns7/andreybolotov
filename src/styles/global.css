@@ -5332,6 +5332,26 @@ html.theme-dark .bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .botto
   text-underline-offset: 2px;
 }
 
+.pay-sheet-pay-copy-link {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.pay-sheet-pay-copy-link:hover {
+  color: #78350f;
+}
+
 .pay-sheet-pay-link--yandex {
   background: linear-gradient(135deg, #fc3f1d, #ff6a00);
   border-color: rgba(255, 255, 255, 0.18);

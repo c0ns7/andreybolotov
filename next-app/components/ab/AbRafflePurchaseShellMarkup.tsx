@@ -381,6 +381,9 @@ export default function AbRafflePurchaseShellMarkup() {
             >
               Нет Яндекс Браузера? Скачать
             </a>
+            <button type="button" className="pay-sheet-pay-copy-link" id="reserve-payment-copy-bank-url">
+              Долго грузится? Скопировать ссылку на оплату
+            </button>
           </aside>
 
           <div className="pay-sheet-instr">

@@ -13,7 +13,7 @@ import {
   validateReceiptFileForUpload,
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
-import { openPaymentInYandexBrowser } from "../../lib/ab-yandex-browser";
+import { copyPaymentUrlToClipboard, openPaymentInYandexBrowser } from "../../lib/ab-yandex-browser";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration";
 import AppBottomNav from "./AppBottomNav";
@@ -2338,6 +2338,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         else if (m === "bank_card") bankBadge.textContent = "Карта";
         else bankBadge.textContent = "QR";
       }
+      const copyBankBtn = document.getElementById("reserve-payment-copy-bank-url");
+      if (copyBankBtn) copyBankBtn.hidden = m !== "collection" && m !== "tbank_collection";
       const rules = String(r.rules_url || "").trim();
       const rw = document.getElementById("reserve-payment-rules-wrap");
       const rl = document.getElementById("reserve-payment-rules-link") as HTMLAnchorElement | null;
@@ -2565,12 +2567,35 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       e.preventDefault();
       openPaymentInYandexBrowser(bankUrl);
-      toastRef.current("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
+      toastRef.current("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
+    };
+    const getActiveBankPaymentUrl = () => {
+      const d = reserveDraftRef.current;
+      const rf = raffleRef.current;
+      if (!d || !rf) return "";
+      if (d.paymentMethod === "tbank_collection") return String(rf.tbank_collection_url || "").trim();
+      if (d.paymentMethod === "collection") return String(rf.collection_url || "").trim();
+      return "";
+    };
+    const onCopyBankUrl = () => {
+      const bankUrl = getActiveBankPaymentUrl();
+      if (!bankUrl) {
+        toastRef.current("Реквизиты пока не настроены", "warning");
+        return;
+      }
+      void copyPaymentUrlToClipboard(bankUrl).then((ok) => {
+        toastRef.current(
+          ok ? "Ссылка скопирована — вставьте её в адресную строку Яндекс Браузера" : "Не удалось скопировать",
+          ok ? "success" : "warning",
+        );
+      });
     };
     const elPayLink = document.getElementById("reserve-payment-link");
     const elPayLinkTbank = document.getElementById("reserve-payment-link-tbank");
+    const elCopyBankUrl = document.getElementById("reserve-payment-copy-bank-url");
     elPayLink?.addEventListener("click", onPayLinkClick);
     elPayLinkTbank?.addEventListener("click", onPayLinkClick);
+    elCopyBankUrl?.addEventListener("click", onCopyBankUrl);
 
     const onPayDone = () => {
       paintTransferredHint(false);
@@ -2880,6 +2905,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       elPayClose?.removeEventListener("click", onPayClose);
       elPayLink?.removeEventListener("click", onPayLinkClick);
       elPayLinkTbank?.removeEventListener("click", onPayLinkClick);
+      elCopyBankUrl?.removeEventListener("click", onCopyBankUrl);
       elModalPay?.removeEventListener("click", onModalPayClick);
       elAltReq?.removeEventListener("click", onAltReqClick);
       elCancelDismiss?.removeEventListener("click", onCancelDismiss);

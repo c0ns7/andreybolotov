@@ -2326,22 +2326,11 @@
     return "https://" + url.replace(/^\/+/, "");
   }
 
-  function urlHostPath(raw) {
-    var url = normalizeHttpUrl(raw);
-    if (!url) return "";
-    try {
-      var u = new URL(url);
-      return u.host + u.pathname + u.search + u.hash;
-    } catch (_e) {
-      return url.replace(/^https?:\/\//i, "");
-    }
-  }
-
   function buildYandexBrowserDeepLink(targetUrl) {
     var url = normalizeHttpUrl(targetUrl);
     if (!url) return "https://browser.yandex.ru/";
     if (isIosUa()) {
-      return "yandexbrowser-open-url://" + urlHostPath(url);
+      return "yandexbrowser-open-url://" + encodeURIComponent(url);
     }
     if (isAndroidUa()) {
       try {
@@ -2357,6 +2346,42 @@
       }
     }
     return "yandexbrowser://open?url=" + encodeURIComponent(url);
+  }
+
+  function copyPaymentUrlToClipboard(targetUrl) {
+    var url = normalizeHttpUrl(targetUrl);
+    if (!url) return Promise.resolve(false);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(url).then(function () {
+        return true;
+      }).catch(function () {
+        return false;
+      });
+    }
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = url;
+      ta.setAttribute("readonly", "true");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return Promise.resolve(true);
+    } catch (_e) {
+      return Promise.resolve(false);
+    }
+  }
+
+  function getActiveBankPaymentUrl() {
+    if (reserveFlowState.paymentMethod === "tbank_collection") {
+      return String(reserveFlowState.tbankCollectionUrl || "").trim();
+    }
+    if (reserveFlowState.paymentMethod === "collection") {
+      return String(reserveFlowState.collectionUrl || "").trim();
+    }
+    return "";
   }
 
   function openPaymentInYandexBrowser(targetUrl) {
@@ -2525,6 +2550,8 @@
     if (collectTbankBlock) collectTbankBlock.hidden = chosenMethod !== "tbank_collection";
     if (qrBlock) qrBlock.hidden = chosenMethod !== "qr";
     if (bankCardBlock) bankCardBlock.hidden = chosenMethod !== "bank_card";
+    var copyBankBtn = document.getElementById("reserve-payment-copy-bank-url");
+    if (copyBankBtn) copyBankBtn.hidden = chosenMethod !== "collection" && chosenMethod !== "tbank_collection";
     var altBtn = document.getElementById("reserve-payment-alt-requisites");
     var rfAlt = getCachedRaffleById(reserveFlowState.raffleId);
     var altModes = rfAlt ? buildAltPayModesFromRaffle(rfAlt, nums.length) : [];
@@ -6840,7 +6867,7 @@
     }
     e.preventDefault();
     openPaymentInYandexBrowser(bankUrl);
-    showToast("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
+    showToast("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
   });
   document.getElementById("reserve-payment-link-tbank")?.addEventListener("click", function (e) {
     if (this.getAttribute("aria-disabled") === "true") {
@@ -6856,7 +6883,20 @@
     }
     e.preventDefault();
     openPaymentInYandexBrowser(bankUrl);
-    showToast("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
+    showToast("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
+  });
+  document.getElementById("reserve-payment-copy-bank-url")?.addEventListener("click", function () {
+    var bankUrl = getActiveBankPaymentUrl();
+    if (!bankUrl) {
+      showToast("Реквизиты пока не настроены", "warning");
+      return;
+    }
+    copyPaymentUrlToClipboard(bankUrl).then(function (ok) {
+      showToast(
+        ok ? "Ссылка скопирована — вставьте её в адресную строку Яндекс Браузера" : "Не удалось скопировать",
+        ok ? "success" : "warning",
+      );
+    });
   });
   document.getElementById("reserve-payment-purpose-notice-ok")?.addEventListener("click", hidePaymentPurposeNotice);
   document.getElementById("reserve-payment-alt-requisites")?.addEventListener("click", async function () {

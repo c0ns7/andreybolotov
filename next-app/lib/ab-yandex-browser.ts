@@ -22,25 +22,14 @@ function normalizeHttpUrl(raw: string): string {
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
-function urlHostPath(raw: string): string {
-  const url = normalizeHttpUrl(raw);
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    return `${u.host}${u.pathname}${u.search}${u.hash}`;
-  } catch {
-    return url.replace(/^https?:\/\//i, "");
-  }
-}
-
 /** Deep link / intent для открытия bank URL в Яндекс Браузере. */
 export function buildYandexBrowserDeepLink(targetUrl: string, userAgent?: string): string {
   const url = normalizeHttpUrl(targetUrl);
   if (!url) return YANDEX_BROWSER_DOWNLOAD_URL;
   const ua = String(userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "") ?? "");
   if (isIosDevice(ua)) {
-    // iOS: как googlechrome:// — без https://, иначе «https» становится hostname
-    return `yandexbrowser-open-url://${urlHostPath(url)}`;
+    // iOS: полный https-URL в encoded-виде — иначе «https» становится hostname или грузится по http
+    return `yandexbrowser-open-url://${encodeURIComponent(url)}`;
   }
   if (isAndroidDevice(ua)) {
     try {
@@ -76,6 +65,30 @@ export function openPaymentInYandexBrowser(targetUrl: string, userAgent?: string
   anchor.click();
   anchor.remove();
   return true;
+}
+
+export async function copyPaymentUrlToClipboard(targetUrl: string): Promise<boolean> {
+  const url = normalizeHttpUrl(targetUrl);
+  if (!url || typeof navigator === "undefined") return false;
+  try {
+    await navigator.clipboard.writeText(url);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.setAttribute("readonly", "true");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const RAFFLE_BANK_BROWSER_NOTICE_HTML = [
