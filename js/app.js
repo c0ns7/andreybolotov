@@ -2326,11 +2326,22 @@
     return "https://" + url.replace(/^\/+/, "");
   }
 
+  function urlHostPath(raw) {
+    var url = normalizeHttpUrl(raw);
+    if (!url) return "";
+    try {
+      var u = new URL(url);
+      return u.host + u.pathname + u.search + u.hash;
+    } catch (_e) {
+      return url.replace(/^https?:\/\//i, "");
+    }
+  }
+
   function buildYandexBrowserDeepLink(targetUrl) {
     var url = normalizeHttpUrl(targetUrl);
     if (!url) return "https://browser.yandex.ru/";
     if (isIosUa()) {
-      return "yandexbrowser-open-url://" + url;
+      return "yandexbrowser-open-url://" + urlHostPath(url);
     }
     if (isAndroidUa()) {
       try {

@@ -22,14 +22,25 @@ function normalizeHttpUrl(raw: string): string {
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
+function urlHostPath(raw: string): string {
+  const url = normalizeHttpUrl(raw);
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return url.replace(/^https?:\/\//i, "");
+  }
+}
+
 /** Deep link / intent для открытия bank URL в Яндекс Браузере. */
 export function buildYandexBrowserDeepLink(targetUrl: string, userAgent?: string): string {
   const url = normalizeHttpUrl(targetUrl);
   if (!url) return YANDEX_BROWSER_DOWNLOAD_URL;
   const ua = String(userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "") ?? "");
   if (isIosDevice(ua)) {
-    // iOS: yandexbrowser-open-url://https://example.com/...
-    return `yandexbrowser-open-url://${url}`;
+    // iOS: как googlechrome:// — без https://, иначе «https» становится hostname
+    return `yandexbrowser-open-url://${urlHostPath(url)}`;
   }
   if (isAndroidDevice(ua)) {
     try {
