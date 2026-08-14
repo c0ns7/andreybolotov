@@ -15,31 +15,40 @@ export function isIosDevice(userAgent?: string): boolean {
   return /iPhone|iPad|iPod/i.test(ua) && !/Android/i.test(ua);
 }
 
+function normalizeHttpUrl(raw: string): string {
+  const url = String(raw || "").trim();
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url.replace(/^\/+/, "")}`;
+}
+
 /** Deep link / intent для открытия bank URL в Яндекс Браузере. */
 export function buildYandexBrowserDeepLink(targetUrl: string, userAgent?: string): string {
-  const url = String(targetUrl || "").trim();
+  const url = normalizeHttpUrl(targetUrl);
   if (!url) return YANDEX_BROWSER_DOWNLOAD_URL;
-  const encoded = encodeURIComponent(url);
   const ua = String(userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "") ?? "");
+  if (isIosDevice(ua)) {
+    // iOS: yandexbrowser-open-url://https://example.com/...
+    return `yandexbrowser-open-url://${url}`;
+  }
   if (isAndroidDevice(ua)) {
     try {
       const u = new URL(url);
       const path = `${u.host}${u.pathname}${u.search}${u.hash}`;
       return (
         `intent://${path}#Intent;scheme=https;package=com.yandex.browser;` +
-        `action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;` +
-        `S.browser_fallback_url=${encoded};end`
+        `action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`
       );
     } catch {
-      return `yandexbrowser://open?url=${encoded}`;
+      return `yandexbrowser://open?url=${encodeURIComponent(url)}`;
     }
   }
-  return `yandexbrowser://open?url=${encoded}`;
+  return `yandexbrowser://open?url=${encodeURIComponent(url)}`;
 }
 
 /** Открывает страницу банка через Яндекс Браузер (или напрямую, если уже в нём). */
 export function openPaymentInYandexBrowser(targetUrl: string, userAgent?: string): boolean {
-  const url = String(targetUrl || "").trim();
+  const url = normalizeHttpUrl(targetUrl);
   if (!url) return false;
   if (typeof window === "undefined") return false;
   const ua = String(userAgent ?? navigator.userAgent ?? "");

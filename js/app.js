@@ -2315,10 +2315,23 @@
     return /Android/i.test(String(navigator.userAgent || ""));
   }
 
+  function isIosUa() {
+    return /iPhone|iPad|iPod/i.test(String(navigator.userAgent || "")) && !isAndroidUa();
+  }
+
+  function normalizeHttpUrl(raw) {
+    var url = String(raw || "").trim();
+    if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    return "https://" + url.replace(/^\/+/, "");
+  }
+
   function buildYandexBrowserDeepLink(targetUrl) {
-    var url = String(targetUrl || "").trim();
+    var url = normalizeHttpUrl(targetUrl);
     if (!url) return "https://browser.yandex.ru/";
-    var encoded = encodeURIComponent(url);
+    if (isIosUa()) {
+      return "yandexbrowser-open-url://" + url;
+    }
     if (isAndroidUa()) {
       try {
         var u = new URL(url);
@@ -2326,20 +2339,17 @@
         return (
           "intent://" +
           path +
-          "#Intent;scheme=https;package=com.yandex.browser;action=android.intent.action.VIEW;" +
-          "category=android.intent.category.BROWSABLE;S.browser_fallback_url=" +
-          encoded +
-          ";end"
+          "#Intent;scheme=https;package=com.yandex.browser;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end"
         );
       } catch (_e) {
-        return "yandexbrowser://open?url=" + encoded;
+        return "yandexbrowser://open?url=" + encodeURIComponent(url);
       }
     }
-    return "yandexbrowser://open?url=" + encoded;
+    return "yandexbrowser://open?url=" + encodeURIComponent(url);
   }
 
   function openPaymentInYandexBrowser(targetUrl) {
-    var url = String(targetUrl || "").trim();
+    var url = normalizeHttpUrl(targetUrl);
     if (!url) return false;
     if (isYandexBrowserUa()) {
       window.open(url, "_blank", "noopener,noreferrer");
