@@ -367,14 +367,30 @@ export default function AbRafflePurchaseShellMarkup() {
         </p>
 
         <div id="reserve-payment-step-requisites">
+          <aside className="pay-sheet-yandex-notice" aria-label="Рекомендация РКН по оплате">
+            <p className="pay-sheet-yandex-notice__title">Оплата через Яндекс Браузер</p>
+            <p className="pay-sheet-yandex-notice__text">
+              Банковские сайты могут не открываться в Safari, Chrome и других зарубежных браузерах. Для корректной оплаты
+              используйте <strong>Яндекс Браузер</strong> — кнопка ниже откроет страницу банка именно там (рекомендация РКН).
+            </p>
+            <a
+              className="pay-sheet-yandex-notice__link"
+              href="https://browser.yandex.ru/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Нет Яндекс Браузера? Скачать
+            </a>
+          </aside>
+
           <div className="pay-sheet-instr">
             <p className="pay-sheet-instr__title">📋 Инструкция:</p>
             <ol className="pay-sheet-instr__list">
               <li>
-                Нажмите «<b>Перейти к оплате</b>» ниже
+                Нажмите «<b>Открыть оплату в Яндекс Браузере</b>» ниже — откроется страница банка в рекомендованном браузере
               </li>
               <li id="reserve-pay-instr-step2-collection" hidden>
-                Переведите <b className="pay-sheet-instr-amt">0 ₽</b> через сбор Сбербанка по кнопке ниже. Назначение платежа указывать не нужно — просто переведите сумму.
+                Переведите <b className="pay-sheet-instr-amt">0 ₽</b> через сбор Сбербанка. Назначение платежа указывать не нужно — просто переведите сумму.
               </li>
               <li id="reserve-pay-instr-step2-other">
                 Оплатите: <b className="pay-sheet-instr-amt">0 ₽</b>
@@ -387,7 +403,7 @@ export default function AbRafflePurchaseShellMarkup() {
                 Сделайте <b>скриншот</b> перевода
               </li>
               <li>
-                Нажмите кнопку «Я перевёл» в самом низу
+                Вернитесь на сайт и нажмите «Я перевёл» в самом низу
               </li>
             </ol>
           </div>
@@ -426,8 +442,8 @@ export default function AbRafflePurchaseShellMarkup() {
                 </svg>
               </button>
             </div>
-            <a id="reserve-payment-link" className="pay-sheet-pay-link" href="#" target="_blank" rel="noopener">
-              Перейти к оплате 🔗
+            <a id="reserve-payment-link" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" target="_blank" rel="noopener">
+              Открыть оплату в Яндекс Браузере
             </a>
           </section>
 
@@ -465,8 +481,8 @@ export default function AbRafflePurchaseShellMarkup() {
                 </svg>
               </button>
             </div>
-            <a id="reserve-payment-link-tbank" className="pay-sheet-pay-link" href="#" target="_blank" rel="noopener">
-              Перейти к оплате 🔗
+            <a id="reserve-payment-link-tbank" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" target="_blank" rel="noopener">
+              Открыть оплату в Яндекс Браузере
             </a>
           </section>
 

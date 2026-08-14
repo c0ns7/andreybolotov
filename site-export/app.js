@@ -224,10 +224,10 @@
               cls +
               '" title="' +
               (t.is_bonus ? "Бонусный номерок" : "Платный номерок") +
-              '">' +
+              '"><' +
               esc(String(t.number)) +
               (t.is_bonus ? "★" : "") +
-              "</span>"
+              "></span>"
             );
           })
           .join("");

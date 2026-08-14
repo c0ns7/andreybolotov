@@ -5301,6 +5301,98 @@ html.theme-dark .bottom-nav-btn--blog-unread:not(.bottom-nav-btn--active) .botto
   margin: 0 0 12px;
 }
 
+.pay-sheet-yandex-notice {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 1rem;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.95), rgba(254, 243, 199, 0.72));
+}
+
+.pay-sheet-yandex-notice__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.pay-sheet-yandex-notice__text {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #78350f;
+}
+
+.pay-sheet-yandex-notice__link {
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pay-sheet-pay-link--yandex {
+  background: linear-gradient(135deg, #fc3f1d, #ff6a00);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.pay-sheet-pay-link--yandex:hover {
+  filter: brightness(1.04);
+}
+
+.raffle-bank-browser-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 12px 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(254, 243, 199, 0.78));
+  box-shadow: 0 8px 24px rgba(146, 64, 14, 0.08);
+}
+
+.raffle-bank-browser-notice__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(251, 191, 36, 0.22);
+  color: #b45309;
+}
+
+.raffle-bank-browser-notice__body {
+  min-width: 0;
+}
+
+.raffle-bank-browser-notice__title {
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.raffle-bank-browser-notice__text {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #78350f;
+}
+
+.raffle-bank-browser-notice__link {
+  display: inline-flex;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #b45309;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .pay-sheet-instr {
   margin-bottom: 12px;
   padding: 12px;
@@ -6294,6 +6386,32 @@ html.theme-dark .pay-sheet-amount-main {
 html.theme-dark .pay-sheet-instr {
   border-color: rgba(16, 185, 129, 0.35);
   background: rgba(16, 185, 129, 0.08);
+}
+
+html.theme-dark .pay-sheet-yandex-notice,
+html.theme-dark .raffle-bank-browser-notice {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: linear-gradient(180deg, rgba(120, 53, 15, 0.34), rgba(69, 26, 3, 0.24));
+}
+
+html.theme-dark .pay-sheet-yandex-notice__title,
+html.theme-dark .raffle-bank-browser-notice__title {
+  color: #fde68a;
+}
+
+html.theme-dark .pay-sheet-yandex-notice__text,
+html.theme-dark .raffle-bank-browser-notice__text {
+  color: #fcd34d;
+}
+
+html.theme-dark .pay-sheet-yandex-notice__link,
+html.theme-dark .raffle-bank-browser-notice__link,
+html.theme-dark .raffle-bank-browser-notice__icon {
+  color: #fbbf24;
+}
+
+html.theme-dark .raffle-bank-browser-notice__icon {
+  background: rgba(251, 191, 36, 0.14);
 }
 
 html.theme-dark .pay-sheet-transferred-wrap {

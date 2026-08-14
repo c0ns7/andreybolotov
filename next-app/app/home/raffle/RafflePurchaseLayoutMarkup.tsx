@@ -109,6 +109,37 @@ export default function RafflePurchaseLayoutMarkup() {
           </div>
         </header>
 
+        <aside id="raffle-page-bank-browser-notice" className="raffle-bank-browser-notice" aria-label="Рекомендация по оплате">
+          <div className="raffle-bank-browser-notice__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div className="raffle-bank-browser-notice__body">
+            <p className="raffle-bank-browser-notice__title">Как оплатить без ошибок</p>
+            <p className="raffle-bank-browser-notice__text">
+              Теперь в России банковские сайты ограничены через зарубежные браузеры (Safari, Chrome и т.д.).
+            </p>
+            <p className="raffle-bank-browser-notice__text">
+              Чтобы оплата прошла корректно — и ваши банковские сайты снова заработали — рекомендуем использовать{" "}
+              <strong>Яндекс Браузер</strong> (рекомендация РКН).
+            </p>
+            <p className="raffle-bank-browser-notice__text">
+              Мы добавили рекомендацию по корректной оплате непосредственно на этапе оплаты — просто следуйте инструкции на сайте.
+            </p>
+            <a
+              className="raffle-bank-browser-notice__link"
+              href="https://browser.yandex.ru/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Скачать Яндекс Браузер
+            </a>
+          </div>
+        </aside>
+
         <main className="raffle-purchase-main">
           <p id="raffle-page-timer" className="raffle-detail__timer raffle-purchase-timer" hidden></p>
           <div id="raffle-page-root" className="raffle-purchase-root raffle-purchase-panel" data-raffle-ui="raffle-page">

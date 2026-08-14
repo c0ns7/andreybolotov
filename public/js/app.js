@@ -2307,6 +2307,61 @@
     el.setAttribute("aria-hidden", "true");
   }
 
+  function isYandexBrowserUa() {
+    return /YaBrowser/i.test(String(navigator.userAgent || ""));
+  }
+
+  function isAndroidUa() {
+    return /Android/i.test(String(navigator.userAgent || ""));
+  }
+
+  function buildYandexBrowserDeepLink(targetUrl) {
+    var url = String(targetUrl || "").trim();
+    if (!url) return "https://browser.yandex.ru/";
+    var encoded = encodeURIComponent(url);
+    if (isAndroidUa()) {
+      try {
+        var u = new URL(url);
+        var path = u.host + u.pathname + u.search + u.hash;
+        return (
+          "intent://" +
+          path +
+          "#Intent;scheme=https;package=com.yandex.browser;action=android.intent.action.VIEW;" +
+          "category=android.intent.category.BROWSABLE;S.browser_fallback_url=" +
+          encoded +
+          ";end"
+        );
+      } catch (_e) {
+        return "yandexbrowser://open?url=" + encoded;
+      }
+    }
+    return "yandexbrowser://open?url=" + encoded;
+  }
+
+  function openPaymentInYandexBrowser(targetUrl) {
+    var url = String(targetUrl || "").trim();
+    if (!url) return false;
+    if (isYandexBrowserUa()) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return true;
+    }
+    var deepLink = buildYandexBrowserDeepLink(url);
+    var anchor = document.createElement("a");
+    anchor.href = deepLink;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(function () {
+      try {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (_e) {}
+    }, 900);
+    return true;
+  }
+
   function showPaymentPurposeNotice(purpose) {
     var el = document.getElementById("reserve-payment-purpose-notice");
     var val = document.getElementById("reserve-payment-purpose-notice-value");
@@ -2431,14 +2486,18 @@
     if (payLink) {
       var href = String(reserveFlowState.collectionUrl || "").trim();
       payLink.href = href || "#";
+      payLink.dataset.bankUrl = href || "";
       payLink.setAttribute("aria-disabled", href ? "false" : "true");
       payLink.classList.toggle("reserve-flow-btn--disabled", !href);
+      payLink.classList.toggle("pay-sheet-pay-link--disabled", !href);
     }
     if (payLinkTbank) {
       var tbankHref = String(reserveFlowState.tbankCollectionUrl || "").trim();
       payLinkTbank.href = tbankHref || "#";
+      payLinkTbank.dataset.bankUrl = tbankHref || "";
       payLinkTbank.setAttribute("aria-disabled", tbankHref ? "false" : "true");
       payLinkTbank.classList.toggle("reserve-flow-btn--disabled", !tbankHref);
+      payLinkTbank.classList.toggle("pay-sheet-pay-link--disabled", !tbankHref);
     }
     if (payQrImg) {
       var qrSrc = String(reserveFlowState.qrImageUrl || "").trim();
@@ -6756,13 +6815,33 @@
     if (this.getAttribute("aria-disabled") === "true") {
       e.preventDefault();
       showToast("Реквизиты пока не настроены", "warning");
+      return;
     }
+    var bankUrl = String(this.dataset.bankUrl || this.href || "").trim();
+    if (!bankUrl || bankUrl === "#") {
+      e.preventDefault();
+      showToast("Реквизиты пока не настроены", "warning");
+      return;
+    }
+    e.preventDefault();
+    openPaymentInYandexBrowser(bankUrl);
+    showToast("Открываем оплату в Яндекс Браузере…", "info");
   });
   document.getElementById("reserve-payment-link-tbank")?.addEventListener("click", function (e) {
     if (this.getAttribute("aria-disabled") === "true") {
       e.preventDefault();
       showToast("Реквизиты пока не настроены", "warning");
+      return;
     }
+    var bankUrl = String(this.dataset.bankUrl || this.href || "").trim();
+    if (!bankUrl || bankUrl === "#") {
+      e.preventDefault();
+      showToast("Реквизиты пока не настроены", "warning");
+      return;
+    }
+    e.preventDefault();
+    openPaymentInYandexBrowser(bankUrl);
+    showToast("Открываем оплату в Яндекс Браузере…", "info");
   });
   document.getElementById("reserve-payment-purpose-notice-ok")?.addEventListener("click", hidePaymentPurposeNotice);
   document.getElementById("reserve-payment-alt-requisites")?.addEventListener("click", async function () {

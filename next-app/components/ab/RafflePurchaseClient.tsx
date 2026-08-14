@@ -13,6 +13,7 @@ import {
   validateReceiptFileForUpload,
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
+import { openPaymentInYandexBrowser } from "../../lib/ab-yandex-browser";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration";
 import AppBottomNav from "./AppBottomNav";
@@ -2300,11 +2301,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const at = document.getElementById("reserve-payment-link-tbank") as HTMLAnchorElement | null;
       if (a) {
         a.href = href || "#";
+        a.dataset.bankUrl = href || "";
         a.setAttribute("aria-disabled", href ? "false" : "true");
         a.classList.toggle("pay-sheet-pay-link--disabled", !href);
       }
       if (at) {
         at.href = hrefT || "#";
+        at.dataset.bankUrl = hrefT || "";
         at.setAttribute("aria-disabled", hrefT ? "false" : "true");
         at.classList.toggle("pay-sheet-pay-link--disabled", !hrefT);
       }
@@ -2546,6 +2549,28 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
 
     const elCancelConfirmBtn = document.getElementById("reserve-payment-cancel-confirm");
     elCancelConfirmBtn?.addEventListener("click", onCancelReservation);
+
+    const onPayLinkClick = (e: Event) => {
+      const el = e.currentTarget as HTMLAnchorElement | null;
+      if (!el || el.getAttribute("aria-disabled") === "true") {
+        e.preventDefault();
+        toastRef.current("Реквизиты пока не настроены", "warning");
+        return;
+      }
+      const bankUrl = String(el.dataset.bankUrl || el.href || "").trim();
+      if (!bankUrl || bankUrl === "#") {
+        e.preventDefault();
+        toastRef.current("Реквизиты пока не настроены", "warning");
+        return;
+      }
+      e.preventDefault();
+      openPaymentInYandexBrowser(bankUrl);
+      toastRef.current("Открываем оплату в Яндекс Браузере…", "info");
+    };
+    const elPayLink = document.getElementById("reserve-payment-link");
+    const elPayLinkTbank = document.getElementById("reserve-payment-link-tbank");
+    elPayLink?.addEventListener("click", onPayLinkClick);
+    elPayLinkTbank?.addEventListener("click", onPayLinkClick);
 
     const onPayDone = () => {
       paintTransferredHint(false);
@@ -2853,6 +2878,8 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       clearPayTimer();
       elGoPay?.removeEventListener("click", onGoPay);
       elPayClose?.removeEventListener("click", onPayClose);
+      elPayLink?.removeEventListener("click", onPayLinkClick);
+      elPayLinkTbank?.removeEventListener("click", onPayLinkClick);
       elModalPay?.removeEventListener("click", onModalPayClick);
       elAltReq?.removeEventListener("click", onAltReqClick);
       elCancelDismiss?.removeEventListener("click", onCancelDismiss);
