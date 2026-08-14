@@ -445,7 +445,7 @@ export default function AbRafflePurchaseShellMarkup() {
                 </svg>
               </button>
             </div>
-            <a id="reserve-payment-link" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" target="_blank" rel="noopener">
+            <a id="reserve-payment-link" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" rel="noopener noreferrer">
               Открыть оплату в Яндекс Браузере
             </a>
           </section>
@@ -484,7 +484,7 @@ export default function AbRafflePurchaseShellMarkup() {
                 </svg>
               </button>
             </div>
-            <a id="reserve-payment-link-tbank" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" target="_blank" rel="noopener">
+            <a id="reserve-payment-link-tbank" className="pay-sheet-pay-link pay-sheet-pay-link--yandex" href="#" rel="noopener noreferrer">
               Открыть оплату в Яндекс Браузере
             </a>
           </section>

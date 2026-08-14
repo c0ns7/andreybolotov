@@ -2315,10 +2315,6 @@
     return /Android/i.test(String(navigator.userAgent || ""));
   }
 
-  function isIosUa() {
-    return /iPhone|iPad|iPod/i.test(String(navigator.userAgent || "")) && !isAndroidUa();
-  }
-
   function normalizeHttpUrl(raw) {
     var url = String(raw || "").trim();
     if (!url) return "";
@@ -2329,9 +2325,6 @@
   function buildYandexBrowserDeepLink(targetUrl) {
     var url = normalizeHttpUrl(targetUrl);
     if (!url) return "https://browser.yandex.ru/";
-    if (isIosUa()) {
-      return "yandexbrowser-open-url://" + encodeURIComponent(url);
-    }
     if (isAndroidUa()) {
       try {
         var u = new URL(url);
@@ -2342,10 +2335,17 @@
           "#Intent;scheme=https;package=com.yandex.browser;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end"
         );
       } catch (_e) {
-        return "yandexbrowser://open?url=" + encodeURIComponent(url);
+        return "yandexbrowser-open-url://" + encodeURIComponent(url);
       }
     }
-    return "yandexbrowser://open?url=" + encodeURIComponent(url);
+    return "yandexbrowser-open-url://" + encodeURIComponent(url);
+  }
+
+  function resolvePaymentLinkHref(bankUrl) {
+    var url = normalizeHttpUrl(bankUrl);
+    if (!url) return "#";
+    if (isYandexBrowserUa()) return url;
+    return buildYandexBrowserDeepLink(url);
   }
 
   function copyPaymentUrlToClipboard(targetUrl) {
@@ -2391,14 +2391,7 @@
       window.open(url, "_blank", "noopener,noreferrer");
       return true;
     }
-    var deepLink = buildYandexBrowserDeepLink(url);
-    var anchor = document.createElement("a");
-    anchor.href = deepLink;
-    anchor.rel = "noopener noreferrer";
-    anchor.style.display = "none";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    window.location.assign(buildYandexBrowserDeepLink(url));
     return true;
   }
 
@@ -2525,7 +2518,7 @@
     if (payQrRecipient) payQrRecipient.textContent = reserveFlowState.qrRecipient || "Реквизиты уточняются";
     if (payLink) {
       var href = String(reserveFlowState.collectionUrl || "").trim();
-      payLink.href = href || "#";
+      payLink.href = href ? resolvePaymentLinkHref(href) : "#";
       payLink.dataset.bankUrl = href || "";
       payLink.setAttribute("aria-disabled", href ? "false" : "true");
       payLink.classList.toggle("reserve-flow-btn--disabled", !href);
@@ -2533,7 +2526,7 @@
     }
     if (payLinkTbank) {
       var tbankHref = String(reserveFlowState.tbankCollectionUrl || "").trim();
-      payLinkTbank.href = tbankHref || "#";
+      payLinkTbank.href = tbankHref ? resolvePaymentLinkHref(tbankHref) : "#";
       payLinkTbank.dataset.bankUrl = tbankHref || "";
       payLinkTbank.setAttribute("aria-disabled", tbankHref ? "false" : "true");
       payLinkTbank.classList.toggle("reserve-flow-btn--disabled", !tbankHref);
@@ -6859,15 +6852,21 @@
       showToast("Реквизиты пока не настроены", "warning");
       return;
     }
-    var bankUrl = String(this.dataset.bankUrl || this.href || "").trim();
-    if (!bankUrl || bankUrl === "#") {
+    var bankUrl = String(this.dataset.bankUrl || "").trim();
+    if (!bankUrl) {
       e.preventDefault();
       showToast("Реквизиты пока не настроены", "warning");
       return;
     }
-    e.preventDefault();
-    openPaymentInYandexBrowser(bankUrl);
-    showToast("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
+    this.href = resolvePaymentLinkHref(bankUrl);
+    if (isYandexBrowserUa()) {
+      this.target = "_blank";
+      this.rel = "noopener noreferrer";
+    } else {
+      this.removeAttribute("target");
+      this.rel = "noopener noreferrer";
+      showToast("Подтвердите «Открыть» в диалоге — откроется Яндекс Браузер", "info");
+    }
   });
   document.getElementById("reserve-payment-link-tbank")?.addEventListener("click", function (e) {
     if (this.getAttribute("aria-disabled") === "true") {
@@ -6875,15 +6874,21 @@
       showToast("Реквизиты пока не настроены", "warning");
       return;
     }
-    var bankUrl = String(this.dataset.bankUrl || this.href || "").trim();
-    if (!bankUrl || bankUrl === "#") {
+    var bankUrl = String(this.dataset.bankUrl || "").trim();
+    if (!bankUrl) {
       e.preventDefault();
       showToast("Реквизиты пока не настроены", "warning");
       return;
     }
-    e.preventDefault();
-    openPaymentInYandexBrowser(bankUrl);
-    showToast("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
+    this.href = resolvePaymentLinkHref(bankUrl);
+    if (isYandexBrowserUa()) {
+      this.target = "_blank";
+      this.rel = "noopener noreferrer";
+    } else {
+      this.removeAttribute("target");
+      this.rel = "noopener noreferrer";
+      showToast("Подтвердите «Открыть» в диалоге — откроется Яндекс Браузер", "info");
+    }
   });
   document.getElementById("reserve-payment-copy-bank-url")?.addEventListener("click", function () {
     var bankUrl = getActiveBankPaymentUrl();

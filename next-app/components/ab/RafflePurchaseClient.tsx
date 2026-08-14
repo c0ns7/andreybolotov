@@ -13,7 +13,11 @@ import {
   validateReceiptFileForUpload,
 } from "../../lib/receipt-client";
 import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
-import { copyPaymentUrlToClipboard, openPaymentInYandexBrowser } from "../../lib/ab-yandex-browser";
+import {
+  copyPaymentUrlToClipboard,
+  isYandexBrowser,
+  resolvePaymentLinkHref,
+} from "../../lib/ab-yandex-browser";
 import AbRafflePurchaseShellMarkup from "./AbRafflePurchaseShellMarkup";
 import { openReceiptSentSuccessModal } from "../../lib/receipt-sent-celebration";
 import AppBottomNav from "./AppBottomNav";
@@ -2300,13 +2304,13 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       const a = document.getElementById("reserve-payment-link") as HTMLAnchorElement | null;
       const at = document.getElementById("reserve-payment-link-tbank") as HTMLAnchorElement | null;
       if (a) {
-        a.href = href || "#";
+        a.href = href ? resolvePaymentLinkHref(href) : "#";
         a.dataset.bankUrl = href || "";
         a.setAttribute("aria-disabled", href ? "false" : "true");
         a.classList.toggle("pay-sheet-pay-link--disabled", !href);
       }
       if (at) {
-        at.href = hrefT || "#";
+        at.href = hrefT ? resolvePaymentLinkHref(hrefT) : "#";
         at.dataset.bankUrl = hrefT || "";
         at.setAttribute("aria-disabled", hrefT ? "false" : "true");
         at.classList.toggle("pay-sheet-pay-link--disabled", !hrefT);
@@ -2559,15 +2563,21 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
         toastRef.current("Реквизиты пока не настроены", "warning");
         return;
       }
-      const bankUrl = String(el.dataset.bankUrl || el.href || "").trim();
-      if (!bankUrl || bankUrl === "#") {
+      const bankUrl = String(el.dataset.bankUrl || "").trim();
+      if (!bankUrl) {
         e.preventDefault();
         toastRef.current("Реквизиты пока не настроены", "warning");
         return;
       }
-      e.preventDefault();
-      openPaymentInYandexBrowser(bankUrl);
-      toastRef.current("Подтвердите «Открыть» — страница откроется сразу по HTTPS", "info");
+      el.href = resolvePaymentLinkHref(bankUrl);
+      if (isYandexBrowser()) {
+        el.target = "_blank";
+        el.rel = "noopener noreferrer";
+      } else {
+        el.removeAttribute("target");
+        el.rel = "noopener noreferrer";
+        toastRef.current("Подтвердите «Открыть» в диалоге — откроется Яндекс Браузер", "info");
+      }
     };
     const getActiveBankPaymentUrl = () => {
       const d = reserveDraftRef.current;
