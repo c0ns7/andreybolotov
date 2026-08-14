@@ -2565,7 +2565,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       }
       e.preventDefault();
       openPaymentInYandexBrowser(bankUrl);
-      toastRef.current("Открываем оплату в Яндекс Браузере…", "info");
+      toastRef.current("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
     };
     const elPayLink = document.getElementById("reserve-payment-link");
     const elPayLinkTbank = document.getElementById("reserve-payment-link-tbank");

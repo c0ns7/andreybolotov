@@ -2348,17 +2348,11 @@
     var deepLink = buildYandexBrowserDeepLink(url);
     var anchor = document.createElement("a");
     anchor.href = deepLink;
-    anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
     anchor.style.display = "none";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    window.setTimeout(function () {
-      try {
-        window.open(url, "_blank", "noopener,noreferrer");
-      } catch (_e) {}
-    }, 900);
     return true;
   }
 
@@ -6825,7 +6819,7 @@
     }
     e.preventDefault();
     openPaymentInYandexBrowser(bankUrl);
-    showToast("Открываем оплату в Яндекс Браузере…", "info");
+    showToast("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
   });
   document.getElementById("reserve-payment-link-tbank")?.addEventListener("click", function (e) {
     if (this.getAttribute("aria-disabled") === "true") {
@@ -6841,7 +6835,7 @@
     }
     e.preventDefault();
     openPaymentInYandexBrowser(bankUrl);
-    showToast("Открываем оплату в Яндекс Браузере…", "info");
+    showToast("Подтвердите «Открыть» в запросе — оплата откроется в Яндекс Браузере", "info");
   });
   document.getElementById("reserve-payment-purpose-notice-ok")?.addEventListener("click", hidePaymentPurposeNotice);
   document.getElementById("reserve-payment-alt-requisites")?.addEventListener("click", async function () {

@@ -50,19 +50,11 @@ export function openPaymentInYandexBrowser(targetUrl: string, userAgent?: string
   const deepLink = buildYandexBrowserDeepLink(url, ua);
   const anchor = document.createElement("a");
   anchor.href = deepLink;
-  anchor.target = "_blank";
   anchor.rel = "noopener noreferrer";
   anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.setTimeout(() => {
-    try {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      /* ignore */
-    }
-  }, 900);
   return true;
 }
 
