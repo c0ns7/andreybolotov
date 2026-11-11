@@ -186,7 +186,9 @@ CREATE TABLE IF NOT EXISTS site_settings (
   blog_enabled INTEGER NOT NULL DEFAULT 0,
   music_enabled INTEGER NOT NULL DEFAULT 0,
   music_default_volume INTEGER NOT NULL DEFAULT 35,
-  support_max_url TEXT NOT NULL DEFAULT 'https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w'
+  support_max_url TEXT NOT NULL DEFAULT 'https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w',
+  raffle_reserve_minutes INTEGER NOT NULL DEFAULT 15,
+  raffle_reject_reopen_minutes INTEGER NOT NULL DEFAULT 1440
 );
 INSERT INTO site_settings (id, maintenance_enabled, blog_enabled, music_enabled, music_default_volume, support_max_url)
 VALUES (1, 0, 0, 0, 35, 'https://max.ru/u/f9LHodD0cOKSJihr4puAfiyfPGQJWImlRAdNuRhpYwI7qse5YaB625-1d3w')

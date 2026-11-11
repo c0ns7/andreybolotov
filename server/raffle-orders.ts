@@ -3,10 +3,15 @@ import type { PoolClient } from "pg";
 import { decodeCdnSafeToken } from "./ab-cdn-safe-token.js";
 import { calcPromoGiftCount, resolvePromoPackFromRaffle } from "./promo-pack.js";
 import {
+  clampRaffleRejectReopenMinutes,
+  clampRaffleReserveMinutes,
+  DEFAULT_RAFFLE_REJECT_REOPEN_MINUTES,
+  DEFAULT_RAFFLE_RESERVE_MINUTES,
   getRaffleById,
   getRaffleEffectiveUnitPrice,
   getRaffleTicketEndNumber,
   getRaffleTicketStartNumber,
+  getSiteSettings,
   isRaffleTicketNumberInRange,
   isRaffleCenopadActive,
   getUserById,
@@ -31,8 +36,31 @@ import {
 } from "./raffle-bank-cards.js";
 import { parseSiteDateTimeLocalToUtcMs, SITE_TIMEZONE } from "./site-timezone.js";
 
-export const RAFFLE_RESERVE_MS = 15 * 60 * 1000;
+/** Fallback, если настройки сайта ещё не прочитаны. Реальное значение — из site_settings. */
+export const RAFFLE_RESERVE_MS = DEFAULT_RAFFLE_RESERVE_MINUTES * 60 * 1000;
 export const RAFFLE_MAX_SELECT = 25;
+
+/** Длительность первичной брони номерков (мс). */
+export async function getRaffleReserveMs(): Promise<number> {
+  try {
+    const settings = await getSiteSettings();
+    return clampRaffleReserveMinutes(settings.raffle_reserve_minutes) * 60 * 1000;
+  } catch {
+    const envRaw = String(process.env.RAFFLE_RESERVE_MINUTES ?? "").trim();
+    if (envRaw) return clampRaffleReserveMinutes(envRaw) * 60 * 1000;
+    return RAFFLE_RESERVE_MS;
+  }
+}
+
+/** Окно на новый чек после отклонения (мс). */
+export async function getRejectReopenReserveMs(): Promise<number> {
+  try {
+    const settings = await getSiteSettings();
+    return clampRaffleRejectReopenMinutes(settings.raffle_reject_reopen_minutes) * 60 * 1000;
+  } catch {
+    return rejectReopenReserveMsFromEnv();
+  }
+}
 
 export function getRaffleMaxSelect(raffle: { max_tickets_per_user?: number | null } | null | undefined): number {
   const n = Math.floor(Number(raffle?.max_tickets_per_user ?? RAFFLE_MAX_SELECT));
@@ -542,13 +570,10 @@ export async function markReserveReminderSent(orderId: number): Promise<void> {
   );
 }
 
-/** После отклонения чека: сколько минут даём на новый чек (минимум 15). */
+/** Fallback из env, если БД недоступна. */
 export function rejectReopenReserveMsFromEnv(): number {
-  const raw = String(process.env.RAFFLE_REJECT_REOPEN_MINUTES ?? "1440").trim();
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 24 * 60 * 60 * 1000;
-  const mins = Math.max(15, Math.min(Math.floor(n), 7 * 24 * 60));
-  return mins * 60 * 1000;
+  const raw = String(process.env.RAFFLE_REJECT_REOPEN_MINUTES ?? String(DEFAULT_RAFFLE_REJECT_REOPEN_MINUTES)).trim();
+  return clampRaffleRejectReopenMinutes(raw) * 60 * 1000;
 }
 
 export type TicketCellKind =
@@ -1042,7 +1067,7 @@ export async function createReservation(
   const totalCheck = await assertUserRaffleTotalTicketLimit(raffle, raffleId, userId, toReserve.length);
   if (!totalCheck.ok) return totalCheck;
 
-  const reservedUntil = now + RAFFLE_RESERVE_MS;
+  const reservedUntil = now + (await getRaffleReserveMs());
   const cenopadApplied = isRaffleCenopadActive(raffle) ? 1 : 0;
   const unitPrice = getRaffleEffectiveUnitPrice(raffle);
   const amount = toReserve.length * unitPrice;
@@ -1410,7 +1435,7 @@ export async function rejectOrderByAdmin(
   }
   const now = Date.now();
   const raffleId = o.raffle_id;
-  const newUntil = now + rejectReopenReserveMsFromEnv();
+  const newUntil = now + (await getRejectReopenReserveMs());
   await pgExec(
     `UPDATE raffle_orders SET status = 'reserved', receipt_url = NULL, receipt_name = NULL, receipt_mime = NULL,
      reserved_until = ?, reserve_extended_once = 0, reserve_reminder_sent_at = NULL,

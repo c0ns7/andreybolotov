@@ -894,6 +894,54 @@ export default function AdminMarkup() {
             <p className="admin-settings-card__status" id="admin-settings-blog-status" role="status"></p>
           </div>
           <div className="admin-settings-card">
+            <h2 className="admin-settings-card__title">Таймеры брони номерков</h2>
+            <p className="admin-settings-card__text">
+              Время первичной брони после выбора номерков и окно на повторную оплату после отклонения чека.
+              Уже созданные заказы не меняются — новые значения действуют для новых броней и новых отклонений.
+            </p>
+            <label className="admin-settings-field" htmlFor="admin-settings-raffle-reserve-minutes">
+              <span className="admin-settings-field__label">Бронь после выбора номерков (минуты)</span>
+              <input
+                id="admin-settings-raffle-reserve-minutes"
+                className="input admin-settings-field__input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={180}
+                step={1}
+                placeholder="15"
+              />
+            </label>
+            <label className="admin-settings-field" htmlFor="admin-settings-raffle-reject-reopen-minutes">
+              <span className="admin-settings-field__label">После отклонения чека (минуты)</span>
+              <input
+                id="admin-settings-raffle-reject-reopen-minutes"
+                className="input admin-settings-field__input"
+                type="number"
+                inputMode="numeric"
+                min={15}
+                max={10080}
+                step={1}
+                placeholder="1440"
+              />
+            </label>
+            <p className="admin-settings-card__hint">
+              Примеры: 10 мин брони → <code>10</code>; 3 часа после отклонения → <code>180</code>; 24 часа →{" "}
+              <code>1440</code>. Бронь: 1–180 мин. После отклонения: 15 мин – 7 суток.
+            </p>
+            <button type="button" className="admin-settings-action-btn" id="admin-settings-raffle-timers-save">
+              <span className="admin-settings-action-btn__ico" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+              </span>
+              <span>Сохранить таймеры</span>
+            </button>
+            <p className="admin-settings-card__status" id="admin-settings-raffle-timers-status" role="status"></p>
+          </div>
+          <div className="admin-settings-card">
             <h2 className="admin-settings-card__title">Приглашение в чат MAX</h2>
             <p className="admin-settings-card__text">
               Ссылка «Присоединиться к чату в MAX» в сообщении после закрепления номерков и в массовой рассылке по закреплённым оплатам.

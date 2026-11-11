@@ -21,6 +21,12 @@ import {
   setMusicPlaybackMode,
   setSupportMaxUrl,
   setMaxChatJoinUrl,
+  setRaffleReserveMinutes,
+  setRaffleRejectReopenMinutes,
+  RAFFLE_RESERVE_MINUTES_MIN,
+  RAFFLE_RESERVE_MINUTES_MAX,
+  RAFFLE_REJECT_REOPEN_MINUTES_MIN,
+  RAFFLE_REJECT_REOPEN_MINUTES_MAX,
   getSupportMessageById,
   getUserByEmail,
   getUserById,
@@ -1152,7 +1158,14 @@ adminSubApp.post("/music/upload", async (c) => {
 adminSubApp.patch("/settings", async (c) => {
   const auth = await requireAdmin(c);
   if (auth instanceof Response) return auth;
-  let body: { maintenance_enabled?: unknown; blog_enabled?: unknown; support_max_url?: unknown; max_chat_join_url?: unknown };
+  let body: {
+    maintenance_enabled?: unknown;
+    blog_enabled?: unknown;
+    support_max_url?: unknown;
+    max_chat_join_url?: unknown;
+    raffle_reserve_minutes?: unknown;
+    raffle_reject_reopen_minutes?: unknown;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -1199,6 +1212,34 @@ adminSubApp.patch("/settings", async (c) => {
       return c.json({ error: "Некорректная ссылка" }, 400);
     }
     await setMaxChatJoinUrl(raw);
+  }
+  if (body.raffle_reserve_minutes !== undefined) {
+    const n = Math.floor(Number(body.raffle_reserve_minutes));
+    if (!Number.isFinite(n) || n < RAFFLE_RESERVE_MINUTES_MIN || n > RAFFLE_RESERVE_MINUTES_MAX) {
+      return c.json(
+        {
+          error: `Время брони: от ${RAFFLE_RESERVE_MINUTES_MIN} до ${RAFFLE_RESERVE_MINUTES_MAX} минут`,
+        },
+        400,
+      );
+    }
+    await setRaffleReserveMinutes(n);
+  }
+  if (body.raffle_reject_reopen_minutes !== undefined) {
+    const n = Math.floor(Number(body.raffle_reject_reopen_minutes));
+    if (
+      !Number.isFinite(n) ||
+      n < RAFFLE_REJECT_REOPEN_MINUTES_MIN ||
+      n > RAFFLE_REJECT_REOPEN_MINUTES_MAX
+    ) {
+      return c.json(
+        {
+          error: `Окно после отклонения: от ${RAFFLE_REJECT_REOPEN_MINUTES_MIN} минут до ${RAFFLE_REJECT_REOPEN_MINUTES_MAX} минут (7 суток)`,
+        },
+        400,
+      );
+    }
+    await setRaffleRejectReopenMinutes(n);
   }
   c.header("Cache-Control", "no-store");
   return c.json(await getSiteSettings());

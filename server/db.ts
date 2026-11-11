@@ -1462,6 +1462,27 @@ function normalizeMusicPlaybackMode(raw: unknown): MusicPlaybackMode {
     : "sequential";
 }
 
+export const DEFAULT_RAFFLE_RESERVE_MINUTES = 15;
+export const DEFAULT_RAFFLE_REJECT_REOPEN_MINUTES = 1440;
+/** Первичная бронь: от 1 до 180 минут. */
+export const RAFFLE_RESERVE_MINUTES_MIN = 1;
+export const RAFFLE_RESERVE_MINUTES_MAX = 180;
+/** Окно после отклонения чека: от 15 минут до 7 суток. */
+export const RAFFLE_REJECT_REOPEN_MINUTES_MIN = 15;
+export const RAFFLE_REJECT_REOPEN_MINUTES_MAX = 7 * 24 * 60;
+
+export function clampRaffleReserveMinutes(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_RAFFLE_RESERVE_MINUTES;
+  return Math.max(RAFFLE_RESERVE_MINUTES_MIN, Math.min(n, RAFFLE_RESERVE_MINUTES_MAX));
+}
+
+export function clampRaffleRejectReopenMinutes(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_RAFFLE_REJECT_REOPEN_MINUTES;
+  return Math.max(RAFFLE_REJECT_REOPEN_MINUTES_MIN, Math.min(n, RAFFLE_REJECT_REOPEN_MINUTES_MAX));
+}
+
 export async function getSiteSettings(): Promise<{
   maintenance_enabled: boolean;
   blog_enabled: boolean;
@@ -1470,6 +1491,8 @@ export async function getSiteSettings(): Promise<{
   music_playback_mode: MusicPlaybackMode;
   support_max_url: string;
   max_chat_join_url: string;
+  raffle_reserve_minutes: number;
+  raffle_reject_reopen_minutes: number;
 }> {
   const row = await pgGet<{
     maintenance_enabled: number;
@@ -1479,8 +1502,12 @@ export async function getSiteSettings(): Promise<{
     music_playback_mode?: string;
     support_max_url?: string;
     max_chat_join_url?: string;
+    raffle_reserve_minutes?: number;
+    raffle_reject_reopen_minutes?: number;
   }>(
-    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode, support_max_url, max_chat_join_url FROM site_settings WHERE id = 1`,
+    `SELECT maintenance_enabled, blog_enabled, music_enabled, music_default_volume, music_playback_mode,
+            support_max_url, max_chat_join_url, raffle_reserve_minutes, raffle_reject_reopen_minutes
+     FROM site_settings WHERE id = 1`,
   );
   const vol = Math.floor(Number(row?.music_default_volume ?? 35));
   return {
@@ -1491,6 +1518,12 @@ export async function getSiteSettings(): Promise<{
     music_playback_mode: normalizeMusicPlaybackMode(row?.music_playback_mode),
     support_max_url: normalizeSupportMaxUrl(row?.support_max_url),
     max_chat_join_url: normalizeMaxChatJoinUrl(row?.max_chat_join_url),
+    raffle_reserve_minutes: clampRaffleReserveMinutes(
+      row?.raffle_reserve_minutes ?? DEFAULT_RAFFLE_RESERVE_MINUTES,
+    ),
+    raffle_reject_reopen_minutes: clampRaffleRejectReopenMinutes(
+      row?.raffle_reject_reopen_minutes ?? DEFAULT_RAFFLE_REJECT_REOPEN_MINUTES,
+    ),
   };
 }
 
@@ -1555,6 +1588,18 @@ export async function setMusicDefaultVolume(volume: number): Promise<void> {
 export async function setMusicPlaybackMode(mode: MusicPlaybackMode): Promise<void> {
   const m = normalizeMusicPlaybackMode(mode);
   await pgExec(`UPDATE site_settings SET music_playback_mode = ? WHERE id = 1`, [m]);
+}
+
+export async function setRaffleReserveMinutes(minutes: number): Promise<number> {
+  const v = clampRaffleReserveMinutes(minutes);
+  await pgExec(`UPDATE site_settings SET raffle_reserve_minutes = ? WHERE id = 1`, [v]);
+  return v;
+}
+
+export async function setRaffleRejectReopenMinutes(minutes: number): Promise<number> {
+  const v = clampRaffleRejectReopenMinutes(minutes);
+  await pgExec(`UPDATE site_settings SET raffle_reject_reopen_minutes = ? WHERE id = 1`, [v]);
+  return v;
 }
 
 export async function deleteRaffle(id: number): Promise<void> {

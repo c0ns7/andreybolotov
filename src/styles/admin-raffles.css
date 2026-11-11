@@ -466,6 +466,19 @@
   color: #64748b;
   flex: 1;
 }
+.admin-settings-card__hint {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+.admin-settings-card__hint code {
+  font-size: 0.78rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #475569;
+}
 .admin-settings-toggle {
   display: flex;
   align-items: center;
