@@ -67,13 +67,13 @@ export default function AppDockNavLegacy() {
             </span>
             <span className="bottom-nav-btn__label">Поиск</span>
           </button>
-          <button type="button" className="bottom-nav-btn" id="tab-chat" aria-label="Чат">
+          <button type="button" className="bottom-nav-btn" id="tab-chat" aria-label="Чат поддержки">
             <span className="bottom-nav-btn__icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>
               </svg>
             </span>
-            <span className="bottom-nav-btn__label">Чат</span>
+            <span className="bottom-nav-btn__label">Чат поддержки</span>
           </button>
           <button type="button" className="bottom-nav-btn" id="tab-profile" aria-label="Профиль">
             <span className="bottom-nav-btn__icon">

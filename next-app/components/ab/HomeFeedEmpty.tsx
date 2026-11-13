@@ -62,13 +62,13 @@ export default function HomeFeedEmpty({ variant, onRetry, retrying = false, onOp
                   onClick={onOpenChat}
                   disabled={retrying}
                 >
-                  Чат
+                  Чат поддержки
                 </button>
               ) : null}
             </>
           ) : onOpenChat ? (
             <button type="button" className="home-feed-empty__btn home-feed-empty__btn--primary" onClick={onOpenChat}>
-              Написать в чат
+              Написать в чат поддержки
             </button>
           ) : null}
         </div>

@@ -1015,7 +1015,7 @@ export default function AppBottomNav({
                 (!isChat && chatUnread > 0 ? " bottom-nav-btn--chat-unread" : "")
               }
               id="tab-chat"
-              aria-label="Чат"
+              aria-label="Чат поддержки"
               onClick={() => {
                 const cur = loadAbSession();
                 if (!cur?.token || !authVerified) {
@@ -1035,7 +1035,7 @@ export default function AppBottomNav({
                   {chatUnread > 99 ? "99+" : String(chatUnread)}
                 </span>
               </span>
-              <span className="bottom-nav-btn__label">Чат</span>
+              <span className="bottom-nav-btn__label">Чат поддержки</span>
             </button>
           ) : null}
           <button

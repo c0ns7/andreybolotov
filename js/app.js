@@ -2593,7 +2593,7 @@
     var input = document.getElementById("reserve-payment-file");
     if (input) input.value = "";
     var nameEl = document.getElementById("reserve-payment-file-name");
-    if (nameEl) nameEl.textContent = "Фото или PDF перевода";
+    if (nameEl) nameEl.textContent = "Чек в PDF-формате / скриншот с полной информацией";
     reserveFlowState.paymentParticipation = null;
     if (modalReservePayment) closeModal(modalReservePayment);
   }
@@ -4484,8 +4484,8 @@
       : "Когда появится новая акция, она будет здесь. А пока загляните в билеты или напишите нам — всегда рады помочь.";
     var actions = isError
       ? '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--primary" data-home-feed-retry>Обновить</button>' +
-        '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--ghost" data-home-feed-open-chat>Чат</button>'
-      : '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--primary" data-home-feed-open-chat>Написать в чат</button>';
+        '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--ghost" data-home-feed-open-chat>Чат поддержки</button>'
+      : '<button type="button" class="home-feed-empty__btn home-feed-empty__btn--primary" data-home-feed-open-chat>Написать в чат поддержки</button>';
     return (
       '<div class="home-feed-empty' +
       (isError ? " home-feed-empty--error" : "") +
@@ -5571,7 +5571,7 @@
       );
       html += rafflePayStepItem(
         3,
-        "<p class=\"raffle-pay-steps__txt\">Сделайте скриншот перевода.</p>",
+        "<p class=\"raffle-pay-steps__txt\">Сохраните чек. Чек должен быть в формате PDF. Либо цельный скриншот чека. Без обрезки с полной информацией.</p>",
       );
       html += rafflePayStepItem(
         4,
@@ -5601,7 +5601,7 @@
       html += rafflePayStepItem(4, "<p class=\"raffle-pay-steps__txt\">Отправьте средства.</p>");
       html += rafflePayStepItem(
         5,
-        "<p class=\"raffle-pay-steps__txt\">Сохраните чек (PDF или скриншот).</p>",
+        "<p class=\"raffle-pay-steps__txt\">Сохраните чек. Чек должен быть в формате PDF. Либо цельный скриншот чека. Без обрезки с полной информацией.</p>",
       );
       html += rafflePayStepItem(
         6,

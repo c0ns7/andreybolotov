@@ -337,9 +337,13 @@ export default function AdminMarkup() {
                 </button>
                 <div className="admin-reply__main">
                   <div className="admin-reply-canned" id="admin-reply-canned" role="toolbar" aria-label="Готовые ответы">
-                    <button type="button" className="admin-reply-canned__btn" data-canned="where_order">Где заказ</button>
-                    <button type="button" className="admin-reply-canned__btn" data-canned="how_receipt">Как чек</button>
-                    <button type="button" className="admin-reply-canned__btn" data-canned="wait_time">Сроки</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="requisites">Реквизиты</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="mobile_bank">Моб.банк</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="payment_purpose">Назначение платежа</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="receipt">Чек</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="no_ticket">Нет номерка</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="instruction">Инструкция</button>
+                    <button type="button" className="admin-reply-canned__btn" data-canned="outage">Неисправность</button>
                   </div>
                   <textarea
                     id="admin-reply-input"
@@ -879,19 +883,6 @@ export default function AdminMarkup() {
               <span className="admin-settings-toggle__label">Техработы включены</span>
             </label>
             <p className="admin-settings-card__status" id="admin-settings-status" role="status"></p>
-          </div>
-          <div className="admin-settings-card">
-            <h2 className="admin-settings-card__title">Блог на сайте</h2>
-            <p className="admin-settings-card__text">
-              Если выключено, пользователи видят заглушку вместо раздела «Блог». Администраторы по-прежнему могут
-              создавать и редактировать посты.
-            </p>
-            <label className="admin-settings-toggle">
-              <input type="checkbox" id="admin-settings-blog-enabled" className="admin-settings-toggle__input" role="switch" />
-              <span className="admin-settings-toggle__track" aria-hidden="true"></span>
-              <span className="admin-settings-toggle__label">Блог доступен пользователям</span>
-            </label>
-            <p className="admin-settings-card__status" id="admin-settings-blog-status" role="status"></p>
           </div>
           <div className="admin-settings-card">
             <h2 className="admin-settings-card__title">Таймеры брони номерков</h2>

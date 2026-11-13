@@ -35,7 +35,6 @@
 
   function applySettingsToForm(d, refs) {
     if (refs.toggle) refs.toggle.checked = !!d.maintenance_enabled;
-    if (refs.blogToggle) refs.blogToggle.checked = !!d.blog_enabled;
     if (refs.maxUrlInput) {
       refs.maxUrlInput.value = String(d.support_max_url || DEFAULT_SUPPORT_MAX_URL);
     }
@@ -63,7 +62,6 @@
     setDisabled(
       [
         refs.toggle,
-        refs.blogToggle,
         refs.maxUrlInput,
         refs.maxChatJoinInput,
         refs.reserveInput,
@@ -82,7 +80,6 @@
         setDisabled(
           [
             refs.toggle,
-            refs.blogToggle,
             refs.maxUrlInput,
             refs.maxChatJoinInput,
             refs.reserveInput,
@@ -97,14 +94,12 @@
         }
         applySettingsToForm(x.d, refs);
         if (refs.statusEl) refs.statusEl.textContent = "";
-        if (refs.blogStatusEl) refs.blogStatusEl.textContent = "";
         if (refs.timersStatusEl) refs.timersStatusEl.textContent = "";
       })
       .catch(function () {
         setDisabled(
           [
             refs.toggle,
-            refs.blogToggle,
             refs.maxUrlInput,
             refs.maxChatJoinInput,
             refs.reserveInput,
@@ -306,8 +301,6 @@
     const refs = {
       toggle: document.getElementById("admin-settings-maintenance"),
       statusEl: document.getElementById("admin-settings-status"),
-      blogToggle: document.getElementById("admin-settings-blog-enabled"),
-      blogStatusEl: document.getElementById("admin-settings-blog-status"),
       maxUrlInput: document.getElementById("admin-settings-support-max-url"),
       maxChatJoinInput: document.getElementById("admin-settings-max-chat-join-url"),
       reserveInput: document.getElementById("admin-settings-raffle-reserve-minutes"),
@@ -340,7 +333,6 @@
           function (d) {
             refs.toggle.disabled = false;
             refs.toggle.checked = !!d.maintenance_enabled;
-            if (refs.blogToggle) refs.blogToggle.checked = !!d.blog_enabled;
             if (refs.statusEl) refs.statusEl.textContent = "Сохранено";
             setTimeout(function () {
               if (refs.statusEl && refs.statusEl.textContent === "Сохранено") refs.statusEl.textContent = "";
@@ -350,34 +342,6 @@
             refs.toggle.disabled = false;
             refs.toggle.checked = !on;
             if (refs.statusEl) refs.statusEl.textContent = d.error || "Не удалось сохранить";
-          },
-        );
-      });
-    }
-
-    if (refs.blogToggle && refs.blogToggle.dataset.abSettingsChangeBound !== "1") {
-      refs.blogToggle.dataset.abSettingsChangeBound = "1";
-      refs.blogToggle.addEventListener("change", function () {
-        const on = refs.blogToggle.checked;
-        refs.blogToggle.disabled = true;
-        if (refs.blogStatusEl) refs.blogStatusEl.textContent = "Сохранение…";
-        patchSettings(
-          { blog_enabled: on },
-          function (d) {
-            refs.blogToggle.disabled = false;
-            refs.blogToggle.checked = !!d.blog_enabled;
-            if (refs.toggle) refs.toggle.checked = !!d.maintenance_enabled;
-            if (refs.blogStatusEl) refs.blogStatusEl.textContent = "Сохранено";
-            setTimeout(function () {
-              if (refs.blogStatusEl && refs.blogStatusEl.textContent === "Сохранено") {
-                refs.blogStatusEl.textContent = "";
-              }
-            }, 2000);
-          },
-          function (d) {
-            refs.blogToggle.disabled = false;
-            refs.blogToggle.checked = !on;
-            if (refs.blogStatusEl) refs.blogStatusEl.textContent = d.error || "Не удалось сохранить";
           },
         );
       });

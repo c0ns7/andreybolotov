@@ -10,7 +10,6 @@ import { AB_USER_WS_EVENT } from "../../lib/ab-user-ws-events";
 import { getAbMyTicketsCached } from "../../lib/ab-my-tickets-cache";
 import { resolvePromoPackFromRaffle } from "../../lib/ab-promo-pack";
 import AppBottomNav from "./AppBottomNav";
-import { useSiteFlags } from "../../lib/use-site-flags";
 import HomeFeedEmpty from "./HomeFeedEmpty";
 import PullToRefresh from "./PullToRefresh";
 import HomeSocialLinks from "./HomeSocialLinks";
@@ -180,7 +179,6 @@ function RaffleCardShutter({
 export default function HomeAppClient() {
   const router = useRouter();
   const { session, authVerified, authCheckInFlight, toast, verifySession } = useAbSession();
-  const { blog_enabled: blogEnabled } = useSiteFlags();
   const [mounted, setMounted] = useState(false);
   const [raffles, setRaffles] = useState<RaffleRow[]>([]);
   const [feedErr, setFeedErr] = useState(false);
@@ -1132,10 +1130,8 @@ export default function HomeAppClient() {
         show={showApp}
         profileLetter={letter}
         authVerified={authVerified}
-        showBlog
-        blogEnabled={blogEnabled}
         onChat={() => router.push("/home/chat")}
-        onChatBlocked={() => toast("Войдите, чтобы написать в чат", "warning")}
+        onChatBlocked={() => toast("Войдите, чтобы написать в чат поддержки", "warning")}
       />
     </>
   );

@@ -2384,7 +2384,7 @@ export default function RafflePurchaseClient({ raffleHash = "" }: RafflePurchase
       if (title) title.textContent = isC ? "Последний шаг — загрузите чек" : "Реквизиты для перевода";
       if (hint) {
         hint.textContent = isC
-          ? "Шаг «Чек»: выберите фото или PDF из банка и нажмите «Отправить чек»."
+          ? "Шаг «Чек»: загрузите PDF или цельный скриншот чека и нажмите «Отправить чек»."
           : "Оплатите сумму ниже, затем нажмите «Я перевёл».";
       }
       if (fill && isC) fill.style.width = "100%";

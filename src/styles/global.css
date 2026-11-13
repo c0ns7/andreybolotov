@@ -4457,6 +4457,14 @@ html.bottom-nav-hidden-by-fast-input .cart-action-strip {
   text-decoration: none;
 }
 
+#tab-chat .bottom-nav-btn__label {
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: normal;
+  max-width: 4.8rem;
+  text-align: center;
+}
+
 .bottom-nav-profile__dot {
   position: absolute;
   bottom: 2px;
@@ -5746,6 +5754,14 @@ html.theme-dark .pay-sheet-copy-btn--copied:hover {
   font-weight: 600;
   text-align: center;
   color: #f97316;
+}
+
+.pay-sheet-warn-foot--emph {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .pay-sheet-purpose-notice {

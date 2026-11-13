@@ -465,13 +465,13 @@ function buildStaffReceiptRejectedChatBody(
     title: safeTitle,
     reason: reason || "Причина не указана. Попробуйте загрузить более читаемый чек.",
     retry_url: retryUrl,
-    cta: "Повторить оплату",
+    cta: "Отправить чек",
   };
   const encoded = encodeURIComponent(JSON.stringify(payload));
   return (
     `Чек по акции «${safeTitle}» отклонён.\n` +
     `Причина: ${payload.reason}\n` +
-    `Нажмите «Повторить оплату», чтобы отправить новый чек.` +
+    `Нажмите «Отправить чек», чтобы отправить новый чек.` +
     `\n\n[[AB_CARD:${encoded}]]`
   );
 }

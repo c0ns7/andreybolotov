@@ -403,7 +403,13 @@ export default function AbRafflePurchaseShellMarkup() {
                 </span>
               </li>
               <li>
-                Сделайте <b>скриншот</b> перевода
+                Сохраните чек.
+                <br />
+                Чек должен быть в формате <b>PDF</b>.
+                <br />
+                Либо цельный скриншот чека.
+                <br />
+                Без обрезки с полной информацией.
               </li>
               <li>
                 Вернитесь на сайт и нажмите «Я перевёл» в самом низу
@@ -602,8 +608,8 @@ export default function AbRafflePurchaseShellMarkup() {
               </svg>
             </button>
           </div>
-          <p className="pay-sheet-warn-foot">
-            ⚠️ Нажмите эту кнопку ПОСЛЕ перевода, иначе бронь сгорит
+          <p className="pay-sheet-warn-foot pay-sheet-warn-foot--emph">
+            ⚠️ Нажмите на эту кнопку ПОСЛЕ перевода, иначе бронь сгорит
           </p>
           <button type="button" className="pay-sheet-alt-req" id="reserve-payment-alt-requisites">
             🔄 Дайте другие реквизиты
@@ -612,13 +618,14 @@ export default function AbRafflePurchaseShellMarkup() {
 
         <div id="reserve-payment-step-confirm" className="pay-sheet-confirm-step" hidden>
           <div className="pay-sheet-receipt-checklist">
-            <p className="pay-sheet-receipt-checklist__title">✅ Что должно быть на чеке:</p>
+            <p className="pay-sheet-receipt-checklist__title">Что должно быть в чеке:</p>
             <ul className="pay-sheet-receipt-checklist__list">
-              <li>Дата перевода</li>
+              <li>Дата и время перевода</li>
+              <li>Получатель</li>
+              <li>Отправитель</li>
               <li>
                 Сумма: <b id="reserve-payment-amount-check">0 ₽</b>
               </li>
-              <li>Последние 4 цифры карты получателя</li>
             </ul>
           </div>
           <div className="pay-sheet-receipt-upload-wrap">
@@ -639,7 +646,11 @@ export default function AbRafflePurchaseShellMarkup() {
               </div>
               <div className="pay-sheet-receipt-drop__text">
                 <p className="pay-sheet-receipt-drop__title">Загрузить чек</p>
-                <p className="pay-sheet-receipt-drop__sub">Фото или PDF перевода</p>
+                <p className="pay-sheet-receipt-drop__sub">
+                  Чек в PDF-формате
+                  <br />
+                  Скриншот чека с полной информацией
+                </p>
               </div>
             </button>
             <div id="reserve-payment-file-preview" className="pay-sheet-receipt-preview" hidden>

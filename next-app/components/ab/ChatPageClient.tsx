@@ -701,7 +701,7 @@ export default function ChatPageClient() {
                                         if (url) router.push(url.replace(/^https?:\/\/[^/]+/i, ""));
                                       }}
                                     >
-                                      {String(card.cta || "Повторить оплату")}
+                                      {String(card.cta || "Отправить чек")}
                                     </button>
                                   </div>
                                 );
