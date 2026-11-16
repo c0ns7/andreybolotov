@@ -26,7 +26,8 @@ export function extForChatMime(mime: string): string | null {
 }
 
 export function isAllowedChatAttachmentUrl(url: string): boolean {
-  return /^\/uploads\/chat\/[a-zA-Z0-9._-]+$/.test(url);
+  const pathOnly = String(url || "").trim().split("?")[0] || "";
+  return /^\/uploads\/chat\/[a-zA-Z0-9._-]+$/.test(pathOnly);
 }
 
 export type ChatAttachment = { url: string; name: string; mime: string };
@@ -34,7 +35,7 @@ export type ChatAttachment = { url: string; name: string; mime: string };
 export function parseChatAttachmentFromMessage(raw: unknown): ChatAttachment | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const url = String(o.url ?? "").trim();
+  const url = String(o.url ?? "").trim().split("?")[0] || "";
   const name = String(o.name ?? "файл").trim().slice(0, 255) || "файл";
   const mime = String(o.mime ?? "application/octet-stream").trim().slice(0, 120);
   if (!isAllowedChatAttachmentUrl(url)) return null;

@@ -36,7 +36,7 @@ import {
   isRaffleTicketNumberInRange,
   type RaffleRow,
 } from "../../server/db.js";
-import { pgAll } from "../../server/pg-sql.js";
+import { pgAll, pgGet } from "../../server/pg-sql.js";
 import {
   createSessionPg,
   deleteSessionPg,
@@ -136,6 +136,18 @@ import {
   tickRaffleFreeTicketsPushReminders,
 } from "../../server/raffle-free-tickets-push.js";
 import { getPublicSiteMusicPayload } from "../../server/site-music.js";
+import { isStaffRole } from "../../server/admin-roles.js";
+import {
+  applySecurityHeaders,
+  isCorsOriginAllowed,
+  isRateLimitEnabled,
+} from "../../server/http-security.js";
+import {
+  isSensitiveUploadPath,
+  signUploadUrlIfNeeded,
+  verifySignedUploadPath,
+} from "../../server/secure-uploads.js";
+import { createRegisterCaptcha, verifyRegisterCaptcha } from "../../server/register-captcha.js";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 async function raffleDtoWithBankCardMeta(r: RaffleRow) {
@@ -150,7 +162,7 @@ const paymentParticipationCache = new Map<
   { ts: number; data: Awaited<ReturnType<typeof buildRafflePaymentParticipationContext>> }
 >();
 const latestTableCache = new Map<
-  number,
+  string,
   {
     ts: number;
     payload: {
@@ -161,7 +173,7 @@ const latestTableCache = new Map<
 >();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
-  if (process.env.AB_ENABLE_RATE_LIMIT !== "1") return true;
+  if (!isRateLimitEnabled()) return true;
   const now = Date.now();
   let b = rateLimitBuckets.get(key);
   if (!b || now - b.win > windowMs) {
@@ -184,6 +196,14 @@ setInterval(() => {
     if (now - entry.ts > 60_000) latestTableCache.delete(key);
   }
 }, 60_000).unref?.();
+
+function phoneForTableRow(status: string, phone: string | null): string | null {
+  // Чужие телефоны наружу не отдаём (152‑ФЗ). Только свои номерки.
+  if (status === "self_reserved" || status === "self_pending" || status === "self_confirmed") {
+    return phone;
+  }
+  return null;
+}
 
 function getClientIp(request: FastifyRequest): string {
   const xfwd = String(request.headers["x-forwarded-for"] ?? "");
@@ -340,8 +360,24 @@ const app = Fastify({
 attachProcessStabilityGuards(app.log);
 
 await app.register(cors, {
-  origin: true,
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (isCorsOriginAllowed(origin)) return cb(null, true);
+    return cb(null, false);
+  },
   credentials: true,
+});
+
+app.addHook("onSend", async (request, reply, payload) => {
+  applySecurityHeaders((name, value) => {
+    if (!reply.hasHeader(name)) reply.header(name, value);
+  });
+  // Sensitive uploads must never be cached by CDN/browsers as public
+  const pathOnly = String(request.url || "").split("?")[0] || "";
+  if (isSensitiveUploadPath(pathOnly)) {
+    reply.header("Cache-Control", "private, no-store");
+  }
+  return payload;
 });
 
 await app.register(multipart, {
@@ -645,10 +681,59 @@ async function readUploadAsset(relPath: string): Promise<Buffer | null> {
   return null;
 }
 
+async function canAccessSensitiveUpload(
+  request: FastifyRequest,
+  pathname: string,
+): Promise<boolean> {
+  const q = request.query as { exp?: string; sig?: string };
+  if (verifySignedUploadPath(pathname, q?.exp, q?.sig)) return true;
+
+  const user = await getAuthUser(request);
+  if (!user) return false;
+  if (isStaffRole(user.role)) return true;
+
+  const pathOnly = pathname.split("?")[0] || pathname;
+  if (pathOnly.startsWith("/uploads/receipts/")) {
+    const row = await pgGet<{ user_id: number }>(
+      `SELECT user_id FROM raffle_orders WHERE receipt_url = ? LIMIT 1`,
+      [pathOnly],
+    );
+    if (row && Math.floor(Number(row.user_id)) === user.id) return true;
+    // Also allow if file mentioned in receipt_submitted event for this user's orders
+    const ev = await pgGet<{ x: number }>(
+      `SELECT 1 AS x
+         FROM raffle_order_events e
+         INNER JOIN raffle_orders o ON o.id = e.order_id
+         WHERE o.user_id = ? AND e.kind = 'receipt_submitted' AND e.detail LIKE ?
+         LIMIT 1`,
+      [user.id, `%"url":"${pathOnly}"%`],
+    );
+    return Boolean(ev);
+  }
+  if (pathOnly.startsWith("/uploads/chat/")) {
+    const row = await pgGet<{ user_id: number }>(
+      `SELECT user_id FROM support_messages WHERE attachment_url = ? LIMIT 1`,
+      [pathOnly],
+    );
+    return Boolean(row && Math.floor(Number(row.user_id)) === user.id);
+  }
+  return false;
+}
+
 app.get("/uploads/*", async (request, reply) => {
   const clean = String(request.url || "").split("?")[0] || "";
   const rel = clean.replace(/^\/uploads\/?/, "");
   if (!rel) return reply.code(404).send({ error: "Not Found" });
+  const pathname = `/uploads/${rel.replace(/^\/+/, "")}`;
+  if (isSensitiveUploadPath(pathname)) {
+    const ok = await canAccessSensitiveUpload(request, pathname);
+    if (!ok) return reply.code(401).send({ error: "Требуется авторизация" });
+    const buf = await readUploadAsset(rel);
+    if (!buf) return reply.code(404).send({ error: "Not Found" });
+    reply.header("Content-Type", mimeForUploadPath(rel));
+    reply.header("Cache-Control", "private, no-store");
+    return reply.send(buf);
+  }
   const buf = await readUploadAsset(rel);
   if (!buf) return reply.code(404).send({ error: "Not Found" });
   reply.header("Content-Type", mimeForUploadPath(rel));
@@ -832,7 +917,8 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   const ticketStart = getRaffleTicketStartNumber(latest);
   const ticketEnd = getRaffleTicketEndNumber(latest);
   const now = Date.now();
-  const cached = latestTableCache.get(raffleId);
+  const cacheKey = `${raffleId}:${user.id}`;
+  const cached = latestTableCache.get(cacheKey);
   if (cached && now - cached.ts < 15_000) {
     return { ...cached.payload, server_time_ms: now };
   }
@@ -875,7 +961,7 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     const prev = byNumber.get(n);
     const orderId = Math.floor(Number(row.order_id) || 0);
     if (!prev || prio > prev.prio || (prio === prev.prio && orderId > prev.orderId)) {
-      byNumber.set(n, { status, phone, prio, orderId });
+      byNumber.set(n, { status, phone: isSelf ? phone : null, prio, orderId });
     }
     if (isSelf) {
       const prevOwn = ownByNumber.get(n);
@@ -895,11 +981,16 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     const n = Math.floor(Number(row.n));
     if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prePhone = String(row.phone || "").trim();
-    const isSelf = prePhone && prePhone === ownPhone;
+    const isSelf = Boolean(prePhone && prePhone === ownPhone);
     const status = isSelf ? "self_confirmed" : "taken";
     const prev = byNumber.get(n);
     if (!prev || 6 > prev.prio) {
-      byNumber.set(n, { status, phone: prePhone || null, prio: 6, orderId: Number.MAX_SAFE_INTEGER });
+      byNumber.set(n, {
+        status,
+        phone: isSelf ? prePhone || null : null,
+        prio: 6,
+        orderId: Number.MAX_SAFE_INTEGER,
+      });
     }
     if (isSelf) {
       ownByNumber.set(n, { status: "self_confirmed", phone: prePhone || null, prio: 6 });
@@ -918,12 +1009,12 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
   for (let n = tableFrom; n <= tableTo; n++) {
     const own = ownByNumber.get(n);
     if (own) {
-      tableRows.push({ n, status: own.status, phone: own.phone });
+      tableRows.push({ n, status: own.status, phone: phoneForTableRow(own.status, own.phone) });
       continue;
     }
     const row = byNumber.get(n);
     if (row) {
-      tableRows.push({ n, status: row.status, phone: row.phone });
+      tableRows.push({ n, status: row.status, phone: phoneForTableRow(row.status, row.phone) });
       continue;
     }
     tableRows.push({ n, status: "free", phone: null });
@@ -944,8 +1035,8 @@ app.get("/api/raffles/latest-visible/table", async (request, reply) => {
     },
     rows: tableRows,
   };
-  latestTableCache.set(raffleId, { ts: now, payload });
-  if (latestTableCache.size > 20) {
+  latestTableCache.set(cacheKey, { ts: now, payload });
+  if (latestTableCache.size > 200) {
     const cutoff = now - 60_000;
     for (const [key, value] of latestTableCache) {
       if (value.ts < cutoff) latestTableCache.delete(key);
@@ -994,16 +1085,15 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
   const ticketStart = getRaffleTicketStartNumber(latest);
   const ticketEnd = getRaffleTicketEndNumber(latest);
 
-  const byNumber = new Map<number, { status: "taken"; phone: string | null; prio: number; orderId: number }>();
-  const holdRows = await pgAll<{ n: number; order_status: string; phone: string | null; order_id: number }>(
+  // Публичная таблица: только статусы. Телефоны не выбираем и не отдаём.
+  const byNumber = new Map<number, { status: "taken"; phone: null; prio: number; orderId: number }>();
+  const holdRows = await pgAll<{ n: number; order_status: string; order_id: number }>(
     `SELECT
        h.ticket_number AS n,
        o.status AS order_status,
-       u.phone AS phone,
        o.id AS order_id
      FROM raffle_ticket_holds h
      INNER JOIN raffle_orders o ON o.id = h.order_id
-     INNER JOIN users u ON u.id = o.user_id
      WHERE h.raffle_id = ? AND o.status IN ('reserved', 'pending_review', 'confirmed')`,
     [raffleId],
   );
@@ -1019,16 +1109,15 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
     const n = Math.floor(Number(row.n));
     if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
     const prio = statusPrio(String(row.order_status || ""));
-    const phone = String(row.phone || "").trim() || null;
     const prev = byNumber.get(n);
     const orderId = Math.floor(Number(row.order_id) || 0);
     if (!prev || prio > prev.prio || (prio === prev.prio && orderId > prev.orderId)) {
-      byNumber.set(n, { status: "taken", phone, prio, orderId });
+      byNumber.set(n, { status: "taken", phone: null, prio, orderId });
     }
   }
 
-  const preRows = await pgAll<{ n: number; phone: string }>(
-    `SELECT ticket_number AS n, phone AS phone
+  const preRows = await pgAll<{ n: number }>(
+    `SELECT ticket_number AS n
      FROM raffle_phone_preassignments
      WHERE raffle_id = ?`,
     [raffleId],
@@ -1036,10 +1125,9 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
   for (const row of preRows) {
     const n = Math.floor(Number(row.n));
     if (!Number.isFinite(n) || !isRaffleTicketNumberInRange(latest, n)) continue;
-    const prePhone = String(row.phone || "").trim() || null;
     const prev = byNumber.get(n);
     if (!prev || 6 > prev.prio) {
-      byNumber.set(n, { status: "taken", phone: prePhone, prio: 6, orderId: Number.MAX_SAFE_INTEGER });
+      byNumber.set(n, { status: "taken", phone: null, prio: 6, orderId: Number.MAX_SAFE_INTEGER });
     }
   }
 
@@ -1051,11 +1139,11 @@ app.get("/api/public/raffles/latest-visible/table", async (request, reply) => {
   const tableFrom = sequentialWindow?.from ?? ticketStart;
   const tableTo = sequentialWindow?.to ?? ticketEnd;
 
-  const tableRows: Array<{ n: number; status: "free" | "taken"; phone: string | null }> = [];
+  const tableRows: Array<{ n: number; status: "free" | "taken"; phone: null }> = [];
   for (let n = tableFrom; n <= tableTo; n++) {
     const row = byNumber.get(n);
     if (row) {
-      tableRows.push({ n, status: "taken", phone: row.phone });
+      tableRows.push({ n, status: "taken", phone: null });
       continue;
     }
     tableRows.push({ n, status: "free", phone: null });
@@ -1152,7 +1240,20 @@ app.get("/api/public/raffle-order-status", async (request, reply) => {
   return dto;
 });
 
+app.get("/api/auth/captcha", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`get:auth-captcha:${ip}`, 30, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов капчи. Подождите немного." });
+  }
+  reply.header("Cache-Control", "no-store");
+  return createRegisterCaptcha();
+});
+
 app.post("/api/auth/register", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`post:auth-register:${ip}`, 5, 3_600_000)) {
+    return reply.code(429).send({ error: "Слишком много регистраций с этого IP. Попробуйте позже." });
+  }
   const body = (request.body ?? {}) as {
     phone?: string;
     name?: string;
@@ -1161,7 +1262,11 @@ app.post("/api/auth/register", async (request, reply) => {
     password?: string;
     consent_personal_data?: boolean;
     consent_privacy_policy?: boolean;
+    captcha_token?: string;
+    captcha_answer?: string;
   };
+  const captcha = verifyRegisterCaptcha(body.captcha_token, body.captcha_answer);
+  if (!captcha.ok) return reply.code(400).send({ error: captcha.error });
   const phone = normalizePhone(String(body.phone ?? ""));
   const nameRaw = String(body.name ?? "");
   const emailRaw = String(body.email ?? "").trim().toLowerCase();
@@ -1172,6 +1277,9 @@ app.post("/api/auth/register", async (request, reply) => {
 
   if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
   if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
+  if (!rateLimitAllow(`post:auth-register-phone:${phone}`, 3, 3_600_000)) {
+    return reply.code(429).send({ error: "Слишком много попыток регистрации. Попробуйте позже." });
+  }
   const nameCheck = validatePersonName(nameRaw);
   if (!nameCheck.ok) return reply.code(400).send({ error: nameCheck.error });
   const name = nameCheck.name;
@@ -1218,26 +1326,40 @@ app.post("/api/auth/register", async (request, reply) => {
 });
 
 app.post("/api/auth/check-phone", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`post:auth-check-phone:${ip}`, 20, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много запросов. Подождите немного." });
+  }
   const body = (request.body ?? {}) as { phone?: string };
   const phone = normalizePhone(String(body.phone ?? ""));
   if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
   if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
+  if (!rateLimitAllow(`post:auth-check-phone-num:${phone}`, 10, 3_600_000)) {
+    return reply.code(429).send({ error: "Слишком много проверок этого номера. Попробуйте позже." });
+  }
   const user = await getUserByPhonePg(phone);
   if (!user) return { exists: false };
+  // Имя намеренно не отдаём — только факт существования/блокировки
   return {
     exists: true,
     blocked: Number(user.blocked) === 1,
-    name: String(user.name || ""),
   };
 });
 
 app.post("/api/auth/login", async (request, reply) => {
+  const ip = getClientIp(request);
+  if (!rateLimitAllow(`post:auth-login:${ip}`, 20, 60_000)) {
+    return reply.code(429).send({ error: "Слишком много попыток входа. Подождите немного." });
+  }
   const body = (request.body ?? {}) as { phone?: string; password?: string };
   const phone = normalizePhone(String(body.phone ?? ""));
   const password = String(body.password ?? "");
   if (!phone) return reply.code(400).send({ error: "Введите полный номер телефона" });
   if (!isValidRuMobile(phone)) return reply.code(400).send({ error: "Нужен мобильный номер России (+7 9XX …)" });
   if (!password) return reply.code(400).send({ error: "Введите пароль" });
+  if (!rateLimitAllow(`post:auth-login-phone:${phone}`, 8, 15 * 60_000)) {
+    return reply.code(429).send({ error: "Слишком много попыток входа для этого номера. Попробуйте позже." });
+  }
 
   const user = await getUserByPhonePg(phone);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
@@ -1592,8 +1714,9 @@ app.post("/api/chat/upload", async (request, reply) => {
   const fileName = `${randomUUID()}${ext}`;
   await writeChatUploadToDirs(fileName, buffer);
   const originalName = String(part.filename || "файл").replace(/[<>\"]/g, "").slice(0, 255) || "файл";
+  const pathOnly = `/uploads/chat/${fileName}`;
   return {
-    url: `/uploads/chat/${fileName}`,
+    url: signUploadUrlIfNeeded(pathOnly) || pathOnly,
     name: originalName,
     mime,
   };
@@ -1913,8 +2036,9 @@ app.post("/api/raffles/receipt-upload", async (request, reply) => {
       { route: "receipt-upload", userId: user.id, bytes: buffer.length, mime, fileName },
       "receipt_upload_ok",
     );
+    const pathOnly = `/uploads/receipts/${fileName}`;
     return {
-      url: `/uploads/receipts/${fileName}`,
+      url: signUploadUrlIfNeeded(pathOnly) || pathOnly,
       name: originalName,
       mime,
       sha256,

@@ -1,12 +1,14 @@
 /* Service Worker: кэш просмотренных фото и видео (блог, акции, uploads). */
-var CACHE = "ab_media_v1";
+var CACHE = "ab_media_v2";
 var MEDIA_PATH_RE = /^\/(uploads\/|img\/)/;
+var SENSITIVE_UPLOAD_RE = /^\/uploads\/(receipts|chat)\//;
 var MEDIA_EXT_RE = /\.(jpe?g|png|webp|gif|svg|ico|mp4|webm|mov|m4v)(\?|#|$)/i;
 var MAX_ENTRIES = 220;
 
 function isMediaUrl(url) {
   try {
     var u = new URL(url);
+    if (SENSITIVE_UPLOAD_RE.test(u.pathname)) return false;
     return MEDIA_PATH_RE.test(u.pathname) || MEDIA_EXT_RE.test(u.pathname);
   } catch (e) {
     return false;

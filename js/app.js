@@ -7982,6 +7982,34 @@
     });
     var indicator = document.getElementById("reg-steps-indicator");
     if (indicator) indicator.textContent = "Шаг " + String(s) + " из 3";
+    if (s === 3) loadRegisterCaptcha();
+  }
+
+  function loadRegisterCaptcha() {
+    var img = document.getElementById("captcha-reg-image");
+    var tokenEl = document.getElementById("captcha-reg-token");
+    var answerEl = document.getElementById("captcha-reg");
+    if (!img || !tokenEl) return;
+    if (answerEl) answerEl.value = "";
+    fetch("/api/auth/captcha", { cache: "no-store" })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.error) || "Не удалось загрузить капчу");
+          return data;
+        });
+      })
+      .then(function (data) {
+        tokenEl.value = String(data.captcha_token || "");
+        var svg = String(data.image_svg || "");
+        img.src = svg
+          ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg)
+          : "";
+      })
+      .catch(function (err) {
+        tokenEl.value = "";
+        img.removeAttribute("src");
+        showToast((err && err.message) || "Не удалось загрузить капчу", "error");
+      });
   }
 
   function initRegisterSteps() {
@@ -8017,6 +8045,9 @@
     });
     document.getElementById("reg-step-back-3")?.addEventListener("click", function () {
       setRegisterStep(2);
+    });
+    document.getElementById("captcha-reg-refresh")?.addEventListener("click", function () {
+      loadRegisterCaptcha();
     });
   }
   initRegisterSteps();
@@ -8745,6 +8776,12 @@
       showToast("Подтвердите согласие с документами", "warning");
       return;
     }
+    var captchaToken = String((document.getElementById("captcha-reg-token") || {}).value || "").trim();
+    var captchaAnswer = String((document.getElementById("captcha-reg") || {}).value || "").trim();
+    if (!captchaToken || !captchaAnswer) {
+      showToast("Введите код с картинки", "warning");
+      return;
+    }
 
     apiJson("/api/auth/register", {
       method: "POST",
@@ -8755,6 +8792,8 @@
         password: p1,
         consent_personal_data: true,
         consent_privacy_policy: true,
+        captcha_token: captchaToken,
+        captcha_answer: captchaAnswer,
       }),
     })
       .then(function (data) {
@@ -8776,6 +8815,7 @@
       })
       .catch(function (err) {
         showToast(err.message || "Ошибка регистрации", "error");
+        loadRegisterCaptcha();
       });
   });
 

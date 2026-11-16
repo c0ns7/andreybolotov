@@ -2,47 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, Grid2X2, Phone, RefreshCw, Search, SlidersHorizontal, Ticket, Users, X } from "lucide-react";
+import { ChevronLeft, Grid2X2, RefreshCw, SlidersHorizontal, Ticket, Users, X } from "lucide-react";
 import { buildAbPublicWebSocketUrl, detachWebSocket } from "../../lib/ab-ws";
 
 type PublicTicketCard = {
   raffleId: number;
   ticket: number;
-  phone: string;
   raffleTitle: string;
   status: "free" | "taken";
 };
 
 function statusLabel(status: PublicTicketCard["status"]): string {
   return status === "free" ? "Свободен" : "Занят";
-}
-
-function normalizePhone(raw?: string) {
-  return String(raw || "").replace(/\D/g, "");
-}
-
-function formatPhoneRu(raw?: string) {
-  const d = normalizePhone(raw);
-  if (d.length < 11) return raw || "";
-  const n = d.startsWith("8") ? "7" + d.slice(1) : d;
-  const a = n.slice(-10);
-  return `+7 (${a.slice(0, 3)}) ${a.slice(3, 6)}-${a.slice(6, 8)}-${a.slice(8, 10)}`;
-}
-
-function formatSearchPhone(raw: string): string {
-  let d = String(raw || "").replace(/\D/g, "");
-  if (!d) return "";
-  if (d[0] === "8") d = "7" + d.slice(1);
-  if (d[0] === "9") d = "7" + d;
-  if (d[0] !== "7") d = "7" + d.replace(/^7+/, "");
-  d = d.slice(0, 11);
-  let out = "+7";
-  if (d.length > 1) out += " (" + d.slice(1, 4);
-  if (d.length >= 4) out += ")";
-  if (d.length > 4) out += " " + d.slice(4, 7);
-  if (d.length > 7) out += "-" + d.slice(7, 9);
-  if (d.length > 9) out += "-" + d.slice(9, 11);
-  return out;
 }
 
 function buildTableRangeTabs(meta: {
@@ -117,7 +88,6 @@ export default function PublicTableClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [phoneQuery, setPhoneQuery] = useState("");
   const [ticketQuery, setTicketQuery] = useState("");
   const [cards, setCards] = useState<PublicTicketCard[]>([]);
   const [raffleTitle, setRaffleTitle] = useState("");
@@ -131,7 +101,6 @@ export default function PublicTableClient() {
   const [raffleId, setRaffleId] = useState(0);
   const [viewersCount, setViewersCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [revealedPhones, setRevealedPhones] = useState<Record<number, boolean>>({});
   const [modalCard, setModalCard] = useState<PublicTicketCard | null>(null);
   const [activeRangeKey, setActiveRangeKey] = useState("all");
 
@@ -195,15 +164,13 @@ export default function PublicTableClient() {
       setViewersCount(Math.max(0, Math.floor(Number(raffle.viewers_count) || 0)));
       const rows = Array.isArray(data?.rows) ? data.rows : [];
       const mapped: PublicTicketCard[] = rows
-        .map((row: { n?: number; status?: string; phone?: string | null }) => {
+        .map((row: { n?: number; status?: string }) => {
           const n = Math.floor(Number(row?.n));
           if (!Number.isFinite(n) || n <= 0) return null;
           const status: PublicTicketCard["status"] = String(row?.status || "") === "taken" ? "taken" : "free";
-          const phoneRaw = String(row?.phone || "").trim();
           return {
             raffleId: rid,
             ticket: n,
-            phone: phoneRaw ? formatPhoneRu(phoneRaw) : "",
             raffleTitle: String(raffle.title || "Акция"),
             status,
           };
@@ -273,7 +240,6 @@ export default function PublicTableClient() {
     () => rangeTabs.find((x) => x.key === activeRangeKey) || rangeTabs[0] || { key: "all", label: "Общий", from: 1, to: 999999 },
     [rangeTabs, activeRangeKey],
   );
-  const phoneDigits = useMemo(() => normalizePhone(phoneQuery), [phoneQuery]);
   const ticketDigits = useMemo(() => String(ticketQuery || "").replace(/\D/g, ""), [ticketQuery]);
   const totalCount = cards.length;
   const freeCount = useMemo(() => cards.filter((c) => c.status === "free").length, [cards]);
@@ -281,14 +247,10 @@ export default function PublicTableClient() {
   const takenPercent = totalCount > 0 ? Math.min(100, Math.round((takenCount / totalCount) * 100)) : 0;
   const filtered = useMemo(() => {
     const inRange = cards.filter((item) => item.ticket >= activeRange.from && item.ticket <= activeRange.to);
-    if (!phoneDigits && !ticketDigits) return inRange;
-    return inRange.filter((item) => {
-      const byPhone = !phoneDigits || normalizePhone(item.phone).includes(phoneDigits);
-      const byTicket = !ticketDigits || String(item.ticket).includes(ticketDigits);
-      return byPhone && byTicket;
-    });
-  }, [cards, activeRange.from, activeRange.to, phoneDigits, ticketDigits]);
-  const hasActiveFilters = phoneDigits.length > 0 || ticketDigits.length > 0;
+    if (!ticketDigits) return inRange;
+    return inRange.filter((item) => String(item.ticket).includes(ticketDigits));
+  }, [cards, activeRange.from, activeRange.to, ticketDigits]);
+  const hasActiveFilters = ticketDigits.length > 0;
 
   return (
     <div className="screen home-screen">
@@ -307,7 +269,7 @@ export default function PublicTableClient() {
             <div className="table-page__head-titles">
               <h1 className="table-page__title">Таблица номерков</h1>
               <p className="table-page__subtitle">
-                {raffleTitle ? `Текущая акция: ${raffleTitle}` : "Публичная таблица с поиском по номеркам и телефону"}
+                {raffleTitle ? `Текущая акция: ${raffleTitle}` : "Публичная таблица с поиском по номеркам"}
               </p>
             </div>
           </div>
@@ -367,10 +329,7 @@ export default function PublicTableClient() {
             <button
               type="button"
               className={"table-page__filters-reset" + (hasActiveFilters ? " is-active" : "")}
-              onClick={() => {
-                setPhoneQuery("");
-                setTicketQuery("");
-              }}
+              onClick={() => setTicketQuery("")}
               disabled={!hasActiveFilters}
             >
               <X size={14} aria-hidden="true" />
@@ -379,16 +338,6 @@ export default function PublicTableClient() {
           </div>
           {filtersOpen ? (
             <div className="table-page__filters">
-              <label className="table-page__search">
-                <Search size={16} aria-hidden="true" />
-                <input
-                  type="text"
-                  value={phoneQuery}
-                  onChange={(e) => setPhoneQuery(formatSearchPhone(e.target.value))}
-                  placeholder="+7 (9__) ___-__-__"
-                  aria-label="Фильтр по номеру телефона"
-                />
-              </label>
               <label className="table-page__search">
                 <Ticket size={16} aria-hidden="true" />
                 <input
@@ -429,9 +378,7 @@ export default function PublicTableClient() {
                 <article
                   className={"table-ticket-card table-ticket-card--" + card.status}
                   key={String(card.raffleId) + "_" + String(card.ticket)}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest(".table-ticket-card__phone")) return;
+                  onClick={() => {
                     if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) {
                       setModalCard(card);
                     }
@@ -442,25 +389,6 @@ export default function PublicTableClient() {
                       <Ticket size={13} />
                     </span>
                     <strong className="table-ticket-card__num">№ {card.ticket}</strong>
-                  </div>
-                  <div className="table-ticket-card__line">
-                    <span className="table-ticket-card__icon" aria-hidden="true">
-                      <Phone size={12} />
-                    </span>
-                    <button
-                      type="button"
-                      className={
-                        "table-ticket-card__tiny table-ticket-card__phone" +
-                        (card.phone && !revealedPhones[card.ticket] ? " is-blurred" : "")
-                      }
-                      onClick={() => {
-                        if (!card.phone) return;
-                        setRevealedPhones((prev) => ({ ...prev, [card.ticket]: !prev[card.ticket] }));
-                      }}
-                      aria-label="Показать или скрыть телефон"
-                    >
-                      {card.phone || "—"}
-                    </button>
                   </div>
                   <div className="table-ticket-card__line">
                     <span className="table-ticket-card__icon" aria-hidden="true">
@@ -481,10 +409,6 @@ export default function PublicTableClient() {
               <X size={18} />
             </button>
             <h3 className="table-card-modal__title">Номерок № {modalCard.ticket}</h3>
-            <div className="table-card-modal__row">
-              <span>Телефон</span>
-              <strong>{modalCard.phone || "—"}</strong>
-            </div>
             <div className="table-card-modal__row">
               <span>Таблица</span>
               <strong>{modalCard.raffleTitle}</strong>

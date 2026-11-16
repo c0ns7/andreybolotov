@@ -57,6 +57,10 @@ export default function LandingClient() {
   const [showRegPass2, setShowRegPass2] = useState(false);
   const [regLegalAcceptedMain, setRegLegalAcceptedMain] = useState(true);
   const [regLegalAcceptedDocs, setRegLegalAcceptedDocs] = useState(true);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaSvg, setCaptchaSvg] = useState("");
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [legalModal, setLegalModal] = useState<"none" | "pd" | "privacy">("none");
 
   const [loginPhone, setLoginPhone] = useState("");
@@ -83,6 +87,33 @@ export default function LandingClient() {
 
   // Не скрываем заставку, пока сессия не подтверждена — иначе кнопка «Войти» пропадает при проверке токена.
   const showAuthedUi = !!(session?.token && session?.phone && authVerified);
+
+  const loadRegisterCaptcha = useCallback(async () => {
+    setCaptchaLoading(true);
+    setCaptchaAnswer("");
+    try {
+      const res = await fetch("/api/auth/captcha", { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as {
+        captcha_token?: string;
+        image_svg?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(String(data.error || "Не удалось загрузить капчу"));
+      setCaptchaToken(String(data.captcha_token || ""));
+      setCaptchaSvg(String(data.image_svg || ""));
+    } catch (err) {
+      setCaptchaToken("");
+      setCaptchaSvg("");
+      toast(err instanceof Error ? err.message : "Не удалось загрузить капчу", "error");
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (modal !== "auth" || authStep !== "register") return;
+    void loadRegisterCaptcha();
+  }, [modal, authStep, loadRegisterCaptcha]);
 
   const beginAuthFlow = useCallback(() => {
     setModal("auth");
@@ -130,7 +161,7 @@ export default function LandingClient() {
     if (authCheckingPhone || checkedPhone === phone) return;
     setAuthCheckingPhone(true);
     setCheckedPhone(phone);
-    void abApiJson<{ exists: boolean; blocked?: boolean; name?: string }>("/api/auth/check-phone", {
+    void abApiJson<{ exists: boolean; blocked?: boolean }>("/api/auth/check-phone", {
       method: "POST",
       body: JSON.stringify({ phone }),
     })
@@ -181,6 +212,10 @@ export default function LandingClient() {
       toast("Подтвердите согласие с документами", "warning");
       return;
     }
+    if (!captchaToken || !captchaAnswer.trim()) {
+      toast("Введите код с картинки", "warning");
+      return;
+    }
     try {
       const data = await abApiJson<AuthResp>("/api/auth/register", {
         method: "POST",
@@ -191,6 +226,8 @@ export default function LandingClient() {
           password: regPass,
           consent_personal_data: true,
           consent_privacy_policy: true,
+          captcha_token: captchaToken,
+          captcha_answer: captchaAnswer.trim(),
         }),
       });
       setSessionFromLogin(sessionFromAuth(data));
@@ -199,6 +236,7 @@ export default function LandingClient() {
     } catch (err) {
       const msg = err instanceof AbApiError ? err.message : "Ошибка регистрации";
       toast(msg, "error");
+      void loadRegisterCaptcha();
     }
   };
 
@@ -477,6 +515,47 @@ export default function LandingClient() {
                       )}
                     </button>
                   </div>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="captcha-reg-native">Код с картинки</label>
+                  <div className="reg-captcha">
+                    <div className="reg-captcha__image-wrap" aria-live="polite">
+                      {captchaSvg ? (
+                        <img
+                          className="reg-captcha__image"
+                          alt="Капча"
+                          width={180}
+                          height={56}
+                          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(captchaSvg)}`}
+                        />
+                      ) : (
+                        <div className="reg-captcha__placeholder">{captchaLoading ? "Загрузка…" : "Нет картинки"}</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn--ghost reg-captcha__refresh"
+                      onClick={() => void loadRegisterCaptcha()}
+                      disabled={captchaLoading}
+                      aria-label="Обновить капчу"
+                    >
+                      Обновить
+                    </button>
+                  </div>
+                  <input
+                    className="input"
+                    id="captcha-reg-native"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    placeholder="Введите символы с картинки"
+                    value={captchaAnswer}
+                    onChange={(e) => setCaptchaAnswer(e.target.value)}
+                    disabled={captchaLoading || !captchaToken}
+                  />
+                  <p className="form-hint">Защита от автоматической регистрации</p>
                 </div>
                 <label className="consent-check consent-switch">
                   <input type="checkbox" checked={regLegalAcceptedMain} onChange={(e) => setRegLegalAcceptedMain(e.target.checked)} />

@@ -222,13 +222,17 @@ export async function uploadReceiptFile(file: File, onProgress?: ReceiptUploadPr
 /** Привязка чека к заказу: до 3 попыток при сетевом сбое. */
 export async function postReceiptWithRetries(orderId: number, payload: Record<string, unknown>): Promise<Response> {
   let lastErr: unknown;
+  const bodyPayload = { ...payload };
+  if (typeof bodyPayload.url === "string") {
+    bodyPayload.url = String(bodyPayload.url).split("?")[0] || "";
+  }
   for (let attempt = 0; attempt < RECEIPT_POST_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleep(backoffMs(attempt));
     try {
       return await fetch("/api/raffles/orders/" + String(orderId) + "/receipt", {
         method: "POST",
         headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bodyPayload),
       });
     } catch (e) {
       lastErr = e;

@@ -47,6 +47,9 @@ import {
 } from "./db-auth-pg.js";
 import { attachWebSocket, broadcastRaffleGridUpdated, broadcastTypingUserToAdmins } from "./ws-chat.js";
 import { getStaffTypingForUser } from "./typing-state.js";
+import { applySecurityHeaders, isCorsOriginAllowed, isRateLimitEnabled } from "./http-security.js";
+import { signUploadUrlIfNeeded } from "./secure-uploads.js";
+import { createRegisterCaptcha, verifyRegisterCaptcha } from "./register-captcha.js";
 import type { Context } from "hono";
 import type { RaffleRow, SessionUser } from "./db.js";
 import { isValidRuMobile, normalizePhone } from "./phone.js";
@@ -212,7 +215,8 @@ async function handleChatFileUpload(c: Context): Promise<Response> {
   }
   const fileName = `${randomUUID()}${ext}`;
   await writeUploadToDirs(chatUploadsDirs, fileName, buffer);
-  const url = `/uploads/chat/${fileName}`;
+  const pathOnly = `/uploads/chat/${fileName}`;
+  const url = signUploadUrlIfNeeded(pathOnly) || pathOnly;
   const origName = String(blob.name || "file")
     .replace(/[<>\"]/g, "")
     .slice(0, 255);
@@ -257,7 +261,8 @@ async function handleReceiptFileUpload(c: Context): Promise<Response> {
   }
   const fileName = `${randomUUID()}${ext}`;
   await writeUploadToDirs(receiptUploadsDirs, fileName, buffer);
-  const url = `/uploads/receipts/${fileName}`;
+  const pathOnly = `/uploads/receipts/${fileName}`;
+  const url = signUploadUrlIfNeeded(pathOnly) || pathOnly;
   const sha256 = createHash("sha256").update(buffer).digest("hex");
   const origName = String(blob.name || "чек")
     .replace(/[<>\"]/g, "")
@@ -340,17 +345,29 @@ app.get("/img/*", async (c) => {
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: (origin) => {
+      if (!origin) return "";
+      return isCorsOriginAllowed(origin) ? origin : "";
+    },
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
     maxAge: 86400,
   }),
 );
+
+app.use("/*", async (c, next) => {
+  await next();
+  applySecurityHeaders((name, value) => {
+    if (!c.res.headers.get(name)) c.header(name, value);
+  });
+});
 
 function maintenanceBypassPath(path: string): boolean {
   if (path === "/api/health" || path === "/api/site/status" || path === "/api/site/music") return true;
   return (
     path === "/api/auth/register" ||
+    path === "/api/auth/captcha" ||
     path === "/api/auth/check-phone" ||
     path === "/api/auth/login" ||
     path === "/api/auth/me" ||
@@ -421,7 +438,7 @@ async function requireUser(c: Context): Promise<SessionUser | Response> {
 const rateLimitBuckets = new Map<string, { win: number; n: number }>();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
-  if (process.env.AB_ENABLE_RATE_LIMIT !== "1") return true;
+  if (!isRateLimitEnabled()) return true;
   const now = Date.now();
   let b = rateLimitBuckets.get(key);
   if (!b || now - b.win > windowMs) {
@@ -430,6 +447,12 @@ function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
   }
   b.n += 1;
   return b.n <= max;
+}
+
+function getClientIp(c: Context): string {
+  const xfwd = String(c.req.header("x-forwarded-for") ?? "");
+  const ip = xfwd.split(",")[0]?.trim();
+  return ip || String(c.req.header("x-real-ip") ?? "") || "local";
 }
 
 function rateLimitExceeded(c: Context) {
@@ -505,7 +528,16 @@ app.get("/api/internal/cron/raffle-free-tickets-push-tick", async (c) => {
   return c.json({ ok: true, at: Date.now(), ...result });
 });
 
+app.get("/api/auth/captcha", async (c) => {
+  const ip = getClientIp(c);
+  if (!rateLimitAllow(`get:auth-captcha:${ip}`, 30, 60_000)) return rateLimitExceeded(c);
+  c.header("Cache-Control", "no-store");
+  return c.json(createRegisterCaptcha());
+});
+
 app.post("/api/auth/register", async (c) => {
+  const ip = getClientIp(c);
+  if (!rateLimitAllow(`post:auth-register:${ip}`, 5, 3_600_000)) return rateLimitExceeded(c);
   let body: {
     phone?: string;
     name?: string;
@@ -513,12 +545,16 @@ app.post("/api/auth/register", async (c) => {
     password?: string;
     consent_personal_data?: boolean;
     consent_privacy_policy?: boolean;
+    captcha_token?: string;
+    captcha_answer?: string;
   };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Некорректный JSON" }, 400);
   }
+  const captcha = verifyRegisterCaptcha(body.captcha_token, body.captcha_answer);
+  if (!captcha.ok) return c.json({ error: captcha.error }, 400);
   const phone = normalizePhone(String(body.phone ?? ""));
   const nameRaw = String(body.name ?? "");
   const locality = String(body.locality ?? "").trim().slice(0, 120);
@@ -530,6 +566,7 @@ app.post("/api/auth/register", async (c) => {
   if (!isValidRuMobile(phone)) {
     return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
   }
+  if (!rateLimitAllow(`post:auth-register-phone:${phone}`, 3, 3_600_000)) return rateLimitExceeded(c);
   const nameCheck = validatePersonName(nameRaw);
   if (!nameCheck.ok) return c.json({ error: nameCheck.error }, 400);
   const name = nameCheck.name;
@@ -568,6 +605,8 @@ app.post("/api/auth/register", async (c) => {
 });
 
 app.post("/api/auth/check-phone", async (c) => {
+  const ip = getClientIp(c);
+  if (!rateLimitAllow(`post:auth-check-phone:${ip}`, 20, 60_000)) return rateLimitExceeded(c);
   let body: { phone?: string };
   try {
     body = await c.req.json();
@@ -579,16 +618,18 @@ app.post("/api/auth/check-phone", async (c) => {
   if (!isValidRuMobile(phone)) {
     return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
   }
+  if (!rateLimitAllow(`post:auth-check-phone-num:${phone}`, 10, 3_600_000)) return rateLimitExceeded(c);
   const user = await getUserByPhonePg(phone);
   if (!user) return c.json({ exists: false });
   return c.json({
     exists: true,
     blocked: Number(user.blocked) === 1,
-    name: String(user.name || ""),
   });
 });
 
 app.post("/api/auth/login", async (c) => {
+  const ip = getClientIp(c);
+  if (!rateLimitAllow(`post:auth-login:${ip}`, 20, 60_000)) return rateLimitExceeded(c);
   let body: { phone?: string; password?: string };
   try {
     body = await c.req.json();
@@ -603,6 +644,7 @@ app.post("/api/auth/login", async (c) => {
     return c.json({ error: "Нужен мобильный номер России (+7 9XX …)" }, 400);
   }
   if (!password) return c.json({ error: "Введите пароль" }, 400);
+  if (!rateLimitAllow(`post:auth-login-phone:${phone}`, 8, 15 * 60_000)) return rateLimitExceeded(c);
 
   const user = await getUserByPhonePg(phone);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {

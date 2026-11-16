@@ -548,10 +548,16 @@ export default function ChatPageClient() {
     if ((!text && !pendingAttachment) || sending) return;
     setSending(true);
     try {
+      const attachment = pendingAttachment
+        ? {
+            ...pendingAttachment,
+            url: String(pendingAttachment.url || "").split("?")[0] || "",
+          }
+        : null;
       const data = await abApiJson<ChatListResponse>("/api/chat/messages", {
         method: "POST",
         headers: { ...abAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ body: text, attachment: pendingAttachment }),
+        body: JSON.stringify({ body: text, attachment }),
       });
       setMessages(Array.isArray(data.messages) ? data.messages : []);
       setHasMore(Boolean(data.has_more));
@@ -760,6 +766,7 @@ export default function ChatPageClient() {
                   .then((x) => {
                     if (!x.ok) throw new Error(String(x.d?.error || "Ошибка загрузки файла"));
                     setPendingAttachment({
+                      // В БД уйдёт путь без query; для превью оставляем подписанный URL.
                       url: String(x.d?.url || ""),
                       name: String(x.d?.name || "файл"),
                       mime: String(x.d?.mime || "application/octet-stream"),

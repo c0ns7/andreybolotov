@@ -87,7 +87,9 @@ export default function HomeTableClient() {
                   : kindRaw === "self_confirmed"
                     ? "self_confirmed"
                     : "free";
-          const phoneRaw = String(row.phone || "").trim();
+          // Чужие телефоны API не отдаёт; свои — только для self_* статусов.
+          const phoneRaw =
+            status.startsWith("self_") && row.phone ? String(row.phone).trim() : "";
           next.push({
             raffleId,
             ticket: n,
@@ -171,9 +173,12 @@ export default function HomeTableClient() {
     if (!q) return base;
     return base.filter((item) => {
       const byTicket = String(item.ticket).includes(queryDigits || q);
-      const byPhone = normalizePhone(item.phone).includes(queryDigits);
+      const byOwnPhone =
+        item.status.startsWith("self_") && queryDigits
+          ? normalizePhone(item.phone).includes(queryDigits)
+          : false;
       const byRaffle = item.raffleTitle.toLowerCase().includes(q);
-      return byTicket || byPhone || byRaffle;
+      return byTicket || byOwnPhone || byRaffle;
     });
   }, [cards, onlyMine, query, queryDigits]);
 
@@ -202,7 +207,7 @@ export default function HomeTableClient() {
               <div className="table-page__head-titles">
                 <h1 className="table-page__title">Таблица номерков</h1>
                 <p className="table-page__subtitle">
-                  {raffleTitle ? `Последняя активная акция: ${raffleTitle}` : "Поиск по номерку или номеру телефона"}
+                  {raffleTitle ? `Последняя активная акция: ${raffleTitle}` : "Поиск по номерку"}
                 </p>
               </div>
             </div>
@@ -212,8 +217,8 @@ export default function HomeTableClient() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Например: 125 или 79991234567"
-                aria-label="Поиск по номерку или номеру телефона"
+                placeholder="Например: 125"
+                aria-label="Поиск по номерку"
               />
             </label>
             <button

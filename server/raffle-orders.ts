@@ -34,6 +34,7 @@ import {
   pickAvailableBankCard,
   refreshBankCardDailyLimitCooldown,
 } from "./raffle-bank-cards.js";
+import { signUploadUrlIfNeeded } from "./secure-uploads.js";
 import { parseSiteDateTimeLocalToUtcMs, SITE_TIMEZONE } from "./site-timezone.js";
 
 /** Fallback, если настройки сайта ещё не прочитаны. Реальное значение — из site_settings. */
@@ -423,7 +424,7 @@ async function listReceiptArchiveForUserRaffle(userId: number, raffleId: number)
       order_id: o.id,
       order_public_id: `A${o.id}`,
       at_ms: o.updated_at,
-      url,
+      url: signUploadUrlIfNeeded(url) || url,
       name: String(o.receipt_name || "чек").slice(0, 255) || "чек",
       mime: o.receipt_mime ? String(o.receipt_mime) : null,
     });
@@ -445,6 +446,10 @@ export type AdminPriorReceiptItem = {
   same_order: boolean;
 };
 
+function uploadPathOnly(raw: string): string {
+  return String(raw || "").trim().split("?")[0] || "";
+}
+
 export async function listReceiptHistoryPriorForPendingOrder(
   userId: number,
   raffleId: number,
@@ -452,9 +457,9 @@ export async function listReceiptHistoryPriorForPendingOrder(
   currentReceiptUrl: string | null,
 ): Promise<AdminPriorReceiptItem[]> {
   const all = await listReceiptArchiveForUserRaffle(userId, raffleId);
-  const curUrl = String(currentReceiptUrl ?? "").trim();
+  const curPath = uploadPathOnly(String(currentReceiptUrl ?? ""));
   return all
-    .filter((x) => !(x.order_id === currentOrderId && curUrl && x.url === curUrl))
+    .filter((x) => !(x.order_id === currentOrderId && curPath && uploadPathOnly(x.url) === curPath))
     .slice(0, 22)
     .map((x) => ({
       order_id: x.order_id,
@@ -1254,7 +1259,8 @@ export async function attachReceiptToOrder(
   receipt: { url: string; name: string; mime: string; sha256?: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await cleanupExpiredRaffleOrders();
-  if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(receipt.url)) {
+  const receiptUrl = String(receipt.url || "").trim().split("?")[0] || "";
+  if (!/^\/uploads\/receipts\/[a-zA-Z0-9._-]+$/.test(receiptUrl)) {
     return { ok: false, error: "Некорректная ссылка на чек" };
   }
   const sha = String(receipt.sha256 || "")
@@ -1280,13 +1286,13 @@ export async function attachReceiptToOrder(
      SET receipt_url = ?, receipt_name = ?, receipt_mime = ?, receipt_sha256 = ?, receipt_same_as_previous = ?,
          status = 'pending_review', updated_at = ?
      WHERE id = ?`,
-    [receipt.url, receipt.name, receipt.mime, sha || null, isSameAsPrevious, now, orderId],
+    [receiptUrl, receipt.name, receipt.mime, sha || null, isSameAsPrevious, now, orderId],
   );
   await pgExec(`UPDATE raffle_ticket_holds SET hold_status = 'payment_pending', expires_at = NULL WHERE order_id = ?`, [
     orderId,
   ]);
   const receiptEventDetail = JSON.stringify({
-    url: receipt.url,
+    url: receiptUrl,
     name: receipt.name,
     mime: receipt.mime,
   });
@@ -1510,7 +1516,7 @@ async function listReceiptHistoryForOrder(
       if (!url) continue;
       items.push({
         at_ms: Number(row.created_at) || 0,
-        url,
+        url: signUploadUrlIfNeeded(url) || url,
         name: String(parsed.name ?? "чек").slice(0, 255) || "чек",
         mime: parsed.mime ? String(parsed.mime) : null,
       });
@@ -1519,10 +1525,11 @@ async function listReceiptHistoryForOrder(
     }
   }
   const fallbackUrl = String(fallback?.url ?? "").trim();
-  if (fallbackUrl && !items.some((x) => x.url === fallbackUrl)) {
+  const fallbackPath = uploadPathOnly(fallbackUrl);
+  if (fallbackUrl && !items.some((x) => uploadPathOnly(x.url) === fallbackPath)) {
     items.push({
       at_ms: Date.now(),
-      url: fallbackUrl,
+      url: signUploadUrlIfNeeded(fallbackUrl) || fallbackUrl,
       name: String(fallback?.name ?? "чек").slice(0, 255) || "чек",
       mime: fallback?.mime ? String(fallback.mime) : null,
     });
@@ -1617,7 +1624,7 @@ export function orderToDto(o: RaffleOrderRow) {
     status: o.status,
     reserved_until: o.reserved_until,
     reserve_extended_once: (o as RaffleOrderRow).reserve_extended_once ? 1 : 0,
-    receipt_url: o.receipt_url,
+    receipt_url: signUploadUrlIfNeeded(o.receipt_url),
     receipt_name: o.receipt_name,
     receipt_same_as_previous: Number((o as RaffleOrderRow).receipt_same_as_previous ?? 0),
     receipt_reject_count: Number((o as RaffleOrderRow).receipt_reject_count ?? 0),

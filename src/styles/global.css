@@ -9316,6 +9316,44 @@ html.theme-dark .reserve-payment-modal__upload-hint {
   color: var(--text-muted);
 }
 
+.reg-captcha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.reg-captcha__image-wrap {
+  flex: 0 0 auto;
+  width: 180px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  background: #f4f1ea;
+}
+
+.reg-captcha__image {
+  display: block;
+  width: 180px;
+  height: 56px;
+}
+
+.reg-captcha__placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.reg-captcha__refresh {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
 .consent-check {
   display: grid;
   grid-template-columns: 16px 1fr;

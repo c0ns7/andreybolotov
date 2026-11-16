@@ -1780,7 +1780,7 @@
           clearTimeout(adminTypingIdleTimer);
           sendAdminTyping(false);
           return postAdminChatMessage(caption, {
-            url: data.url,
+            url: String(data.url || "").split("?")[0],
             name: data.name,
             mime: data.mime,
           });

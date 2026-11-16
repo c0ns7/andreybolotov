@@ -21,6 +21,7 @@ import {
 } from "./db-auth-pg.js";
 import { pgAll, pgExec, pgGet } from "./pg-sql.js";
 import { pgPool } from "./pg.js";
+import { signUploadUrlIfNeeded } from "./secure-uploads.js";
 import { isEpochReached } from "./site-timezone.js";
 
 export type { SessionUser, UserRow } from "./db-auth-pg.js";
@@ -338,7 +339,7 @@ export function messageToDto(r: SupportMessageRow) {
     is_staff: isStaff,
     created_at: r.created_at,
     read_by_staff: isStaff ? false : r.read_by_staff_at != null,
-    attachment_url: r.attachment_url ?? null,
+    attachment_url: signUploadUrlIfNeeded(r.attachment_url ?? null),
     attachment_name: r.attachment_name ?? null,
     attachment_mime: r.attachment_mime ?? null,
   };

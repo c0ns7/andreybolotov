@@ -10,6 +10,8 @@ import bcrypt from "bcryptjs";
 import { orderStatusPublicPath } from "./ab-cdn-safe-token.js";
 import type { SessionUser } from "./db.js";
 import { getUserBySessionTokenPg } from "./db-auth-pg.js";
+import { isRateLimitEnabled } from "./http-security.js";
+import { signUploadUrlIfNeeded } from "./secure-uploads.js";
 import {
   countActivePrivilegedStaff,
   deleteRaffle,
@@ -521,7 +523,8 @@ async function handleChatFileUpload(c: Context): Promise<Response> {
   }
   const fileName = `${randomUUID()}${ext}`;
   await writeUploadToDirs(chatUploadsDirs, fileName, buffer);
-  const url = `/uploads/chat/${fileName}`;
+  const pathOnly = `/uploads/chat/${fileName}`;
+  const url = signUploadUrlIfNeeded(pathOnly) || pathOnly;
   const origName = String(blob.name || "file")
     .replace(/[<>\"]/g, "")
     .slice(0, 255);
@@ -562,7 +565,7 @@ setInterval(() => {
 }, 60_000).unref?.();
 
 function rateLimitAllow(key: string, max: number, windowMs: number): boolean {
-  if (process.env.AB_ENABLE_RATE_LIMIT !== "1") return true;
+  if (!isRateLimitEnabled()) return true;
   const now = Date.now();
   let b = rateLimitBuckets.get(key);
   if (!b || now - b.win > windowMs) {

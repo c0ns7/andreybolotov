@@ -86,6 +86,29 @@ export default function AuthModalsLegacy() {
                     </button>
                   </div>
                 </div>
+                <div className="form-group">
+                  <label htmlFor="captcha-reg">Код с картинки</label>
+                  <div className="reg-captcha">
+                    <div className="reg-captcha__image-wrap">
+                      <img className="reg-captcha__image" id="captcha-reg-image" alt="Капча" width={180} height={56} />
+                    </div>
+                    <button type="button" className="btn btn--ghost reg-captcha__refresh" id="captcha-reg-refresh" aria-label="Обновить капчу">
+                      Обновить
+                    </button>
+                  </div>
+                  <input
+                    className="input"
+                    type="text"
+                    id="captcha-reg"
+                    name="captcha"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    placeholder="Введите символы с картинки"
+                  />
+                  <input type="hidden" id="captcha-reg-token" value="" />
+                  <p className="form-hint">Защита от автоматической регистрации</p>
+                </div>
                 <label className="consent-check consent-check--legacy consent-switch">
                   <input type="checkbox" id="reg-legal-accept" defaultChecked />
                   <span className="consent-switch__slider" aria-hidden="true" />
