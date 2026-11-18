@@ -27,6 +27,10 @@
   const PROMO_PACK_LABELS = {
     "5plus1": "5+1",
     "5plus2": "5+2",
+    "3plus1": "3+1",
+    "3plus2": "3+2",
+    "5plus1": "5+1",
+    "5plus2": "5+2",
     "10plus1": "10+1",
     "10plus2": "10+2",
   };
@@ -34,7 +38,14 @@
   function resolvePromoPackFromRaffle(r) {
     if (!r) return null;
     var kind = String(r.promo_pack_kind || "").trim();
-    if (kind === "10plus1" || kind === "10plus2" || kind === "5plus1" || kind === "5plus2") {
+    if (
+      kind === "3plus1" ||
+      kind === "3plus2" ||
+      kind === "10plus1" ||
+      kind === "10plus2" ||
+      kind === "5plus1" ||
+      kind === "5plus2"
+    ) {
       return { kind: kind, label: PROMO_PACK_LABELS[kind] };
     }
     if (Number(r.promo_10_plus_1_enabled) === 1 || r.promo_10_plus_1_enabled === true) {
@@ -48,6 +59,12 @@
     }
     if (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true) {
       return { kind: "5plus1", label: "5+1" };
+    }
+    if (Number(r.promo_3_plus_1_enabled) === 1 || r.promo_3_plus_1_enabled === true) {
+      return { kind: "3plus1", label: "3+1" };
+    }
+    if (Number(r.promo_3_plus_2_enabled) === 1 || r.promo_3_plus_2_enabled === true) {
+      return { kind: "3plus2", label: "3+2" };
     }
     return null;
   }
@@ -821,7 +838,11 @@
         return (
           " · акция " +
           esc(pack.label) +
-          " (5+1: " +
+          " (3+1: " +
+          esc(String(Math.max(0, Number(r.promo_3_plus_1_locked_free_count) || 0))) +
+          ", 3+2: " +
+          esc(String(Math.max(0, Number(r.promo_3_plus_2_locked_free_count) || 0))) +
+          ", 5+1: " +
           esc(String(Math.max(0, Number(r.promo_5_plus_1_locked_free_count) || 0))) +
           ", 5+2: " +
           esc(String(Math.max(0, Number(r.promo_5_plus_2_locked_free_count) || 0))) +
@@ -1328,19 +1349,29 @@
               ? "5plus2"
               : edit && edit.promo_5_plus_1_enabled
                 ? "5plus1"
-                : "none";
-    ["none", "5plus1", "5plus2", "10plus1", "10plus2"].forEach(function (v) {
+                : edit && edit.promo_3_plus_2_enabled
+                  ? "3plus2"
+                  : edit && edit.promo_3_plus_1_enabled
+                    ? "3plus1"
+                    : "none";
+    ["none", "3plus1", "3plus2", "5plus1", "5plus2", "10plus1", "10plus2"].forEach(function (v) {
       var el = document.getElementById("raffle-promo-pack-" + v);
       if (el) el.checked = pack === v;
     });
     var promoStatsEl = document.getElementById("raffle-promo-5-plus-1-stats");
     if (promoStatsEl) {
+      var c0 = edit ? Math.max(0, Number(edit.promo_3_plus_1_locked_free_count) || 0) : 0;
+      var c0b = edit ? Math.max(0, Number(edit.promo_3_plus_2_locked_free_count) || 0) : 0;
       var c1 = edit ? Math.max(0, Number(edit.promo_5_plus_1_locked_free_count) || 0) : 0;
       var c2 = edit ? Math.max(0, Number(edit.promo_5_plus_2_locked_free_count) || 0) : 0;
       var c3 = edit ? Math.max(0, Number(edit.promo_10_plus_1_locked_free_count) || 0) : 0;
       var c4 = edit ? Math.max(0, Number(edit.promo_10_plus_2_locked_free_count) || 0) : 0;
       promoStatsEl.textContent =
-        "Закреплено бонусных номерков: 5+1 — " +
+        "Закреплено бонусных номерков: 3+1 — " +
+        String(c0) +
+        ", 3+2 — " +
+        String(c0b) +
+        ", 5+1 — " +
         String(c1) +
         ", 5+2 — " +
         String(c2) +
@@ -1348,6 +1379,12 @@
         String(c3) +
         ", 10+2 — " +
         String(c4);
+    }
+    var backfillBtn = document.getElementById("raffle-promo-backfill-today");
+    if (backfillBtn) {
+      var showBackfill = !!(edit && edit.id && pack && pack !== "none");
+      backfillBtn.hidden = !showBackfill;
+      backfillBtn.dataset.raffleId = showBackfill ? String(edit.id) : "";
     }
     var hidEl = document.getElementById("raffle-hidden-from-public");
     if (hidEl) hidEl.checked = edit ? !!edit.hidden_from_public : false;
@@ -2494,18 +2531,29 @@
       })(),
     };
     try {
+      var saved;
       if (editId) {
-        await apiJson("/api/admin/raffles/" + editId, {
+        saved = await apiJson("/api/admin/raffles/" + editId, {
           method: "PATCH",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        await apiJson("/api/admin/raffles", {
+        saved = await apiJson("/api/admin/raffles", {
           method: "POST",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+      }
+      var bf = saved && saved.promo_backfill;
+      if (bf && Number(bf.tickets_granted) > 0) {
+        alert(
+          "Сохранено. Доначислено бонусов за сегодня: " +
+            String(bf.tickets_granted) +
+            " ном. по " +
+            String(bf.orders_touched) +
+            " заявкам. Уведомления отправлены в чат.",
+        );
       }
       closeForm();
       await loadRaffles();
@@ -2513,6 +2561,37 @@
       alert(err.message || "Ошибка сохранения");
     } finally {
       setFormLoading(false);
+    }
+  });
+
+  document.getElementById("raffle-promo-backfill-today")?.addEventListener("click", async function () {
+    var btn = document.getElementById("raffle-promo-backfill-today");
+    var rid = btn ? Math.floor(Number(btn.dataset.raffleId)) : 0;
+    if (!Number.isFinite(rid) || rid < 1) {
+      alert("Сначала сохраните акцию с включённым N+бонус");
+      return;
+    }
+    if (!confirm("Доначислить бонусы за сегодняшние подтверждённые заявки и отправить уведомления в чат?")) {
+      return;
+    }
+    try {
+      btn.disabled = true;
+      var res = await apiJson("/api/admin/raffles/" + rid + "/promo-backfill-today", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      alert(
+        "Готово. Заявок: " +
+          String(res.orders_touched || 0) +
+          ", бонусных номерков: " +
+          String(res.tickets_granted || 0),
+      );
+      await loadRaffles();
+      openForm(rid);
+    } catch (err) {
+      alert(err.message || "Ошибка догона");
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
 

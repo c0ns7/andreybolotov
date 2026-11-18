@@ -22,6 +22,8 @@ export function hasEverConfirmedTickets(
       const buckets = [
         nums.confirmed,
         nums.bonus_confirmed,
+        nums.bonus_3plus1_confirmed,
+        nums.bonus_3plus2_confirmed,
         nums.bonus_5plus1_confirmed,
         nums.bonus_5plus2_confirmed,
         nums.bonus_10plus1_confirmed,

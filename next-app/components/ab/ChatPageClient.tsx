@@ -673,7 +673,7 @@ export default function ChatPageClient() {
                               />
                             ) : null}
                             {cards.map((card, cardIdx) => {
-                              if (card?.kind === "receipt_confirmed") {
+                              if (card?.kind === "receipt_confirmed" || card?.kind === "promo_backfill") {
                                 return <ChatReceiptConfirmedActionCard key={"card_rc_" + String(cardIdx)} card={card} />;
                               }
                               if (card?.kind === "prize_claim") {

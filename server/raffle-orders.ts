@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 import type { PoolClient } from "pg";
 import { decodeCdnSafeToken } from "./ab-cdn-safe-token.js";
-import { calcPromoGiftCount, resolvePromoPackFromRaffle } from "./promo-pack.js";
+import {
+  calcPromoGiftCount,
+  resolvePromoPackFromRaffle,
+  type PromoPackLabel,
+  type PromoPackSpec,
+} from "./promo-pack.js";
 import {
   clampRaffleRejectReopenMinutes,
   clampRaffleReserveMinutes,
@@ -35,7 +40,11 @@ import {
   refreshBankCardDailyLimitCooldown,
 } from "./raffle-bank-cards.js";
 import { signUploadUrlIfNeeded } from "./secure-uploads.js";
-import { parseSiteDateTimeLocalToUtcMs, SITE_TIMEZONE } from "./site-timezone.js";
+import {
+  getSiteCalendarDayBoundsUtcMs,
+  parseSiteDateTimeLocalToUtcMs,
+  SITE_TIMEZONE,
+} from "./site-timezone.js";
 
 /** Fallback, если настройки сайта ещё не прочитаны. Реальное значение — из site_settings. */
 export const RAFFLE_RESERVE_MS = DEFAULT_RAFFLE_RESERVE_MINUTES * 60 * 1000;
@@ -1381,6 +1390,150 @@ export async function confirmOrderByAdmin(orderId: number): Promise<{ ok: true }
   return { ok: true };
 }
 
+export type PromoBackfillGrant = {
+  orderId: number;
+  userId: number;
+  raffleId: number;
+  raffleTitle: string;
+  giftNumbers: number[];
+  promoLabel: PromoPackLabel;
+};
+
+async function countBonusHoldsForOrder(orderId: number, client?: PoolClient): Promise<number> {
+  const row = await pgGet<{ c: number }>(
+    `SELECT COUNT(*)::bigint AS c FROM raffle_ticket_holds WHERE order_id = ? AND COALESCE(is_bonus, 0) = 1`,
+    [orderId],
+    client,
+  );
+  return Math.max(0, Math.floor(Number(row?.c) || 0));
+}
+
+/** Доначислить бонусные номерки по активной акции к уже подтверждённой заявке (delta = need - have). */
+export async function grantMissingPromoBonusesToConfirmedOrder(
+  orderId: number,
+  promoPack: PromoPackSpec,
+  client?: PoolClient,
+): Promise<number[]> {
+  const o = await pgGet<{
+    id: number;
+    raffle_id: number;
+    user_id: number;
+    status: string;
+    ticket_count: number;
+  }>(
+    `SELECT id, raffle_id, user_id, status, ticket_count FROM raffle_orders WHERE id = ?`,
+    [orderId],
+    client,
+  );
+  if (!o || String(o.status) !== "confirmed") return [];
+  const paidCount = Math.max(0, Math.floor(Number(o.ticket_count) || 0));
+  const need = calcPromoGiftCount(paidCount, promoPack);
+  if (need <= 0) return [];
+  const have = await countBonusHoldsForOrder(orderId, client);
+  const want = Math.max(0, need - have);
+  if (want <= 0) return [];
+
+  const raffleId = Math.floor(Number(o.raffle_id));
+  const userId = Math.floor(Number(o.user_id));
+  const free = await listGloballyFreeTicketNumbers(raffleId, client);
+  for (let i = free.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = free[i]!;
+    free[i] = free[j]!;
+    free[j] = t;
+  }
+  const picked = free.slice(0, Math.min(want, free.length));
+  if (!picked.length) return [];
+  const now = Date.now();
+  const gifted: number[] = [];
+  for (const n of picked) {
+    await pgExec(
+      `INSERT INTO raffle_ticket_holds (raffle_id, order_id, user_id, ticket_number, is_bonus, bonus_promo_kind, hold_status, expires_at, created_at)
+       VALUES (?, ?, ?, ?, 1, ?, 'confirmed', NULL, ?)`,
+      [raffleId, orderId, userId, n, promoPack.kind, now],
+      client,
+    );
+    gifted.push(n);
+  }
+  return gifted;
+}
+
+/**
+ * Догон акции N+M за сегодняшний календарный день (часовой пояс сайта):
+ * для каждой confirmed-заявки доначисляет недостающие бонусы по текущему promo-pack.
+ */
+export async function backfillPromoPackSameDay(raffleId: number): Promise<
+  | { ok: true; grants: PromoBackfillGrant[]; ordersTouched: number; ticketsGranted: number }
+  | { ok: false; error: string }
+> {
+  const id = Math.floor(Number(raffleId));
+  if (!Number.isFinite(id) || id < 1) return { ok: false, error: "Некорректный id акции" };
+  const raffle = await getRaffleById(id);
+  if (!raffle) return { ok: false, error: "Акция не найдена" };
+  const promoPack = resolvePromoPackFromRaffle(raffle);
+  if (!promoPack) return { ok: false, error: "На акции не включена акция N+бонус" };
+
+  const bounds = getSiteCalendarDayBoundsUtcMs(Date.now());
+  if (!bounds) return { ok: false, error: "Не удалось определить сегодняшний день" };
+
+  const orders = await pgAll<{
+    id: number;
+    user_id: number;
+    ticket_count: number;
+    updated_at: number;
+    confirmed_at: number | null;
+  }>(
+    `SELECT o.id, o.user_id, o.ticket_count, o.updated_at,
+            (SELECT MIN(e.created_at) FROM raffle_order_events e
+             WHERE e.order_id = o.id AND e.kind = 'confirmed') AS confirmed_at
+       FROM raffle_orders o
+       WHERE o.raffle_id = ? AND o.status = 'confirmed'
+       ORDER BY COALESCE(
+         (SELECT MIN(e.created_at) FROM raffle_order_events e
+          WHERE e.order_id = o.id AND e.kind = 'confirmed'),
+         o.updated_at
+       ) ASC, o.id ASC`,
+    [id],
+  );
+
+  const grants: PromoBackfillGrant[] = [];
+  const title = String(raffle.title || "Акция").trim() || "Акция";
+  for (const order of orders) {
+    const confirmedAt = Math.floor(Number(order.confirmed_at) || Number(order.updated_at) || 0);
+    if (!confirmedAt || confirmedAt < bounds.startMs || confirmedAt > bounds.endMs) continue;
+    const giftNumbers = await grantMissingPromoBonusesToConfirmedOrder(order.id, promoPack);
+    if (!giftNumbers.length) continue;
+    await insertRaffleOrderEvent(
+      order.id,
+      "promo_backfill",
+      JSON.stringify({
+        promo: promoPack.label,
+        gift_count: giftNumbers.length,
+        gift_numbers: giftNumbers,
+      }),
+    );
+    grants.push({
+      orderId: Math.floor(Number(order.id)),
+      userId: Math.floor(Number(order.user_id)),
+      raffleId: id,
+      raffleTitle: title,
+      giftNumbers,
+      promoLabel: promoPack.label,
+    });
+  }
+
+  if (grants.length) {
+    await recalculateRaffleDerivedStatsForRaffle(id);
+  }
+
+  return {
+    ok: true,
+    grants,
+    ordersTouched: grants.length,
+    ticketsGranted: grants.reduce((acc, g) => acc + g.giftNumbers.length, 0),
+  };
+}
+
 /** Полностью снять бронь / отменить заявку: номерки освобождаются. */
 export async function adminFullyReleaseRaffleOrder(
   orderId: number,
@@ -1957,6 +2110,8 @@ export type ParticipationHistoryTimelineStatus =
   | "reserved"
   | "pending_review"
   | "confirmed"
+  | "bonus_3plus1"
+  | "bonus_3plus2"
   | "bonus_5plus1"
   | "bonus_5plus2"
   | "bonus_10plus1"
@@ -1978,6 +2133,8 @@ export type ParticipationHistoryRaffle = {
     pending_review: number[];
     confirmed: number[];
     bonus_confirmed: number[];
+    bonus_3plus1_confirmed: number[];
+    bonus_3plus2_confirmed: number[];
     bonus_5plus1_confirmed: number[];
     bonus_5plus2_confirmed: number[];
     bonus_10plus1_confirmed: number[];
@@ -1988,12 +2145,18 @@ export type ParticipationHistoryRaffle = {
 function participationHistoryBonusMeta(kind: string): {
   status: ParticipationHistoryTimelineStatus;
   arrayKey:
+    | "bonus_3plus1_confirmed"
+    | "bonus_3plus2_confirmed"
     | "bonus_5plus1_confirmed"
     | "bonus_5plus2_confirmed"
     | "bonus_10plus1_confirmed"
     | "bonus_10plus2_confirmed";
 } {
   switch (String(kind || "").trim()) {
+    case "3plus1":
+      return { status: "bonus_3plus1", arrayKey: "bonus_3plus1_confirmed" };
+    case "3plus2":
+      return { status: "bonus_3plus2", arrayKey: "bonus_3plus2_confirmed" };
     case "5plus2":
       return { status: "bonus_5plus2", arrayKey: "bonus_5plus2_confirmed" };
     case "10plus1":
@@ -2094,6 +2257,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
           pending_review: [],
           confirmed: [],
           bonus_confirmed: [],
+          bonus_3plus1_confirmed: [],
+          bonus_3plus2_confirmed: [],
           bonus_5plus1_confirmed: [],
           bonus_5plus2_confirmed: [],
           bonus_10plus1_confirmed: [],
@@ -2149,6 +2314,8 @@ export async function listParticipationHistoryForUser(userId: number): Promise<P
     it.numbers.pending_review.sort((a, b) => a - b);
     it.numbers.confirmed.sort((a, b) => a - b);
     it.numbers.bonus_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_3plus1_confirmed.sort((a, b) => a - b);
+    it.numbers.bonus_3plus2_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus1_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_5plus2_confirmed.sort((a, b) => a - b);
     it.numbers.bonus_10plus1_confirmed.sort((a, b) => a - b);
@@ -2529,11 +2696,11 @@ export async function recalculateWholesaleForRaffle(raffleId: number): Promise<v
   }
 }
 
-/** Сколько бонусных номерков по акциям 5+1, 5+2, 10+1 и 10+2 закреплено подтверждёнными заказами. */
+/** Сколько бонусных номерков по акциям N+M закреплено подтверждёнными заказами. */
 export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Promise<void> {
   const raffle = await getRaffleById(raffleId);
   if (!raffle) return;
-  const row = await pgGet<{ c1: number; c2: number; c3: number; c4: number }>(
+  const row = await pgGet<{ c1: number; c2: number; c3: number; c4: number; c5: number; c6: number }>(
     `SELECT
        COUNT(*) FILTER (
          WHERE COALESCE(h.is_bonus, 0) = 1
@@ -2541,7 +2708,9 @@ export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Prom
        )::bigint AS c1,
        COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '5plus2')::bigint AS c2,
        COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '10plus1')::bigint AS c3,
-       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '10plus2')::bigint AS c4
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '10plus2')::bigint AS c4,
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '3plus1')::bigint AS c5,
+       COUNT(*) FILTER (WHERE COALESCE(h.is_bonus, 0) = 1 AND h.bonus_promo_kind = '3plus2')::bigint AS c6
        FROM raffle_ticket_holds h
        INNER JOIN raffle_orders o ON o.id = h.order_id
        WHERE h.raffle_id = ? AND o.status = 'confirmed'`,
@@ -2553,6 +2722,8 @@ export async function recalculatePromoGiftStatsForRaffle(raffleId: number): Prom
     Number(row?.c2 ?? 0),
     Number(row?.c3 ?? 0),
     Number(row?.c4 ?? 0),
+    Number(row?.c5 ?? 0),
+    Number(row?.c6 ?? 0),
   );
 }
 

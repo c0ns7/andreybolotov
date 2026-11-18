@@ -1478,6 +1478,14 @@ export default function AdminMarkup() {
                     <span>Нет</span>
                   </label>
                   <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                    <input id="raffle-promo-pack-3plus1" type="radio" name="raffle-promo-pack" value="3plus1" />
+                    <span>3+1 — за каждые 3 оплаченных закрепляется 1 бонусный номерок</span>
+                  </label>
+                  <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                    <input id="raffle-promo-pack-3plus2" type="radio" name="raffle-promo-pack" value="3plus2" />
+                    <span>3+2 — за каждые 3 оплаченных закрепляется 2 бонусных номерка</span>
+                  </label>
+                  <label className="admin-radio-line" style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
                     <input id="raffle-promo-pack-5plus1" type="radio" name="raffle-promo-pack" value="5plus1" />
                     <span>5+1 — за каждые 5 оплаченных закрепляется 1 бонусный номерок</span>
                   </label>
@@ -1494,7 +1502,15 @@ export default function AdminMarkup() {
                     <span>10+2 — за каждые 10 оплаченных закрепляется 2 бонусных номерка</span>
                   </label>
                 </div>
+                <p className="admin-raffle-field-hint admin-raffle-field-hint--tight">
+                  При сохранении с включённой акцией система доначислит бонусы за сегодняшние уже подтверждённые заявки и отправит уведомления в чат.
+                </p>
                 <p className="admin-raffle-field-hint admin-raffle-field-hint--tight" id="raffle-promo-5-plus-1-stats"></p>
+                <div style={{ marginTop: "0.5rem" }}>
+                  <button type="button" className="btn btn--ghost" id="raffle-promo-backfill-today" hidden>
+                    Доначислить бонусы за сегодня
+                  </button>
+                </div>
               </div>
               <div className="form-group admin-raffle-toggle-row">
                 <label className="admin-toggle" htmlFor="raffle-hidden-from-public">

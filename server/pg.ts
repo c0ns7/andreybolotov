@@ -136,6 +136,18 @@ export async function ensurePgRuntimeSchema(): Promise<void> {
   await pgPool.query(
     `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_10_plus_2_locked_free_count INTEGER NOT NULL DEFAULT 0`,
   );
+  await pgPool.query(
+    `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_3_plus_1_enabled INTEGER NOT NULL DEFAULT 0`,
+  );
+  await pgPool.query(
+    `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_3_plus_1_locked_free_count INTEGER NOT NULL DEFAULT 0`,
+  );
+  await pgPool.query(
+    `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_3_plus_2_enabled INTEGER NOT NULL DEFAULT 0`,
+  );
+  await pgPool.query(
+    `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS promo_3_plus_2_locked_free_count INTEGER NOT NULL DEFAULT 0`,
+  );
   await pgPool.query(`ALTER TABLE raffle_ticket_holds ADD COLUMN IF NOT EXISTS bonus_promo_kind TEXT`);
   await pgPool.query(
     `ALTER TABLE raffles ADD COLUMN IF NOT EXISTS wholesale_every_n_tickets INTEGER NOT NULL DEFAULT 10`,

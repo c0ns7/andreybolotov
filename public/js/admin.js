@@ -376,7 +376,7 @@
   }
 
   function adminActionCardHtml(card) {
-    if (card && card.kind === "receipt_confirmed") {
+    if (card && (card.kind === "receipt_confirmed" || card.kind === "promo_backfill")) {
       return adminReceiptConfirmedCardHtml(card);
     }
     if (card && card.kind === "prize_claim") {

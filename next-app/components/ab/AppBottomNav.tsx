@@ -64,6 +64,8 @@ type HistoryTimelineStatus =
   | "reserved"
   | "pending_review"
   | "confirmed"
+  | "bonus_3plus1"
+  | "bonus_3plus2"
   | "bonus_5plus1"
   | "bonus_5plus2"
   | "bonus_10plus1"
@@ -71,6 +73,8 @@ type HistoryTimelineStatus =
 
 function isBonusHistoryStatus(status?: HistoryTimelineStatus): boolean {
   return (
+    status === "bonus_3plus1" ||
+    status === "bonus_3plus2" ||
     status === "bonus_5plus1" ||
     status === "bonus_5plus2" ||
     status === "bonus_10plus1" ||
@@ -93,6 +97,8 @@ type HistoryPayload = {
       pending_review?: number[];
       confirmed?: number[];
       bonus_confirmed?: number[];
+      bonus_3plus1_confirmed?: number[];
+      bonus_3plus2_confirmed?: number[];
       bonus_5plus1_confirmed?: number[];
       bonus_5plus2_confirmed?: number[];
       bonus_10plus1_confirmed?: number[];
@@ -216,6 +222,8 @@ function buildFallbackHistoryTimeline(
   const bonusNums = Array.from(
     new Set(
       [
+        ...(it.numbers?.bonus_3plus1_confirmed || []),
+        ...(it.numbers?.bonus_3plus2_confirmed || []),
         ...(it.numbers?.bonus_5plus1_confirmed || []),
         ...(it.numbers?.bonus_5plus2_confirmed || []),
         ...(it.numbers?.bonus_10plus1_confirmed || []),

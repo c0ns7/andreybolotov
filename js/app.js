@@ -3877,6 +3877,8 @@
 
   function isBonusHistoryStatus(st) {
     return (
+      st === "bonus_3plus1" ||
+      st === "bonus_3plus2" ||
       st === "bonus_5plus1" ||
       st === "bonus_5plus2" ||
       st === "bonus_10plus1" ||
@@ -4072,6 +4074,8 @@
   }
 
   var PROMO_PACK_META = {
+    "3plus1": { base: 3, mult: 1, label: "3+1" },
+    "3plus2": { base: 3, mult: 2, label: "3+2" },
     "5plus1": { base: 5, mult: 1, label: "5+1" },
     "5plus2": { base: 5, mult: 2, label: "5+2" },
     "10plus1": { base: 10, mult: 1, label: "10+1" },
@@ -4081,11 +4085,22 @@
   function resolvePromoPackFromRaffle(r) {
     if (!r) return null;
     var kind = String(r.promo_pack_kind || "").trim();
-    if (kind === "10plus1" || kind === "10plus2" || kind === "5plus1" || kind === "5plus2") return kind;
+    if (
+      kind === "3plus1" ||
+      kind === "3plus2" ||
+      kind === "10plus1" ||
+      kind === "10plus2" ||
+      kind === "5plus1" ||
+      kind === "5plus2"
+    ) {
+      return kind;
+    }
     if (Number(r.promo_10_plus_1_enabled) === 1 || r.promo_10_plus_1_enabled === true) return "10plus1";
     if (Number(r.promo_10_plus_2_enabled) === 1 || r.promo_10_plus_2_enabled === true) return "10plus2";
     if (Number(r.promo_5_plus_2_enabled) === 1 || r.promo_5_plus_2_enabled === true) return "5plus2";
     if (Number(r.promo_5_plus_1_enabled) === 1 || r.promo_5_plus_1_enabled === true) return "5plus1";
+    if (Number(r.promo_3_plus_1_enabled) === 1 || r.promo_3_plus_1_enabled === true) return "3plus1";
+    if (Number(r.promo_3_plus_2_enabled) === 1 || r.promo_3_plus_2_enabled === true) return "3plus2";
     return null;
   }
 

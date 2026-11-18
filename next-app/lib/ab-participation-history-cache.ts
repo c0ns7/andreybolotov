@@ -7,6 +7,8 @@ export type AbParticipationHistoryTimelineStatus =
   | "reserved"
   | "pending_review"
   | "confirmed"
+  | "bonus_3plus1"
+  | "bonus_3plus2"
   | "bonus_5plus1"
   | "bonus_5plus2"
   | "bonus_10plus1"
@@ -27,6 +29,8 @@ export type AbParticipationHistoryPayload = {
       pending_review?: number[];
       confirmed?: number[];
       bonus_confirmed?: number[];
+      bonus_3plus1_confirmed?: number[];
+      bonus_3plus2_confirmed?: number[];
       bonus_5plus1_confirmed?: number[];
       bonus_5plus2_confirmed?: number[];
       bonus_10plus1_confirmed?: number[];

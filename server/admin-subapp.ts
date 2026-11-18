@@ -79,6 +79,7 @@ import {
   listUserIdsWithConfirmedRaffleOrders,
   attachReceiptToOrder,
   buildRafflePaymentParticipationContext,
+  backfillPromoPackSameDay,
   confirmOrderByAdmin,
   getOrderById,
   getTicketNumbersForOrder,
@@ -90,6 +91,7 @@ import {
   recalculateRaffleDerivedStatsForRaffle,
   rejectOrderByAdmin,
   raffleMaxRejectReworksFromEnv,
+  type PromoBackfillGrant,
 } from "./raffle-orders.js";
 import {
   addManualBonusTableEntry,
@@ -395,6 +397,64 @@ function buildStaffRaffleReceiptConfirmedChatBody(
   return buildReceiptConfirmedChatCard(raffleTitle, paidTicketNumbers, bonusTicketNumbers, maxJoinUrl, bonusPromoLabel);
 }
 
+function buildPromoBackfillChatCard(
+  raffleTitle: string,
+  bonusTicketNumbers: number[],
+  bonusPromoLabel: PromoPackLabel,
+  maxJoinUrl: string,
+): string {
+  const bonusUniq = [
+    ...new Set(
+      bonusTicketNumbers.map((x) => Math.floor(Number(x))).filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ];
+  bonusUniq.sort((a, b) => a - b);
+  const safeTitle = String(raffleTitle || "акция")
+    .trim()
+    .slice(0, 180);
+  const payload = {
+    kind: "promo_backfill",
+    eyebrow: `Акция ${bonusPromoLabel}`,
+    headline: "Бонусные номерки начислены",
+    subtitle: safeTitle,
+    message: `По акции «${bonusPromoLabel}» вам доначислены бонусные номерки за сегодня.`,
+    paid_tickets: [] as number[],
+    bonus_tickets: bonusUniq,
+    bonus_promo: bonusUniq.length ? bonusPromoLabel : null,
+    max_join_url: maxJoinUrl || MAX_PRIVATE_CHAT_JOIN_URL,
+    max_cta: "Присоединиться к чату в MAX",
+  };
+  return `[[AB_CARD:${encodeURIComponent(JSON.stringify(payload))}]]`;
+}
+
+async function notifyUsersPromoBackfillGrants(grants: PromoBackfillGrant[]): Promise<void> {
+  if (!grants.length) return;
+  const site = await getSiteSettings();
+  const byUser = new Map<number, PromoBackfillGrant[]>();
+  for (const g of grants) {
+    const list = byUser.get(g.userId) || [];
+    list.push(g);
+    byUser.set(g.userId, list);
+  }
+  for (const [uid, userGrants] of byUser) {
+    try {
+      const allNums = userGrants.flatMap((g) => g.giftNumbers);
+      const label = userGrants[0]?.promoLabel ?? "3+1";
+      const title = userGrants[0]?.raffleTitle ?? "Акция";
+      const body = buildPromoBackfillChatCard(title, allNums, label, site.max_chat_join_url);
+      const msgId = await insertSupportMessage(uid, body, true, null);
+      await markThreadReadByStaff(uid);
+      broadcastThreadReadByStaff(uid);
+      const row = await getSupportMessageById(msgId);
+      if (row) broadcastChatMessage(uid, messageToDto(row));
+      notifyUserEmailStaffReply(uid, { body, attachmentName: null, attachmentMime: null });
+      broadcastRaffleTicketsUpdated(uid);
+    } catch (e) {
+      console.error("[promo-backfill] chat notify:", e instanceof Error ? e.message : e);
+    }
+  }
+}
+
 function buildStaffMaxPrivateInviteOnlyChatBody(maxJoinUrl: string): string {
   const url = String(maxJoinUrl || MAX_PRIVATE_CHAT_JOIN_URL).trim() || MAX_PRIVATE_CHAT_JOIN_URL;
   return (
@@ -617,6 +677,8 @@ type RaffleInput = {
   sort_order: number;
   wholesale_enabled: boolean;
   wholesale_every_n_tickets: number;
+  promo_3_plus_1_enabled: boolean;
+  promo_3_plus_2_enabled: boolean;
   promo_5_plus_1_enabled: boolean;
   promo_5_plus_2_enabled: boolean;
   promo_10_plus_1_enabled: boolean;
@@ -786,12 +848,16 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   ) {
     return { ok: false, error: "Укажите целое число от 1: сколько закреплённых номерков дают 1 номер оптовика" };
   }
+  const promo_3_plus_1_enabled = Boolean(body.promo_3_plus_1_enabled);
+  const promo_3_plus_2_enabled = Boolean(body.promo_3_plus_2_enabled);
   const promo_5_plus_1_enabled = Boolean(body.promo_5_plus_1_enabled);
   const promo_5_plus_2_enabled = Boolean(body.promo_5_plus_2_enabled);
   const promo_10_plus_1_enabled = Boolean(body.promo_10_plus_1_enabled);
   const promo_10_plus_2_enabled = Boolean(body.promo_10_plus_2_enabled);
   const promoPackKind = detectPromoPackKind({
     promo_pack: typeof body.promo_pack === "string" ? body.promo_pack : null,
+    promo_3_plus_1_enabled,
+    promo_3_plus_2_enabled,
     promo_5_plus_1_enabled,
     promo_5_plus_2_enabled,
     promo_10_plus_1_enabled,
@@ -799,13 +865,15 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
   });
   const promoFlags = promoFlagsFromKind(promoPackKind);
   const promoEnabledCount = [
+    promoFlags.promo_3_plus_1_enabled,
+    promoFlags.promo_3_plus_2_enabled,
     promoFlags.promo_5_plus_1_enabled,
     promoFlags.promo_5_plus_2_enabled,
     promoFlags.promo_10_plus_1_enabled,
     promoFlags.promo_10_plus_2_enabled,
   ].filter(Boolean).length;
   if (promoEnabledCount > 1) {
-    return { ok: false, error: "Включите только одну акцию: 5+1, 5+2, 10+1 или 10+2." };
+    return { ok: false, error: "Включите только одну акцию: 3+1, 3+2, 5+1, 5+2, 10+1 или 10+2." };
   }
   const hidden_from_public = Boolean(body.hidden_from_public);
   const hide_ticket_stats = Boolean(body.hide_ticket_stats);
@@ -938,6 +1006,8 @@ function parseRaffleBody(body: Record<string, unknown>): { ok: true; value: Raff
       sort_order,
       wholesale_enabled,
       wholesale_every_n_tickets,
+      promo_3_plus_1_enabled: promoFlags.promo_3_plus_1_enabled,
+      promo_3_plus_2_enabled: promoFlags.promo_3_plus_2_enabled,
       promo_5_plus_1_enabled: promoFlags.promo_5_plus_1_enabled,
       promo_5_plus_2_enabled: promoFlags.promo_5_plus_2_enabled,
       promo_10_plus_1_enabled: promoFlags.promo_10_plus_1_enabled,
@@ -1764,6 +1834,8 @@ adminSubApp.post("/raffles", async (c) => {
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     card_payment_scope: v.card_payment_scope,
     card_payment_min_tickets: v.card_payment_min_tickets,
+    promo_3_plus_1_enabled: v.promo_3_plus_1_enabled ? 1 : 0,
+    promo_3_plus_2_enabled: v.promo_3_plus_2_enabled ? 1 : 0,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     promo_10_plus_1_enabled: v.promo_10_plus_1_enabled ? 1 : 0,
@@ -1777,6 +1849,22 @@ adminSubApp.post("/raffles", async (c) => {
     public_start_at: v.public_start_at,
   });
   await replaceRaffleBankCards(id, v.bank_cards);
+  let promo_backfill: { orders_touched: number; tickets_granted: number } | null = null;
+  if (
+    v.promo_3_plus_1_enabled ||
+    v.promo_3_plus_2_enabled ||
+    v.promo_5_plus_1_enabled ||
+    v.promo_5_plus_2_enabled ||
+    v.promo_10_plus_1_enabled ||
+    v.promo_10_plus_2_enabled
+  ) {
+    const bf = await backfillPromoPackSameDay(id);
+    if (bf.ok) {
+      await notifyUsersPromoBackfillGrants(bf.grants);
+      promo_backfill = { orders_touched: bf.ordersTouched, tickets_granted: bf.ticketsGranted };
+      if (bf.ticketsGranted > 0) notifyRaffleGridMutated(id);
+    }
+  }
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles POST] notify:", e instanceof Error ? e.message : e),
   );
@@ -1784,7 +1872,7 @@ adminSubApp.post("/raffles", async (c) => {
   const row = await getRaffleById(id);
   const dto = row ? raffleToDto(row, { forAdmin: true }) : null;
   const bank_cards = row ? await listBankCardsWithAdminStats(row.id, Date.now()) : [];
-  return c.json({ raffle: dto ? { ...dto, bank_cards } : null });
+  return c.json({ raffle: dto ? { ...dto, bank_cards } : null, promo_backfill });
 });
 
 adminSubApp.patch("/raffles/:id", async (c) => {
@@ -1839,6 +1927,8 @@ adminSubApp.patch("/raffles/:id", async (c) => {
     wholesale_every_n_tickets: v.wholesale_every_n_tickets,
     card_payment_scope: v.card_payment_scope,
     card_payment_min_tickets: v.card_payment_min_tickets,
+    promo_3_plus_1_enabled: v.promo_3_plus_1_enabled ? 1 : 0,
+    promo_3_plus_2_enabled: v.promo_3_plus_2_enabled ? 1 : 0,
     promo_5_plus_1_enabled: v.promo_5_plus_1_enabled ? 1 : 0,
     promo_5_plus_2_enabled: v.promo_5_plus_2_enabled ? 1 : 0,
     promo_10_plus_1_enabled: v.promo_10_plus_1_enabled ? 1 : 0,
@@ -1853,6 +1943,22 @@ adminSubApp.patch("/raffles/:id", async (c) => {
   });
   await replaceRaffleBankCards(id, v.bank_cards);
   await recalculateRaffleDerivedStatsForRaffle(id);
+  let promo_backfill: { orders_touched: number; tickets_granted: number } | null = null;
+  if (
+    v.promo_3_plus_1_enabled ||
+    v.promo_3_plus_2_enabled ||
+    v.promo_5_plus_1_enabled ||
+    v.promo_5_plus_2_enabled ||
+    v.promo_10_plus_1_enabled ||
+    v.promo_10_plus_2_enabled
+  ) {
+    const bf = await backfillPromoPackSameDay(id);
+    if (bf.ok) {
+      await notifyUsersPromoBackfillGrants(bf.grants);
+      promo_backfill = { orders_touched: bf.ordersTouched, tickets_granted: bf.ticketsGranted };
+      if (bf.ticketsGranted > 0) notifyRaffleGridMutated(id);
+    }
+  }
   void maybeSendRaffleLaunchEmails(id).catch((e) =>
     console.error("[admin/raffles PATCH] notify:", e instanceof Error ? e.message : e),
   );
@@ -1860,7 +1966,25 @@ adminSubApp.patch("/raffles/:id", async (c) => {
   const row = await getRaffleById(id);
   const dto = row ? raffleToDto(row, { forAdmin: true }) : null;
   const bank_cards = row ? await listBankCardsWithAdminStats(row.id, Date.now()) : [];
-  return c.json({ raffle: dto ? { ...dto, bank_cards } : null });
+  return c.json({ raffle: dto ? { ...dto, bank_cards } : null, promo_backfill });
+});
+
+adminSubApp.post("/raffles/:id/promo-backfill-today", async (c) => {
+  const auth = await requireAdmin(c);
+  if (auth instanceof Response) return auth;
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id) || id < 1) return c.json({ error: "Некорректный id" }, 400);
+  const bf = await backfillPromoPackSameDay(id);
+  if (!bf.ok) return c.json({ error: bf.error }, 400);
+  await notifyUsersPromoBackfillGrants(bf.grants);
+  if (bf.ticketsGranted > 0) notifyRaffleGridMutated(id);
+  const row = await getRaffleById(id);
+  return c.json({
+    ok: true,
+    orders_touched: bf.ordersTouched,
+    tickets_granted: bf.ticketsGranted,
+    raffle: row ? raffleToDto(row, { forAdmin: true }) : null,
+  });
 });
 
 adminSubApp.post("/raffles/:id/notify-launch", async (c) => {
